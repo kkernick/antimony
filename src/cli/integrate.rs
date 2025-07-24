@@ -277,6 +277,10 @@ pub fn id(cmd: Args) -> Result<()> {
         .join("applications")
         .join(format!("{name}.desktop"));
 
+    if let Some(parent) = antimony_desktop.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
     write!(
         File::create(antimony_desktop).with_context(|| "Failed to create new desktop file")?,
         "{}",
