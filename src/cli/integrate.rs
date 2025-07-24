@@ -114,7 +114,14 @@ pub fn id(cmd: Args) -> Result<()> {
     // and thus applications will run in the sandbox unless the absolute
     // path in /usr/bin is given.
     debug!("Creating symlink in ~/.local/bin");
-    let local = HOME_PATH.join(".local").join("bin").join(name);
+    let local = HOME_PATH.join(".local").join("bin");
+    if !local.exists() {
+        println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
+            to launch sandboxed applications from the command line without the explicit path.");
+        std::fs::create_dir_all(&local)?;
+    }
+
+    let local = local.join(name);
     if !local.exists() {
         symlink(antimony, &local).with_context(|| "Failed to create local symlink")?;
     }
