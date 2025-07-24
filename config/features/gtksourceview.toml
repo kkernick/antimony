@@ -1,0 +1,11 @@
+name = "gtksourceview"
+description = "GTK Syntax Highlighting"
+requires = ["gtk4"]
+
+libraries = ["/usr/lib/libgtksourceview*"]
+
+[files]
+system.ReadOnly = [
+  "/usr/share/gtksourceview-5/",
+  "/usr/share/gtksourceview-4/",
+]

@@ -1,0 +1,11 @@
+path = "/usr/lib/zed/zed-editor"
+id =  "dev.zed.Zed"
+home.policy = "Enabled"
+
+features = ["wayland", "dri", "vulkan", "fonts", "shell"]
+
+[files]
+passthrough = "ReadWrite"
+
+[ipc]
+portals = ["Settings", "FileChooser", "Documents"]

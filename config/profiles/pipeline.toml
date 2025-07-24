@@ -1,0 +1,7 @@
+path = "tubefeeder"
+id =  "de.schmidhuberj.tubefeeder"
+home.policy = "Enabled"
+features = ["libadwaita", "libclapper", "network", "libpeas", "gio"]
+
+[ipc]
+own = ["org.mpris.MediaPlayer2.tubefeeder"]

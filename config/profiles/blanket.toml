@@ -1,0 +1,6 @@
+id =  "com.rafaelmardojai.Blanket"
+
+features = ["libadwaita", "mpris", "pipewire", "gst", "vaapi"]
+
+[ipc]
+portals = ["Background", "FileChooser", "Inhibit"]

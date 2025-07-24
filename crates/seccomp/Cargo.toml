@@ -1,0 +1,13 @@
+[package]
+name = "seccomp"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+notify = []
+
+[dependencies]
+dashmap = "6.1.0"
+log = "0.4.27"
+nix = { version = "0.30.1", features = ["socket", "uio"] }
+rayon = "1.10.0"

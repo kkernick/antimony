@@ -1,0 +1,10 @@
+name = "gio"
+description = "Gnome General Networking and IO"
+requires = ["gnutls"]
+
+libraries = [
+  "/usr/lib/gio",
+  "libproxy*",
+]
+
+ipc.portals = ["NetworkMonitor", "ProxyResolver"]

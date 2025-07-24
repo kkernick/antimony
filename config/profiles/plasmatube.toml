@@ -1,0 +1,7 @@
+id =  "org.kde.plasmatube"
+home.policy = "Enabled"
+
+features = ["kf6", "network", "sdl"]
+
+[ipc]
+own = ["org.kde.plasmatube"]

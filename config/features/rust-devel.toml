@@ -1,0 +1,13 @@
+name = "rust-devel"
+description = "Provide Rust and its associated development tools."
+requires = ["gcc", "lib", "hostname"]
+
+binaries = [
+  "cargo",
+  "cargo-clippy",
+  "cargo-fmt",
+  "clippy-driver",
+  "rustc",
+  "rustdoc",
+  "rustfmt",
+]

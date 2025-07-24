@@ -1,0 +1,5 @@
+name = "os-release"
+description = "Provide a /etc/os-release"
+
+[files.direct.ReadOnly]
+"/etc/os-release" = "NAME=\"Linux\"\nPRETTY_NAME=\"Linux\"\nID=linux"

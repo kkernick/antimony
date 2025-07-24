@@ -1,0 +1,19 @@
+name = "dri"
+description = "DRI for accelerated video rendering"
+
+libraries = [
+  "/usr/lib/dri",
+  "/usr/lib/gbm",
+  "libMesa*",
+  "libGL*",
+  "libEGL*"
+]
+
+devices = ["/dev/dri"]
+
+files.system.ReadOnly = [
+  "/sys/devices/pci0000:00",
+  "/sys/dev/char",
+  "/usr/share/glvnd",
+  "/usr/share/libdrm",
+]

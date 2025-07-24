@@ -1,0 +1,12 @@
+name = "webkit"
+description = "WebKit for rendering web-content"
+requires = ["gir", "gio"]
+
+libraries = [
+  "/usr/lib/webkitgtk-6.0/",
+  "libjavascriptcoregtk*",
+  "libwebkitgtk*",
+]
+
+[ipc]
+portals = ["Realtime"]

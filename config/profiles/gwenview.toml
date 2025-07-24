@@ -1,0 +1,7 @@
+id =  "org.kde.gwenview"
+home.policy = "Enabled"
+
+features = ["kf6"]
+
+[ipc]
+portals = ["FileChooser"]

@@ -1,0 +1,4 @@
+id =  "ca.desrt.dconf-editor"
+home.policy = "Enabled"
+
+features = ["gtk3"]

@@ -1,0 +1,10 @@
+name = "freerdp"
+description = "RDP support via FreeRDP"
+requires = ["network"]
+
+libraries = [
+  "libwinpr*",
+  "libfreerdp3*",
+  "/usr/lib/freerdp",
+  "/usr/lib/ossl-modules/"
+]

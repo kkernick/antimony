@@ -1,0 +1,8 @@
+id = "org.kde.haruna"
+home.policy = "Enabled"
+
+features = ["kf6", "sdl", "pipewire", "vaapi", "mpris"]
+libraries = ["libMpvQt*"]
+
+[ipc]
+portals = ["FileChooser"]

@@ -1,0 +1,6 @@
+name = "mime"
+description = "MIME types to know default applications"
+
+[files]
+system.ReadOnly = ["/usr/share/mime"]
+user.ReadOnly = ["$XDG_DATA_HOME/mime"]

@@ -1,0 +1,8 @@
+path = "keepassxc"
+id =  "org.keepassxc.KeePassXC"
+home.policy = "Enabled"
+
+features = ["qt5"]
+
+[ipc]
+portals = ["FileChooser"]

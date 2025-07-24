@@ -1,0 +1,10 @@
+name = "hardened_malloc"
+description = "Enforce Hardened Malloc as the memory allocator within the sandbox"
+
+libraries = ["/usr/lib/libhardened_malloc.so"]
+
+[files.direct.ReadOnly]
+"/etc/ld.so.preload" = "/usr/lib/libhardened_malloc.so"
+
+[environment]
+"LD_PRELOAD" = "/usr/lib/libhardened_malloc.so"

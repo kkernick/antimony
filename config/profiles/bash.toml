@@ -1,0 +1,1 @@
+binaries = ["cat", "id", "ls", "vim"]

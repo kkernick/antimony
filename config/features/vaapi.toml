@@ -1,0 +1,4 @@
+name = "vaapi"
+description = "VA-API for Hardware Video Encoding/Decoding."
+
+libraries = ["libva-drm*", "libva-wayland*", "libva.so*"]

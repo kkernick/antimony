@@ -1,0 +1,49 @@
+#!/bin/bash
+
+RECIPE="${1}"
+if [[ -z $RECIPE ]]; then
+  RECIPE="release"
+fi
+
+cargo build --profile $RECIPE
+
+if [[ "${RECIPE}" == "dev" ]]; then
+    RECIPE="debug"
+fi
+
+sudo rm /usr/bin/antimony{,-monitor,-spawn}
+
+echo "Copying binaries"
+sudo cp target/$RECIPE/antimony{,-monitor,-spawn} /usr/bin
+
+echo "Giving AUDIT cap"
+sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
+
+echo "Setting SetUID"
+exec="/usr/bin/antimony"
+sudo chown antimony:antimony $exec
+sudo chmod ug+s $exec
+sudo chmod o+x $exec
+
+
+echo "Removing old config"
+sudo rm -fr /usr/share/antimony/{features,profiles}
+
+if [[ ! -d /usr/share/antimony ]]; then
+  sudo mkdir /usr/share/antimony
+fi
+
+echo "Setting up HOME"
+sudo chown antimony:antimony /usr/share/antimony
+sudo cp -r config/features /usr/share/antimony
+sudo cp -r config/profiles /usr/share/antimony
+
+echo "Setting up config"
+if [[ ! -d /usr/share/antimony/config ]]; then
+  sudo mkdir /usr/share/antimony/config
+fi
+
+sudo cp config/default.toml /usr/share/antimony/config
+sudo cp config/new.toml /usr/share/antimony/config
+
+sudo chown -R antimony:antimony /usr/share/antimony

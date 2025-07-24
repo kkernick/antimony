@@ -1,0 +1,21 @@
+name = "qt5"
+description = "Provide necessary files for QT5 applications"
+
+requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
+
+libraries = ["/usr/lib/qt", "libQt5*"]
+
+[files]
+user.ReadOnly = [
+  "$XDG_CONFIG_HOME/kdedefaults",
+  "$XDG_CONFIG_HOME/breezerc",
+  "$XDG_CONFIG_HOME/kdeglobals",
+  "$XDG_CONFIG_HOME/Trolltech.conf",
+  "$XDG_CONFIG_HOME/kde.org"
+]
+system.ReadOnly = [
+  "/usr/share/qt6"
+]
+
+[environment]
+"QT_QPA_PLATFORM" = "wayland"

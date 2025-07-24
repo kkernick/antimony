@@ -1,0 +1,5 @@
+name = "gir"
+description = "An XML format used by GObject-Introspection"
+
+libraries = ["/usr/lib/girepository-1.0/"]
+files.system.ReadOnly = ["/usr/share/gir-1.0/"]

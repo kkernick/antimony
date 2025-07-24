@@ -1,0 +1,9 @@
+id =  "org.gnome.gitlab.somas.Apostrophe"
+home.policy = "Enabled"
+
+features = [
+  "libadwaita", "python", "webkit", "gtksourceview", "libspelling"
+]
+
+[ipc]
+portals = ["FileChooser", "Documents"]

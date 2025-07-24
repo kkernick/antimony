@@ -1,0 +1,20 @@
+# This is your Default Profile. It's a per-user file that
+# acts as a set of defaults/supplementary definitions.
+#
+# The syntax is identical to an actual profile, and all
+# options within this file save path, name, and id
+# will be incorporated into all profiles you run as this user.
+#
+# This merging process has two rules:
+#   1.  For Single-Value arguments, such as seccomp,
+#       if the application process does not have a value defined,
+#       it will take the value of the default. If a value is defined,
+#       the default will be ignored. For example, you could set
+#       seccomp to Permissive, and any profile that doesn't
+#       explicitly set seccomp will borrow this value (Useful for
+#       auditing).
+#
+#   2.  For Multi-Value arguments, any value defined in the default
+#       will be added to the application profile. For example, you
+#       could define features to ["hardened_malloc"] to provide this
+#       feature to any profile you run.

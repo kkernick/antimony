@@ -1,0 +1,5 @@
+name = "python"
+description = "Provide Python"
+
+binaries = ["python"]
+libraries = ["python*"]

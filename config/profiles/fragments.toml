@@ -1,0 +1,9 @@
+id =  "de.haeckerfelix.Fragments"
+home.policy = "Enabled"
+
+features = ["libadwaita", "network"]
+
+binaries = ["transmission-daemon"]
+
+[ipc]
+portals = ["FileChooser", "Documents"]

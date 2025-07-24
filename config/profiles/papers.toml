@@ -1,0 +1,5 @@
+id =  "org.gnome.Papers"
+
+features = ["libadwaita"]
+
+ipc.portals = ["FileChooser", "Inhibit"]

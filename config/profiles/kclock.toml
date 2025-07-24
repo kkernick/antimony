@@ -1,0 +1,7 @@
+id =  "org.kde.kclock"
+home.policy = "Enabled"
+
+features = ["kf6"]
+
+[ipc]
+talk = ["org.kde.kclockd"]

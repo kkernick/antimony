@@ -1,0 +1,11 @@
+id =  "org.freedesktop.Bustle"
+
+features = ["libadwaita"]
+
+# pkexec doesn't actually do anything here. It has nothing to talk to,
+# and you can't elevate privilege in a user-sandbox. It just prevents
+# bustle from crashing when you try and capture from the system bus.
+binaries = ["dbus-monitor", "pkexec"]
+
+[ipc]
+user_bus = true

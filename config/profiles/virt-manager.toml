@@ -1,0 +1,14 @@
+home.policy = "Enabled"
+
+features = ["gtk3", "python", "network", "gtksourceview"]
+libraries = ["libvirt*", "libosinfo*"]
+
+[files]
+system.ReadOnly = [
+  "/var/run/libvirt",
+  "/usr/share/hwdata"
+]
+
+[ipc]
+system_bus = true
+own = ["org.virt-manager.virt-manager"]

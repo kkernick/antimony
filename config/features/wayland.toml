@@ -1,0 +1,13 @@
+name = "wayland"
+description = "Provide the wayland socket."
+
+files.system.ReadOnly = [
+  "/usr/share/X11/xkb",
+  "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"
+]
+
+[environment]
+"WAYLAND_DISPLAY" = "$WAYLAND_DISPLAY"
+"XDG_SESSION_TYPE" = "wayland"
+"XDG_CURRENT_DESKTOP" = "$XDG_CURRENT_DESKTOP"
+"DESKTOP_SESSION" = "$DESKTOP_SESSION"

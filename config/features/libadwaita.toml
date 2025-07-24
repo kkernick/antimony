@@ -1,0 +1,4 @@
+name = "libadwaita"
+description = "For libadwaita applications"
+requires = ["gtk4"]
+libraries = ["libadwaita*"]

@@ -1,0 +1,4 @@
+home.policy = "Enabled"
+
+features = ["electron", "network", "pipewire"]
+arguments = ["--ozone-platform=wayland"]

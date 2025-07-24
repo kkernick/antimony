@@ -1,0 +1,8 @@
+id =  "org.kde.okular"
+home.policy = "Enabled"
+
+features = ["kf6"]
+libraries = ["libOkular6Core*"]
+
+[ipc]
+portals = ["FileChooser"]

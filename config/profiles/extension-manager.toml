@@ -1,0 +1,8 @@
+id =  "com.mattjakeman.ExtensionManager"
+
+features = ["libadwaita", "network", "gio"]
+
+[ipc]
+portals = ["Documents"]
+talk = ["org.gnome.Shell.Extensions"]
+call = ["org.gnome.Shell.Extensions=org.gnome.Shell.Extensions.*@/org/gnome/Shell/Extensions"]

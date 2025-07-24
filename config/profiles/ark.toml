@@ -1,0 +1,7 @@
+id =  "org.kde.ark"
+home.policy = "Enabled"
+
+features = ["kf6"]
+
+[ipc]
+portals = ["FileChooser"]

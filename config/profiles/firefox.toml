@@ -1,0 +1,6 @@
+home.policy = "Enabled"
+
+features = ["electron", "pipewire", "vaapi", "network", "xdg-open"]
+
+[ipc]
+portals = ["FileChooser"]

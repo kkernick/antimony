@@ -1,0 +1,16 @@
+#!/bin/bash
+
+PROFILE=$1
+
+ANTIMONY=$2
+if [[ -z $2 ]]; then
+  ANTIMONY="antimony"
+fi
+
+echo "Using: $ANTIMONY"
+
+ARGS="--shell=none --time-unit=microsecond"
+
+hyperfine --command-name "Local Refresh" $ARGS "$ANTIMONY refresh $PROFILE --dry"
+
+hyperfine --command-name "Setup" $ARGS  --warmup 1 "$ANTIMONY run $PROFILE --dry"

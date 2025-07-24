@@ -1,0 +1,6 @@
+id =  "io.github.fabrialberio.pinapp"
+
+features = ["libadwaita", "python", "applications"]
+
+[ipc]
+portals = ["Documents"]

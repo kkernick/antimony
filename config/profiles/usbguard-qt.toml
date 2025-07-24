@@ -1,0 +1,2 @@
+features = ["qt6", "tray"]
+devices = ["/dev/shm"]

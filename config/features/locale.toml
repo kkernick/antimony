@@ -1,0 +1,17 @@
+name = "locale"
+description = "Provide localization information"
+
+libraries = [
+  "/usr/lib/locale",
+  "/usr/lib/gconv",
+]
+
+[files]
+system.ReadOnly = [
+  "/etc/localtime",
+  "/usr/share/zoneinfo",
+  "/usr/share/locale"
+]
+
+[environment]
+LANG = "$LANG"

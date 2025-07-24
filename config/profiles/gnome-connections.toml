@@ -1,0 +1,4 @@
+id =  "org.gnome.Connections"
+home.policy = "Enabled"
+
+features = ["libadwaita", "freerdp", "secrets"]

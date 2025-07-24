@@ -1,0 +1,7 @@
+name = "enchant"
+description = "Spell Checking Library"
+
+libraries = [
+  "/usr/lib/enchant-2/",
+  "libenchant*"
+]

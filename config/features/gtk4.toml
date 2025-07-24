@@ -1,0 +1,31 @@
+name = "gtk4"
+description = "For GTK4 applications"
+requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
+
+libraries = [
+  "/usr/lib/gtk-4.0", "/usr/lib/tinysparql-3.0",
+  "libgdk-4*", "libgtk-4*"
+]
+
+[files]
+system.ReadOnly = [
+  "/usr/share/gtk",
+  "/usr/share/glib-2.0",
+  "/usr/share/gtk-2.0",
+  "/usr/share/gtk-4.0",
+  "/etc/xdg/gtk-4.0/",
+]
+user.ReadOnly = [
+  "$XDG_CONFIG_HOME/gtkrc",
+  "$XDG_CONFIG_HOME/gtkrc-2.0",
+  "$XDG_CONFIG_HOME/gtk-2.0",
+  "$XDG_CONFIG_HOME/gtk-4.0",
+  "$HOME/.gtkrc-2.0",
+]
+
+[environment]
+"GTK_USE_PORTAL" = "1"
+"GTK_A11Y" = "none"
+
+[ipc]
+own = ["{desktop}"]

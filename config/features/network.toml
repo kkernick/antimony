@@ -1,0 +1,21 @@
+name = "network"
+description = "Give applications network connectivity."
+
+namespaces = ["Net"]
+
+files.system.ReadOnly = [
+  "/etc/gai.conf",
+  "/etc/host.conf",
+  "/etc/hosts",
+  "/etc/nsswitch.conf",
+  "/etc/resolv.conf",
+  "/etc/ca-certificates",
+  "/usr/share/ca-certificates",
+  "/etc/pki",
+  "/usr/share/pki",
+  "/etc/ssl",
+  "/usr/share/ssl",
+]
+
+libraries = [
+"libnss*"]

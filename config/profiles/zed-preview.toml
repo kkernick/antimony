@@ -1,0 +1,3 @@
+path = "/usr/lib/zed/zed-editor"
+id =  "dev.zed.Zed-Preview"
+inherits = ["default", "zed"]

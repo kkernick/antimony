@@ -1,0 +1,16 @@
+name = "glycin"
+description = "Gnome Image Loading."
+requires = ["gir", "flatpak-spawn"]
+
+files.system.ReadOnly = [
+  "/usr/include/glycin-2/",
+  "/usr/include/glycin-gtk4-2/",
+  "/usr/share/glycin-loaders/"
+]
+
+libraries = [
+  "/usr/lib/glycin-loaders/",
+  "/usr/lib/libglycin*"
+]
+
+binaries = ["prlimit"]

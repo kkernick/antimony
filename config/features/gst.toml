@@ -1,0 +1,10 @@
+name = "gst"
+description = "GStreamer for video/audio playback"
+requires = ["gir", "passwd", "python"]
+
+libraries = [
+  "/usr/lib/gstreamer-1.0",
+  "libgst*",
+]
+
+files.system.ReadOnly = ["/usr/share/gstreamer-1.0/"]

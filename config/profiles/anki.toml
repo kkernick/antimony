@@ -1,0 +1,6 @@
+home.policy = "Enabled"
+
+features = ["qt6", "python", "network", "passwd", "electron"]
+
+[ipc]
+portals = ["FileChooser"]

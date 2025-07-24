@@ -1,0 +1,48 @@
+[package]
+name = "antimony"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = [
+    "crates/seccomp",
+    "crates/spawn",
+    "."
+, "crates/user"]
+
+[dependencies]
+user = { path = "crates/user" }
+seccomp = { path = "crates/seccomp", features = ["notify"] }
+spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
+anyhow = "1.0.98"
+clap = { version = "4.5.39", features = ["derive"] }
+dashmap = { version = "6.1.0", features = ["rayon"] }
+env_logger = "0.11.8"
+hex = "0.4.3"
+inotify = "0.11.0"
+log = "0.4.27"
+nix = { version = "0.30.1", features = ["fs", "poll", "process", "signal", "user"] }
+once_cell = "1.21.3"
+rand = "0.9.1"
+rayon = "1.10.0"
+serde = { version = "1.0.219", features = ["derive"] }
+strum = { version = "0.27.1", features = ["strum_macros"] }
+strum_macros = "0.27.1"
+tempfile = "3.20.0"
+toml = "0.8.22"
+url = "2.5.4"
+which = "8.0.0"
+zbus = { version = "5.7.1", features = ["async-io", "blocking", "blocking-api"], default-features = false }
+indicatif = { version = "0.18.0", features = ["improved_unicode", "rayon"] }
+signal-hook = "0.3.18"
+console = "0.16.0"
+Inflector = "0.11.4"
+rusqlite = "0.37.0"
+r2d2_sqlite = "0.31.0"
+r2d2 = "0.8.10"
+dialoguer = { version = "0.11.0", default-features = false }
+
+[profile.release]
+opt-level = 3
+#lto = "thin"
+panic = "abort"

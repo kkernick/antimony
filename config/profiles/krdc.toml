@@ -1,0 +1,5 @@
+id =  "org.kde.krdc"
+home.policy = "Enabled"
+
+features = ["kf6", "network", "freerdp"]
+libraries = ["libkrdc*"]

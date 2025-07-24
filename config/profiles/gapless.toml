@@ -1,0 +1,10 @@
+id =  "com.github.neithern.g4music"
+home.policy = "Enabled"
+
+features = ["libadwaita", "mpris", "pipewire", "gst", "vaapi"]
+
+[files]
+user.ReadWrite = ["Music"]
+
+[ipc]
+portals = ["Background", "FileChooser", "Inhibit"]

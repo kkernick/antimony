@@ -1,0 +1,5 @@
+name = "sdl"
+description = "Provide necessary files for SDL2/3 applications"
+
+requires = ["wayland"]
+libraries = ["libSDL*"]

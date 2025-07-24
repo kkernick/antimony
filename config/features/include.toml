@@ -1,0 +1,7 @@
+name = "include"
+description = "Source headers"
+
+files.system.ReadOnly = [
+  "/usr/share/include",
+  "/usr/include"
+]

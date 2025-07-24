@@ -1,0 +1,31 @@
+name = "gtk3"
+description = "For GTK3 applications"
+requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
+
+libraries = [
+  "/usr/lib/gtk-3.0", "/usr/lib/tinysparql-3.0",
+  "libgdk-3*", "libgtk-3*"
+]
+
+[files]
+system.ReadOnly = [
+  "/usr/share/gtk",
+  "/usr/share/glib-2.0",
+  "/usr/share/gtk-2.0",
+  "/usr/share/gtk-3.0",
+  "/etc/xdg/gtk-3.0/",
+]
+user.ReadOnly = [
+  "$XDG_CONFIG_HOME/gtkrc",
+  "$XDG_CONFIG_HOME/gtkrc-2.0",
+  "$XDG_CONFIG_HOME/gtk-2.0",
+  "$XDG_CONFIG_HOME/gtk-3.0",
+  "$HOME/.gtkrc-2.0",
+]
+
+[environment]
+"GTK_USE_PORTAL" = "1"
+"GTK_A11Y" = "none"
+
+[ipc]
+own = ["{desktop}"]

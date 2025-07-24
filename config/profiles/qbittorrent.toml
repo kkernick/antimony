@@ -1,0 +1,7 @@
+id =  "org.qbittorrent.qBittorrent"
+home.policy = "Enabled"
+
+features = ["kf6", "network"]
+
+[ipc]
+portals = ["FileChooser"]

@@ -1,0 +1,20 @@
+name = "pipewire"
+description = "The PipeWire socket for video/audio."
+
+files.system.ReadOnly = [
+ "$XDG_RUNTIME_DIR/pipewire-0",
+ "$XDG_RUNTIME_DIR/pulse",
+ "/etc/pipewire",
+ "/usr/share/pipewire",
+]
+
+files.user.ReadOnly = [
+  "$XDG_CONFIG_HOME/pulse"
+]
+
+libraries = [
+  "libpipewire*",
+  "/usr/lib/pipewire-0.3",
+  "/usr/lib/spa-0.2",
+  "/usr/lib/pulseaudio",
+]

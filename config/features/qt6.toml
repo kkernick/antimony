@@ -1,0 +1,21 @@
+name = "qt6"
+description = "Provide necessary files for QT6 applications"
+
+requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
+
+libraries = ["/usr/lib/qt6", "libQt6*"]
+
+[files]
+user.ReadOnly = [
+  "$XDG_CONFIG_HOME/kdedefaults",
+  "$XDG_CONFIG_HOME/breezerc",
+  "$XDG_CONFIG_HOME/kdeglobals",
+  "$XDG_CONFIG_HOME/Trolltech.conf",
+  "$XDG_CONFIG_HOME/kde.org"
+]
+system.ReadOnly = [
+  "/usr/share/qt6"
+]
+
+[environment]
+"QT_QPA_PLATFORM" = "wayland"

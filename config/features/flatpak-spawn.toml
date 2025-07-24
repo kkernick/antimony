@@ -1,0 +1,8 @@
+name = "flatpak-spawn"
+description = "Use Antimony-Spawn to permit sandboxes to run other applications under Antimony."
+namespaces = ["User"]
+
+binaries = [
+  "/usr/bin/antimony-spawn=/usr/bin/flatpak-spawn",
+  "ldd", "bwrap", "find",
+]

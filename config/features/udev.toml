@@ -1,0 +1,12 @@
+name = "udev"
+description = "Device information"
+caveat = "This provides access to /sys, allowing the sandbox to see all devices."
+
+binaries = ["udevadm", "dmidecode"]
+
+[files]
+system.ReadOnly = [
+  "/etc/udev",
+  "/usr/share/hwdata",
+  "/sys"
+]

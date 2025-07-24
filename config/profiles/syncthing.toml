@@ -1,0 +1,2 @@
+home.policy = "Enabled"
+features = ["network"]

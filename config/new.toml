@@ -1,0 +1,202 @@
+# Antimony runs applications through Profiles, which outline all required files and functionality
+# that needs to be present in the sandbox. Profiles are specified in TOML. When you are
+# done editing, you can run this profile via `antimony run NAME`. Comments on this document
+# will be discarded once you save. For options with predefined values, each option is
+# provided, and you can uncomment the desired option. Every element of the Profile is optional.
+
+# By default, Antimony will resolve the name of the profile to get the binary, so a profile
+# named chromium will look in the user PATH, and use the first match as the executable. Your
+# PATH is manually edited to remove ~/.local/bin, as that's where Antimony stores its
+# shadows, which could cause an infinite loop.
+#
+# If another path is needed, you can provide one (`which` is still used, so you don't need
+# to provide an absolute path if the value can be resolved).
+# path = /path/to/app
+
+# The id defaults to the name of the profile, and is used internally, and for desktop
+# integration. If your profile is for a graphical application, this value should match
+# the desktop file installed in /usr/share/applications, which in many cases is
+# just the name (IE chromium -> chromium.desktop). Do not provide the .desktop extension.
+# id = "desktop"
+
+# Features are the most important aspect of the profile, as they are named pieces of
+# functionality that provide values for everything in this document. Manually providing
+# files, binaries, libraries, namespaces, etc should be infrequent, as a feature for
+# what you're looking for should provide that for you. Some common features include:
+#   * "network": Provides network connectivity to the sandbox.
+#   * "gtk3", "gtk4", "qt6", "electron": For various application frameworks.
+#   * "xdg-open": To open Files/URIs on the host with the default application.
+#   * "locale": For system locale
+#   * "secrets": To use your DE's password store (gnome-keyring, kwallet) to store secrets.
+# Use `antimony list` to see all available features.
+# features = []
+
+# Inheritance is like a feature, but specifies other profiles. Inherited profiles provide values
+# for the calling profile, only if the latter has not explicitly set its own value for that
+# particular attribute. By default, the Default profile, if it exists, will be inherited,
+# but you can exclude the profile from this by either setting an empty list if there are no
+# other profiles inherited, or by just excluding "default" from the list.
+#
+# Consider your default profile specifying the `seccomp` attribute. All profiles that do
+# not explicitly set their own value for this attribute will borrow this value.
+#
+# Inheritance applies left-to-right, so if a profile inherits a value from the first profile
+# in this list, additional definitions for the same attribute will be ignored.
+# inherits = ["default"]
+
+# Home specifies whether to create a home folder for the application, located at:
+# ~/.local/share/antimony/{name}
+# This allows for configuration to persist between runs. If no home is defined, settings,
+# configuration, and caches are discarded after the application closes.
+# [home]
+#
+# None does not create a home folder. This behaves identically to if you hadn't set the value
+# at all, but is useful for overriding inheritance.
+# policy = "None"
+#
+# Enabled will create the home directory and bind it ReadWrite, so the application can make
+# configurations, and they will persist between instances.
+# policy = "Enabled"
+#
+# Overlay will provide the home directory under a temporary overlay, so the profile will be
+# able to make modifications, but they will be discarded. You can use this if you have setup
+# a good configuration of the application (Via Enabled), but don't want further changes to be
+# made. It's especially useful for applications that only like having a single instance, such
+# as Chromium and Zed, but to which this paradigm does not work in a Sandbox.
+# With this option, you can spawn multiple, isolated copies.
+# policy = "Overlay"
+#
+# By default, the name of the home folder will be the name of the profile. You can override
+# this, however, which can be useful for configurations.
+# name = "name"
+
+# SECCOMP is a security mechanism provided by the Linux Kernel that can restrict system calls (Like read,exec)
+# Antimony uses SECCOMP as a means of further constraining the sandbox.
+#
+# In Permissive Mode, the sandbox runs under a logging filter and with a companion binary: antimony-monitor. The
+# monitor will collect syscall information and store them in the SECCOMP Database. The first time you run
+# the application in Permissive mode, you may notice a performance drop, but subsequent uses will be faster;
+# additionally, filter generation is cumulative, so you can keep the profile in Permissive mode for a day or
+# so, ensuring you cover all use-cases, then switch it to Enforcing.
+# seccomp = "Permissive"
+#
+# In Enforcing Mode, Antimony will kill the entire sandbox when any program within it attempts to use a system call
+# not specified in the SECCOMP profile. There is virtually zero overhead to use this setting.
+# seccomp = "Enforcing"
+
+# IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
+# information, see xdg-dbus-proxy's manual page.
+# [ipc]
+#
+# This setting overrules everything else in this section, and unconditionally disables all
+# IPC. No proxy is run, no access to the User/System bus is provided. This is useful to
+# pass on the command line if you need to temporarily disable Portals--say to open a file
+# exposed in the sandbox itself, and not one from the host.
+# disable_ipc = false
+#
+# If you need unrestricted access to the user bus, this mounts it directly into the sandbox. However, unless
+# your application explicitly requires this permission (Such as DBus Monitors like Bustle), you should use
+# the more fine-grained controls below. Setting this option disregards those aforementioned settings, as the
+# proxy is not run.
+# user_bus = false
+#
+# If you want to expose the system bus to the program, you can do so here; this is likely not necessary. There
+# is not way to filter the system bus. You either pass it entirely, or you don't (And you almost definitely
+# don't need to unless your application talks to privileged busses, like virt-manager).
+# system_bus = false
+#
+# Portals are used primarily by Flatpak to provide functionality within a sandbox, use as Background to
+# run in the background, Camera for the camera, FileChooser to provide arbitrary files, OpenURI to
+# open files with the default handler, and more.
+# portals = []
+#
+# See are busses that the application can see, but cannot interact with.
+# see = []
+#
+# Talk are busses the application can talk over.
+# talk = []
+#
+# Own are busses the application owns, particularly for GTK applications
+# own = []
+#
+# Call are formatted as BUS=METHOD@PATH. If you don't know what that means, you don't need it.
+# call = []
+
+# Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
+# do not fall into this group. Each group specifies three kinds of files:
+#   1. ReadOnly provides files ro
+#   2. ReadWrite provides files rw (Note files are mounted, so applications cannot replace them via move)
+#   3. Executable provides files with chmod 555.
+#
+# By default, files are canonicalized to either the sandbox home or root, and match the path on the host
+# (With the exception of translating /home/$USER to /home/antimony), but you can manually override this
+# by specifying HOST=DEST, such as /etc/passwd=/etc/passwd.host if you want to place a file in an arbitrary
+# location within the sandbox.
+#
+# [files]
+#
+# Passthrough defines how files that are given via the command line should be provided. This is used,
+# for example, if you've integrated the sandbox, and are opening a supported file via your file explorer.
+# passthrough = "ReadOnly"
+# passthrough = "ReadWrite"
+# passthrough = "Executable"
+#
+# User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
+# been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
+# [user]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# System files have the normal root as canonical (/).
+# [system]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# Direct files are constructed with the sandbox, creating the file with the path specified with the key,
+# and the contents as the value. They are mounted ro.
+# [direct]
+# [direct.ReadOnly]
+# /my/file.txt = "Contents"
+#
+# [direct.ReadWrite]
+# /my/file.txt.rw = "Contents"
+#
+# [direct.Executable]
+# /my/file.txt.exe = "#!/bin/bash"
+
+# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
+# binaries = []
+
+# Additional libraries to pass to the sandbox. There are three different formats:
+#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
+#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
+#   3.  Wildcards, which can match files or directories, and
+#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
+# libraries = []
+
+# Devices to pass, such as /dev/dri
+# devices = []
+
+# Namespaces: "None", "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
+# Unless you know what you are doing, don't add namespaces to the profile.
+# Relevant features, such as "network" or "electron" will add needed namespaces
+# automatically.
+# namespaces = []
+
+# Keypair environment variables to pass to the sandbox.
+# [env]
+# KEY = "VAL"
+
+# Arguments that should be passed directly to the application, such as
+# "--ozone-platform=wayland" for electron.
+# arguments = []
+
+# Configurations specify specialized modes of running the profile. Each config is a fully fledged
+# profile that overrides the settings defined above (Opposite to how inheritance functions)
+# [configuration]
+#
+# For example, a configuration that doesn't set a home folder.
+# [configuration.clean]
+# home.policy = "None"

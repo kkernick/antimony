@@ -1,0 +1,17 @@
+name = "themes"
+description = "Pass host themes, cursors, and icons"
+
+requires = ["mime"]
+
+[files]
+system.ReadOnly = [
+  "/usr/share/themes", "/usr/share/color-schemes",
+  "/usr/share/icons", "/usr/share/pixmaps",
+  "/usr/share/cursors"
+]
+user.ReadOnly = [
+  "$XDG_DATA_HOME/pixmaps",
+]
+
+[ipc]
+portals = ["Settings"]

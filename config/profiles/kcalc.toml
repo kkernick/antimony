@@ -1,0 +1,4 @@
+id =  "org.kde.kcalc"
+home.policy = "Enabled"
+
+features = ["kf6"]

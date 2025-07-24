@@ -1,0 +1,7 @@
+id = "com.github.rafostar.Clapper"
+home.policy = "Enabled"
+
+features = ["libadwaita", "libclapper", "mpris"]
+
+[ipc]
+portals = ["FileChooser"]

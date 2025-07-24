@@ -1,0 +1,15 @@
+name = "fonts"
+description = "Provide host fonts and config."
+
+[files]
+system.ReadOnly = [
+  "/usr/share/fonts",
+  "/usr/share/fontconfig",
+  "/etc/fonts"
+]
+user.ReadOnly = [
+  "$XDG_CONFIG_HOME/fontconfig",
+  "$XDG_DATA_HOME/fontconfig",
+  "$XDG_DATA_HOME/fonts",
+  "$HOME/.fonts",
+]

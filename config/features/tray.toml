@@ -1,0 +1,5 @@
+name = "tray"
+description = "Tray icons"
+
+[ipc]
+talk = ["org.kde.StatusNotifierWatcher"]

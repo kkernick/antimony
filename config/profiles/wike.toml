@@ -1,0 +1,4 @@
+id =  "com.github.hugolabe.Wike"
+home.policy = "Enabled"
+
+features = ["libadwaita", "webkit", "python", "network", "gjs"]

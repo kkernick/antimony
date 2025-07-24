@@ -1,0 +1,8 @@
+path = "io.gitlab.news_flash.NewsFlash"
+home.policy = "Enabled"
+
+features = ["libadwaita", "mpris", "libclapper", "network", "webkit", "xdg-open"]
+
+[ipc]
+portals = ["Background", "FileChooser"]
+own = ["org.mpris.MediaPlayer2.Newsflash"]

@@ -1,0 +1,15 @@
+name = "gnutls"
+description = "TLS for secure network communications."
+requires = ["gir", "locale"]
+
+libraries = [
+  "libgnutls*",
+  "/usr/lib/pkcs11"
+]
+
+[files]
+system.ReadOnly = [
+  "/etc/gnutls",
+  "/usr/share/p11-kit/",
+  "/etc/pkcs11",
+]

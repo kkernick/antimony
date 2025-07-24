@@ -1,0 +1,89 @@
+name = "xdg-open"
+description = "Allow the program to open files in the default application."
+
+[ipc]
+portals = ["OpenURI"]
+
+[files.direct.Executable]
+"/usr/bin/xdg-open" = '''
+#!/bin/sh
+
+has_url_scheme()
+{
+    echo "$1" | LC_ALL=C grep -Eq '^[[:alpha:]][[:alpha:][:digit:]+\.\-]*:'
+}
+
+
+is_file_url_or_path()
+{
+    if echo "$1" | grep -q '^file://' || ! has_url_scheme "$1" ; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+file_url_to_path()
+{
+    local file="$1"
+    if [ -z "$HOSTNAME" ]; then
+        if command -v hostname > /dev/null; then
+            HOSTNAME=$(hostname)
+        else
+            HOSTNAME=$(uname -n)
+        fi
+    fi
+
+    if echo "$file" | grep -q '^file://'; then
+        file=${file#file://localhost}
+        file=${file#file://"$HOSTNAME"}
+        file=${file#file://}
+        if ! echo "$file" | grep -q '^/'; then
+            echo "$file"
+            return
+        fi
+        file=${file%%#*}
+        file=${file%%\?*}
+        local printf=printf
+        if [ -x /usr/bin/printf ]; then
+            printf=/usr/bin/printf
+        fi
+        file=$($printf "$(echo "$file" | sed -e 's@%\([a-f0-9A-F]\{2\}\)@\x\1@g')")
+    fi
+    echo "$file"
+}
+
+
+if is_file_url_or_path "$1"; then
+    file="$(file_url_to_path "$1")"
+    if [ ! -e "$file" ]; then
+      exit 2
+    fi
+    if [ ! -r "$file" ]; then
+       exit 5
+    fi
+
+    gdbus call --session \
+        --dest org.freedesktop.portal.Desktop \
+        --object-path /org/freedesktop/portal/desktop \
+        --method org.freedesktop.portal.OpenURI.OpenFile \
+        --timeout 5 \
+        "" "3" {} 3< "$file"
+else
+    # $1 contains an URI
+
+    gdbus call --session \
+        --dest org.freedesktop.portal.Desktop \
+        --object-path /org/freedesktop/portal/desktop \
+        --method org.freedesktop.portal.OpenURI.OpenURI \
+        --timeout 5 \
+        "" "$1" {}
+fi
+
+if [ $? -eq 0 ]; then
+    exit 0
+else
+    exit 4
+fi
+'''

@@ -1,0 +1,7 @@
+name = "hunspell"
+description = "Spell Checking Library"
+
+libraries = ["libhunspell*"]
+
+[files.system]
+ReadOnly = ["/usr/share/hunspell/"]
