@@ -1,12 +1,14 @@
 home.policy = "Enabled"
 
 features = ["gtk3", "python", "network", "gtksourceview"]
-libraries = ["libvirt*", "libosinfo*"]
+libraries = ["libvirt*", "libosinfo*", "libspice-client*"]
 
 [files]
 system.ReadOnly = [
   "/var/run/libvirt",
-  "/usr/share/hwdata"
+  "/usr/share/hwdata",
+  "/usr/share/osinfo",
+  "/sys"
 ]
 
 [ipc]

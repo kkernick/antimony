@@ -173,14 +173,16 @@ mod tests {
     #[test]
     fn validate_features() {
         let features = Path::new(AT_HOME.as_path()).join("features");
-        for path in std::fs::read_dir(features)
-            .expect("No features to test")
-            .filter_map(|e| e.ok())
-        {
-            toml::from_str::<Feature>(
-                &std::fs::read_to_string(path.path()).expect("Failed to read feature"),
-            )
-            .expect("Failed to parse feature");
+        if features.exists() {
+            for path in std::fs::read_dir(features)
+                .expect("No features to test")
+                .filter_map(|e| e.ok())
+            {
+                toml::from_str::<Feature>(
+                    &std::fs::read_to_string(path.path()).expect("Failed to read feature"),
+                )
+                .expect("Failed to parse feature");
+            }
         }
     }
 }

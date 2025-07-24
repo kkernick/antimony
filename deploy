@@ -5,7 +5,7 @@ if [[ -z $RECIPE ]]; then
   RECIPE="release"
 fi
 
-cargo build --profile $RECIPE
+cargo build --profile $RECIPE --workspace
 
 if [[ "${RECIPE}" == "dev" ]]; then
     RECIPE="debug"
@@ -48,4 +48,4 @@ sudo cp config/new.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
 
-deploy-completions $RECIPE
+./deploy-completions $RECIPE

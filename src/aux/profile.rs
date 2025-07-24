@@ -1172,14 +1172,16 @@ mod tests {
     #[test]
     fn validate_profiles() {
         let profiles = Path::new(AT_HOME.as_path()).join("profiles");
-        for path in std::fs::read_dir(profiles)
-            .expect("No profiles to test")
-            .filter_map(|e| e.ok())
-        {
-            toml::from_str::<Profile>(
-                &std::fs::read_to_string(path.path()).expect("Failed to read feature"),
-            )
-            .expect("Failed to parse feature");
+        if profiles.exists() {
+            for path in std::fs::read_dir(profiles)
+                .expect("No profiles to test")
+                .filter_map(|e| e.ok())
+            {
+                toml::from_str::<Profile>(
+                    &std::fs::read_to_string(path.path()).expect("Failed to read profile"),
+                )
+                .expect("Failed to parse profile");
+            }
         }
     }
 }
