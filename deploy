@@ -47,3 +47,5 @@ sudo cp config/default.toml /usr/share/antimony/config
 sudo cp config/new.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
+
+deploy-completions $RECIPE

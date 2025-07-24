@@ -8,7 +8,7 @@ members = [
     "crates/seccomp",
     "crates/spawn",
     "."
-, "crates/user"]
+, "crates/user", "crates/antimony_completions"]
 
 [dependencies]
 user = { path = "crates/user" }

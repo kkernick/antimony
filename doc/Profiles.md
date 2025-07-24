@@ -92,7 +92,7 @@ The takeaway from this is that Profiles are not particularly verbose, nor do the
 
 ### Debugging Tools
 
-Antimony provides a set of debugging tools to help make profile creation easier. 
+Antimony provides a set of debugging tools to help make profile creation easier.
 
 #### Tracing
 `strace` is a program that traces a binary, printing syscall information. You can trace an application in the sandbox using the `trace` command:
@@ -104,21 +104,21 @@ antimony trace my_profile errors/all --report
 `trace` dumps the output of `strace` to your console, which is *very* verbose, so you have the option of only logging errors, or outputting the entire thing. If you don’t know how to parse `strace`, you can optionally provide the `--report` flag, which will give you a summary at the end of program execution. This report informs you of every file that the sandbox tried to access, but couldn’t because the file didn’t exist, yet the same file *does* exist on the Host. This can help pin-point files that the profile needs to run, but that the sandbox doesn’t provide. If a Feature can provide that file, they will be listed underneath the file in question, as it can be excessively permissive. Consider the following report:
 
 ```
-/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq can be provided with the following features  
+/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq can be provided with the following features
        - udev.toml (via /sys) as ReadOnly
 ```
 
-While the `udev` feature can indeed provide this file, it does so by providing the *entire* `/sys` folder. It would be more prudent that, if this file is necessary, to pass it directly, or one of it’s parents. 
+While the `udev` feature can indeed provide this file, it does so by providing the *entire* `/sys` folder. It would be more prudent that, if this file is necessary, to pass it directly, or one of it’s parents.
 
 #### Info
-The `info` command dumps information related to Features, Profiles, and [SECCOMP](./SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`. 
+The `info` command dumps information related to Features, Profiles, and [SECCOMP](./SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`.
 
 #### Debug Shell
 The `debug-shell` command will create the sandbox for the Profile, but rather than executing the application will drop you into a shell with some utilities for navigating the command line. You can check the contents of the environment, validate files and libraries, and even try and run the application with your own arguments or under different traces (So long as you provide them with `binaries`).
 
 ## Editing a Profile
 
-You can use `antimony edit` to edit a profile. Trying to edit  *System Profile* will create a copy for the user, allowing you to customize the behavior without affecting other users. This will open the TOML in your editor of choice. 
+You can use `antimony edit` to edit a profile. Trying to edit  *System Profile* will create a copy for the user, allowing you to customize the behavior without affecting other users. This will open the TOML in your editor of choice.
 
 ## Running a Profile
 
@@ -139,19 +139,19 @@ Antimony supports integrating Profiles into your environment; this makes sandbox
 
 All Profiles integrate themselves by installing a symlink to Antimony at `~/.local/bin`. When running as a symlink, Antimony will use it’s name as the profile argument to the `run` command, so: executing the symlink `~/.local/bin/chromium -> /usr/bin/antimony`, would be equivalent to `antimony run chromium`.
 
-This behavior allows you to shadow the original application in shell environments. Simply define you PATH to have `~/.local/bin` in front, and calling `chromium` from the command line will use Antimony instead. This works particularly well for CLI applications. If you need to run the unconfined version on the host, you can just spell out the absolute path, such as `/usr/bin/chromium`. 
+This behavior allows you to shadow the original application in shell environments. Simply define you PATH to have `~/.local/bin` in front, and calling `chromium` from the command line will use Antimony instead. This works particularly well for CLI applications. If you need to run the unconfined version on the host, you can just spell out the absolute path, such as `/usr/bin/chromium`.
 
 ### Desktop Integration
 
 If you provided an `id` attribute in the Profile, and a corresponding desktop file exists at `/usr/share/applications/id.desktop`, then Antimony will additionally shadow that as well (CLI applications that don’t have any such desktop file will simply stop after binary integration).
 
-The behavior of this depends on whether `id` is a valid Reverse DNS Name, which is required for Portal integration. Basically, some Desktop Environments (Principally Gnome), will source a desktop file with the sandbox’s `id` for icons. However, the ID must be, as mentioned, a valid Reverse DNS (In other words it needs a `.` character). If your `id` doesn’t contain one, like `chromium`, Antimony sticks a prefix onto the end to ensure the name is valid (`antimony.chromium`, in this case). However, this now presents an issue where the Desktop is looking for a desktop file named `antimony.chromium.desktop`, which does not exist. 
+The behavior of this depends on whether `id` is a valid Reverse DNS Name, which is required for Portal integration. Basically, some Desktop Environments (Principally Gnome), will source a desktop file with the sandbox’s `id` for icons. However, the ID must be, as mentioned, a valid Reverse DNS (In other words it needs a `.` character). If your `id` doesn’t contain one, like `chromium`, Antimony sticks a prefix onto the end to ensure the name is valid (`antimony.chromium`, in this case). However, this now presents an issue where the Desktop is looking for a desktop file named `antimony.chromium.desktop`, which does not exist.
 
 This presents two cases:
 1. If the `id` is valid, Antimony can cleanly create a copy of the system desktop file at `$XDG_DATA_HOME/applications`. The FreeDesktop specification allows for users to modify system desktop files by creating a copy in this location, which is exactly what Antimony does, and replaces the executable to point to the symlink created in binary integration.
-2. If the `id` is invalid, Antimony will create two desktop files at `$XDG_DATA_HOME/applications`:
+2. If the `id` is invalid, you might need to provide the `--shadow` argument, which will create two desktop files at `$XDG_DATA_HOME/applications`:
 	1. `id.desktop` will be used to shadow the system copy, otherwise you would have *two* identical copies.
-	2. `antimony.id.desktop` is the actual desktop file your environment will recognize and present in App Menus. 
+	2. `antimony.id.desktop` is the actual desktop file your environment will recognize and present in App Menus.
 
 Integration is done with `antimony integrate profile_name`. See [Configurations](./Configurations.md) if your profile uses them. Your Desktop Environment may need a few moments to recognize the new files, and you may need to log out to see the changes. You should be presented with an identical application to before, but one that launches under Antimony instead of on the host.
 
@@ -161,4 +161,4 @@ To undo integration, pass the `--remove` flag. Or, if you want to do it manually
 
 ## Refreshing
 
-Antimony caches Profiles to ensure fast startup. However, when you update your system, the cached definitions may become out of date. To reconcile this, you can use `antimony refresh`, which performs sandbox setup on either the provided Profile, or every integrated profile, but without running the applications. 
+Antimony caches Profiles to ensure fast startup. However, when you update your system, the cached definitions may become out of date. To reconcile this, you can use `antimony refresh`, which performs sandbox setup on either the provided Profile, or every integrated profile, but without running the applications.

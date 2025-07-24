@@ -25,6 +25,7 @@ pub struct Args {
     /// incongruity between ID and desktop that requires a shadow that
     /// hides the original. If an integrated profile lacks an icon, you
     /// may need to use this option.
+    #[arg(short, long, default_value_t = false)]
     pub shadow: bool,
 
     /// How to integrate configurations
