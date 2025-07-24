@@ -1,6 +1,6 @@
 #!/bin/sh
 
-target/$1/antimony_completion
+target/$1/antimony_completions
 sudo mv antimony.bash /usr/share/bash-completion
 sudo mv antimony.fish /usr/share/fish/vendor_completions.d
 sudo mv _antimony /usr/share/zsh/site-functions
