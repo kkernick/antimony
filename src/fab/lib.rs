@@ -333,8 +333,8 @@ pub fn fabricate(
             if !sof_path.exists() {
                 std::fs::create_dir_all(sof_path)?;
             }
-            handle.args_i(["--ro-bind", dir.as_str(), dir.as_str()])?;
         }
+        handle.args_i(["--ro-bind", dir.as_str(), dir.as_str()])?;
         Ok(())
     })?;
 

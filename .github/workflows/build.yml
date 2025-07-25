@@ -1,0 +1,49 @@
+name: Build Packages
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+         contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libseccomp-dev sqlite3 libsqlite3-dev ruby-dev libarchive-tools
+        sudo gem install fpm
+
+    - name: Extract version number
+      id: extract_version
+      run: |
+        VERSION=$(echo $GITHUB_REF | sed 's|refs/tags/||')
+        echo "Version: $VERSION"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Run package script
+      run: |
+        ./package ${{ steps.extract_version.outputs.version }}
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: github.ref_type == 'tag'
+      with:
+        files: |
+          antimony-sandbox-${{ steps.extract_version.outputs.version }}-1-x86_64.pkg.tar.zst
+          antimony-sandbox_${{ steps.extract_version.outputs.version }}-1_amd64.deb
+          antimony-sandbox-${{ steps.extract_version.outputs.version }}-1.x86_64.rpm
