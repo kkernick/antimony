@@ -1,0 +1,3 @@
+#!/bin/sh
+
+userdel antimony

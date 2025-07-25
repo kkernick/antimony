@@ -5,7 +5,7 @@ use crate::{
         profile::{Namespace, Portal, Profile},
         syscalls,
     },
-    fab::lib::get_libraries,
+    fab::lib::{add_sof, get_libraries},
 };
 use anyhow::Result;
 use inotify::WatchMask;
@@ -32,37 +32,19 @@ pub fn run(
 
     let runtime = RUNTIME_DIR.to_string_lossy();
     let resolve = which("xdg-dbus-proxy")?.to_string_lossy().into_owned();
-    let instance_dir = String::from(".proxy");
 
     user::set(user::Mode::Effective)?;
     // Create an SOF for the proxy.
     // It's shared between every application and instance.
     // Performed before we drop to the user.
-    let sof = Path::new(AT_HOME.as_path())
-        .join("cache")
-        .join(instance_dir);
+    let sof = Path::new(AT_HOME.as_path()).join("cache").join(".proxy");
+
     if !sof.exists() {
         let libraries = get_libraries(Cow::Borrowed(&resolve))?;
 
         libraries
             .into_par_iter()
-            .map(|library| -> Result<()> {
-                let sof_path = match library.rfind('/') {
-                    Some(i) => sof.join(&library[i + 1..]),
-                    None => sof.join(&library),
-                };
-
-                if let Some(parent) = sof_path.parent() {
-                    fs::create_dir_all(parent)?;
-                    let canon = fs::canonicalize(&library)?;
-                    if fs::hard_link(&canon, &sof_path).is_err() {
-                        fs::copy(canon, sof_path)?;
-                    }
-                }
-                Ok(())
-            })
-            // Collect in case of any errors.
-            .collect::<Result<Vec<_>>>()?;
+            .try_for_each(|library| add_sof(&sof, library))?;
     }
     user::set(user::Mode::Real)?;
 
@@ -83,7 +65,8 @@ pub fn run(
             "--unshare-all",
             "--unshare-user",
             "--die-with-parent",
-            "--bind", &runtime, &runtime,
+            "--dir", &runtime,
+            "--bind", &format!("{runtime}/bus"), &format!("{runtime}/bus"),
             "--ro-bind", &info.to_string_lossy(), "/.flatpak-info",
             "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
             "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
@@ -94,10 +77,10 @@ pub fn run(
 
     #[rustfmt::skip]
     proxy.args_i([
-        "--overlay-src", &format!("{sof_str}"), "--tmp-overlay", "/usr/lib",
-        "--symlink", "/usr/lib", "/usr/lib64",
+        "--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib",
+        "--ro-bind-try", &format!("{sof_str}/lib64"), "/usr/lib64",
         "--symlink", "/usr/lib", "/lib",
-        "--symlink", "/usr/lib", "/lib64",
+        "--symlink", "/usr/lib64", "/lib64",
     ])?;
 
     // Setup SECCOMP.

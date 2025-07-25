@@ -6,9 +6,9 @@ use crate::{
     },
     fab::{lib::get_dir, localize_path},
 };
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::debug;
+use log::{debug, trace};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -197,7 +197,12 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     let resolved = if path.starts_with('/') {
         Cow::Borrowed(path)
     } else {
-        Cow::Owned(which(path)?.to_string_lossy().into_owned())
+        Cow::Owned(
+            which(path)
+                .with_context(|| path.to_string())?
+                .to_string_lossy()
+                .into_owned(),
+        )
     };
 
     if resolved.starts_with("/bin") {
@@ -214,6 +219,8 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
         return Ok(Type::Done);
     }
 
+    trace!("Parsing {path}");
+
     let resolved = match resolve_bin(path) {
         Ok(path) => path,
         Err(_) => return Ok(Type::None),
@@ -223,11 +230,15 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
     if let Ok(dest) = std::fs::read_link(resolved.as_ref()) {
         let dest = dest.to_string_lossy();
         if include_self {
-            ret.symlinks.insert(
-                resolved.into_owned(),
-                resolve_bin(dest.as_ref())?.into_owned(),
-            );
+            match resolve_bin(dest.as_ref()) {
+                Ok(dest) => {
+                    ret.symlinks
+                        .insert(resolved.into_owned(), dest.into_owned());
+                }
+                Err(_) => return Ok(Type::None),
+            };
         }
+
         parse(&dest, ret.clone(), true)?;
         return Ok(Type::Link);
     }
@@ -458,7 +469,13 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     parsed
         .symlinks
         .into_par_iter()
-        .try_for_each(|(link, dest)| handle.args_i(["--symlink", &dest, &link]))?;
+        .try_for_each(|(link, dest)| {
+            if !link.contains("/lib") {
+                handle.args_i(["--symlink", &dest, &link])
+            } else {
+                Ok(())
+            }
+        })?;
 
     profile
         .libraries
@@ -479,8 +496,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     #[rustfmt::skip]
     handle.args_i([
         "--symlink", "/usr/bin", "/bin",
-        "--symlink", "/usr/bin", "/sbin",
-        "--symlink", "/usr/bin", "/usr/sbin"
+        "--symlink", "/usr/sbin", "/sbin"
 
     ])?;
     profile.binaries = Some(elf_binaries);

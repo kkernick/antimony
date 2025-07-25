@@ -10,7 +10,7 @@ Antimony’s default home is protected from frivolous modification, so you’ll 
 antimony create my_profile
 ```
 
-With the name of the profile provided as `my_profile`. This will open up an instance of your default editor (Specified via `EDITOR`, or defaulting to a series of commonly installed ones), allowing you to specify all the various attributes of the application. While the new profile documentation can look intimidating, Antimony needs very little information to properly confine a profile. Simple binaries, like `bash` and command line utilities, do not need profiles *at all*. If the argument to `antimony run` does not point to a valid Profile name, it is assumed to be a binary, and will run it (See [The Command Line Profile](./Defaults). For example, there is no `zsh` profile defined, but this works:
+With the name of the profile provided as `my_profile`. This will open up an instance of your default editor (Specified via `EDITOR`, or defaulting to a series of commonly installed ones), allowing you to specify all the various attributes of the application. While the new profile documentation can look intimidating, Antimony needs very little information to properly confine a profile. Simple binaries, like `bash` and command line utilities, do not need profiles *at all*. If the argument to `antimony run` does not point to a valid Profile name, it is assumed to be a binary, and will run it (See [The Command Line Profile](Defaults.md). For example, there is no `zsh` profile defined, but this works:
 
 ```bash
 antimony run zsh
@@ -111,7 +111,7 @@ antimony trace my_profile errors/all --report
 While the `udev` feature can indeed provide this file, it does so by providing the *entire* `/sys` folder. It would be more prudent that, if this file is necessary, to pass it directly, or one of it’s parents.
 
 #### Info
-The `info` command dumps information related to Features, Profiles, and [SECCOMP](./SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`.
+The `info` command dumps information related to Features, Profiles, and [SECCOMP](SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`.
 
 #### Debug Shell
 The `debug-shell` command will create the sandbox for the Profile, but rather than executing the application will drop you into a shell with some utilities for navigating the command line. You can check the contents of the environment, validate files and libraries, and even try and run the application with your own arguments or under different traces (So long as you provide them with `binaries`).
@@ -153,7 +153,7 @@ This presents two cases:
 	1. `id.desktop` will be used to shadow the system copy, otherwise you would have *two* identical copies.
 	2. `antimony.id.desktop` is the actual desktop file your environment will recognize and present in App Menus.
 
-Integration is done with `antimony integrate profile_name`. See [Configurations](./Configurations.md) if your profile uses them. Your Desktop Environment may need a few moments to recognize the new files, and you may need to log out to see the changes. You should be presented with an identical application to before, but one that launches under Antimony instead of on the host.
+Integration is done with `antimony integrate profile_name`. See [Configurations](Configurations.md) if your profile uses them. Your Desktop Environment may need a few moments to recognize the new files, and you may need to log out to see the changes. You should be presented with an identical application to before, but one that launches under Antimony instead of on the host.
 
 To undo integration, pass the `--remove` flag. Or, if you want to do it manually:
 1. Delete the symlink at `~/.local/bin/name`

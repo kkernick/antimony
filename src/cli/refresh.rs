@@ -37,6 +37,7 @@ impl super::Run for Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
+            user::set(user::Mode::Real)?;
             let bin = HOME_PATH.join(".local").join("bin");
             debug!("Refreshing local binaries");
 
@@ -56,6 +57,7 @@ impl super::Run for Args {
                     None
                 })
                 .collect();
+            user::revert()?;
 
             // DO NOT TRY AND RUN THIS IN PARALLEL. ANTIMONY WILL
             // CAUSE A KERNEL PANIC IF YOU RUN IT IN PARALLEL!

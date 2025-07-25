@@ -1,8 +1,37 @@
 //! Environment Variables Antimony needs defined.
-use log::warn;
+use anyhow::Result;
+use log::{debug, warn};
 use once_cell::sync::Lazy;
+use spawn::Spawner;
 use std::path::PathBuf;
 use which::which;
+
+pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
+    let version = || -> Result<String> {
+        let out = Spawner::new("bwrap")
+            .arg("--version")?
+            .output(true)
+            .spawn()?
+            .output_all()?;
+        Ok(out)
+    }();
+
+    match version {
+        Ok(version) => version.contains("0.11"),
+        Err(_) => false,
+    }
+});
+
+pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
+    let single = match std::fs::read_link("/usr/lib64") {
+        Ok(dest) => {
+            dest == std::path::PathBuf::from("/usr/lib") || dest == std::path::PathBuf::from("lib")
+        }
+        Err(_) => false,
+    };
+    debug!("Single Library Folder: {single}");
+    single
+});
 
 /// The User's PATH variable, removing ~/.local/bin to prevent
 /// Antimony from using itself when a profile has been integrated.

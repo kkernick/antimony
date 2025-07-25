@@ -1,0 +1,395 @@
+#compdef antimony
+
+autoload -U is-at-least
+
+_antimony() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_antimony_commands" \
+"*::: :->Antimony" \
+&& ret=0
+    case $state in
+    (Antimony)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:antimony-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+'--config=[Use a configuration within the profile]:CONFIG:_default' \
+'*--features=[Additional features]:FEATURES:_default' \
+'*--inherits=[Additional inheritance]:INHERITS:_default' \
+'--home-policy=[Override the home policy]:HOME_POLICY:((none\:"Do not use a home profile"
+enabled\:"The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox"
+overlay\:"Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn'\''t typically support multiple instances (Zed, Chromium, etc)"))' \
+'--home-name=[Override the home name]:HOME_NAME:_default' \
+'--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
+permissive\:"Syscalls are logged to construct a policy for the profile"
+enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"))' \
+'*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notification open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor)' \
+'*--see=[Add busses the sandbox can see]:SEE:_default' \
+'*--talk=[Add busses the sandbox can talk to]:TALK:_default' \
+'*--own=[Add busses the sandbox owns]:OWN:_default' \
+'*--call=[Add busses the sandbox can call]:CALL:_default' \
+'--file-passthrough=[Override the file passthrough mode]:FILE_PASSTHROUGH:((read-only\:""
+read-write\:""
+executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
+'*--ro=[Add read-only files]:RO:_default' \
+'*--rw=[Add read-write files]:RW:_default' \
+'*--binaries=[Add binaries]:BINARIES:_default' \
+'*--libraries=[Add libraries]:LIBRARIES:_default' \
+'*--devices=[Add devices]:DEVICES:_default' \
+'*--namespaces=[Add namespaces]:NAMESPACES:((none\:""
+all\:""
+user\:"The user namespace is needed to create additional sandboxes (Such as chromium)"
+ipc\:""
+pid\:""
+net\:"Use the network feature instead"
+uts\:""
+c-group\:""))' \
+'*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
+'--dry[Generate the profile, but do not run the executable]' \
+'--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
+'--system-bus[Provide the system bus]' \
+'--user-bus[Provide the user bus. xdg-dbus-proxy is not run]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':profile -- The name of the profile, or a command to sandbox:_default' \
+'*::passthrough -- Arguments to pass to the profile application:_default' \
+&& ret=0
+;;
+(create)
+_arguments "${_arguments_options[@]}" : \
+'-b[Provide an empty file, rather than a documented one]' \
+'--blank[Provide an empty file, rather than a documented one]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(edit)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(refresh)
+_arguments "${_arguments_options[@]}" : \
+'--dry[Just delete the cache, don'\''t repopulate]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_default' \
+&& ret=0
+;;
+(integrate)
+_arguments "${_arguments_options[@]}" : \
+'-c+[How to integrate configurations]:CONFIG_MODE:((action\:"Integrate each configuration as a separate desktop action within the main Desktop File"
+file\:"Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers"))' \
+'--config-mode=[How to integrate configurations]:CONFIG_MODE:((action\:"Integrate each configuration as a separate desktop action within the main Desktop File"
+file\:"Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers"))' \
+'-r[Undo integration for the profile]' \
+'--remove[Undo integration for the profile]' \
+'-s[Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don'\''t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option]' \
+'--shadow[Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don'\''t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(reset)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(trace)
+_arguments "${_arguments_options[@]}" : \
+'--report[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':profile -- The name of the profile:_default' \
+':mode -- What to trace:((errors\:"Only trace syscalls that return errors"
+all\:"Trace all syscalls, even those that succeed. Useful to see the context in which an error occurred"))' \
+'*::passthrough -- Arguments to pass to strace:_default' \
+&& ret=0
+;;
+(stat)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(info)
+_arguments "${_arguments_options[@]}" : \
+'*-v[Generate the profile, but do not run the executable]' \
+'*--verbosity[Generate the profile, but do not run the executable]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':what -- What to get info on:((profile\:"A Profile"
+feature\:"A Feature"
+seccomp\:"Query the SECCOMP database"))' \
+'::name -- Profile/Feature/Binary name:_default' \
+&& ret=0
+;;
+(debug-shell)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(seccomp)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':operation -- The operation to perform:((optimize\:"Optimize the database"
+remove\:"Remove the database completely"
+export\:"Export the database to a path"
+merge\:"Merge another database into the system database"
+clean\:"Remove binaries that no longer exist from the database"))' \
+'::path -- An optional path, used by Export/Merge:_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_antimony__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:antimony-help-command-$line[1]:"
+        case $line[1] in
+            (run)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(edit)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(refresh)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(integrate)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(reset)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(trace)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(stat)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(info)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(debug-shell)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(seccomp)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_antimony_commands] )) ||
+_antimony_commands() {
+    local commands; commands=(
+'run:Run a profile' \
+'create:Create a new profile' \
+'edit:Edit an existing profile' \
+'refresh:Refresh caches' \
+'integrate:Integrate a profile into the user environment' \
+'reset:Reset a profile back to the system-defined profile' \
+'trace:Trace a profile for missing syscalls or files' \
+'stat:Collect stats about a profile'\''s sandbox' \
+'info:List installed profiles and features' \
+'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
+'seccomp:Perform operations on the SECCOMP Database' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'antimony commands' commands "$@"
+}
+(( $+functions[_antimony__create_commands] )) ||
+_antimony__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony create commands' commands "$@"
+}
+(( $+functions[_antimony__debug-shell_commands] )) ||
+_antimony__debug-shell_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony debug-shell commands' commands "$@"
+}
+(( $+functions[_antimony__edit_commands] )) ||
+_antimony__edit_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony edit commands' commands "$@"
+}
+(( $+functions[_antimony__help_commands] )) ||
+_antimony__help_commands() {
+    local commands; commands=(
+'run:Run a profile' \
+'create:Create a new profile' \
+'edit:Edit an existing profile' \
+'refresh:Refresh caches' \
+'integrate:Integrate a profile into the user environment' \
+'reset:Reset a profile back to the system-defined profile' \
+'trace:Trace a profile for missing syscalls or files' \
+'stat:Collect stats about a profile'\''s sandbox' \
+'info:List installed profiles and features' \
+'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
+'seccomp:Perform operations on the SECCOMP Database' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'antimony help commands' commands "$@"
+}
+(( $+functions[_antimony__help__create_commands] )) ||
+_antimony__help__create_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help create commands' commands "$@"
+}
+(( $+functions[_antimony__help__debug-shell_commands] )) ||
+_antimony__help__debug-shell_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help debug-shell commands' commands "$@"
+}
+(( $+functions[_antimony__help__edit_commands] )) ||
+_antimony__help__edit_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help edit commands' commands "$@"
+}
+(( $+functions[_antimony__help__help_commands] )) ||
+_antimony__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help help commands' commands "$@"
+}
+(( $+functions[_antimony__help__info_commands] )) ||
+_antimony__help__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help info commands' commands "$@"
+}
+(( $+functions[_antimony__help__integrate_commands] )) ||
+_antimony__help__integrate_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help integrate commands' commands "$@"
+}
+(( $+functions[_antimony__help__refresh_commands] )) ||
+_antimony__help__refresh_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help refresh commands' commands "$@"
+}
+(( $+functions[_antimony__help__reset_commands] )) ||
+_antimony__help__reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help reset commands' commands "$@"
+}
+(( $+functions[_antimony__help__run_commands] )) ||
+_antimony__help__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help run commands' commands "$@"
+}
+(( $+functions[_antimony__help__seccomp_commands] )) ||
+_antimony__help__seccomp_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help seccomp commands' commands "$@"
+}
+(( $+functions[_antimony__help__stat_commands] )) ||
+_antimony__help__stat_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help stat commands' commands "$@"
+}
+(( $+functions[_antimony__help__trace_commands] )) ||
+_antimony__help__trace_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help trace commands' commands "$@"
+}
+(( $+functions[_antimony__info_commands] )) ||
+_antimony__info_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony info commands' commands "$@"
+}
+(( $+functions[_antimony__integrate_commands] )) ||
+_antimony__integrate_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony integrate commands' commands "$@"
+}
+(( $+functions[_antimony__refresh_commands] )) ||
+_antimony__refresh_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony refresh commands' commands "$@"
+}
+(( $+functions[_antimony__reset_commands] )) ||
+_antimony__reset_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony reset commands' commands "$@"
+}
+(( $+functions[_antimony__run_commands] )) ||
+_antimony__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony run commands' commands "$@"
+}
+(( $+functions[_antimony__seccomp_commands] )) ||
+_antimony__seccomp_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony seccomp commands' commands "$@"
+}
+(( $+functions[_antimony__stat_commands] )) ||
+_antimony__stat_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony stat commands' commands "$@"
+}
+(( $+functions[_antimony__trace_commands] )) ||
+_antimony__trace_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony trace commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_antimony" ]; then
+    _antimony "$@"
+else
+    compdef _antimony antimony
+fi

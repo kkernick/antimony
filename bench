@@ -9,7 +9,7 @@ fi
 
 echo "Using: $ANTIMONY"
 
-ARGS="--shell=none --time-unit=microsecond"
+ARGS="--shell=none --time-unit=millisecond"
 
 hyperfine --command-name "Local Refresh" $ARGS "$ANTIMONY refresh $PROFILE --dry"
 

@@ -16,7 +16,6 @@ sudo rm /usr/bin/antimony{,-monitor,-spawn}
 echo "Copying binaries"
 sudo cp target/$RECIPE/antimony{,-monitor,-spawn} /usr/bin
 
-echo "Giving AUDIT cap"
 sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
 
 echo "Setting SetUID"
@@ -24,7 +23,7 @@ exec="/usr/bin/antimony"
 sudo chown antimony:antimony $exec
 sudo chmod ug+s $exec
 sudo chmod o+x $exec
-
+sudo setcap cap_fowner+ep /usr/bin/antimony
 
 echo "Removing old config"
 sudo rm -fr /usr/share/antimony/{features,profiles}

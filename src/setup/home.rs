@@ -1,6 +1,11 @@
-use crate::aux::{env::DATA_HOME, profile::HomePolicy};
+use std::process::exit;
+
+use crate::aux::{
+    env::{DATA_HOME, OVERLAY},
+    profile::HomePolicy,
+};
 use anyhow::Result;
-use log::debug;
+use log::{debug, error};
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(home) = &args.profile.home {
@@ -20,14 +25,21 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 match policy {
                     HomePolicy::Enabled => {
                         args.handle
-                            .args_i(["--bind", &home_str, "/home/antimony"])?
+                            .args_i(["--bind", &home_str, "/home/antimony"])?;
                     }
-                    _ => args.handle.args_i([
-                        "--overlay-src",
-                        &home_str,
-                        "--tmp-overlay",
-                        "/home/antimony",
-                    ])?,
+                    _ => {
+                        if *OVERLAY {
+                            args.handle.args_i([
+                                "--overlay-src",
+                                &home_str,
+                                "--tmp-overlay",
+                                "/home/antimony",
+                            ])?;
+                        } else {
+                            error!("Bubblewrap version too old for overlays!");
+                            exit(1);
+                        }
+                    }
                 };
                 user::restore(saved)?;
             }

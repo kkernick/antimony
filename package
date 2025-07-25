@@ -1,0 +1,9 @@
+#!/bin/sh
+
+VERSION="${1}"
+cargo build --release --workspace
+./target/release/antimony_completions
+
+fpm -t pacman --depends libseccomp --depends sqlite
+fpm -t deb --depends libseccomp2 --depends sqlite3
+fpm -t rpm --depends libseccomp --depends sqlite

@@ -1,8 +1,11 @@
 use crate::{
-    aux::{env::AT_HOME, profile::Profile},
+    aux::{
+        env::{AT_HOME, SINGLE_LIB},
+        profile::Profile,
+    },
     fab::bin::ELF_MAGIC,
 };
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use dashmap::DashSet;
 use log::debug;
 use once_cell::sync::Lazy;
@@ -65,7 +68,6 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
                     .to_string_lossy()
                     .into_owned()
             }
-            let mut resolved = resolved.replace("lib64", "lib");
             if resolved.starts_with("/lib") {
                 resolved.insert_str(0, "/usr");
             }
@@ -77,28 +79,41 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
 
 /// Get all matches for a wildcard.
 pub fn get_wildcards(pattern: &str) -> Result<HashSet<String>> {
+    let run = |dir, base| -> Result<HashSet<String>> {
+        Ok(Spawner::new("find")
+            .args([
+                dir,
+                "-maxdepth",
+                "1",
+                "-mindepth",
+                "1",
+                "-name",
+                base,
+                "-executable",
+            ])?
+            .output(true)
+            .mode(user::Mode::Real)
+            .spawn()?
+            .output_all()?
+            .lines()
+            .map(|e| e.to_string())
+            .collect())
+    };
+
     if let Some(libraries) = get_cache(pattern)? {
         return Ok(libraries);
     }
-    let (dir, base) = {
-        if pattern.starts_with("/") {
-            let i = pattern.rfind('/').unwrap();
-            (&pattern[..i], &pattern[i + 1..])
-        } else {
-            ("/usr/lib", pattern)
+    let libraries = if pattern.starts_with("/") {
+        let i = pattern.rfind('/').unwrap();
+        run(&pattern[..i], &pattern[i + 1..])?
+    } else {
+        let mut libraries = run("/usr/lib", pattern)?;
+        if !*SINGLE_LIB {
+            libraries.extend(run("/usr/lib64", pattern).unwrap_or_default());
         }
+        libraries
     };
 
-    #[rustfmt::skip]
-    let libraries: HashSet<String> = Spawner::new("find")
-        .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base, "-executable"])?
-        .output(true)
-        .mode(user::Mode::Real)
-        .spawn()?
-        .output_all()?
-        .lines()
-        .map(|e| e.to_string())
-        .collect();
     write_cache(pattern, libraries)
 }
 
@@ -149,6 +164,28 @@ fn dir_resolve(
     Ok(dependencies)
 }
 
+pub fn sof_path(sof: &Path, library: &str) -> PathBuf {
+    PathBuf::from(library.replace("/usr", &sof.to_string_lossy()))
+}
+
+pub fn add_sof(sof: &Path, library: String) -> Result<()> {
+    let sof_path = sof_path(sof, &library);
+
+    if let Some(parent) = sof_path.parent() {
+        std::fs::create_dir_all(parent)?;
+        if let Ok(canon) = std::fs::canonicalize(&library) {
+            if let Err(e) = std::fs::hard_link(&canon, &sof_path) {
+                if e.kind() != std::io::ErrorKind::AlreadyExists {
+                    return Err(e).with_context(|| {
+                        format!("Failed to hardlink {library} -> {}", sof_path.display())
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Generate the libraries for a program.
 pub fn fabricate(
     profile: &mut Profile,
@@ -163,9 +200,9 @@ pub fn fabricate(
             #[rustfmt::skip]
             handle.args_i([
                 "--ro-bind", "/usr/lib", "/usr/lib",
-                "--symlink", "/usr/lib", "/usr/lib64",
+                "--ro-bind", "/usr/lib64", "/usr/lib64",
                 "--symlink", "/usr/lib", "/lib",
-                "--symlink", "/usr/lib", "/lib64",
+                "--symlink", "/usr/lib64", "/lib64",
             ])?;
             return Ok(());
         }
@@ -184,10 +221,17 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    let app_lib = Path::new("/usr").join("lib").join(name);
-    if app_lib.exists() {
-        debug!("Adding program lib folder");
-        resolved.insert(app_lib.to_string_lossy());
+    let mut lib_roots = vec!["lib"];
+    if !*SINGLE_LIB {
+        lib_roots.push("lib64");
+    }
+
+    for lib_root in lib_roots {
+        let app_lib = Path::new("/usr").join(lib_root).join(name);
+        if app_lib.exists() {
+            debug!("Adding program lib folder");
+            resolved.insert(Cow::Owned(app_lib.to_string_lossy().into_owned()));
+        }
     }
 
     if let Some(libraries) = profile.libraries.take() {
@@ -261,7 +305,7 @@ pub fn fabricate(
                 library.as_str()
             };
 
-            if parent == ("/usr/lib") {
+            if parent == "/usr/lib" || parent == "/usr/lib64" {
                 true
             } else {
                 !directories
@@ -270,37 +314,29 @@ pub fn fabricate(
             }
         })
         // Write the SOF version, as a hard link preferably.
-        .map(|library| -> Result<()> {
-            let sof_path = match library.rfind('/') {
-                Some(i) => sof.join(&library[i + 1..]),
-                None => sof.join(&library),
-            };
-
-            if let Some(parent) = sof_path.parent() {
-                std::fs::create_dir_all(parent)?;
-                let canon = std::fs::canonicalize(&library)?;
-
-                if !sof_path.exists() && std::fs::hard_link(&canon, &sof_path).is_err() {
-                    std::fs::copy(canon, sof_path)?;
-                }
-            }
-            Ok(())
-        })
-        // Collect in case of any errors.
-        .collect::<Result<Vec<_>>>()?;
+        .try_for_each(|lib| add_sof(&sof, lib))?;
 
     // Overlays are required to mount the library directories.
+
+    let sof_str = sof.to_string_lossy();
     #[rustfmt::skip]
     handle.args_i([
-        "--overlay-src", &sof.to_string_lossy(), "--tmp-overlay", "/usr/lib",
-        "--symlink", "/usr/lib", "/usr/lib64",
+        "--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib",
+        "--ro-bind-try", &format!("{sof_str}/lib64"), "/usr/lib64",
         "--symlink", "/usr/lib", "/lib",
-        "--symlink", "/usr/lib", "/lib64",
+        "--symlink", "/usr/lib64", "/lib64",
     ])?;
 
-    for directory in directories.iter() {
-        handle.args_i(["--ro-bind", &directory, &directory])?;
-    }
+    directories.iter().try_for_each(|dir| -> Result<()> {
+        if dir.contains("lib") {
+            let sof_path = sof_path(&sof, dir.as_str());
+            if !sof_path.exists() {
+                std::fs::create_dir_all(sof_path)?;
+            }
+            handle.args_i(["--ro-bind", dir.as_str(), dir.as_str()])?;
+        }
+        Ok(())
+    })?;
 
     user::restore(saved)?;
     Ok(())

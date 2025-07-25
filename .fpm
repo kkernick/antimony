@@ -1,0 +1,29 @@
+-s dir
+--name antimony-sandbox
+--iteration 1
+--license Unlicense
+--url "https://github.com/kkernick/antimony"
+--description "Sandbox Applications"
+
+--depends findutils
+--depends bubblewrap
+--depends strace
+--depends xdg-dbus-proxy
+
+--after-install hooks/after_install.sh
+--after-remove hooks/after_remove.sh
+--after-upgrade hooks/after_upgrade.sh
+
+target/release/antimony=/usr/bin/antimony
+target/release/antimony-monitor=/usr/bin/antimony-monitor
+target/release/antimony-spawn=/usr/bin/antimony-spawn
+
+config/profiles=/usr/share/antimony
+config/features=/usr/share/antimony
+
+config/default.toml=/usr/share/antimony/config/default.toml
+config/new.toml=/usr/share/antimony/config/new.toml
+
+completions/antimony.bash=/usr/share/bash-completion/completions/antimony
+completions/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish
+completions/_antimony=/usr/share/zsh/site-functions/_antimony
