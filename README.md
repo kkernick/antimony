@@ -22,7 +22,7 @@ Antimony relies on the following runtime-dependencies:
 ### Compiling
 
 > [!tip]
-> If you’re using Arch, Antimony is available in the [AUR](https://aur.archlinux.org/antimony-sandbox)
+> If you’re using Arch, Antimony is available in the [AUR](https://aur.archlinux.org/packages/antimony-sandbox)
 
 To compile Antimony, you will need:
 * Rust and Cargo, supporting the 2024 Edition.
