@@ -16,7 +16,7 @@ All test are run on an identical, Arch Virtual Machine. The raw numbers are not 
 | Zed         | 102.2 | 7.1    | 3.0         | 2.4X        |
 | Okular      | 100.8 | 7.5    | 2.8         | 2.7X        |
 | Syncthing   | 98.2  | 6.2    | 2.2         | 2.8X        |
-^hot
+
 *Comparison between Hot Startup, in Milliseconds. Each application has cached definitions, and this benchmark largely shows how quickly the program can read its caches and launch bubblewrap.*
 
 | Profile Cold | SB*    | SB++** | Antimony*** | Improvement |
@@ -25,7 +25,7 @@ All test are run on an identical, Arch Virtual Machine. The raw numbers are not 
 | Zed          | 418.2  | 177.8  | 45.6        | 3.9X        |
 | Okular       | 3792.9 | 2107.6 | 1604.8      | 1.3X        |
 | Syncthing    | 170.4  | 37.0   | 25.9        | 1.4X        |
-^cold
+
 *Comparison between Cold Startup, in Milliseconds. Each application has its cache removed prior to execution.*
 
 \* SB is run via `benchmark.sh python main $PROFILE` from the [SB](https://github.com/kkernick/sb) repository.
