@@ -1,0 +1,4 @@
+home.policy = "Enabled"
+
+features = ["electron", "network", "xdg-open", "secrets"]
+arguments = ["--ozone-platform=wayland"]
