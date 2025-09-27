@@ -19,7 +19,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
             if policy == SeccompPolicy::Permissive && !args.args.dry {
                 debug!("Spawning SECCOMP Monitor");
-                let handle = Spawner::new("antimony-monitor")
+                let handle = Spawner::new("/usr/bin/antimony-monitor")
                     .arg(&args.instance)?
                     .preserve_env(true)
                     .spawn()?;

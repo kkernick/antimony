@@ -52,7 +52,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
     if let Some(libraries) = get_cache(&path)? {
         return Ok(libraries);
     }
-    let libraries: HashSet<String> = Spawner::new("ldd")
+    let libraries: HashSet<String> = Spawner::new("/usr/bin/ldd")
         .arg(path.as_ref())?
         .output(true)
         .spawn()?
@@ -133,7 +133,7 @@ pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
     if let Some(libraries) = get_cache(dir)? {
         return Ok(libraries);
     }
-    let libraries: HashSet<String> = Spawner::new("find")
+    let libraries: HashSet<String> = Spawner::new("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(true)
         .mode(user::Mode::Real)

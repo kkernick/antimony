@@ -55,7 +55,7 @@ pub fn run(
     fs::create_dir_all(&proxy)?;
 
     #[rustfmt::skip]
-    let mut proxy = Spawner::new("bwrap")
+    let mut proxy = Spawner::new("/usr/bin/bwrap")
         .mode(user::Mode::Real).args([
             "--new-session",
             "--ro-bind", &resolve, &resolve,

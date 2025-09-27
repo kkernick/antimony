@@ -31,7 +31,7 @@ static CHARS: Lazy<HashSet<char>> = Lazy::new(|| {
 
 /// Reserved keywords in bash.
 static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut compgen: HashSet<String> = Spawner::new("bash")
+    let mut compgen: HashSet<String> = Spawner::new("/usr/bin/bash")
         .args(["-c", "compgen -k"])
         .unwrap()
         .output(true)
@@ -327,7 +327,7 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
 
                 if let Some((key, val)) = line.split_once('=') {
                     if !line.starts_with("-") {
-                        let mut result = Spawner::new("bash")
+                        let mut result = Spawner::new("/usr/bin/bash")
                             .args(["-c", &format!("{line}; echo ${key}")])?
                             .output(true)
                             .error(true)
