@@ -8,7 +8,7 @@ use which::which;
 
 pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
     let version = || -> Result<String> {
-        let out = Spawner::new("bwrap")
+        let out = Spawner::new("/usr/bin/bwrap")
             .arg("--version")?
             .output(true)
             .spawn()?

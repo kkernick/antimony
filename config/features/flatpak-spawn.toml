@@ -4,5 +4,5 @@ namespaces = ["User"]
 
 binaries = [
   "/usr/bin/antimony-spawn=/usr/bin/flatpak-spawn",
-  "ldd", "bwrap", "find",
+  "ldd", "bwrap", "find", "bash"
 ]
