@@ -1,0 +1,9 @@
+id = "org.kde.dolphin"
+features = ["kf6", "xdg-open"]
+libraries = ["libdolphin*"]
+
+[ipc]
+own = ["org.kde.dolphin.*"]
+
+[files.user]
+ReadWrite = ["/"]

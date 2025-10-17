@@ -1,0 +1,11 @@
+features = ["gdk-pixbuf", "gir", "kf6", "python", "tray"]
+libraries = ["libnotify*"]
+
+[ipc]
+system_bus = true
+
+[files.user]
+ReadWrite = ["$XDG_CONFIG_HOME/firewall"]
+
+[files.system]
+ReadOnly = ["/etc/firewall"]

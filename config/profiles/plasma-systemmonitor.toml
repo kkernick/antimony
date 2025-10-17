@@ -1,0 +1,14 @@
+id = "org.kde.plasma-systemmonitor"
+features = ["cgroup", "kf6", "ksysguard", "network"]
+libraries = ["libPlasmaSystemMonitor*"]
+namespaces = ["Pid"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+talk = ["org.kde.ksystemstats", "org.kde.ksystemstats1.*"]
+own = ["org.kde.plasma-systemmonitor"]
+
+[files.system]
+ReadOnly = ["/sys"]

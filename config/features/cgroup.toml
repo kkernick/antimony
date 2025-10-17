@@ -1,0 +1,6 @@
+name = "CGroup"
+description = "Share the host CGroup"
+namespaces = ["CGroup"]
+
+[files.system]
+ReadOnly = ["/sys/fs/cgroup"]
