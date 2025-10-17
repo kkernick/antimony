@@ -1,6 +1,5 @@
 name = "hardened_malloc"
 description = "Enforce Hardened Malloc as the memory allocator within the sandbox"
-
 libraries = ["/usr/lib/libhardened_malloc.so"]
 
 [files.direct.ReadOnly]

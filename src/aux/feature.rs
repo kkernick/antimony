@@ -4,7 +4,7 @@ use crate::aux::env::{AT_HOME, PWD};
 use crate::aux::profile::Files;
 use console::style;
 use serde::Deserialize;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Errors reading feature files
@@ -85,7 +85,7 @@ pub struct Feature {
     pub devices: Option<BTreeSet<String>>,
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
-    pub environment: Option<HashMap<String, String>>,
+    pub environment: Option<BTreeMap<String, String>>,
 }
 impl Feature {
     /// Get a feature from its name.

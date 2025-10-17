@@ -1,6 +1,7 @@
 name = "glycin"
 description = "Gnome Image Loading."
 requires = ["gir", "flatpak-spawn"]
+conflicts = ["hardened_malloc"]
 
 files.system.ReadOnly = [
   "/usr/include/glycin-2/",

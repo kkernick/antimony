@@ -51,16 +51,131 @@ fn format(mut str: String, map: &HashMap<&str, String>) -> Result<String, Error>
     }
 }
 
+/// Load a feature from the cache database. This prevents loading the same Feature multiple times.
+fn load_feature<'a>(
+    name: &str,
+    db: &'a mut HashMap<String, Feature>,
+) -> Result<&'a mut Feature, Error> {
+    Ok(db
+        .entry(name.to_string())
+        .or_insert(Feature::new(name).map_err(Error::Feature)?))
+}
+
+/// Strike a feature from the feature list.
+/// This function operates with the following logic:
+///
+/// 1. If this feature is currently required, it is removed from the requirement list *immediately*
+/// 2. Every feature that this feature depends on is decremented in the requirement list.
+/// 3. If those dependencies were only required by the stricken feature, they are also stricken.
+///
+/// This ensures that when a feature is deemed a conflict with another feature, both it, and any
+/// dependencies that were only required by the now stricken feature, are removed.
+///
+/// Remember, conflicting features supersede everything else. No matter where a conflicting feature
+/// is defined, it will be removed from the set regardless of where the conflict exists, how many
+/// other features rely on, etc.
+fn strike_feature(
+    feature: &str,
+    db: &mut HashMap<String, Feature>,
+    features: &mut HashMap<String, u32>,
+) -> Result<(), Error> {
+    // If we required this feature
+    if features.contains_key(feature) {
+        debug!("Striking feature: {feature}");
+
+        // Remove the offending feature immediately.
+        features.remove(feature);
+
+        // Then, grab the features that this feature requires.
+        if let Some(depends) = load_feature(feature, db)?.requires.clone() {
+            for depend in depends {
+                // For each, decrement the dependency count.
+                if let Some(feat) = features.get_mut(&depend) {
+                    *feat -= 1;
+
+                    // If this feature was the only one requiring this dependency, strike it as well.
+                    if *feat < 1 {
+                        strike_feature(&depend, db, features)?;
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolves features. This function recursively resolves each feature, and all the required features
+/// it needs. It also excludes any conflicts, with intelligent dependency sorting.
+fn resolve_feature(
+    feature: &str,
+    db: &mut HashMap<String, Feature>,
+    features: &mut HashMap<String, u32>,
+    blacklist: &mut HashSet<String>,
+    searched: &mut HashSet<String>,
+) -> Result<(), Error> {
+    // If we haven't search this already.
+    if !searched.contains(feature) && !blacklist.contains(feature) {
+        // Add this feature to our feature list if it doesn't exit.
+        *features.entry(feature.to_string()).or_insert(0) += 1;
+
+        // Add to searched.
+        searched.insert(feature.to_string());
+
+        // Get a copy of the required features, and conflicting features.
+        let (requires, conflicts) = {
+            match load_feature(feature, db) {
+                Ok(feature) => (feature.requires.clone(), feature.conflicts.clone()),
+                Err(_) => (None, None),
+            }
+        };
+
+        // Resolve the requirements.
+        if let Some(requires) = requires {
+            for require in requires {
+                resolve_feature(&require, db, features, blacklist, searched)?;
+            }
+        }
+
+        // Strike out conflicts.
+        if let Some(conflicts) = conflicts {
+            blacklist.extend(conflicts.clone());
+            for conflict in conflicts {
+                if features.contains_key(&conflict) {
+                    strike_feature(&conflict, db, features)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn resolve_features(
+    profile: &Profile,
+    db: &mut HashMap<String, Feature>,
+) -> Result<HashSet<String>, Error> {
+    let mut features = HashMap::new();
+    let mut searched = HashSet::new();
+    let mut blacklist = HashSet::new();
+
+    if let Some(feats) = &profile.features {
+        for feat in feats {
+            resolve_feature(
+                feat.as_str(),
+                db,
+                &mut features,
+                &mut blacklist,
+                &mut searched,
+            )?;
+        }
+    }
+    Ok(features.into_keys().collect())
+}
+
 fn add_feature(
     profile: &mut Profile,
     map: &HashMap<&str, String>,
     mut feature: Feature,
-    searched: &mut HashSet<String>,
 ) -> Result<(), Error> {
-    if searched.contains(&feature.name) {
-        return Ok(());
-    }
-
     if let Some(caveat) = feature.caveat {
         warn!(
             "This profile uses a dangerous feature! {}: {}",
@@ -184,20 +299,6 @@ fn add_feature(
                 .insert(key, resolve(Cow::Owned(value)).into_owned());
         }
     }
-
-    if let Some(requires) = feature.requires.take() {
-        debug!("Dependencies => {requires:?}");
-        for sub in requires {
-            add_feature(
-                profile,
-                map,
-                Feature::new(&sub).map_err(Error::Feature)?,
-                searched,
-            )?;
-        }
-    }
-
-    searched.insert(feature.name);
     Ok(())
 }
 
@@ -208,17 +309,9 @@ pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
         ("{desktop}", profile.desktop(name).to_string())
     ]);
 
-    let mut searched = HashSet::new();
-
-    if let Some(ref features) = profile.features.take() {
-        for feature in features {
-            add_feature(
-                profile,
-                &map,
-                Feature::new(feature).map_err(Error::Feature)?,
-                &mut searched,
-            )?;
-        }
+    let mut db = HashMap::new();
+    for feature in resolve_features(profile, &mut db)? {
+        add_feature(profile, &map, db.remove(&feature).unwrap())?;
     }
     Ok(())
 }
