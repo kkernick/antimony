@@ -1049,6 +1049,7 @@ pub enum Portal {
     Settings,
     Secret,
     NetworkMonitor,
+    PowerManagement,
 }
 
 /// Namespaces. By default, none are shared. You will likely not need to use these

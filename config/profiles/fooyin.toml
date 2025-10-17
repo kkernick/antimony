@@ -4,4 +4,4 @@ home.policy = "Enabled"
 features = ["kf6", "mpris", "sdl", "pipewire"]
 
 [ipc]
-portals = ["FileChooser"]
+portals = ["FileChooser", "Realtime"]

@@ -1,6 +1,6 @@
 home.policy = "Enabled"
 
-features = ["electron", "pipewire", "vaapi", "network", "xdg-open", "qt5"]
+features = ["electron", "pipewire", "vaapi", "network", "xdg-open", "qt5", "mpris"]
 arguments = ["--ozone-platform=wayland"]
 
 [ipc]
