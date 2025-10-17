@@ -3,6 +3,7 @@ pub mod create;
 pub mod debug_shell;
 pub mod default;
 pub mod edit;
+pub mod feature;
 pub mod info;
 pub mod integrate;
 pub mod refresh;
@@ -51,6 +52,9 @@ pub enum Command {
     /// Edit the default profile
     Default(default::Args),
 
+    /// Modify the system features.
+    Feature(feature::Args),
+
     /// Refresh caches
     Refresh(refresh::Args),
 
@@ -82,6 +86,7 @@ impl Run for Command {
             Command::Create(args) => args.run(),
             Command::Edit(args) => args.run(),
             Command::Default(args) => args.run(),
+            Command::Feature(args) => args.run(),
             Command::Refresh(args) => args.run(),
             Command::Integrate(args) => args.run(),
             Command::Reset(args) => args.run(),

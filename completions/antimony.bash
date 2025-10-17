@@ -28,6 +28,9 @@ _antimony() {
             antimony,edit)
                 cmd="antimony__edit"
                 ;;
+            antimony,feature)
+                cmd="antimony__feature"
+                ;;
             antimony,help)
                 cmd="antimony__help"
                 ;;
@@ -67,6 +70,9 @@ _antimony() {
             antimony__help,edit)
                 cmd="antimony__help__edit"
                 ;;
+            antimony__help,feature)
+                cmd="antimony__help__feature"
+                ;;
             antimony__help,help)
                 cmd="antimony__help__help"
                 ;;
@@ -101,7 +107,7 @@ _antimony() {
 
     case "${cmd}" in
         antimony)
-            opts="-h -V --help --version run create edit default refresh integrate reset trace stat info debug-shell seccomp help"
+            opts="-h -V --help --version run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -178,8 +184,22 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        antimony__feature)
+            opts="-d -h --delete --help <FEATURE>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         antimony__help)
-            opts="run create edit default refresh integrate reset trace stat info debug-shell seccomp help"
+            opts="run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -235,6 +255,20 @@ _antimony() {
             return 0
             ;;
         antimony__help__edit)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        antimony__help__feature)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

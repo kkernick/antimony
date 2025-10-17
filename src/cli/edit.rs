@@ -15,7 +15,9 @@ impl super::Run for Args {
         if new {
             let source = Profile::path(&self.profile)?;
             if let Some(parent) = user.parent() {
+                user::set(user::Mode::Effective)?;
                 std::fs::create_dir_all(parent)?;
+                user::revert()?;
             }
             std::fs::copy(source, &user)?;
         }

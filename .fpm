@@ -22,6 +22,7 @@ config/profiles=/usr/share/antimony
 config/features=/usr/share/antimony
 
 config/default.toml=/usr/share/antimony/config/default.toml
+config/feature.toml=/usr/share/antimony/config/feature.toml
 config/new.toml=/usr/share/antimony/config/new.toml
 
 completions/antimony.bash=/usr/share/bash-completion/completions/antimony

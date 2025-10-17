@@ -1,0 +1,124 @@
+# Features define system resources required for a specific function. This can include, say,
+# inclusion and setup of a specific library to use in the sandbox (IE hardened-malloc), to
+# support for entire graphics toolkits (IE qt6).
+
+# Every feature needs a name. This must be the same as the file name.
+name = "feature"
+
+# The description outlines what the feature is for. This is mandatory. Everything besides
+# the name and description are optional
+description = ""
+
+# The caveat is any warning that should be displayed when a profile uses this feature. This could
+# include anything from performance consideration (hardened_malloc), attack surface increases (lib),
+# etc.
+# caveat = ""
+
+# Requires is a list of other features this feature depends on. Dependency resolution is
+# recursive.
+# requires = []
+
+# Conflicts are features that cannot co-exist with this feature. A conflict blacklists
+# a feature from the profile, regardless of how many other features depend on it, or
+# even if the profile itself calls for it. This can, therefore, cause sandboxes to break
+# if a required feature is conflicts and is removed.
+# conflicts = []
+
+# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
+# binaries = []
+
+# Additional libraries to pass to the sandbox. There are three different formats:
+#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
+#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
+#   3.  Wildcards, which can match files or directories, and
+#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
+# libraries = []
+
+# Devices to pass, such as /dev/dri
+# devices = []
+
+# IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
+# information, see xdg-dbus-proxy's manual page.
+# [ipc]
+#
+# This setting overrules everything else in this section, and unconditionally disables all
+# IPC. No proxy is run, no access to the User/System bus is provided. This is useful to
+# pass on the command line if you need to temporarily disable Portals--say to open a file
+# exposed in the sandbox itself, and not one from the host.
+# disable = false
+#
+# If you need unrestricted access to the user bus, this mounts it directly into the sandbox. However, unless
+# your application explicitly requires this permission (Such as DBus Monitors like Bustle), you should use
+# the more fine-grained controls below. Setting this option disregards those aforementioned settings, as the
+# proxy is not run.
+# user_bus = false
+#
+# If you want to expose the system bus to the program, you can do so here; this is likely not necessary. There
+# is not way to filter the system bus. You either pass it entirely, or you don't (And you almost definitely
+# don't need to unless your application talks to privileged busses, like virt-manager).
+# system_bus = false
+#
+# Portals are used primarily by Flatpak to provide functionality within a sandbox, use as Background to
+# run in the background, Camera for the camera, FileChooser to provide arbitrary files, OpenURI to
+# open files with the default handler, and more.
+# portals = []
+#
+# See are busses that the application can see, but cannot interact with.
+# see = []
+#
+# Talk are busses the application can talk over.
+# talk = []
+#
+# Own are busses the application owns, particularly for GTK applications
+# own = []
+#
+# Call are formatted as BUS=METHOD@PATH. If you don't know what that means, you don't need it.
+# call = []
+
+# Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
+# do not fall into this group. Each group specifies three kinds of files:
+#   1. ReadOnly provides files ro
+#   2. ReadWrite provides files rw (Note files are mounted, so applications cannot replace them via move)
+#   3. Executable provides files with chmod 555.
+#
+# By default, files are canonicalized to either the sandbox home or root, and match the path on the host
+# (With the exception of translating /home/$USER to /home/antimony), but you can manually override this
+# by specifying HOST=DEST, such as /etc/passwd=/etc/passwd.host if you want to place a file in an arbitrary
+# location within the sandbox.
+#
+# [files]
+#
+# Passthrough defines how files that are given via the command line should be provided. This is used,
+# for example, if you've integrated the sandbox, and are opening a supported file via your file explorer.
+# passthrough = "ReadOnly"
+# passthrough = "ReadWrite"
+# passthrough = "Executable"
+#
+# User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
+# been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
+# [files.user]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# System files have the normal root as canonical (/).
+# [files.system]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# Direct files are constructed with the sandbox, creating the file with the path specified with the key,
+# and the contents as the value. They are mounted ro.
+# [files.direct]
+# [files.direct.ReadOnly]
+# "/my/file.txt" = "Contents"
+#
+# [files.direct.ReadWrite]
+# "/my/file.txt.rw" = "Contents"
+#
+# [files.direct.Executable]
+# "/my/file.txt.exe" = "#!/bin/bash"
+
+# Keypair environment variables to pass to the sandbox.
+# [environment]
+# KEY = "VAL"

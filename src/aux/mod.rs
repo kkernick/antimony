@@ -1,3 +1,4 @@
+pub mod edit;
 pub mod env;
 pub mod feature;
 pub mod path;

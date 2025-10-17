@@ -1,11 +1,12 @@
 //!  Features are miniature profiles used by the latter for common functionality.
 use super::profile::{Ipc, Namespace};
+use crate::aux::edit;
 use crate::aux::env::{AT_HOME, PWD};
 use crate::aux::profile::Files;
 use console::style;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Errors reading feature files
 #[derive(Debug)]
@@ -48,7 +49,7 @@ impl From<toml::de::Error> for Error {
 }
 
 /// A Feature
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.
@@ -88,26 +89,30 @@ pub struct Feature {
     pub environment: Option<BTreeMap<String, String>>,
 }
 impl Feature {
+    /// Get the path to a feature.
+    pub fn path(name: &str) -> Result<PathBuf, Error> {
+        if name.ends_with(".toml") {
+            return Ok(PathBuf::from(name));
+        }
+
+        let system = AT_HOME.join("features").join(name).with_extension("toml");
+        if system.exists() {
+            return Ok(system);
+        }
+
+        let local = PWD.join("config").join("features").join(name);
+        if local.exists() {
+            return Ok(local);
+        }
+
+        Err(Error::NotFound(name.to_string()))
+    }
+
     /// Get a feature from its name.
     pub fn new(name: &str) -> Result<Feature, Error> {
-        // Features can either be sourced via an absolute path, or AT_HOME.
-        let feature: String = {
-            if name.ends_with(".toml") {
-                std::fs::read_to_string(Path::new(name))?
-            } else if let Ok(path) =
-                std::fs::read_to_string(AT_HOME.join("features").join(name).with_extension("toml"))
-            {
-                path
-            } else if let Ok(path) =
-                std::fs::read_to_string(PWD.join("config").join("features").join(name))
-            {
-                path
-            } else {
-                return Err(Error::NotFound(name.to_string()));
-            }
-        };
-
-        Ok(toml::from_str(feature.as_str())?)
+        Ok(toml::from_str(&std::fs::read_to_string(&Self::path(
+            name,
+        )?)?)?)
     }
 
     /// Print info about the feature.
@@ -170,6 +175,11 @@ impl Feature {
                 }
             }
         }
+    }
+
+    /// Edit a feature.
+    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
+        edit::edit::<Self>(path)
     }
 }
 

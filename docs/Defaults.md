@@ -6,7 +6,7 @@ Antimony Profiles are largely composed of Features, which coalesce to create a s
 
 You can define a list of other profiles that the current profile should inherit in the `inherit` attribute:
 ```toml
-inherit ["A", "B", "C"]
+inherit = ["A", "B", "C"]
 ```
 
 Inheritance works by filling in the gaps of the calling profile; if an attribute is not defined, it takes the value from the inheritee. Inherited profiles are processed left-to-right, so a feature defined in an earlier profile takes precedence over later ones.

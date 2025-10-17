@@ -43,6 +43,7 @@ if [[ ! -d /usr/share/antimony/config ]]; then
 fi
 
 sudo cp config/default.toml /usr/share/antimony/config
+sudo cp config/feature.toml /usr/share/antimony/config
 sudo cp config/new.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony

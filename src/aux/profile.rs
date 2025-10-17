@@ -1,16 +1,15 @@
 //! The Profile defines what application should be run, and what features it needs
 //! to function properly.
-use crate::aux::env::{AT_HOME, EDITOR, PWD, USER_NAME};
+use crate::aux::edit;
+use crate::aux::env::{AT_HOME, PWD, USER_NAME};
 use crate::aux::path::which_exclude;
 use crate::fab::lib::get_wildcards;
 use crate::fab::resolve;
 use crate::{cli, fab};
 use clap::ValueEnum;
 use console::style;
-use dialoguer::Confirm;
-use log::{debug, error};
+use log::debug;
 use serde::{Deserialize, Serialize};
-use spawn::Spawner;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs::File;
@@ -44,17 +43,8 @@ pub enum Error {
     /// Errors for profile arguments specified on the command line.
     CommandLine(&'static str, String, Vec<String>),
 
-    /// Errors running the profile
-    Spawn(spawn::SpawnError),
-
-    /// Errors managing a spawned profile
-    Handle(spawn::HandleError),
-
     /// Errors incorporating features.
     Feature(crate::fab::features::Error),
-
-    /// Dialog errors
-    Dialog(dialoguer::Error),
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -69,11 +59,7 @@ impl std::fmt::Display for Error {
             Self::Io(what, e) => write!(f, "Failed to {what}: {e}"),
             Self::Errno(what, e) => write!(f, "{what} failed: {e}"),
             Self::Path(e) => write!(f, "Path error: {e}"),
-            Self::Spawn(e) => write!(f, "Failed to run command: {e}"),
-            Self::Handle(e) => write!(f, "Failed to manage subprocess: {e}"),
             Self::Feature(e) => write!(f, "Failed to resolve feature: {e}"),
-            Self::Dialog(e) => write!(f, "Failed to prompt user: {e}"),
-
             Self::CommandLine(arg, value, valid) => {
                 write!(
                     f,
@@ -92,19 +78,8 @@ impl std::error::Error for Error {
             Self::Errno(_, e) => Some(e),
             Self::Path(e) => Some(e),
             Self::Feature(e) => Some(e),
-            Self::Dialog(e) => Some(e),
             _ => None,
         }
-    }
-}
-impl From<spawn::SpawnError> for Error {
-    fn from(val: spawn::SpawnError) -> Self {
-        Error::Spawn(val)
-    }
-}
-impl From<spawn::HandleError> for Error {
-    fn from(val: spawn::HandleError) -> Self {
-        Error::Handle(val)
     }
 }
 impl From<which::Error> for Error {
@@ -125,11 +100,6 @@ impl From<toml::ser::Error> for Error {
 impl From<crate::fab::features::Error> for Error {
     fn from(val: crate::fab::features::Error) -> Self {
         Error::Feature(val)
-    }
-}
-impl From<dialoguer::Error> for Error {
-    fn from(val: dialoguer::Error) -> Self {
-        Error::Dialog(val)
     }
 }
 
@@ -271,6 +241,15 @@ impl Profile {
 
     /// Get the path of a profile.
     pub fn path(name: &str) -> Result<PathBuf, Error> {
+        if name == "default" {
+            let path = Self::default_profile();
+            if !path.exists() {
+                std::fs::copy(AT_HOME.join("config").join("default.toml"), &path)
+                    .map_err(|e| Error::Io("Failed to create default profile", e))?;
+            }
+            return Ok(path);
+        }
+
         // Try and load a file absolutely if the file is given.
         if name.ends_with(".toml") {
             let path = PathBuf::from(name);
@@ -647,76 +626,8 @@ impl Profile {
     }
 
     /// Edit a profile.
-    pub fn edit(path: &Path) -> Result<Option<()>, Error> {
-        let saved = user::save().map_err(|e| Error::Errno("Get User", e))?;
-
-        // Pivot to real mode to edit the temporary.
-        // Editors, like vim, can run arbitrary commands, and we don't want
-        // to extend privilege.
-        user::set(user::Mode::Real).map_err(|e| Error::Errno("Set User", e))?;
-        let temp = tempfile::Builder::new()
-            .suffix(".toml")
-            .tempfile()
-            .map_err(|e| Error::Io("open temporary file", e))?;
-
-        std::fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
-        let original =
-            std::fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
-
-        // Loop until the user either:
-        //  1. Provides a valid edit.
-        //  2. Bails
-        let profile = loop {
-            // Launch the editor.
-            Spawner::new(EDITOR.as_str())
-                .preserve_env(true)
-                .arg(temp.path().to_string_lossy())?
-                .mode(user::Mode::Real)
-                .spawn()?
-                .wait()?;
-
-            // Read the contents.
-            match std::fs::read_to_string(&temp) {
-                Ok(string) => match toml::from_str::<Self>(string.as_ref()) {
-                    // If they didn't make any changes, we want to tell edit
-                    // so that they don't create a redundant user profile.
-                    Ok(profile) => {
-                        if string == original {
-                            println!("No modification made.");
-                            return Ok(None);
-                        } else {
-                            break profile;
-                        }
-                    }
-
-                    // If there's an error, make the user correct, or bail entirely.
-                    Err(e) => {
-                        let retry = Confirm::new()
-                            .with_prompt(format!("The profile has a syntax error: {e}\nTry again?"))
-                            .interact()?;
-
-                        if !retry {
-                            user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
-                            return Ok(Some(()));
-                        }
-                    }
-                },
-                Err(e) => {
-                    error!("Failed to read temporary profile: {e}");
-                    user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
-                    return Ok(None);
-                }
-            }
-        };
-        user::set(user::Mode::Effective).map_err(|e| Error::Errno("Set user", e))?;
-        write!(
-            File::create(path).map_err(|e| Error::Io("write profile", e))?,
-            "{}",
-            toml::to_string(&profile)?
-        )
-        .map_err(|e| Error::Io("write profile", e))?;
-        user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
-        Ok(Some(()))
+    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
+        edit::edit::<Self>(path)
     }
 }
 

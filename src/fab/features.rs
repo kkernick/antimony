@@ -174,9 +174,9 @@ fn resolve_features(
 fn add_feature(
     profile: &mut Profile,
     map: &HashMap<&str, String>,
-    mut feature: Feature,
+    feature: &mut Feature,
 ) -> Result<(), Error> {
-    if let Some(caveat) = feature.caveat {
+    if let Some(caveat) = feature.caveat.take() {
         warn!(
             "This profile uses a dangerous feature! {}: {}",
             feature.name, caveat
@@ -311,7 +311,7 @@ pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
 
     let mut db = HashMap::new();
     for feature in resolve_features(profile, &mut db)? {
-        add_feature(profile, &map, db.remove(&feature).unwrap())?;
+        add_feature(profile, &map, load_feature(&feature, &mut db)?)?;
     }
     Ok(())
 }

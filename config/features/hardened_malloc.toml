@@ -1,5 +1,6 @@
 name = "hardened_malloc"
 description = "Enforce Hardened Malloc as the memory allocator within the sandbox"
+caveat = "Hardened Malloc can cause noticeable performance degredation."
 libraries = ["/usr/lib/libhardened_malloc.so"]
 
 [files.direct.ReadOnly]

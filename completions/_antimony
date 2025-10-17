@@ -97,6 +97,15 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(feature)
+_arguments "${_arguments_options[@]}" : \
+'-d[Delete a feature. It cannot be recovered. DANGEROUS!]' \
+'--delete[Delete a feature. It cannot be recovered. DANGEROUS!]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':feature -- The name of the feature:_default' \
+&& ret=0
+;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
@@ -155,8 +164,8 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (info)
 _arguments "${_arguments_options[@]}" : \
-'*-v[Generate the profile, but do not run the executable]' \
-'*--verbosity[Generate the profile, but do not run the executable]' \
+'*-v[The verbosity of information]' \
+'*--verbosity[The verbosity of information]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':what -- What to get info on:((profile\:"A Profile"
@@ -214,6 +223,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(feature)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -266,6 +279,7 @@ _antimony_commands() {
 'create:Create a new profile' \
 'edit:Edit an existing profile' \
 'default:Edit the default profile' \
+'feature:Modify the system features' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -298,6 +312,11 @@ _antimony__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony edit commands' commands "$@"
 }
+(( $+functions[_antimony__feature_commands] )) ||
+_antimony__feature_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony feature commands' commands "$@"
+}
 (( $+functions[_antimony__help_commands] )) ||
 _antimony__help_commands() {
     local commands; commands=(
@@ -305,6 +324,7 @@ _antimony__help_commands() {
 'create:Create a new profile' \
 'edit:Edit an existing profile' \
 'default:Edit the default profile' \
+'feature:Modify the system features' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -336,6 +356,11 @@ _antimony__help__default_commands() {
 _antimony__help__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help edit commands' commands "$@"
+}
+(( $+functions[_antimony__help__feature_commands] )) ||
+_antimony__help__feature_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help feature commands' commands "$@"
 }
 (( $+functions[_antimony__help__help_commands] )) ||
 _antimony__help__help_commands() {
