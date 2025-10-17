@@ -243,11 +243,11 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
         return Ok(Type::Link);
     }
 
-    if path.starts_with("/usr/lib") {
-        if let Some(parent) = resolve_dir(path)? {
-            debug!("Directory => {parent}");
-            ret.directories.insert(parent);
-        }
+    if path.starts_with("/usr/lib")
+        && let Some(parent) = resolve_dir(path)?
+    {
+        debug!("Directory => {parent}");
+        ret.directories.insert(parent);
     }
 
     // Open it.
@@ -325,21 +325,21 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
                     }
                 }
 
-                if let Some((key, val)) = line.split_once('=') {
-                    if !line.starts_with("-") {
-                        let mut result = Spawner::new("/usr/bin/bash")
-                            .args(["-c", &format!("{line}; echo ${key}")])?
-                            .output(true)
-                            .error(true)
-                            .mode(user::Mode::Real)
-                            .spawn()?;
+                if let Some((key, val)) = line.split_once('=')
+                    && !line.starts_with("-")
+                {
+                    let mut result = Spawner::new("/usr/bin/bash")
+                        .args(["-c", &format!("{line}; echo ${key}")])?
+                        .output(true)
+                        .error(true)
+                        .mode(user::Mode::Real)
+                        .spawn()?;
 
-                        let code = result.wait()?;
-                        if code == 0 {
-                            let result = result.output_all()?;
-                            environment.insert(key.to_string(), result);
-                            line = val.to_string();
-                        }
+                    let code = result.wait()?;
+                    if code == 0 {
+                        let result = result.output_all()?;
+                        environment.insert(key.to_string(), result);
+                        line = val.to_string();
                     }
                 }
 
@@ -409,27 +409,27 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     // Read direct files so we can determine dependencies.
     if let Some(files) = &mut profile.files {
-        if let Some(user) = &mut files.user {
-            if let Some(x) = user.remove(&FileMode::Executable) {
-                for file in x {
-                    handle_localize(&file, true)?;
-                }
+        if let Some(user) = &mut files.user
+            && let Some(x) = user.remove(&FileMode::Executable)
+        {
+            for file in x {
+                handle_localize(&file, true)?;
             }
         }
-        if let Some(sys) = &mut files.system {
-            if let Some(x) = sys.remove(&FileMode::Executable) {
-                for file in x {
-                    handle_localize(&file, false)?;
-                }
+        if let Some(sys) = &mut files.system
+            && let Some(x) = sys.remove(&FileMode::Executable)
+        {
+            for file in x {
+                handle_localize(&file, false)?;
             }
         }
-        if let Some(direct) = &mut files.direct {
-            if let Some(x) = direct.remove(&FileMode::Executable) {
-                x.iter().try_for_each(|(file, _)| {
-                    let path = direct_path(file);
-                    handle_localize(&path.to_string_lossy(), false)
-                })?;
-            }
+        if let Some(direct) = &mut files.direct
+            && let Some(x) = direct.remove(&FileMode::Executable)
+        {
+            x.iter().try_for_each(|(file, _)| {
+                let path = direct_path(file);
+                handle_localize(&path.to_string_lossy(), false)
+            })?;
         }
     }
 

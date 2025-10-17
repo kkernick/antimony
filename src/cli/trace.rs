@@ -31,8 +31,12 @@ pub struct Args {
 
     /// Collect the trace log and list files that the sandbox tried to access,
     /// and feature they are available in.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long, default_value_t = false)]
     pub report: bool,
+
+    /// Use a configuration within the profile.
+    #[arg(short, long)]
+    pub config: Option<String>,
 
     /// Arguments to pass to strace
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -43,6 +47,7 @@ impl super::Run for Args {
     fn run(self) -> Result<()> {
         let mut args = super::run::Args {
             binaries: Some(vec!["strace".to_string()]),
+            config: self.config.clone(),
             ..Default::default()
         };
 

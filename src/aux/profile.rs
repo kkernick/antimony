@@ -929,11 +929,11 @@ impl Files {
             if let Some(user) = &self.user {
                 files.extend(get_files(user, mode));
             }
-            if let Some(direct) = &self.direct {
-                if let Some(mode_files) = direct.get(&mode) {
-                    for file in mode_files.keys() {
-                        files.insert(format!("\t\t- {}", style(file).italic()));
-                    }
+            if let Some(direct) = &self.direct
+                && let Some(mode_files) = direct.get(&mode)
+            {
+                for file in mode_files.keys() {
+                    files.insert(format!("\t\t- {}", style(file).italic()));
                 }
             }
             if !files.is_empty() {

@@ -96,10 +96,10 @@ pub fn run(
         "--filter",
     ])?;
 
-    if let Ok(log) = std::env::var("RUST_LOG") {
-        if log == "debug" {
-            proxy.arg_i("--log")?;
-        }
+    if let Ok(log) = std::env::var("RUST_LOG")
+        && log == "debug"
+    {
+        proxy.arg_i("--log")?;
     }
 
     let cache = sys_dir.join("proxy.cache");
@@ -193,10 +193,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             "[Context]",
             "sockets=session-bus;system-bus;",
         ].into_iter().map(|e| e.to_string()).collect();
-        if let Some(ns) = &args.profile.namespaces {
-            if ns.contains(&Namespace::Net) {
-                info_contents.push("shared=network;".to_string());
-            }
+        if let Some(ns) = &args.profile.namespaces
+            && ns.contains(&Namespace::Net)
+        {
+            info_contents.push("shared=network;".to_string());
         }
         write!(&out, "{}", info_contents.join("\n"))?;
 

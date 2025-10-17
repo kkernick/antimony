@@ -41,22 +41,22 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     debug!("Setting up files");
     // Add direct files.
     if let Some(files) = &mut args.profile.files {
-        if let Some(user) = &mut files.user {
-            if let Some(exe) = user.remove(&FileMode::Executable) {
-                user::set(user::Mode::Real)?;
-                exe.into_par_iter().try_for_each(|file| {
-                    let (_, dest) = localize_path(&file, true);
-                    get_x(&dest, &args.handle)
-                })?;
+        if let Some(user) = &mut files.user
+            && let Some(exe) = user.remove(&FileMode::Executable)
+        {
+            user::set(user::Mode::Real)?;
+            exe.into_par_iter().try_for_each(|file| {
+                let (_, dest) = localize_path(&file, true);
+                get_x(&dest, &args.handle)
+            })?;
 
-                user::revert()?;
-            }
+            user::revert()?;
         }
-        if let Some(system) = &mut files.system {
-            if let Some(exe) = system.remove(&FileMode::Executable) {
-                exe.into_par_iter()
-                    .try_for_each(|file| get_x(&file, &args.handle))?;
-            }
+        if let Some(system) = &mut files.system
+            && let Some(exe) = system.remove(&FileMode::Executable)
+        {
+            exe.into_par_iter()
+                .try_for_each(|file| get_x(&file, &args.handle))?;
         }
 
         if let Some(direct) = &files.direct {

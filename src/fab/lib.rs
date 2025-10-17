@@ -173,14 +173,13 @@ pub fn add_sof(sof: &Path, library: String) -> Result<()> {
 
     if let Some(parent) = sof_path.parent() {
         std::fs::create_dir_all(parent)?;
-        if let Ok(canon) = std::fs::canonicalize(&library) {
-            if let Err(e) = std::fs::hard_link(&canon, &sof_path) {
-                if e.kind() != std::io::ErrorKind::AlreadyExists {
-                    return Err(e).with_context(|| {
-                        format!("Failed to hardlink {library} -> {}", sof_path.display())
-                    });
-                }
-            }
+        if let Ok(canon) = std::fs::canonicalize(&library)
+            && let Err(e) = std::fs::hard_link(&canon, &sof_path)
+            && e.kind() != std::io::ErrorKind::AlreadyExists
+        {
+            return Err(e).with_context(|| {
+                format!("Failed to hardlink {library} -> {}", sof_path.display())
+            });
         }
     }
     Ok(())
@@ -195,17 +194,17 @@ pub fn fabricate(
 ) -> Result<()> {
     let saved = user::save()?;
 
-    if let Some(libraries) = &profile.libraries {
-        if libraries.contains(&"/usr/lib".to_string()) {
-            #[rustfmt::skip]
+    if let Some(libraries) = &profile.libraries
+        && libraries.contains("/usr/lib")
+    {
+        #[rustfmt::skip]
             handle.args_i([
                 "--ro-bind", "/usr/lib", "/usr/lib",
                 "--ro-bind", "/usr/lib64", "/usr/lib64",
                 "--symlink", "/usr/lib", "/lib",
                 "--symlink", "/usr/lib64", "/lib64",
             ])?;
-            return Ok(());
-        }
+        return Ok(());
     }
 
     debug!("Creating SOF");

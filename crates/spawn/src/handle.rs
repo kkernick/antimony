@@ -340,10 +340,10 @@ impl Handle {
     /// Send a signal to the child.
     /// If the child no longer exists, this returns an `Err`.
     pub fn signal(&mut self, sig: Signal) -> Result<(), Error> {
-        if let Some(pid) = self.child {
-            if let Err(e) = kill(pid, sig) {
-                return Err(Error::Comm(e));
-            }
+        if let Some(pid) = self.child
+            && let Err(e) = kill(pid, sig)
+        {
+            return Err(Error::Comm(e));
         }
         Ok(())
     }

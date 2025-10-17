@@ -7,6 +7,10 @@ use std::borrow::Cow;
 pub struct Args {
     /// The name of the profile
     pub profile: String,
+
+    /// Use a configuration within the profile.
+    #[arg(short, long)]
+    pub config: Option<String>,
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
@@ -17,6 +21,7 @@ impl super::Run for Args {
                     .map(str::to_string)
                     .collect(),
             ),
+            config: self.config,
             ..Default::default()
         };
 

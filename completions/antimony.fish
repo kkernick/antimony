@@ -38,7 +38,7 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "info" -d 'List in
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "debug-shell" -d 'Drop into a debugging shell within a profile\'s sandbox'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l config -d 'Use a configuration within the profile' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l inherits -d 'Additional inheritance' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-policy -d 'Override the home policy' -r -f -a "none\t'Do not use a home profile'
@@ -87,7 +87,7 @@ net\t'Use the network feature instead'
 uts\t''
 c-group\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l dry -d 'Generate the profile, but do not run the executable'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'Provide the user bus. xdg-dbus-proxy is not run'
@@ -95,7 +95,8 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d '
 complete -c antimony -n "__fish_antimony_using_subcommand create" -s b -l blank -d 'Provide an empty file, rather than a documented one'
 complete -c antimony -n "__fish_antimony_using_subcommand create" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l dry -d 'Just delete the cache, don\'t repopulate'
+complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s c -l config -d 'Use a configuration within the profile' -r
+complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'
 file\t'Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers'"
@@ -103,11 +104,14 @@ complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s r -l rem
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s s -l shadow -d 'Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don\'t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand reset" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand trace" -l report -d 'Collect the trace log and list files that the sandbox tried to access, and feature they are available in'
+complete -c antimony -n "__fish_antimony_using_subcommand trace" -s c -l config -d 'Use a configuration within the profile' -r
+complete -c antimony -n "__fish_antimony_using_subcommand trace" -s r -l report -d 'Collect the trace log and list files that the sandbox tried to access, and feature they are available in'
 complete -c antimony -n "__fish_antimony_using_subcommand trace" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c antimony -n "__fish_antimony_using_subcommand stat" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand stat" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s v -l verbosity -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c antimony -n "__fish_antimony_using_subcommand debug-shell" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand debug-shell" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit refresh integrate reset trace stat info debug-shell seccomp help" -f -a "run" -d 'Run a profile'

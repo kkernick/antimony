@@ -25,11 +25,11 @@ pub struct Args {
     pub profile: String,
 
     /// Generate the profile, but do not run the executable.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long, default_value_t = false)]
     pub dry: bool,
 
     /// Use a configuration within the profile.
-    #[arg(long)]
+    #[arg(short, long)]
     pub config: Option<String>,
 
     /// Additional features.

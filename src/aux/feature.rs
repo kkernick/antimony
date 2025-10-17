@@ -63,6 +63,9 @@ pub struct Feature {
     /// A list of other features this feature depends on.
     pub requires: Option<BTreeSet<String>>,
 
+    /// A list of other features this feature conflicts with.
+    pub conflicts: Option<BTreeSet<String>>,
+
     /// Any IPC busses needed.
     pub ipc: Option<Ipc>,
 
@@ -117,6 +120,10 @@ impl Feature {
         if verbose > 0 {
             if let Some(requires) = &self.requires {
                 println!("\t- Required Features: {requires:?}");
+            }
+
+            if let Some(conflicts) = &self.conflicts {
+                println!("\t- Conflicting Features: {conflicts:?}");
             }
 
             if let Some(ipc) = &self.ipc {

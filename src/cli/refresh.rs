@@ -16,8 +16,12 @@ pub struct Args {
     profile: Option<String>,
 
     /// Just delete the cache, don't repopulate.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long, default_value_t = false)]
     dry: bool,
+
+    /// Use a configuration within the profile.
+    #[arg(short, long)]
+    pub config: Option<String>,
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
@@ -30,6 +34,7 @@ impl super::Run for Args {
         if let Some(profile) = self.profile {
             let mut args = cli::run::Args {
                 dry: self.dry,
+                config: self.config,
                 ..Default::default()
             };
             let info = setup::setup(Cow::Borrowed(&profile), &mut args)?;
@@ -45,13 +50,12 @@ impl super::Run for Args {
                 .filter_map(|file| {
                     if let Ok(file) = file {
                         let file = file.path();
-                        if let Ok(dest) = std::fs::read_link(&file) {
-                            if dest.ends_with("antimony") {
-                                if let Some(name) = file.file_name() {
-                                    let name = name.to_string_lossy();
-                                    return Some(name.into_owned());
-                                }
-                            }
+                        if let Ok(dest) = std::fs::read_link(&file)
+                            && dest.ends_with("antimony")
+                            && let Some(name) = file.file_name()
+                        {
+                            let name = name.to_string_lossy();
+                            return Some(name.into_owned());
                         }
                     }
                     None

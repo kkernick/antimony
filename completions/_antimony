@@ -30,6 +30,7 @@ _antimony() {
         case $line[1] in
             (run)
 _arguments "${_arguments_options[@]}" : \
+'-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \
 '*--inherits=[Additional inheritance]:INHERITS:_default' \
@@ -62,6 +63,7 @@ net\:"Use the network feature instead"
 uts\:""
 c-group\:""))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
+'-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
 '--system-bus[Provide the system bus]' \
@@ -90,6 +92,9 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
+'-c+[Use a configuration within the profile]:CONFIG:_default' \
+'--config=[Use a configuration within the profile]:CONFIG:_default' \
+'-d[Just delete the cache, don'\''t repopulate]' \
 '--dry[Just delete the cache, don'\''t repopulate]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -120,6 +125,9 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (trace)
 _arguments "${_arguments_options[@]}" : \
+'-c+[Use a configuration within the profile]:CONFIG:_default' \
+'--config=[Use a configuration within the profile]:CONFIG:_default' \
+'-r[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
 '--report[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
@@ -131,6 +139,8 @@ all\:"Trace all syscalls, even those that succeed. Useful to see the context in 
 ;;
 (stat)
 _arguments "${_arguments_options[@]}" : \
+'-c+[Use a configuration within the profile]:CONFIG:_default' \
+'--config=[Use a configuration within the profile]:CONFIG:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The name of the profile:_default' \
@@ -150,6 +160,8 @@ seccomp\:"Query the SECCOMP database"))' \
 ;;
 (debug-shell)
 _arguments "${_arguments_options[@]}" : \
+'-c+[Use a configuration within the profile]:CONFIG:_default' \
+'--config=[Use a configuration within the profile]:CONFIG:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The name of the profile:_default' \

@@ -274,11 +274,11 @@ pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>> 
             let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
 
             for cmsg in msg.cmsgs()? {
-                if let ControlMessageOwned::ScmRights(fds) = cmsg {
-                    if let Some(fd) = fds.first() {
-                        let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
-                        return Ok(Some((owned_fd, msg.bytes)));
-                    }
+                if let ControlMessageOwned::ScmRights(fds) = cmsg
+                    && let Some(fd) = fds.first()
+                {
+                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
+                    return Ok(Some((owned_fd, msg.bytes)));
                 }
             }
             Ok(None)
