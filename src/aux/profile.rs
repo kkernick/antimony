@@ -271,18 +271,6 @@ impl Profile {
 
     /// Get the path of a profile.
     pub fn path(name: &str) -> Result<PathBuf, Error> {
-        if name == "default" {
-            let path = Self::default_profile();
-            return if !path.exists() {
-                Err(Error::NotFound(
-                    name.to_string(),
-                    "No default profile. Use `antimony new default`",
-                ))
-            } else {
-                Ok(path)
-            };
-        }
-
         // Try and load a file absolutely if the file is given.
         if name.ends_with(".toml") {
             let path = PathBuf::from(name);

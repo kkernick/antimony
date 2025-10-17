@@ -1,23 +1,17 @@
-//! Create a new profile.
+//! Edit the default profile
 use crate::aux::{env::AT_HOME, profile::Profile};
 use anyhow::Result;
 use std::fs::File;
 
 #[derive(clap::Args, Debug, Default)]
-pub struct Args {
-    /// The name of the profile.
-    pub profile: String,
+pub struct Args {}
 
-    /// Provide an empty file, rather than a documented one.
-    #[arg(short, long, default_value_t = false)]
-    pub blank: bool,
-}
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         let path = {
-            let path = Profile::user_profile(&self.profile);
-            if !path.exists() && !self.blank {
-                std::fs::copy(AT_HOME.join("config").join("new.toml"), &path)?;
+            let path = Profile::default_profile();
+            if !path.exists() {
+                std::fs::copy(AT_HOME.join("config").join("default.toml"), &path)?;
             }
             path
         };

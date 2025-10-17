@@ -11,7 +11,7 @@
 #
 # If another path is needed, you can provide one (`which` is still used, so you don't need
 # to provide an absolute path if the value can be resolved).
-# path = /path/to/app
+# path = "/path/to/app"
 
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
@@ -31,6 +31,30 @@
 # Use `antimony list` to see all available features.
 # features = []
 
+# Conflicts define features that cannot be included in the profile. This bars them from
+# dependency resolution in the features field. Note that conflicting files are removed
+# without consideration of other features. If a feature requires another feature to work
+# correctly, but it is removed via a conflict, the profile may not behave correctly.
+# conflicts = []
+
+# Arguments that should be passed directly to the application, such as
+# "--ozone-platform=wayland" for electron.
+# arguments = []
+
+# # SECCOMP is a security mechanism provided by the Linux Kernel that can restrict system calls (Like read,exec)
+# Antimony uses SECCOMP as a means of further constraining the sandbox.
+#
+# In Permissive Mode, the sandbox runs under a logging filter and with a companion binary: antimony-monitor. The
+# monitor will collect syscall information and store them in the SECCOMP Database. The first time you run
+# the application in Permissive mode, you may notice a performance drop, but subsequent uses will be faster;
+# additionally, filter generation is cumulative, so you can keep the profile in Permissive mode for a day or
+# so, ensuring you cover all use-cases, then switch it to Enforcing.
+# seccomp = "Permissive"
+#
+# In Enforcing Mode, Antimony will kill the entire sandbox when any program within it attempts to use a system call
+# not specified in the SECCOMP profile. There is virtually zero overhead to use this setting.
+# seccomp = "Enforcing"
+
 # Inheritance is like a feature, but specifies other profiles. Inherited profiles provide values
 # for the calling profile, only if the latter has not explicitly set its own value for that
 # particular attribute. By default, the Default profile, if it exists, will be inherited,
@@ -43,6 +67,25 @@
 # Inheritance applies left-to-right, so if a profile inherits a value from the first profile
 # in this list, additional definitions for the same attribute will be ignored.
 # inherits = ["default"]
+
+# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
+# binaries = []
+
+# Additional libraries to pass to the sandbox. There are three different formats:
+#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
+#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
+#   3.  Wildcards, which can match files or directories, and
+#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
+# libraries = []
+
+# Devices to pass, such as /dev/dri
+# devices = []
+
+# Namespaces: "None", "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
+# Unless you know what you are doing, don't add namespaces to the profile.
+# Relevant features, such as "network" or "electron" will add needed namespaces
+# automatically.
+# namespaces = []
 
 # Home specifies whether to create a home folder for the application, located at:
 # ~/.local/share/antimony/{name}
@@ -70,20 +113,6 @@
 # this, however, which can be useful for configurations.
 # name = "name"
 
-# SECCOMP is a security mechanism provided by the Linux Kernel that can restrict system calls (Like read,exec)
-# Antimony uses SECCOMP as a means of further constraining the sandbox.
-#
-# In Permissive Mode, the sandbox runs under a logging filter and with a companion binary: antimony-monitor. The
-# monitor will collect syscall information and store them in the SECCOMP Database. The first time you run
-# the application in Permissive mode, you may notice a performance drop, but subsequent uses will be faster;
-# additionally, filter generation is cumulative, so you can keep the profile in Permissive mode for a day or
-# so, ensuring you cover all use-cases, then switch it to Enforcing.
-# seccomp = "Permissive"
-#
-# In Enforcing Mode, Antimony will kill the entire sandbox when any program within it attempts to use a system call
-# not specified in the SECCOMP profile. There is virtually zero overhead to use this setting.
-# seccomp = "Enforcing"
-
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.
 # [ipc]
@@ -92,7 +121,7 @@
 # IPC. No proxy is run, no access to the User/System bus is provided. This is useful to
 # pass on the command line if you need to temporarily disable Portals--say to open a file
 # exposed in the sandbox itself, and not one from the host.
-# disable_ipc = false
+# disable = false
 #
 # If you need unrestricted access to the user bus, this mounts it directly into the sandbox. However, unless
 # your application explicitly requires this permission (Such as DBus Monitors like Bustle), you should use
@@ -143,55 +172,32 @@
 #
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
-# [user]
+# [files.user]
 # ReadOnly = []
 # ReadWrite = []
 # Executable = []
 #
 # System files have the normal root as canonical (/).
-# [system]
+# [files.system]
 # ReadOnly = []
 # ReadWrite = []
 # Executable = []
 #
 # Direct files are constructed with the sandbox, creating the file with the path specified with the key,
 # and the contents as the value. They are mounted ro.
-# [direct]
-# [direct.ReadOnly]
-# /my/file.txt = "Contents"
+# [files.direct]
+# [files.direct.ReadOnly]
+# "/my/file.txt" = "Contents"
 #
-# [direct.ReadWrite]
-# /my/file.txt.rw = "Contents"
+# [files.direct.ReadWrite]
+# "/my/file.txt.rw" = "Contents"
 #
-# [direct.Executable]
-# /my/file.txt.exe = "#!/bin/bash"
-
-# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
-# binaries = []
-
-# Additional libraries to pass to the sandbox. There are three different formats:
-#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
-#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
-#   3.  Wildcards, which can match files or directories, and
-#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
-# libraries = []
-
-# Devices to pass, such as /dev/dri
-# devices = []
-
-# Namespaces: "None", "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
-# Unless you know what you are doing, don't add namespaces to the profile.
-# Relevant features, such as "network" or "electron" will add needed namespaces
-# automatically.
-# namespaces = []
+# [files.direct.Executable]
+# "/my/file.txt.exe" = "#!/bin/bash"
 
 # Keypair environment variables to pass to the sandbox.
-# [env]
+# [environment]
 # KEY = "VAL"
-
-# Arguments that should be passed directly to the application, such as
-# "--ozone-platform=wayland" for electron.
-# arguments = []
 
 # Configurations specify specialized modes of running the profile. Each config is a fully fledged
 # profile that overrides the settings defined above (Opposite to how inheritance functions)

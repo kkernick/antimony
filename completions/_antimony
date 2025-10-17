@@ -91,6 +91,12 @@ _arguments "${_arguments_options[@]}" : \
 ':profile -- The name of the profile:_default' \
 && ret=0
 ;;
+(default)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
@@ -204,6 +210,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(default)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -255,6 +265,7 @@ _antimony_commands() {
 'run:Run a profile' \
 'create:Create a new profile' \
 'edit:Edit an existing profile' \
+'default:Edit the default profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -277,6 +288,11 @@ _antimony__debug-shell_commands() {
     local commands; commands=()
     _describe -t commands 'antimony debug-shell commands' commands "$@"
 }
+(( $+functions[_antimony__default_commands] )) ||
+_antimony__default_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony default commands' commands "$@"
+}
 (( $+functions[_antimony__edit_commands] )) ||
 _antimony__edit_commands() {
     local commands; commands=()
@@ -288,6 +304,7 @@ _antimony__help_commands() {
 'run:Run a profile' \
 'create:Create a new profile' \
 'edit:Edit an existing profile' \
+'default:Edit the default profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -309,6 +326,11 @@ _antimony__help__create_commands() {
 _antimony__help__debug-shell_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help debug-shell commands' commands "$@"
+}
+(( $+functions[_antimony__help__default_commands] )) ||
+_antimony__help__default_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help default commands' commands "$@"
 }
 (( $+functions[_antimony__help__edit_commands] )) ||
 _antimony__help__edit_commands() {

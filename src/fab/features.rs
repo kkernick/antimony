@@ -156,7 +156,6 @@ fn resolve_features(
     let mut features = HashMap::new();
     let mut searched = HashSet::new();
     let mut blacklist = profile.conflicts.take().unwrap_or_default();
-    debug!("BLACKLIST: {blacklist:?}");
 
     if let Some(feats) = &profile.features {
         for feat in feats {

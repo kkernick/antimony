@@ -1,6 +1,7 @@
 /// Antimony's CLI.
 pub mod create;
 pub mod debug_shell;
+pub mod default;
 pub mod edit;
 pub mod info;
 pub mod integrate;
@@ -47,6 +48,9 @@ pub enum Command {
     /// Edit an existing profile
     Edit(edit::Args),
 
+    /// Edit the default profile
+    Default(default::Args),
+
     /// Refresh caches
     Refresh(refresh::Args),
 
@@ -77,6 +81,7 @@ impl Run for Command {
             Command::Run(args) => args.run(),
             Command::Create(args) => args.run(),
             Command::Edit(args) => args.run(),
+            Command::Default(args) => args.run(),
             Command::Refresh(args) => args.run(),
             Command::Integrate(args) => args.run(),
             Command::Reset(args) => args.run(),

@@ -32,7 +32,7 @@ pub struct Args {
     /// Profile/Feature/Binary name.
     pub name: Option<String>,
 
-    /// Generate the profile, but do not run the executable.
+    /// The verbosity of information.
     #[arg(short, long, action = clap::ArgAction::Count)]
     pub verbosity: u8,
 }

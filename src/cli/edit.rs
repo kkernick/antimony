@@ -10,27 +10,22 @@ pub struct Args {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         // Edit the profile
-        if self.profile == "default" {
-            Profile::edit(&Profile::default_profile())?;
-        } else {
-            // Make the user modification file
-            let user = Profile::user_profile(&self.profile);
-            let new = !user.exists();
-            if new {
-                let source = Profile::path(&self.profile)?;
-                if let Some(parent) = user.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::copy(source, &user)?;
+        let user = Profile::user_profile(&self.profile);
+        let new = !user.exists();
+        if new {
+            let source = Profile::path(&self.profile)?;
+            if let Some(parent) = user.parent() {
+                std::fs::create_dir_all(parent)?;
             }
+            std::fs::copy(source, &user)?;
+        }
 
-            // Edit it.
-            if Profile::edit(&user)?.is_none() && new {
-                // If there was no modifications, delete the profile
-                // since it's identical to the system one.
-                user::set(user::Mode::Effective)?;
-                std::fs::remove_file(user)?;
-            }
+        // Edit it.
+        if Profile::edit(&user)?.is_none() && new {
+            // If there was no modifications, delete the profile
+            // since it's identical to the system one.
+            user::set(user::Mode::Effective)?;
+            std::fs::remove_file(user)?;
         }
         Ok(())
     }

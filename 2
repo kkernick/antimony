@@ -1,0 +1,9 @@
+features = ["electron", "network", "pipewire", "vaapi", "xdg-open"]
+arguments = ["--ozone-platform=wayland"]
+seccomp = "Permissive"
+
+[home]
+policy = "Overlay"
+
+[ipc]
+portals = ["FileChooser"]
