@@ -36,6 +36,10 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub features: Option<Vec<String>>,
 
+    /// Conflicting features
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub conflicts: Option<Vec<String>>,
+
     /// Additional inheritance.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub inherits: Option<Vec<String>>,

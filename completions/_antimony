@@ -33,6 +33,7 @@ _arguments "${_arguments_options[@]}" : \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \
+'*--conflicts=[Conflicting features]:CONFLICTS:_default' \
 '*--inherits=[Additional inheritance]:INHERITS:_default' \
 '--home-policy=[Override the home policy]:HOME_POLICY:((none\:"Do not use a home profile"
 enabled\:"The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox"

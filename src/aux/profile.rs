@@ -182,6 +182,9 @@ pub struct Profile {
     /// Features the sandbox uses.
     pub features: Option<BTreeSet<String>>,
 
+    /// Features that should be excluded from running under the profile.
+    pub conflicts: Option<BTreeSet<String>>,
+
     /// A list of profiles to use as a foundation for missing values.
     ///
     /// Missing values inherit those from the inherited profiles,
@@ -326,6 +329,10 @@ impl Profile {
 
         if let Some(features) = args.features.take() {
             profile.features = Some(features.into_iter().collect())
+        }
+
+        if let Some(conflicts) = args.conflicts.take() {
+            profile.conflicts = Some(conflicts.into_iter().collect())
         }
 
         if let Some(inherits) = args.inherits.take() {
@@ -474,7 +481,7 @@ impl Profile {
         extend(&mut self.libraries, profile.libraries);
         extend(&mut self.devices, profile.devices);
         extend(&mut self.features, profile.features);
-
+        extend(&mut self.conflicts, profile.conflicts);
         append(&mut self.arguments, profile.arguments);
         Ok(())
     }
@@ -554,6 +561,10 @@ impl Profile {
 
             if let Some(features) = &self.features {
                 println!("\t- Required Features: {features:?}");
+            }
+
+            if let Some(conflicts) = &self.conflicts {
+                println!("\t- Conflicting Features: {conflicts:?}");
             }
 
             if let Some(home) = &self.home {

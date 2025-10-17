@@ -40,6 +40,7 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "seccomp" -d 'Perf
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d 'Conflicting features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l inherits -d 'Additional inheritance' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-policy -d 'Override the home policy' -r -f -a "none\t'Do not use a home profile'
 enabled\t'The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox'

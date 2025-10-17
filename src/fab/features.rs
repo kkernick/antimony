@@ -110,7 +110,7 @@ fn resolve_feature(
     feature: &str,
     db: &mut HashMap<String, Feature>,
     features: &mut HashMap<String, u32>,
-    blacklist: &mut HashSet<String>,
+    blacklist: &mut BTreeSet<String>,
     searched: &mut HashSet<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
@@ -150,12 +150,13 @@ fn resolve_feature(
 }
 
 fn resolve_features(
-    profile: &Profile,
+    profile: &mut Profile,
     db: &mut HashMap<String, Feature>,
 ) -> Result<HashSet<String>, Error> {
     let mut features = HashMap::new();
     let mut searched = HashSet::new();
-    let mut blacklist = HashSet::new();
+    let mut blacklist = profile.conflicts.take().unwrap_or_default();
+    debug!("BLACKLIST: {blacklist:?}");
 
     if let Some(feats) = &profile.features {
         for feat in feats {
