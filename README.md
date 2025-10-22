@@ -5,7 +5,7 @@ Antimony is a [fast](./docs/Speed.md), [powerful](./docs/Profiles.md), [customiz
 ## Installation
 Antimony is available for:
 * RPM-Based Distributions (Fedora)
-* Debian-Based Distributions (Excluding Ubuntu)
+* Debian-Based Distributions (Ubuntu)
 * Arch-Based Distributions
 
 Releases provides packages for all three distribution types, which can be installed with your package manager of choice.
