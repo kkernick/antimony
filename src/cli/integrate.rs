@@ -9,7 +9,7 @@ use inflector::Inflector;
 use log::{debug, warn};
 use std::{borrow::Cow, fs::File, io::Write, os::unix::fs::symlink, path::Path};
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args, Debug, Default)]
 pub struct Args {
     /// The name of the profile
     pub profile: String,
@@ -49,7 +49,11 @@ pub enum ConfigMode {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         user::drop(user::Mode::Real)?;
-        if self.remove { remove(self) } else { id(self) }
+        if self.remove {
+            remove(self)
+        } else {
+            integrate(self)
+        }
     }
 }
 
@@ -103,7 +107,7 @@ pub fn remove(cmd: Args) -> Result<()> {
 }
 
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
-pub fn id(cmd: Args) -> Result<()> {
+pub fn integrate(cmd: Args) -> Result<()> {
     let profile = Profile::new(&cmd.profile)?;
 
     // Collect environment.
@@ -180,6 +184,7 @@ pub fn id(cmd: Args) -> Result<()> {
                 line.push_str(&format!("{name};"));
             }
         }
+        line.push_str("native;");
     };
 
     let fix_exec = |name, line: &mut String, config: Option<&str>| {
@@ -229,6 +234,14 @@ pub fn id(cmd: Args) -> Result<()> {
         }
     }
 
+    contents.push(format!(
+        "\n[Desktop Action native]\n\
+            Name=Run {} Natively\n\
+            Exec={}",
+        cmd.profile.to_title_case(),
+        profile.app_path(&cmd.profile)
+    ));
+
     // Add configurations.
     if let Some(configs) = &profile.configuration {
         match cmd.config_mode.unwrap_or_default() {
@@ -238,7 +251,7 @@ pub fn id(cmd: Args) -> Result<()> {
                 for config in configs.keys() {
                     contents.push(format!(
                         "[Desktop Action {config}]\n\
-                        Name=Antimony Configuration {}\n\
+                        Name=Antimony {} Configuration \n\
                         Exec=antimony run {} --config {config} %U \n",
                         config.to_title_case(),
                         cmd.profile

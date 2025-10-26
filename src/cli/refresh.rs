@@ -4,7 +4,7 @@ use crate::{
     cli,
     setup::{self, setup},
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::{borrow::Cow, time::Duration};
@@ -18,6 +18,10 @@ pub struct Args {
     /// Just delete the cache, don't repopulate.
     #[arg(short, long, default_value_t = false)]
     dry: bool,
+
+    /// Integrate all profiles as well.
+    #[arg(short, long, default_value_t = false)]
+    integrate: bool,
 
     /// Use a configuration within the profile.
     #[arg(short, long)]
@@ -38,7 +42,14 @@ impl super::Run for Args {
                 ..Default::default()
             };
             let info = setup::setup(Cow::Borrowed(&profile), &mut args)?;
-            return cli::run::run(info, &mut args);
+            cli::run::run(info, &mut args)?;
+
+            if self.integrate {
+                cli::integrate::integrate(cli::integrate::Args {
+                    profile,
+                    ..Default::default()
+                })?;
+            }
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
@@ -79,10 +90,21 @@ impl super::Run for Args {
                     dry: true,
                     ..Default::default()
                 };
-                match setup(Cow::Owned(name), &mut args) {
-                    Ok(_) => Ok(()),
-                    Err(e) => Err(e),
-                }
+                setup(Cow::Borrowed(&name), &mut args).and_then(|_| {
+                    if self.integrate {
+                        user::set(user::Mode::Real)?;
+                        pb.set_message(format!("Integrating {name}"));
+                        cli::integrate::integrate(cli::integrate::Args {
+                            profile: name,
+                            ..Default::default()
+                        })
+                        .and_then(|_| {
+                            user::revert().map_err(|_| anyhow!("Failed to revert privilege!"))
+                        })
+                    } else {
+                        Ok(())
+                    }
+                })
             })?;
         }
         Ok(())

@@ -445,7 +445,7 @@ _antimony() {
             return 0
             ;;
         antimony__refresh)
-            opts="-d -c -h --dry --config --help [PROFILE]"
+            opts="-d -i -c -h --dry --integrate --config --help [PROFILE]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

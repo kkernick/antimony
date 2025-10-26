@@ -112,6 +112,8 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '-d[Just delete the cache, don'\''t repopulate]' \
 '--dry[Just delete the cache, don'\''t repopulate]' \
+'-i[Integrate all profiles as well]' \
+'--integrate[Integrate all profiles as well]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_default' \

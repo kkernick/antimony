@@ -1,6 +1,7 @@
 name = "rust-devel"
 description = "Provide Rust and its associated development tools."
 requires = ["gcc", "lib", "hostname"]
+conflicts = ["hardened_malloc"]
 
 binaries = [
   "cargo",

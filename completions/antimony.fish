@@ -104,6 +104,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand feature" -s d -l delet
 complete -c antimony -n "__fish_antimony_using_subcommand feature" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
+complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s i -l integrate -d 'Integrate all profiles as well'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'
 file\t'Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers'"
