@@ -42,7 +42,7 @@ overlay\:"Once an application has been configured, Overlay effectively freezes i
 '--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
 permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"))' \
-'*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notification open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor power-management)' \
+'*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor power-management)' \
 '*--see=[Add busses the sandbox can see]:SEE:_default' \
 '*--talk=[Add busses the sandbox can talk to]:TALK:_default' \
 '*--own=[Add busses the sandbox owns]:OWN:_default' \

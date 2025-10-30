@@ -1040,7 +1040,7 @@ pub enum Portal {
     GlobalShortcuts,
     Inhibit,
     Location,
-    Notification,
+    Notifications,
     OpenURI,
     ProxyResolver,
     Realtime,

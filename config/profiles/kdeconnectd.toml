@@ -1,0 +1,9 @@
+id = "org.kde.kdeconnect.daemon"
+features = ["kf6", "network"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["Notifications"]
+own = ["org.kde.kdeconnect", "org.kde.kdeconnect.*"]

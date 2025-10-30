@@ -520,7 +520,7 @@ _antimony() {
                     return 0
                     ;;
                 --portals)
-                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notification open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor power-management" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor power-management" -- "${cur}"))
                     return 0
                     ;;
                 --see)

@@ -1,12 +1,12 @@
 //! Integrate a profile into the DE.
 use crate::aux::{
-    env::{DATA_HOME, HOME_PATH},
+    env::{CONFIG_HOME, DATA_HOME, HOME_PATH},
     profile::Profile,
 };
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use inflector::Inflector;
-use log::{debug, warn};
+use log::{debug, info, warn};
 use std::{borrow::Cow, fs::File, io::Write, os::unix::fs::symlink, path::Path};
 
 #[derive(clap::Args, Debug, Default)]
@@ -67,16 +67,20 @@ pub fn remove(cmd: Args) -> Result<()> {
         warn!("Binary does not exist");
     }
 
-    let original = DATA_HOME
+    let application = DATA_HOME
         .join("applications")
         .join(format!("{}.desktop", profile.desktop(name)));
-
-    if std::fs::remove_file(&original).is_err() {
+    if std::fs::remove_file(&application).is_err() {
         warn!(
             "Original .desktop file ({}) does not exist. You may need to provide if it differs from the profile name",
-            original.display()
+            application.display()
         );
     }
+
+    let xdg = CONFIG_HOME
+        .join("autostart")
+        .join(format!("{}.desktop", profile.desktop(name)));
+    let _ = std::fs::remove_file(&xdg);
 
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         Cow::Owned(profile.id(name))
@@ -98,7 +102,6 @@ pub fn remove(cmd: Args) -> Result<()> {
     let copy = DATA_HOME
         .join("applications")
         .join(format!("{name}.desktop"));
-
     if std::fs::remove_file(&copy).is_err() {
         warn!("Profile .desktop file ({}) does not exist", copy.display());
     }
@@ -106,45 +109,18 @@ pub fn remove(cmd: Args) -> Result<()> {
     Ok(())
 }
 
-/// Integrate a profile so it can be launched in place of the original in Desktop Environments.
-pub fn integrate(cmd: Args) -> Result<()> {
-    let profile = Profile::new(&cmd.profile)?;
-
-    // Collect environment.
-    let antimony = which::which("antimony")?;
-    let name = &cmd.profile;
-
-    // If ~/.local/bin is in PATH, the symlink takes precedence over
-    // and thus applications will run in the sandbox unless the absolute
-    // path in /usr/bin is given.
-    debug!("Creating symlink in ~/.local/bin");
-    let local = HOME_PATH.join(".local").join("bin");
-    if !local.exists() {
-        println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
-            to launch sandboxed applications from the command line without the explicit path.");
-        std::fs::create_dir_all(&local)?;
-    }
-
-    let local = local.join(name);
-    if !local.exists() {
-        symlink(antimony, &local).with_context(|| "Failed to create local symlink")?;
-    }
-
-    let local = local.to_string_lossy();
-
-    let desktop_file = Path::new("/usr")
-        .join("share")
-        .join("applications")
-        .join(format!("{}.desktop", profile.desktop(name)));
-
-    if !desktop_file.exists() {
-        warn!("The profile does not have a desktop file.");
-        return Ok(());
-    }
-
+/// Format a desktop file to point to Antimony
+fn format_desktop(
+    cmd: &Args,
+    profile: &Profile,
+    name: &str,
+    desktop_file: &Path,
+    local: &str,
+    out_path: &Path,
+) -> Result<()> {
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         // Create a shadow copy to turn on NoDisplay
-        let local_desktop: Vec<String> = std::fs::read_to_string(&desktop_file)
+        let local_desktop: Vec<String> = std::fs::read_to_string(desktop_file)
             .with_context(|| "Failed to read desktop file")?
             .split("\n")
             .map(|e| {
@@ -156,9 +132,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
             .collect();
 
         // Write it out.
-        let shadow = DATA_HOME
-            .join("applications")
-            .join(format!("{}.desktop", profile.desktop(name)));
+        let shadow = desktop_file.join(format!("{}.desktop", profile.desktop(name)));
 
         if let Some(parent) = shadow.parent() {
             std::fs::create_dir_all(parent)?;
@@ -286,10 +260,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
         }
     }
 
-    let antimony_desktop = DATA_HOME
-        .join("applications")
-        .join(format!("{name}.desktop"));
-
+    let antimony_desktop = out_path.join(format!("{name}.desktop"));
     if let Some(parent) = antimony_desktop.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -300,5 +271,65 @@ pub fn integrate(cmd: Args) -> Result<()> {
         contents.join("\n")
     )
     .with_context(|| "Failed to write new desktop file")?;
+    Ok(())
+}
+
+/// Integrate a profile so it can be launched in place of the original in Desktop Environments.
+pub fn integrate(cmd: Args) -> Result<()> {
+    let profile = Profile::new(&cmd.profile)?;
+
+    // Collect environment.
+    let antimony = which::which("antimony")?;
+    let name = &cmd.profile;
+
+    // If ~/.local/bin is in PATH, the symlink takes precedence over
+    // and thus applications will run in the sandbox unless the absolute
+    // path in /usr/bin is given.
+    debug!("Creating symlink in ~/.local/bin");
+    let local = HOME_PATH.join(".local").join("bin");
+    if !local.exists() {
+        println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
+            to launch sandboxed applications from the command line without the explicit path.");
+        std::fs::create_dir_all(&local)?;
+    }
+
+    let local = local.join(name);
+    if !local.exists() {
+        symlink(antimony, &local).with_context(|| "Failed to create local symlink")?;
+    }
+    let local = local.to_string_lossy();
+
+    let desktop_file = Path::new("/usr")
+        .join("share")
+        .join("applications")
+        .join(format!("{}.desktop", profile.desktop(name)));
+    if desktop_file.exists() {
+        info!("Overriding Desktop File");
+        format_desktop(
+            &cmd,
+            &profile,
+            name,
+            &desktop_file,
+            &local,
+            &DATA_HOME.join("applications"),
+        )?;
+    }
+
+    let service_file = Path::new("/etc")
+        .join("xdg")
+        .join("autostart")
+        .join(format!("{}.desktop", profile.desktop(name)));
+    if service_file.exists() {
+        info!("Overriding XDG Service");
+        format_desktop(
+            &cmd,
+            &profile,
+            name,
+            &service_file,
+            &local,
+            &CONFIG_HOME.join("autostart"),
+        )?;
+    }
+
     Ok(())
 }

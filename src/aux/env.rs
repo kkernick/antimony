@@ -100,6 +100,15 @@ pub static DATA_HOME: Lazy<PathBuf> = Lazy::new(|| {
     }
 });
 
+/// The user's config directory.
+pub static CONFIG_HOME: Lazy<PathBuf> = Lazy::new(|| {
+    if let Ok(data) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(data)
+    } else {
+        HOME_PATH.join(".config")
+    }
+});
+
 /// The text editor to use when editing files.
 pub static EDITOR: Lazy<String> = Lazy::new(|| {
     let editor = {
