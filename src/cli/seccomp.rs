@@ -134,6 +134,36 @@ impl super::Run for Args {
                 let tx = conn.transaction()?;
 
                 || -> Result<()> {
+                    let mut stmt = tx.prepare("SELECT id, name FROM profiles")?;
+                    let profiles = stmt.query_map([], |row| {
+                        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                    })?;
+
+                    for profile in profiles {
+                        let (id, name) = profile?;
+                        if name == "xdg-dbus-proxy" {
+                            continue;
+                        }
+
+                        if !AT_HOME
+                            .join("profiles")
+                            .join(format!("{name}.toml"))
+                            .exists()
+                        {
+                            println!("Removing missing profile: {name}");
+                            tx.execute("DELETE FROM profiles WHERE id = ?", params![id])?;
+                        }
+                    }
+                    Ok(())
+                }()?;
+
+                || -> Result<()> {
+                    tx.execute("DELETE FROM profile_binaries WHERE profile_id NOT IN (SELECT id FROM profiles);", [])?;
+                    Ok(())
+                }()?;
+
+                // Remove missing binaries
+                || -> Result<()> {
                     let mut stmt = tx.prepare("SELECT id, path FROM binaries")?;
                     let binaries = stmt.query_map([], |row| {
                         Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
@@ -161,6 +191,12 @@ impl super::Run for Args {
                             tx.execute("DELETE FROM binaries WHERE id = ?", params![id])?;
                         }
                     }
+                    Ok(())
+                }()?;
+
+                // Remove Orphans
+                || -> Result<()> {
+                    tx.execute("DELETE FROM binaries WHERE id NOT IN (SELECT DISTINCT binary_id FROM profile_binaries);", [])?;
                     Ok(())
                 }()?;
 

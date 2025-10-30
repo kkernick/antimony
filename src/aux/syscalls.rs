@@ -34,6 +34,7 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
 
     conn.execute_batch(
         "
+        PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS binaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             path TEXT NOT NULL UNIQUE
