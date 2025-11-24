@@ -78,7 +78,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
 }
 
 /// Get all matches for a wildcard.
-pub fn get_wildcards(pattern: &str) -> Result<HashSet<String>> {
+pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
     let run = |dir, base| -> Result<HashSet<String>> {
         Ok(Spawner::new("find")
             .args([
@@ -106,12 +106,14 @@ pub fn get_wildcards(pattern: &str) -> Result<HashSet<String>> {
     let libraries = if pattern.starts_with("/") {
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
-    } else {
+    } else if lib {
         let mut libraries = run("/usr/lib", pattern)?;
         if !*SINGLE_LIB {
             libraries.extend(run("/usr/lib64", pattern).unwrap_or_default());
         }
         libraries
+    } else {
+        run("/usr/bin", pattern)?
     };
 
     write_cache(pattern, libraries)
@@ -244,7 +246,7 @@ pub fn fabricate(
         resolved.extend(
             wildcards
                 .into_par_iter()
-                .filter_map(|e| get_wildcards(&e).ok())
+                .filter_map(|e| get_wildcards(&e, true).ok())
                 .collect::<Vec<_>>()
                 .into_iter()
                 .flatten()

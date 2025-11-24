@@ -4,7 +4,10 @@ use crate::{
         path::direct_path,
         profile::{FileMode, Profile},
     },
-    fab::{lib::get_dir, localize_path},
+    fab::{
+        lib::{get_dir, get_wildcards},
+        localize_path,
+    },
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
@@ -381,10 +384,26 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     std::fs::create_dir_all(CACHE_DIR.as_path())?;
 
     let mut elf_binaries = BTreeSet::<String>::new();
-    let path = profile.app_path(name).to_string();
-    let binaries = profile.binaries.get_or_insert_default();
 
-    binaries.insert(path);
+    let mut resolved = HashSet::new();
+    resolved.insert(profile.app_path(name).to_string());
+
+    if let Some(binaries) = profile.binaries.take() {
+        // Separate the wildcards from the files/dirs.
+        let (wildcards, flat): (HashSet<_>, HashSet<_>) =
+            binaries.into_par_iter().partition(|e| e.contains('*'));
+        resolved.extend(flat);
+        debug!("Resolving wildcards");
+        resolved.extend(
+            wildcards
+                .into_par_iter()
+                .filter_map(|e| get_wildcards(&e, false).ok())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .flatten()
+                .collect::<HashSet<_>>(),
+        );
+    };
 
     let parsed = Arc::new(ParseReturn::default());
 
@@ -434,7 +453,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     }
 
     // Parse the binaries
-    binaries
+    resolved
         .iter()
         .try_for_each(|binary| handle_localize(binary, false))?;
 

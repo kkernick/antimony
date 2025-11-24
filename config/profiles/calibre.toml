@@ -1,0 +1,10 @@
+id = "calibre-gui"
+features = ["kf6", "python"]
+binaries = ["calibre-*", "calibredb", "ebook-*", "fetch-ebook-metadata", "lrf*", "markdown-calibre", "pdftohtml", "web2disk"]
+libraries = ["/usr/lib/calibre", "libxxhash*"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]

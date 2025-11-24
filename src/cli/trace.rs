@@ -143,7 +143,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
                             let found = if file.is_empty() {
                                 false
                             } else if d_name.contains("*") {
-                                match get_wildcards(&d_name) {
+                                match get_wildcards(&d_name, true) {
                                     Ok(cards) => cards.contains(file),
                                     Err(_) => false,
                                 }

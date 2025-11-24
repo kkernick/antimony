@@ -636,7 +636,7 @@ pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
-            match get_wildcards(library) {
+            match get_wildcards(library, true) {
                 Ok(wilds) => {
                     for wild in wilds {
                         println!("\t\t- {}", style(wild).italic());

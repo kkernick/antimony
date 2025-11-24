@@ -24,9 +24,7 @@ pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
 
 pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
     let single = match std::fs::read_link("/usr/lib64") {
-        Ok(dest) => {
-            dest == std::path::PathBuf::from("/usr/lib") || dest == std::path::PathBuf::from("lib")
-        }
+        Ok(dest) => dest == std::path::Path::new("/usr/lib") || dest == std::path::Path::new("lib"),
         Err(_) => false,
     };
     debug!("Single Library Folder: {single}");
