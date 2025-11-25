@@ -7,7 +7,7 @@ pub mod lib;
 pub mod ns;
 
 use crate::aux::env::HOME;
-use std::{borrow::Cow, path::Path};
+use std::{borrow::Cow, env, path::Path};
 
 pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
     if string.contains('$') {
@@ -28,7 +28,7 @@ pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
                 if !var_name.is_empty() {
                     let val = match var_name.as_str() {
                         "UID" => format!("{}", user::USER.real),
-                        name => std::env::var(name).unwrap_or_else(|_| format!("${name}")),
+                        name => env::var(name).unwrap_or_else(|_| format!("${name}")),
                     };
                     resolved.push_str(&val);
                 } else {

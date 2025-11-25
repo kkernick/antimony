@@ -10,7 +10,8 @@ use nix::unistd::getcwd;
 use rusqlite::params;
 use spawn::Spawner;
 use std::{
-    fs::File,
+    fs::{self, File},
+    io,
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
@@ -59,7 +60,7 @@ impl super::Run for Args {
                     .interact()?;
 
                 if confirm {
-                    std::fs::remove_dir_all(AT_HOME.join("seccomp"))?;
+                    fs::remove_dir_all(AT_HOME.join("seccomp"))?;
                     println!("Deleted");
                 }
                 Ok(())
@@ -75,7 +76,7 @@ impl super::Run for Args {
                         None => getcwd()?.join("syscalls.db"),
                     };
 
-                    std::io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
+                    io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
                     println!("Exported to {dest:?}")
                 }
                 Ok(())
@@ -89,7 +90,7 @@ impl super::Run for Args {
                 };
 
                 let temp = NamedTempFile::new_in(AT_HOME.join("seccomp"))?;
-                std::fs::copy(&db, temp.path())?;
+                fs::copy(&db, temp.path())?;
 
                 let mut conn = DB_POOL.get()?;
                 let tx = conn.transaction()?;

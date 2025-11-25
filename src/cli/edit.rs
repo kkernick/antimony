@@ -1,6 +1,7 @@
 //! Edit an existing profile.
 use crate::aux::profile::Profile;
 use anyhow::Result;
+use std::fs;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -16,10 +17,10 @@ impl super::Run for Args {
             let source = Profile::path(&self.profile)?;
             if let Some(parent) = user.parent() {
                 user::set(user::Mode::Effective)?;
-                std::fs::create_dir_all(parent)?;
+                fs::create_dir_all(parent)?;
                 user::revert()?;
             }
-            std::fs::copy(source, &user)?;
+            fs::copy(source, &user)?;
         }
 
         // Edit it.
@@ -27,7 +28,7 @@ impl super::Run for Args {
             // If there was no modifications, delete the profile
             // since it's identical to the system one.
             user::set(user::Mode::Effective)?;
-            std::fs::remove_file(user)?;
+            fs::remove_file(user)?;
         }
         Ok(())
     }

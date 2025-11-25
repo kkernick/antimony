@@ -14,8 +14,8 @@ use spawn::Spawner;
 use std::{
     borrow::Cow,
     collections::HashSet,
-    fs::File,
-    io::{BufRead, BufReader, Read, Write},
+    fs::{self, File},
+    io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -23,7 +23,7 @@ use std::{
 /// Where to store cache data.
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = PathBuf::from(AT_HOME.as_path()).join("cache").join(".lib");
-    std::fs::create_dir_all(&path).unwrap();
+    fs::create_dir_all(&path).unwrap();
     path
 });
 
@@ -62,7 +62,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
         .filter_map(|e| {
             let mut resolved = e.to_string();
             if e.contains("..") {
-                resolved = std::fs::canonicalize(e)
+                resolved = fs::canonicalize(e)
                     .map_err(Error::from)
                     .ok()?
                     .to_string_lossy()
@@ -174,10 +174,10 @@ pub fn add_sof(sof: &Path, library: String) -> Result<()> {
     let sof_path = sof_path(sof, &library);
 
     if let Some(parent) = sof_path.parent() {
-        std::fs::create_dir_all(parent)?;
-        if let Ok(canon) = std::fs::canonicalize(&library)
-            && let Err(e) = std::fs::hard_link(&canon, &sof_path)
-            && e.kind() != std::io::ErrorKind::AlreadyExists
+        fs::create_dir_all(parent)?;
+        if let Ok(canon) = fs::canonicalize(&library)
+            && let Err(e) = fs::hard_link(&canon, &sof_path)
+            && e.kind() != io::ErrorKind::AlreadyExists
         {
             return Err(e).with_context(|| {
                 format!("Failed to hardlink {library} -> {}", sof_path.display())
@@ -211,7 +211,7 @@ pub fn fabricate(
 
     debug!("Creating SOF");
     let sof = sys_dir.join("sof");
-    std::fs::create_dir_all(&sof)?;
+    fs::create_dir_all(&sof)?;
 
     // Libraries needed by the program. No Binaries.
     let mut dependencies = HashSet::new();
@@ -332,7 +332,7 @@ pub fn fabricate(
         if dir.contains("lib") {
             let sof_path = sof_path(&sof, dir.as_str());
             if !sof_path.exists() {
-                std::fs::create_dir_all(sof_path)?;
+                fs::create_dir_all(sof_path)?;
             }
         }
         handle.args_i(["--ro-bind", dir.as_str(), dir.as_str()])?;

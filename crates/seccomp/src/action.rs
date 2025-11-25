@@ -1,4 +1,6 @@
 //! Wrapper for SCMP_ACT.
+use std::fmt;
+
 use super::raw;
 
 /// An Action.
@@ -38,8 +40,8 @@ impl From<Action> for u32 {
         }
     }
 }
-impl std::fmt::Display for Action {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Action::KillProcess => write!(f, "Kill Process"),
             Action::KillThread => write!(f, "Kill Thread"),

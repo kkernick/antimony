@@ -14,6 +14,7 @@ use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
+    env,
     fs::{self, File},
     io::Write,
     path::Path,
@@ -91,12 +92,12 @@ pub fn run(
     proxy.args_i([
         "--",
         &resolve,
-        &std::env::var("DBUS_SESSION_BUS_ADDRESS")?,
+        &env::var("DBUS_SESSION_BUS_ADDRESS")?,
         &app_dir.join("bus").to_string_lossy(),
         "--filter",
     ])?;
 
-    if let Ok(log) = std::env::var("RUST_LOG")
+    if let Ok(log) = env::var("RUST_LOG")
         && log == "debug"
     {
         proxy.arg_i("--log")?;

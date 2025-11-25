@@ -1,7 +1,7 @@
 //! Edit the default profile
 use crate::aux::{env::AT_HOME, profile::Profile};
 use anyhow::Result;
-use std::fs::File;
+use std::fs::{self, File};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {}
@@ -11,7 +11,7 @@ impl super::Run for Args {
         let path = {
             let path = Profile::default_profile();
             if !path.exists() {
-                std::fs::copy(AT_HOME.join("config").join("default.toml"), &path)?;
+                fs::copy(AT_HOME.join("config").join("default.toml"), &path)?;
             }
             path
         };
@@ -21,7 +21,7 @@ impl super::Run for Args {
         }
 
         if Profile::edit(&path).is_err() {
-            std::fs::remove_file(&path)?;
+            fs::remove_file(&path)?;
         }
         Ok(())
     }

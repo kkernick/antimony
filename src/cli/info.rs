@@ -9,7 +9,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use console::style;
 use log::error;
-use std::{collections::HashSet, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 
 /// What to get information on.
 #[derive(ValueEnum, Clone, Debug)]
@@ -80,7 +80,7 @@ impl super::Run for Args {
                     Some(profile) => print(&profile, self.verbosity + 1)?,
                     None => {
                         let profiles = Path::new(AT_HOME.as_path()).join("profiles");
-                        for path in std::fs::read_dir(profiles)?.filter_map(|e| e.ok()) {
+                        for path in fs::read_dir(profiles)?.filter_map(|e| e.ok()) {
                             let path = path.path().to_string_lossy().into_owned();
                             print(&path, self.verbosity)?;
                         }
@@ -93,9 +93,8 @@ impl super::Run for Args {
                 Some(profile) => Feature::new(&profile)?.info(self.verbosity + 1),
                 None => {
                     let features = Path::new(AT_HOME.as_path()).join("features");
-                    for path in std::fs::read_dir(features)?.filter_map(|e| e.ok()) {
-                        let feature: Feature =
-                            toml::from_str(&std::fs::read_to_string(path.path())?)?;
+                    for path in fs::read_dir(features)?.filter_map(|e| e.ok()) {
+                        let feature: Feature = toml::from_str(&fs::read_to_string(path.path())?)?;
                         feature.info(self.verbosity);
                     }
                 }

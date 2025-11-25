@@ -9,6 +9,7 @@ use log::{debug, warn};
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
+    error, fmt,
 };
 use strum::IntoEnumIterator;
 
@@ -21,16 +22,16 @@ pub enum Error {
     /// Feature error.
     Feature(crate::aux::feature::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::InvalidBus(name) => write!(f, "Invalid bus name: {name}"),
             Self::Feature(e) => write!(f, "Failed to parse feature: {e}"),
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Feature(e) => Some(e),
             _ => None,

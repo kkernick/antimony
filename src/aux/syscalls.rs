@@ -1,6 +1,8 @@
-use crate::aux::env::AT_HOME;
-use crate::aux::path::which_exclude;
-use crate::aux::{path::user_dir, profile::SeccompPolicy};
+use crate::aux::{
+    env::AT_HOME,
+    path::{user_dir, which_exclude},
+    profile::SeccompPolicy,
+};
 use log::{info, trace, warn};
 use nix::sys::socket::{self, ControlMessage, MsgFlags};
 use once_cell::sync::Lazy;
@@ -8,14 +10,19 @@ use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Transaction;
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
-use std::borrow::Cow;
-use std::collections::{BTreeSet, HashSet};
-use std::io::IoSlice;
-use std::os::fd::{AsRawFd, IntoRawFd, OwnedFd};
-use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
-use std::thread::sleep;
-use std::time::Duration;
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashSet},
+    error, fmt, fs,
+    io::IoSlice,
+    os::{
+        fd::{AsRawFd, IntoRawFd, OwnedFd},
+        unix::net::UnixStream,
+    },
+    path::PathBuf,
+    thread::sleep,
+    time::Duration,
+};
 
 /// Connection to the Database
 pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
@@ -23,7 +30,7 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
     user::set(user::Mode::Effective).expect("Failed to set user");
     let dir = AT_HOME.join("seccomp");
     if !dir.exists() {
-        std::fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");
+        fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");
     }
     let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
     let pool = Pool::new(manager).expect("Failed to create pool");
@@ -84,8 +91,8 @@ pub enum Error {
     /// Errors connecting to the database.
     Connection(r2d2::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Seccomp(e) => write!(f, "SECCOMP Error: {e}"),
             Self::Database(e) => write!(f, "Database Error: {e}"),
@@ -93,8 +100,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Seccomp(e) => Some(e),
             Self::Database(e) => Some(e),

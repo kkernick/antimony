@@ -2,12 +2,12 @@
 use crate::{
     aux::env::{AT_HOME, HOME_PATH},
     cli,
-    setup::{self, setup},
+    setup::{self, cleanup, setup},
 };
 use anyhow::{Result, anyhow};
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use std::{borrow::Cow, time::Duration};
+use std::{borrow::Cow, fs, time::Duration};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -19,6 +19,10 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     dry: bool,
 
+    /// Delete the entire Cache directory. Will break any instance currently running!
+    #[arg(short, long, default_value_t = false)]
+    hard: bool,
+
     /// Integrate all profiles as well.
     #[arg(short, long, default_value_t = false)]
     integrate: bool,
@@ -29,9 +33,20 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        // Remove the cache.
-        if std::fs::remove_dir_all(AT_HOME.join("cache")).is_err() {
-            debug!("System cache doesn't exist.");
+        let cache = AT_HOME.join("cache");
+
+        if self.hard {
+            fs::remove_dir_all(&cache)?;
+        } else {
+            // Cached definitions can be removed safely.
+            fs::remove_dir_all(cache.join(".bin"))?;
+            fs::remove_dir_all(cache.join(".lib"))?;
+
+            // This seems to be safe. Even if instances are in use,
+            // deleting the source does not affect either the proxy,
+            // or trying to open direct files.
+            fs::remove_dir_all(cache.join(".proxy"))?;
+            fs::remove_dir_all(cache.join(".direct"))?;
         }
 
         // If a single profile exist, refresh it and it alone.
@@ -39,6 +54,7 @@ impl super::Run for Args {
             let mut args = cli::run::Args {
                 dry: self.dry,
                 config: self.config,
+                refresh: true,
                 ..Default::default()
             };
             let info = setup::setup(Cow::Borrowed(&profile), &mut args)?;
@@ -57,11 +73,11 @@ impl super::Run for Args {
             let bin = HOME_PATH.join(".local").join("bin");
             debug!("Refreshing local binaries");
 
-            let profiles: Vec<String> = std::fs::read_dir(bin)?
+            let profiles: Vec<String> = fs::read_dir(bin)?
                 .filter_map(|file| {
                     if let Ok(file) = file {
                         let file = file.path();
-                        if let Ok(dest) = std::fs::read_link(&file)
+                        if let Ok(dest) = fs::read_link(&file)
                             && dest.ends_with("antimony")
                             && let Some(name) = file.file_name()
                         {
@@ -88,23 +104,25 @@ impl super::Run for Args {
                 pb.set_message(format!("Refreshing {name}"));
                 let mut args = cli::run::Args {
                     dry: true,
+                    refresh: true,
                     ..Default::default()
                 };
-                setup(Cow::Borrowed(&name), &mut args).and_then(|_| {
-                    if self.integrate {
-                        user::set(user::Mode::Real)?;
-                        pb.set_message(format!("Integrating {name}"));
-                        cli::integrate::integrate(cli::integrate::Args {
-                            profile: name,
-                            ..Default::default()
-                        })
-                        .and_then(|_| {
-                            user::revert().map_err(|_| anyhow!("Failed to revert privilege!"))
-                        })
-                    } else {
-                        Ok(())
-                    }
-                })
+                let info = setup(Cow::Borrowed(&name), &mut args)?;
+                cleanup(info.instance)?;
+
+                if self.integrate {
+                    user::set(user::Mode::Real)?;
+                    pb.set_message(format!("Integrating {name}"));
+                    cli::integrate::integrate(cli::integrate::Args {
+                        profile: name,
+                        ..Default::default()
+                    })
+                    .and_then(|_| {
+                        user::revert().map_err(|_| anyhow!("Failed to revert privilege!"))
+                    })
+                } else {
+                    Ok(())
+                }
             })?;
         }
         Ok(())

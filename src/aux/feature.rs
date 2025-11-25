@@ -1,18 +1,24 @@
 //!  Features are miniature profiles used by the latter for common functionality.
+
 use super::profile::{Ipc, Namespace};
-use crate::aux::edit;
-use crate::aux::env::{AT_HOME, PWD};
-use crate::aux::profile::Files;
+use crate::aux::{
+    edit,
+    env::{AT_HOME, PWD},
+    profile::Files,
+};
 use console::style;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    error, fmt, fs, io,
+    path::{Path, PathBuf},
+};
 
 /// Errors reading feature files
 #[derive(Debug)]
 pub enum Error {
     /// An error reading/writing/opening the file.
-    Io(std::io::Error),
+    Io(io::Error),
 
     /// An error if a feature does not exist.
     NotFound(String),
@@ -20,8 +26,8 @@ pub enum Error {
     /// An error if the TOML is malformed.
     Malformed(toml::de::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "Failed to read feature: {e}"),
             Self::NotFound(name) => write!(f, "Feature not found: {name}"),
@@ -29,16 +35,16 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
             _ => None,
         }
     }
 }
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
         Error::Io(value)
     }
 }
@@ -110,9 +116,7 @@ impl Feature {
 
     /// Get a feature from its name.
     pub fn new(name: &str) -> Result<Feature, Error> {
-        Ok(toml::from_str(&std::fs::read_to_string(&Self::path(
-            name,
-        )?)?)?)
+        Ok(toml::from_str(&fs::read_to_string(&Self::path(name)?)?)?)
     }
 
     /// Print info about the feature.
@@ -191,12 +195,12 @@ mod tests {
     fn validate_features() {
         let features = Path::new(AT_HOME.as_path()).join("features");
         if features.exists() {
-            for path in std::fs::read_dir(features)
+            for path in fs::read_dir(features)
                 .expect("No features to test")
                 .filter_map(|e| e.ok())
             {
                 toml::from_str::<Feature>(
-                    &std::fs::read_to_string(path.path()).expect("Failed to read feature"),
+                    &fs::read_to_string(path.path()).expect("Failed to read feature"),
                 )
                 .expect("Failed to parse feature");
             }

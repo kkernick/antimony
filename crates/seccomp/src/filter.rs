@@ -2,7 +2,9 @@
 use super::{action::Action, attribute::Attribute, raw, syscall::Syscall};
 use nix::errno::Errno;
 use std::{
+    error, fmt,
     fs::File,
+    io,
     os::fd::IntoRawFd,
     path::{Path, PathBuf},
 };
@@ -23,7 +25,7 @@ pub enum Error {
     AddRule(Action, Syscall, Errno),
 
     /// Failed to write out as BPF
-    Write(PathBuf, std::io::Error),
+    Write(PathBuf, io::Error),
 
     /// Failed to export the SECCOMP to BPF.
     Export(Errno),
@@ -35,8 +37,8 @@ pub enum Error {
     #[cfg(feature = "notify")]
     Send,
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::SetAttribute(_, errno) => Some(errno),
             Self::AddRule(_, _, errno) => Some(errno),
@@ -47,8 +49,8 @@ impl std::error::Error for Error {
         }
     }
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Initialization => write!(f, "Failed to initialization the Filter context"),
             Self::SetAttribute(attr, errno) => write!(f, "Failed to set attribute {attr}: {errno}"),

@@ -26,8 +26,10 @@ use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::Spawner;
 use std::{
     collections::HashSet,
-    io::IoSliceMut,
+    env, fs,
+    io::{self, IoSliceMut},
     os::{
+        self,
         fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
         unix::net::UnixListener,
     },
@@ -36,6 +38,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    thread,
 };
 use user::Mode;
 
@@ -174,7 +177,7 @@ pub fn notify_reader(
                     if let Err(e) = pair.reply(raw, |req, resp| {
                         // Get the binary name
                         let pid = req.pid;
-                        if let Ok(exe_path) = std::fs::read_link(format!("/proc/{pid}/exe")) {
+                        if let Ok(exe_path) = fs::read_link(format!("/proc/{pid}/exe")) {
                             let path = exe_path.to_string_lossy().into_owned();
 
                             // Get the syscall name
@@ -239,7 +242,7 @@ pub fn notify_reader(
 fn accept_with_timeout(
     listener: &UnixListener,
     timeout: PollTimeout,
-) -> std::io::Result<Option<std::os::unix::net::UnixStream>> {
+) -> io::Result<Option<os::unix::net::UnixStream>> {
     listener.set_nonblocking(true)?;
 
     let fd = listener.as_fd();
@@ -254,7 +257,7 @@ fn accept_with_timeout(
         // Ready to accept
         match listener.accept() {
             Ok((stream, _addr)) => Ok(Some(stream)),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
             Err(e) => Err(e),
         }
     }
@@ -302,7 +305,7 @@ fn main() -> Result<()> {
     rayon::ThreadPoolBuilder::new().build_global()?;
 
     // We need an instance, for where to put the socket.
-    let instance = std::env::args().nth(1).expect("No argument provided");
+    let instance = env::args().nth(1).expect("No argument provided");
 
     info!("SECCOMP Monitor Started!");
     let mut conn = syscalls::DB_POOL.get()?;
@@ -327,7 +330,7 @@ fn main() -> Result<()> {
 
     let audit_term = term.clone();
 
-    std::thread::spawn(move || audit_reader(audit_term, audit));
+    thread::spawn(move || audit_reader(audit_term, audit));
 
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
@@ -340,7 +343,7 @@ fn main() -> Result<()> {
                     .or_insert_with(|| Arc::new(DashMap::new()))
                     .clone();
 
-                std::thread::spawn(move || notify_reader(term_clone, profile, fd));
+                thread::spawn(move || notify_reader(term_clone, profile, fd));
             }
             Ok(None) => continue,
             Err(_) => break,

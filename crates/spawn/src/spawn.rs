@@ -13,7 +13,9 @@ use nix::{
 use parking_lot::Mutex;
 use std::{
     borrow::Cow,
+    env, error,
     ffi::{CString, NulError},
+    fmt,
     os::fd::OwnedFd,
 };
 use which::which;
@@ -28,7 +30,11 @@ use {
 };
 
 #[cfg(feature = "cache")]
-use std::{fs, io::Write, path::Path};
+use std::{
+    fs,
+    io::{self, Write},
+    path::Path,
+};
 
 /// Errors related to the Spawner.
 #[derive(Debug)]
@@ -42,7 +48,7 @@ pub enum Error {
 
     /// Errors reading/writing to the cache.
     #[cfg(feature = "cache")]
-    Io(std::io::Error),
+    Io(io::Error),
 
     /// Errors to various functions that return `Errno`.
     Errno(ForkResult, &'static str, nix::errno::Errno),
@@ -57,8 +63,8 @@ pub enum Error {
     #[cfg(feature = "seccomp")]
     Seccomp(seccomp::filter::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Null(error) => write!(f, "Provided string contains null values: {error}"),
 
@@ -84,8 +90,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Null(error) => Some(error),
 
@@ -116,7 +122,7 @@ impl std::error::Error for Error {
 ///
 /// Launch cat, feeding it input from the parent:
 /// ```rust
-/// use std::io::Write;
+/// use io::Write;
 /// let mut handle = spawn::Spawner::new("cat")
 ///     .input(true)
 ///     .output(true)
@@ -218,7 +224,7 @@ impl<'a> Spawner {
         if var.contains('=') {
             CString::new(var).map_err(Error::Null)
         } else {
-            let val = std::env::var(&var).map_err(|_| Error::Path(var.clone()))?;
+            let val = env::var(&var).map_err(|_| Error::Path(var.clone()))?;
             CString::new(format!("{var}={val}")).map_err(Error::Null)
         }
     }
@@ -356,7 +362,7 @@ impl<'a> Spawner {
     ///     .fd_arg("--file", file).unwrap()
     ///     .arg("/file.txt").unwrap()
     ///     .spawn().unwrap();
-    /// std::fs::remove_file("file.txt").unwrap();
+    /// fs::remove_file("file.txt").unwrap();
     /// ```
     #[cfg(feature = "fd")]
     pub fn fd_arg(
@@ -517,7 +523,7 @@ impl<'a> Spawner {
     /// ## Examples
     ///
     /// ```rust
-    /// let cache = std::path::PathBuf::from("cmd.cache");
+    /// let cache = path::PathBuf::from("cmd.cache");
     /// let mut handle = spawn::Spawner::new("bash");
     /// if cache.exists() {
     ///     handle.cache_read(&cache).unwrap();
@@ -526,7 +532,7 @@ impl<'a> Spawner {
     ///     handle.arg_i("arg").unwrap();
     ///     handle.cache_write(&cache).unwrap();
     /// }
-    /// std::fs::remove_file(cache);
+    /// fs::remove_file(cache);
     /// ```
     ///
     /// ## Caveat
@@ -767,7 +773,7 @@ fn cond_pipe(cond: bool) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use std::io::Write;
+    use io::Write;
 
     use super::*;
 

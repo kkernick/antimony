@@ -2,7 +2,11 @@
 use super::raw;
 use crate::get_architecture;
 use nix::libc::free;
-use std::ffi::{CStr, CString, c_int, c_void};
+use std::{
+    error,
+    ffi::{CStr, CString, c_int, c_void},
+    fmt,
+};
 
 /// An error trying to resolve a syscall, either from string to number, or number to string.
 #[derive(Debug)]
@@ -10,15 +14,15 @@ pub enum Error {
     Name(String),
     Code(c_int),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Name(name) => write!(f, "Failed to resolve syscall name: {name}"),
             Error::Code(code) => write!(f, "Failed to resolve syscall name: {code}"),
         }
     }
 }
-impl std::error::Error for Error {}
+impl error::Error for Error {}
 
 /// A Syscall, which can be constructed from either the number, or from the name.
 #[derive(Debug, Copy, Clone)]
@@ -93,8 +97,8 @@ impl From<Syscall> for c_int {
         syscall.code
     }
 }
-impl std::fmt::Display for Syscall {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Syscall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.code)
     }
 }

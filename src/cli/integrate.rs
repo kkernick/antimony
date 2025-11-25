@@ -7,7 +7,13 @@ use anyhow::{Context, Result};
 use clap::ValueEnum;
 use inflector::Inflector;
 use log::{debug, info, warn};
-use std::{borrow::Cow, fs::File, io::Write, os::unix::fs::symlink, path::Path};
+use std::{
+    borrow::Cow,
+    fs::{self, File},
+    io::Write,
+    os::unix::fs::symlink,
+    path::Path,
+};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -63,14 +69,14 @@ pub fn remove(cmd: Args) -> Result<()> {
 
     let name = &cmd.profile;
 
-    if std::fs::remove_file(HOME_PATH.join(".local").join("bin").join(name)).is_err() {
+    if fs::remove_file(HOME_PATH.join(".local").join("bin").join(name)).is_err() {
         warn!("Binary does not exist");
     }
 
     let application = DATA_HOME
         .join("applications")
         .join(format!("{}.desktop", profile.desktop(name)));
-    if std::fs::remove_file(&application).is_err() {
+    if fs::remove_file(&application).is_err() {
         warn!(
             "Original .desktop file ({}) does not exist. You may need to provide if it differs from the profile name",
             application.display()
@@ -80,7 +86,7 @@ pub fn remove(cmd: Args) -> Result<()> {
     let xdg = CONFIG_HOME
         .join("autostart")
         .join(format!("{}.desktop", profile.desktop(name)));
-    let _ = std::fs::remove_file(&xdg);
+    let _ = fs::remove_file(&xdg);
 
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         Cow::Owned(profile.id(name))
@@ -94,7 +100,7 @@ pub fn remove(cmd: Args) -> Result<()> {
                 .join("applications")
                 .join(format!("{name}-{config}.desktop"));
             if config_desktop.exists() {
-                std::fs::remove_file(config_desktop)?;
+                fs::remove_file(config_desktop)?;
             }
         }
     }
@@ -102,7 +108,7 @@ pub fn remove(cmd: Args) -> Result<()> {
     let copy = DATA_HOME
         .join("applications")
         .join(format!("{name}.desktop"));
-    if std::fs::remove_file(&copy).is_err() {
+    if fs::remove_file(&copy).is_err() {
         warn!("Profile .desktop file ({}) does not exist", copy.display());
     }
 
@@ -120,7 +126,7 @@ fn format_desktop(
 ) -> Result<()> {
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         // Create a shadow copy to turn on NoDisplay
-        let local_desktop: Vec<String> = std::fs::read_to_string(desktop_file)
+        let local_desktop: Vec<String> = fs::read_to_string(desktop_file)
             .with_context(|| "Failed to read desktop file")?
             .split("\n")
             .map(|e| {
@@ -135,7 +141,7 @@ fn format_desktop(
         let shadow = desktop_file.join(format!("{}.desktop", profile.desktop(name)));
 
         if let Some(parent) = shadow.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent)?;
         }
 
         debug!("Writing shadow");
@@ -146,7 +152,7 @@ fn format_desktop(
     };
 
     let desktop =
-        std::fs::read_to_string(desktop_file).with_context(|| "Failed to read desktop file")?;
+        fs::read_to_string(desktop_file).with_context(|| "Failed to read desktop file")?;
 
     // Make the new desktop file.
     debug!("Creating desktop file");
@@ -262,7 +268,7 @@ fn format_desktop(
 
     let antimony_desktop = out_path.join(format!("{name}.desktop"));
     if let Some(parent) = antimony_desktop.parent() {
-        std::fs::create_dir_all(parent)?;
+        fs::create_dir_all(parent)?;
     }
 
     write!(
@@ -290,7 +296,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
     if !local.exists() {
         println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
             to launch sandboxed applications from the command line without the explicit path.");
-        std::fs::create_dir_all(&local)?;
+        fs::create_dir_all(&local)?;
     }
 
     let local = local.join(name);

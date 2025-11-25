@@ -1,5 +1,7 @@
 //! Helper utilities for switching modes in SetUID applications.
 
+use std::{error, fmt};
+
 use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
@@ -21,8 +23,8 @@ pub struct Error {
     /// The error we got from the syscall.
     errno: Errno,
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let current = getresgid();
         if let Ok(uid) = current {
             write!(
@@ -44,9 +46,9 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.errno as &dyn std::error::Error)
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(&self.errno as &dyn error::Error)
     }
 }
 

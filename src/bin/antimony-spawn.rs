@@ -24,7 +24,9 @@ use nix::unistd::chdir;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
+    env,
     os::fd::{FromRawFd, OwnedFd},
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -92,11 +94,11 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     // Set a new AT_HOME in temp.
-    unsafe { std::env::set_var("AT_HOME", "/tmp/antimony-spawn") };
+    unsafe { env::set_var("AT_HOME", "/tmp/antimony-spawn") };
 
     // If we're running within Antimony itself
-    if std::env::var("USER").is_err() {
-        unsafe { std::env::set_var("USER", "antimony") };
+    if env::var("USER").is_err() {
+        unsafe { env::set_var("USER", "antimony") };
     }
 
     rayon::ThreadPoolBuilder::new().build_global()?;
@@ -105,7 +107,7 @@ fn main() -> Result<()> {
 
     // Change the current directory.
     if let Some(directory) = cli.directory {
-        chdir(std::path::Path::new(&directory))?;
+        chdir(Path::new(&directory))?;
     }
 
     let handle = if cli.sandbox {

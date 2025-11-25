@@ -2,6 +2,7 @@
 use crate::aux::profile::Profile;
 use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
+use std::fs;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -23,10 +24,10 @@ impl super::Run for Args {
                     .interact()?;
 
                 if confirm {
-                    std::fs::remove_file(dest)?;
+                    fs::remove_file(dest)?;
                 }
             } else {
-                std::fs::remove_file(dest)?;
+                fs::remove_file(dest)?;
             }
             Ok(())
         } else {

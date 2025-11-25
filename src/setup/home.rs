@@ -1,11 +1,10 @@
-use std::process::exit;
-
 use crate::aux::{
     env::{DATA_HOME, OVERLAY},
     profile::HomePolicy,
 };
 use anyhow::Result;
 use log::{debug, error};
+use std::{fs, process::exit};
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(home) = &args.profile.home {
@@ -20,7 +19,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 let saved = user::save()?;
                 user::set(user::Mode::Real)?;
                 debug!("Setting up home at {home_dir:?}");
-                std::fs::create_dir_all(&home_dir)?;
+                fs::create_dir_all(&home_dir)?;
 
                 debug!("Adding args");
                 let home_str = home_dir.to_string_lossy();

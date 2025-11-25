@@ -2,6 +2,7 @@
 use crate::{cli::run::wait_for_doc, setup::setup};
 use anyhow::{Result, anyhow};
 use log::debug;
+use nix::sys::signal::Signal::SIGTERM;
 use std::borrow::Cow;
 
 #[derive(clap::Args, Debug)]
@@ -40,7 +41,6 @@ fn debug_shell(info: crate::setup::Info) -> Result<()> {
     wait_for_doc();
 
     debug!("Spawning");
-    info.handle.spawn()?.wait()?;
-
+    info.handle.spawn()?.wait_for_signal(SIGTERM)?;
     crate::setup::cleanup(info.instance)
 }

@@ -18,8 +18,8 @@ use spawn::Spawner;
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
-    fs::File,
-    io::{BufRead, BufReader, Read, Seek, Write},
+    fs::{self, File},
+    io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -233,7 +233,7 @@ fn parse(path: &str, ret: Arc<ParseReturn>, mut include_self: bool) -> Result<Ty
     };
 
     // Ensure it's a valid binary.
-    if let Ok(dest) = std::fs::read_link(resolved.as_ref()) {
+    if let Ok(dest) = fs::read_link(resolved.as_ref()) {
         let dest = dest.to_string_lossy();
         if include_self {
             match resolve_bin(dest.as_ref()) {
@@ -293,7 +293,7 @@ fn parse(path: &str, ret: Arc<ParseReturn>, mut include_self: bool) -> Result<Ty
             let mut environment = HashMap::<String, String>::new();
 
             // Rewind.
-            file.seek(std::io::SeekFrom::Start(0))?;
+            file.seek(io::SeekFrom::Start(0))?;
             let reader = BufReader::new(file);
 
             let mut iter = reader.lines();
@@ -384,7 +384,7 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
 }
 
 pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
-    std::fs::create_dir_all(CACHE_DIR.as_path())?;
+    fs::create_dir_all(CACHE_DIR.as_path())?;
 
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
@@ -529,7 +529,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     if profile.home.is_some() {
         user::set(user::Mode::Real)?;
         let home_dir = Path::new(DATA_HOME.as_path()).join("antimony").join(name);
-        std::fs::create_dir_all(&home_dir)?;
+        fs::create_dir_all(&home_dir)?;
         user::revert()?;
 
         debug!("Finding home binaries");

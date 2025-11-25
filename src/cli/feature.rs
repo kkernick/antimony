@@ -1,4 +1,6 @@
 //! Edit an existing profile.
+use std::fs;
+
 use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 use nix::unistd::getpid;
@@ -47,10 +49,10 @@ impl super::Run for Args {
                 }
                 if let Some(parent) = feature.parent() {
                     user::set(user::Mode::Effective)?;
-                    std::fs::create_dir_all(parent)?;
+                    fs::create_dir_all(parent)?;
                     user::revert()?;
                 }
-                std::fs::copy(AT_HOME.join("config").join("feature.toml"), &feature)?;
+                fs::copy(AT_HOME.join("config").join("feature.toml"), &feature)?;
             } else if self.delete {
                 let confirm = Confirm::new()
                     .with_prompt(format!("Are you sure you want to delete {}?", self.feature))
@@ -58,7 +60,7 @@ impl super::Run for Args {
                 if confirm {
                     println!("Deleting {feature:?}");
                     user::set(user::Mode::Effective)?;
-                    std::fs::remove_file(&feature)?;
+                    fs::remove_file(&feature)?;
                 }
                 return Ok(());
             }
@@ -67,7 +69,7 @@ impl super::Run for Args {
             if Feature::edit(&feature)?.is_none() && new {
                 // If there was no modifications, delete the empty feature
                 user::set(user::Mode::Effective)?;
-                std::fs::remove_file(feature)?;
+                fs::remove_file(feature)?;
             }
         }
         Ok(())

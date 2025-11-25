@@ -1,6 +1,7 @@
 //! Get statistics about the sandbox.
 use crate::setup::setup;
 use anyhow::{Result, anyhow};
+use nix::sys::signal::Signal::SIGTERM;
 use std::borrow::Cow;
 
 #[derive(clap::Args, Debug)]
@@ -43,6 +44,6 @@ fn stat(info: crate::setup::Info) -> Result<()> {
                 for dir in $(ls /usr/share); do echo \"    $dir => $(find /usr/share/$dir -type f | wc -l)\"; done;
             ",
         ])?;
-    info.handle.spawn()?.wait()?;
+    info.handle.spawn()?.wait_for_signal(SIGTERM)?;
     crate::setup::cleanup(info.instance)
 }

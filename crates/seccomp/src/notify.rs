@@ -20,8 +20,9 @@
 use super::raw;
 use nix::errno::Errno;
 use std::{
+    error, fmt,
     os::fd::{AsRawFd, RawFd},
-    ptr::null_mut,
+    ptr::{self, null_mut},
 };
 
 /// Errors regarding to Notify.
@@ -39,8 +40,8 @@ pub enum Error {
     /// If there was an error sending a response to a request.
     Respond(Errno),
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Allocation(errno) => Some(errno),
             Self::Receive(errno) => Some(errno),
@@ -48,8 +49,8 @@ impl std::error::Error for Error {
         }
     }
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Allocation(errno) => write!(f, "Failed to allocate notification pair: {errno}"),
             Self::InvalidId => write!(f, "Received ID is no longer valid"),
@@ -111,7 +112,7 @@ impl Pair {
     pub fn recv(&self, fd: RawFd) -> Result<Option<()>, Error> {
         // We need to wipe the structure each time.
         unsafe {
-            std::ptr::write_bytes(self.req, 0, 1);
+            ptr::write_bytes(self.req, 0, 1);
         }
         // Call seccomp_notify_receive
         let ret = unsafe { raw::seccomp_notify_receive(fd, self.req) };

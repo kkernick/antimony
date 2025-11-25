@@ -18,10 +18,17 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use inotify::{Inotify, WatchDescriptor};
-use log::debug;
+use log::{debug, info};
 use rand::RngCore;
 use spawn::Spawner;
-use std::{borrow::Cow, collections::HashSet, path::PathBuf};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fs,
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+};
+use user::restore;
 use zbus::blocking;
 
 struct Args<'a> {
@@ -41,7 +48,7 @@ pub struct Info {
     pub handle: Spawner,
     pub post: Vec<String>,
     pub profile: Profile,
-    pub instance: String,
+    pub instance: PathBuf,
 }
 
 pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
@@ -82,8 +89,6 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         (profile, None)
     };
 
-    debug!("NAME: {name}");
-
     if let Some(config) = args.config.take() {
         match profile.configuration.take() {
             Some(mut configs) => match configs.remove(&config) {
@@ -100,10 +105,54 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     profile = profile.base(cmd_profile)?;
 
     let runtime = RUNTIME_STR.as_str();
+    let busy = |path: &Path| -> bool {
+        match path.read_dir() {
+            Ok(mut iter) => iter.next().is_some(),
+            Err(_) => false,
+        }
+    };
 
     // Get the system directory, which contains the SOF.
-    let sys_dir = AT_HOME.join("cache").join(profile.hash_str());
-    std::fs::create_dir_all(&sys_dir)?;
+    let hash = profile.hash_str();
+    let mut sys_dir = AT_HOME.join("cache").join(&hash);
+    let refresh_dir = AT_HOME.join("cache").join(format!("{hash}-refresh"));
+
+    if refresh_dir.exists() {
+        if !busy(&sys_dir.join("instances")) && !busy(&refresh_dir.join("instances")) {
+            debug!("Updating to refreshed definitions");
+            fs::remove_dir_all(&sys_dir)?;
+            fs::rename(&refresh_dir, &sys_dir)?;
+
+            debug!("Removing stale command caches.");
+            Spawner::new("find")
+                .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
+                .spawn()?
+                .wait()?;
+        } else {
+            debug!("Using refresh directory");
+            sys_dir = refresh_dir.clone();
+        }
+    }
+
+    // If we're told to refresh an existing cache
+    if args.refresh && sys_dir.exists() {
+        // If it's not busy, just remove the directory outright.
+        if !busy(&sys_dir.join("instances")) {
+            fs::remove_dir_all(&sys_dir)?;
+        } else if sys_dir == refresh_dir {
+            return Err(anyhow!(
+                "Already refreshed! Please close all active instances to commit changes!"
+            ));
+        } else {
+            info!("Instance is busy. Refreshing in a new location");
+            sys_dir = refresh_dir;
+        }
+    }
+
+    fs::create_dir_all(&sys_dir)?;
+    let instances = sys_dir.join("instances");
+
+    fs::create_dir_all(&instances)?;
 
     user::set(user::Mode::Real)?;
     if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
@@ -118,8 +167,10 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     }
 
     // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
-    std::fs::create_dir_all(user_dir(&instance).as_path())?;
+    fs::create_dir_all(user_dir(&instance).as_path())?;
     user::revert()?;
+
+    symlink(user_dir(&instance), instances.join(&instance))?;
 
     debug!("Creating system cache");
     let user_cache = sys_dir.join(USER_NAME.as_str());
@@ -179,23 +230,29 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         handle: a.handle,
         post,
         profile: a.profile,
-        instance: a.instance,
+        instance: instances.join(a.instance),
     })
 }
 
-pub fn cleanup(instance: String) -> Result<()> {
+pub fn cleanup(instance: PathBuf) -> Result<()> {
+    let save = user::save()?;
     debug!("Cleaning up!");
-    user::set(user::Mode::Real)?;
 
+    let user_dir = fs::read_link(&instance)?;
+    fs::remove_file(&instance)?;
+
+    user::set(user::Mode::Real)?;
     let runtime = RUNTIME_DIR.join(".flatpak").join(&instance);
     if runtime.exists() {
-        std::fs::remove_dir_all(runtime)?;
+        fs::remove_dir_all(runtime)?;
     }
 
-    let user_dir = user_dir(&instance);
     if user_dir.exists() {
-        std::fs::remove_dir_all(user_dir)?;
+        debug!("Removing instance at {user_dir:?}");
+        fs::remove_dir_all(user_dir)?;
     }
+
+    restore(save)?;
     debug!("Goodbye!");
     Ok(())
 }

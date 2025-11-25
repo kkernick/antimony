@@ -8,7 +8,14 @@ use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use dashmap::DashMap;
 use rayon::prelude::*;
-use std::{borrow::Cow, collections::HashSet, io::Write, path::Path, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fs,
+    io::{self, Write},
+    path::Path,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 /// The mode to run strace under
 #[derive(Debug, Clone, ValueEnum)]
@@ -61,6 +68,10 @@ impl super::Run for Args {
 pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
     let mut err = Vec::<String>::new();
 
+    // Ignore SIGINT.
+    let term = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+
     let handle = info.handle.args([
         "strace",
         match args.mode {
@@ -109,10 +120,10 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
             // Get all features on the system.
             let feature_database: DashMap<String, Feature> = DashMap::new();
             let feature_dir = Path::new(AT_HOME.as_path()).join("features");
-            for path in std::fs::read_dir(feature_dir)?.filter_map(|e| e.ok()) {
+            for path in fs::read_dir(feature_dir)?.filter_map(|e| e.ok()) {
                 feature_database.insert(
                     path.file_name().to_string_lossy().into_owned(),
-                    toml::from_str(&std::fs::read_to_string(path.path())?)?,
+                    toml::from_str(&fs::read_to_string(path.path())?)?,
                 );
             }
 
@@ -233,7 +244,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
                     }
                 });
 
-                let io = std::io::stdout();
+                let io = io::stdout();
                 let mut out = io.lock();
                 if !features.is_empty() {
                     writeln!(out, "{file} can be provided with the following features")?;

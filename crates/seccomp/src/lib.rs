@@ -1,4 +1,6 @@
 //! A wrapper for `libseccomp`.
+
+use std::{error, fmt};
 pub mod action;
 pub mod attribute;
 pub mod filter;
@@ -24,8 +26,8 @@ pub enum Error {
     #[cfg(feature = "notify")]
     Notify(notify::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Filter(e) => write!(f, "Filter Error: {e}"),
             Self::Syscall(e) => write!(f, "Syscall Error: {e}"),
@@ -35,8 +37,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Error::Filter(e) => Some(e),
             Error::Syscall(e) => Some(e),

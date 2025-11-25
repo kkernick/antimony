@@ -3,8 +3,12 @@ use log::error;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use spawn::Spawner;
-use std::io::Write;
-use std::{fs::File, path::Path};
+use std::{
+    error, fmt,
+    fs::{self, File},
+    io::{self, Write},
+    path::Path,
+};
 
 use crate::aux::env::EDITOR;
 
@@ -18,7 +22,7 @@ pub enum Error {
     Serialize(toml::ser::Error),
 
     /// Misc IO errors.
-    Io(&'static str, std::io::Error),
+    Io(&'static str, io::Error),
 
     /// Misc Errno errors.
     Errno(&'static str, nix::errno::Errno),
@@ -35,8 +39,8 @@ pub enum Error {
     /// Dialog errors
     Dialog(dialoguer::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Deserialize(e) => write!(f, "Failed to read profile: {e}"),
             Self::Serialize(e) => write!(f, "Failed to write profile: {e}"),
@@ -49,8 +53,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Deserialize(e) => Some(e),
             Self::Serialize(e) => Some(e),
@@ -105,9 +109,8 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         .tempfile()
         .map_err(|e| Error::Io("open temporary file", e))?;
 
-    std::fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
-    let original =
-        std::fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
+    fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
+    let original = fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
 
     // Loop until the user either:
     //  1. Provides a valid edit.
@@ -122,7 +125,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
             .wait()?;
 
         // Read the contents.
-        match std::fs::read_to_string(&temp) {
+        match fs::read_to_string(&temp) {
             Ok(string) => match toml::from_str::<T>(string.as_ref()) {
                 // If they didn't make any changes, we want to tell edit
                 // so that they don't create a redundant user profile.

@@ -1,7 +1,7 @@
 //! Create a new profile.
 use crate::aux::{env::AT_HOME, profile::Profile};
 use anyhow::Result;
-use std::fs::File;
+use std::fs::{self, File};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -17,7 +17,7 @@ impl super::Run for Args {
         let path = {
             let path = Profile::user_profile(&self.profile);
             if !path.exists() && !self.blank {
-                std::fs::copy(AT_HOME.join("config").join("new.toml"), &path)?;
+                fs::copy(AT_HOME.join("config").join("new.toml"), &path)?;
             }
             path
         };
@@ -27,7 +27,7 @@ impl super::Run for Args {
         }
 
         if Profile::edit(&path).is_err() {
-            std::fs::remove_file(&path)?;
+            fs::remove_file(&path)?;
         }
         Ok(())
     }

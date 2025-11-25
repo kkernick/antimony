@@ -8,7 +8,8 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use log::{debug, error};
-use std::{borrow::Cow, thread, time::Duration};
+use nix::sys::signal::Signal::SIGTERM;
+use std::{borrow::Cow, env, fs, thread, time::Duration};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -27,6 +28,10 @@ pub struct Args {
     /// Generate the profile, but do not run the executable.
     #[arg(short, long, default_value_t = false)]
     pub dry: bool,
+
+    /// Refresh cache definitions. Analogous to `antimony refresh`
+    #[arg(short, long, default_value_t = false)]
+    pub refresh: bool,
 
     /// Use a configuration within the profile.
     #[arg(short, long)]
@@ -133,7 +138,7 @@ impl super::Run for Args {
 
 /// Wait for a filesystem to be mounted.
 pub fn mounted(path: &str) -> bool {
-    if let Ok(file) = std::fs::read_to_string("/proc/self/mountinfo") {
+    if let Ok(file) = fs::read_to_string("/proc/self/mountinfo") {
         file.contains(path)
     } else {
         false
@@ -158,7 +163,7 @@ pub fn run(info: crate::setup::Info, args: &mut Args) -> Result<()> {
         wait_for_doc();
 
         debug!("Spawning");
-        if info.handle.spawn()?.wait()? != 0 {
+        if info.handle.spawn()?.wait_for_signal(SIGTERM)? != 0 {
             error!(
                 "The subcommand finished with a non-zero exit code! You may want to try `antimony trace` to see if there are missing files!"
             );
@@ -171,7 +176,7 @@ pub fn run(info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
 /// Use the symlink name as the profile name.
 pub fn as_symlink() -> Result<()> {
-    match std::env::args().next() {
+    match env::args().next() {
         Some(name) => {
             let base = match name.rfind('/') {
                 Some(i) => &name[i + 1..],
@@ -186,8 +191,8 @@ pub fn as_symlink() -> Result<()> {
             }
 
             let mut args = Args::default();
-            if std::env::args().len() > 1 {
-                args.passthrough = Some(std::env::args().skip(1).collect());
+            if env::args().len() > 1 {
+                args.passthrough = Some(env::args().skip(1).collect());
             }
             let info = crate::cli::run::setup(Cow::Borrowed(base), &mut args)?;
             crate::cli::run::run(info, &mut args)?;

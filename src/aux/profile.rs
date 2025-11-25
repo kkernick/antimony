@@ -1,21 +1,27 @@
 //! The Profile defines what application should be run, and what features it needs
 //! to function properly.
-use crate::aux::edit;
-use crate::aux::env::{AT_HOME, PWD, USER_NAME};
-use crate::aux::path::which_exclude;
-use crate::fab::lib::get_wildcards;
-use crate::fab::resolve;
-use crate::{cli, fab};
+use crate::{
+    aux::{
+        edit,
+        env::{AT_HOME, PWD, USER_NAME},
+        path::which_exclude,
+    },
+    cli,
+    fab::{self, lib::get_wildcards, resolve},
+};
 use clap::ValueEnum;
 use console::style;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::fs::File;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashSet},
+    error, fmt,
+    fs::{self, File},
+    hash::{DefaultHasher, Hash, Hasher},
+    io::{self, Write},
+    path::{Path, PathBuf},
+};
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
@@ -32,7 +38,7 @@ pub enum Error {
     Serialize(toml::ser::Error),
 
     /// Misc IO errors.
-    Io(&'static str, std::io::Error),
+    Io(&'static str, io::Error),
 
     /// Misc Errno errors.
     Errno(&'static str, nix::errno::Errno),
@@ -46,8 +52,8 @@ pub enum Error {
     /// Errors incorporating features.
     Feature(crate::fab::features::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NotFound(name, reason) => write!(
                 f,
@@ -69,8 +75,8 @@ impl std::fmt::Display for Error {
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Deserialize(e) => Some(e),
             Self::Serialize(e) => Some(e),
@@ -244,7 +250,7 @@ impl Profile {
         if name == "default" {
             let path = Self::default_profile();
             if !path.exists() {
-                std::fs::copy(AT_HOME.join("config").join("default.toml"), &path)
+                fs::copy(AT_HOME.join("config").join("default.toml"), &path)
                     .map_err(|e| Error::Io("Failed to create default profile", e))?;
             }
             return Ok(path);
@@ -339,8 +345,8 @@ impl Profile {
     /// Load a new profile from all supported locations.
     pub fn new(name: &str) -> Result<Profile, Error> {
         debug!("Loading {name}");
-        let profile = std::fs::read_to_string(Profile::path(name)?)
-            .map_err(|e| Error::Io("read profile", e))?;
+        let profile =
+            fs::read_to_string(Profile::path(name)?).map_err(|e| Error::Io("read profile", e))?;
 
         let mut profile: Profile = toml::from_str(profile.as_str())?;
 
@@ -357,7 +363,7 @@ impl Profile {
 
         for inherit in to_inherit {
             profile.merge(toml::from_str(
-                &std::fs::read_to_string(Profile::path(&inherit)?)
+                &fs::read_to_string(Profile::path(&inherit)?)
                     .map_err(|e| Error::Io("read inherited profile", e))?,
             )?)?;
         }
@@ -614,12 +620,12 @@ impl Profile {
         let feature_cache = user_cache.join("profile.cache");
         if feature_cache.exists() {
             self = toml::from_str(
-                &std::fs::read_to_string(feature_cache)
+                &fs::read_to_string(feature_cache)
                     .map_err(|e| Error::Io("read feature cache", e))?,
             )?;
         } else {
             fab::features::fabricate(&mut self, name)?;
-            std::fs::create_dir_all(user_cache).map_err(|e| Error::Io("write user cache", e))?;
+            fs::create_dir_all(user_cache).map_err(|e| Error::Io("write user cache", e))?;
 
             write!(
                 File::create(feature_cache).map_err(|e| Error::Io("write feature cache", e))?,
@@ -1116,12 +1122,12 @@ mod tests {
     fn validate_profiles() {
         let profiles = Path::new(AT_HOME.as_path()).join("profiles");
         if profiles.exists() {
-            for path in std::fs::read_dir(profiles)
+            for path in fs::read_dir(profiles)
                 .expect("No profiles to test")
                 .filter_map(|e| e.ok())
             {
                 toml::from_str::<Profile>(
-                    &std::fs::read_to_string(path.path()).expect("Failed to read profile"),
+                    &fs::read_to_string(path.path()).expect("Failed to read profile"),
                 )
                 .expect("Failed to parse profile");
             }

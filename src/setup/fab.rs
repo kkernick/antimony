@@ -1,11 +1,10 @@
-use std::fs;
-
 use crate::{
     aux::env::{OVERLAY, USER_NAME},
     fab,
 };
 use anyhow::{Result, anyhow};
 use log::debug;
+use std::fs;
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached.
@@ -25,7 +24,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     }
 
     debug!("Fabricating sandbox");
-    std::fs::create_dir_all(&args.sys_dir)?;
+    fs::create_dir_all(&args.sys_dir)?;
 
     // Start caching.
     args.handle.cache_start()?;

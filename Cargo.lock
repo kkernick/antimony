@@ -79,7 +79,7 @@ dependencies = [
 
 [[package]]
 name = "antimony"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "Inflector",
  "anyhow",
@@ -1480,6 +1480,7 @@ dependencies = [
  "nix",
  "parking_lot",
  "seccomp",
+ "signal-hook",
  "user",
  "which",
 ]

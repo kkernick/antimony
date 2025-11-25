@@ -1,7 +1,8 @@
 use anyhow::Result;
 use std::{
     fs::{self, File, copy, remove_file},
-    io::{Read, Write},
+    io::{self, Read, Write},
+    os::unix::fs::PermissionsExt,
     path::Path,
 };
 use walkdir::WalkDir;
@@ -65,10 +66,8 @@ pub fn extract(src: &Path, dst: &Path) -> Result<()> {
                 fs::create_dir_all(p)?;
             }
             let mut outfile = fs::File::create(&out)?;
-            std::io::copy(&mut file, &mut outfile)?;
+            io::copy(&mut file, &mut outfile)?;
         }
-
-        use std::os::unix::fs::PermissionsExt;
 
         if let Some(mode) = file.unix_mode() {
             fs::set_permissions(&out, fs::Permissions::from_mode(mode))?;

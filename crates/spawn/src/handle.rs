@@ -17,11 +17,16 @@ use nix::{
 use parking_lot::{Condvar, Mutex, MutexGuard};
 use std::{
     collections::VecDeque,
+    error, fmt,
     fs::File,
     io::{self, Read, Write},
     os::fd::OwnedFd,
-    sync::Arc,
-    thread::{self, JoinHandle},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread::{self, JoinHandle, sleep},
+    time::Duration,
 };
 
 /// Errors related to a ProcessHandle
@@ -47,10 +52,10 @@ pub enum Error {
     Input,
 
     /// Error trying to write to standard input.
-    Write(std::io::Error),
+    Io(io::Error),
 }
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Comm(e) => write!(
                 f,
@@ -63,16 +68,16 @@ impl std::fmt::Display for Error {
             ),
             Self::Child => write!(f, "The child process terminated prematurely"),
             Self::Input => write!(f, "Cannot read input, as child has already terminated!"),
-            Self::Write(e) => write!(f, "Cannot write to pipe: {e}"),
+            Self::Io(e) => write!(f, "IO Error: {e}"),
             Self::NoAssociate(name) => write!(f, "No such associate: {name}"),
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Error::Comm(errno) => Some(errno),
-            Error::Write(error) => Some(error),
+            Error::Io(error) => Some(error),
             _ => None,
         }
     }
@@ -105,14 +110,14 @@ struct SharedBuffer {
 ///
 /// Synchronous.
 /// ```rust
-/// use std::os::fd::{OwnedFd, FromRawFd};
+/// use os::fd::{OwnedFd, FromRawFd};
 /// let mut handle = spawn::Stream::new(unsafe {OwnedFd::from_raw_fd(1)});
 /// handle.read_all().unwrap();
 /// ```
 ///
 /// Asynchronous.
 /// ```rust
-/// use std::os::fd::{OwnedFd, FromRawFd};
+/// use os::fd::{OwnedFd, FromRawFd};
 /// let mut handle = spawn::Stream::new(unsafe {OwnedFd::from_raw_fd(1)});
 /// while let Some(line) = handle.read_line() {
 ///     println!("{line}");
@@ -321,6 +326,47 @@ impl Handle {
             }
         }
         Ok(self.exit)
+    }
+
+    /// Wait for a child to terminate, but while ensuring a signal to the parent
+    /// does not abruptly tear down the child.
+    /// When SIGTERM or SIGINT is sent to the parent, it will send `sig` to the child,
+    /// collect the exit code, and return gracefully.
+    /// Because we are busy waiting, the loop waits 1 seconds between checking the state.
+    pub fn wait_for_signal(&mut self, sig: Signal) -> Result<i32, Error> {
+        if let Some(pid) = self.child {
+            // Hook SIGTERM and SIGINT
+            let term = Arc::new(AtomicBool::new(false));
+            signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))
+                .map_err(Error::Io)?;
+            signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
+                .map_err(Error::Io)?;
+
+            // Wait until either we are hit with a signal, or the child exits.
+            while !term.load(Ordering::Relaxed) {
+                match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(status) => {
+                        self.child = None;
+                        if let WaitStatus::Exited(_, code) = status {
+                            self.exit = code;
+                            break;
+                        }
+                    }
+                    Err(e) => return Err(Error::Comm(e)),
+                }
+                sleep(Duration::from_secs(1));
+            }
+
+            // If the child is still alive, send it the signal
+            if self.alive()? {
+                self.signal(sig)?;
+            }
+
+            // Collect the error code and return
+            self.wait()
+        } else {
+            Ok(self.exit)
+        }
     }
 
     /// Check if the process is still alive, non-blocking.

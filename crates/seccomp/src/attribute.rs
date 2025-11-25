@@ -1,4 +1,6 @@
 //! A wrapper on SCMP_FLTATR.
+use std::fmt;
+
 use super::raw::scmp_filter_attr::{self, *};
 use crate::action::Action;
 
@@ -83,13 +85,13 @@ impl Attribute {
         }
     }
 }
-impl std::fmt::Display for Attribute {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Attribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.str())
     }
 }
-impl std::fmt::Debug for Attribute {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Attribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.str())
     }
 }

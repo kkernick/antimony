@@ -1,18 +1,4 @@
 //! Convert the profile into a self-contained package.
-use std::{
-    fs::{self, copy},
-    os::unix::fs::symlink,
-    path::{Path, PathBuf},
-};
-
-use anyhow::Result;
-use copy_dir::copy_dir;
-use log::debug;
-use spawn::Spawner;
-
-use rayon::prelude::*;
-use strum::IntoEnumIterator;
-
 use crate::{
     aux::{
         env::{AT_HOME, USER_NAME},
@@ -24,6 +10,17 @@ use crate::{
         lib::{self, sof_path},
     },
 };
+use anyhow::Result;
+use copy_dir::copy_dir;
+use log::debug;
+use rayon::prelude::*;
+use spawn::Spawner;
+use std::{
+    fs::{self, copy},
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
+};
+use strum::IntoEnumIterator;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {

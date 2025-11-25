@@ -6,7 +6,10 @@ use anyhow::Result;
 use log::debug;
 use rayon::prelude::*;
 use spawn::Spawner;
-use std::{borrow::Cow, fs::File};
+use std::{
+    borrow::Cow,
+    fs::{self, File},
+};
 use strum::IntoEnumIterator;
 use user;
 
@@ -24,9 +27,9 @@ pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) ->
     let path = direct_path(file);
 
     if !path.exists() {
-        std::fs::create_dir_all(path.parent().unwrap())?;
+        fs::create_dir_all(path.parent().unwrap())?;
         let contents = resolve_env(Cow::Borrowed(&contents));
-        std::fs::write(&path, contents.as_ref())?;
+        fs::write(&path, contents.as_ref())?;
     }
 
     handle.fd_arg_i("--file", File::open(path)?)?;
