@@ -19,8 +19,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             policy => {
                 let saved = user::save()?;
                 user::set(user::Mode::Real)?;
-                debug!("Setting up home");
+                debug!("Setting up home at {home_dir:?}");
                 std::fs::create_dir_all(&home_dir)?;
+
+                debug!("Adding args");
                 let home_str = home_dir.to_string_lossy();
                 match policy {
                     HomePolicy::Enabled => {
@@ -45,5 +47,6 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             }
         }
     }
+    debug!("DONE");
     Ok(())
 }

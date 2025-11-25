@@ -4,7 +4,7 @@ description = "Pass host themes, cursors, and icons"
 requires = ["mime"]
 
 [files]
-system.ReadOnly = [
+platform.ReadOnly = [
   "/usr/share/themes", "/usr/share/color-schemes",
   "/usr/share/icons", "/usr/share/pixmaps",
   "/usr/share/cursors"

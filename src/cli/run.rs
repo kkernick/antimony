@@ -149,7 +149,7 @@ pub fn wait_for_doc() {
 }
 
 pub fn run(info: crate::setup::Info, args: &mut Args) -> Result<()> {
-    info.handle.arg_i(info.profile.app_path(&args.profile))?;
+    info.handle.arg_i(info.profile.app_path(&info.name))?;
     info.handle.args_i(info.post)?;
 
     // Run it

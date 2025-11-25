@@ -8,11 +8,13 @@ libraries = [
 ]
 
 [files]
-system.ReadOnly = [
+resources.ReadOnly = [
   "/usr/share/gtk",
   "/usr/share/glib-2.0",
   "/usr/share/gtk-2.0",
   "/usr/share/gtk-3.0",
+]
+platform.ReadOnly = [
   "/etc/xdg/gtk-3.0/",
 ]
 user.ReadOnly = [

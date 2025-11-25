@@ -1,11 +1,13 @@
 name = "pipewire"
 description = "The PipeWire socket for video/audio."
 
-files.system.ReadOnly = [
+files.platform.ReadOnly = [
  "$XDG_RUNTIME_DIR/pipewire-0",
  "$XDG_RUNTIME_DIR/pulse",
  "/etc/pipewire",
- "/usr/share/pipewire",
+]
+files.resources.ReadOnly = [
+  "/usr/share/pipewire",
 ]
 
 files.user.ReadOnly = [

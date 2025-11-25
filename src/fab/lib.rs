@@ -5,7 +5,7 @@ use crate::{
     },
     fab::bin::ELF_MAGIC,
 };
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Error, Result, anyhow};
 use dashmap::DashSet;
 use log::debug;
 use once_cell::sync::Lazy;
@@ -338,6 +338,13 @@ pub fn fabricate(
         handle.args_i(["--ro-bind", dir.as_str(), dir.as_str()])?;
         Ok(())
     })?;
+
+    profile.libraries = Some(
+        Arc::try_unwrap(directories)
+            .map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))?
+            .into_iter()
+            .collect(),
+    );
 
     user::restore(saved)?;
     Ok(())

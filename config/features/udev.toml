@@ -5,7 +5,7 @@ caveat = "This provides access to /sys, allowing the sandbox to see all devices.
 binaries = ["udevadm", "dmidecode"]
 
 [files]
-system.ReadOnly = [
+platform.ReadOnly = [
   "/etc/udev",
   "/usr/share/hwdata",
   "/sys"

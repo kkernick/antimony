@@ -69,25 +69,6 @@ libraries = ["libOkular6Core*"]
 portals = ["FileChooser"]
 ```
 
-In fact, the largest profile in the current System Default is `virt-manager`, at 14 lines:
-
-```toml
-home.policy = "Enabled"
-
-features = ["gtk3", "python", "network", "gtksourceview"]
-libraries = ["libvirt*", "libosinfo*"]
-
-[files]
-system.ReadOnly = [
-  "/var/run/libvirt",
-  "/usr/share/hwdata"
-]
-
-[ipc]
-system_bus = true
-own = ["org.virt-manager.virt-manager"]
-```
-
 The takeaway from this is that Profiles are not particularly verbose, nor do they take significant effort or grappling esoteric syntax to create.
 
 ### Debugging Tools

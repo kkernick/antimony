@@ -102,7 +102,12 @@ description = ""
 # Executable = []
 #
 # System files have the normal root as canonical (/).
-# [files.system]
+# [files.platform]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# [files.resources]
 # ReadOnly = []
 # ReadWrite = []
 # Executable = []

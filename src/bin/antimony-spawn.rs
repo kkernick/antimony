@@ -141,7 +141,7 @@ fn main() -> Result<()> {
         ])?;
 
         // Post and spawn.
-        info.handle.arg_i(info.profile.app_path(&args.profile))?;
+        info.handle.arg_i(info.profile.app_path(&info.name))?;
         info.handle.args_i(info.post)?;
         info.handle.spawn()?
     } else {

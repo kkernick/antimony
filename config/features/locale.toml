@@ -7,7 +7,7 @@ libraries = [
 ]
 
 [files]
-system.ReadOnly = [
+platform.ReadOnly = [
   "/etc/localtime",
   "/usr/share/zoneinfo",
   "/usr/share/locale"

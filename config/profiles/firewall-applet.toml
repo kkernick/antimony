@@ -7,5 +7,5 @@ system_bus = true
 [files.user]
 ReadWrite = ["$XDG_CONFIG_HOME/firewall"]
 
-[files.system]
+[files.platform]
 ReadOnly = ["/etc/firewall"]

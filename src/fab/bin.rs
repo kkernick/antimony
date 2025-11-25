@@ -74,7 +74,7 @@ pub enum Type {
 
 /// Information returned from parse.
 #[derive(Debug, Default)]
-struct ParseReturn {
+pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: DashSet<String>,
 
@@ -86,6 +86,9 @@ struct ParseReturn {
 
     /// Symlinks
     pub symlinks: DashMap<String, String>,
+
+    /// Localized values
+    pub localized: DashMap<String, String>,
 
     /// Library directories.
     pub directories: DashSet<String>,
@@ -216,7 +219,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 }
 
 /// Parses binaries, specifically for shell scripts.
-fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> {
+fn parse(path: &str, ret: Arc<ParseReturn>, mut include_self: bool) -> Result<Type> {
     // Avoid duplicate work
     if !ret.done.insert(path.to_string()) {
         return Ok(Type::Done);
@@ -246,11 +249,14 @@ fn parse(path: &str, ret: Arc<ParseReturn>, include_self: bool) -> Result<Type> 
         return Ok(Type::Link);
     }
 
-    if path.starts_with("/usr/lib")
-        && let Some(parent) = resolve_dir(path)?
-    {
-        debug!("Directory => {parent}");
-        ret.directories.insert(parent);
+    if path.starts_with("/usr/lib") {
+        if let Some(parent) = resolve_dir(path)?
+            && PathBuf::from(&parent).is_dir()
+        {
+            debug!("Directory => {parent}");
+            ret.directories.insert(parent);
+        }
+        include_self = false;
     }
 
     // Open it.
@@ -377,13 +383,8 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
-pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<()> {
-    if COMPGEN.is_empty() {
-        return Err(anyhow!("Could not calculate bash builtins"));
-    }
+pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     std::fs::create_dir_all(CACHE_DIR.as_path())?;
-
-    let mut elf_binaries = BTreeSet::<String>::new();
 
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
@@ -407,14 +408,14 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     let parsed = Arc::new(ParseReturn::default());
 
-    let handle_localize = |file: &str, home: bool| -> Result<()> {
+    let handle_localize = |file: &str, home: bool, include_self: bool| -> Result<()> {
         if let (Some(src), dst) = localize_path(file, home) {
             if src == dst {
-                parse(file, parsed.clone(), true)?;
+                parse(file, parsed.clone(), include_self)?;
             } else {
                 match parse(&src, parsed.clone(), false)? {
                     Type::Script | Type::File | Type::Elf => {
-                        handle.args_i(["--ro-bind", &src, &dst])?
+                        parsed.localized.insert(src.into_owned(), dst);
                     }
                     _ => {}
                 }
@@ -427,19 +428,27 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     };
 
     // Read direct files so we can determine dependencies.
+    debug!("Localizing files");
     if let Some(files) = &mut profile.files {
         if let Some(user) = &mut files.user
             && let Some(x) = user.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, true)?;
+                handle_localize(&file, true, true)?;
             }
         }
-        if let Some(sys) = &mut files.system
+        if let Some(sys) = &mut files.resources
             && let Some(x) = sys.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, false)?;
+                handle_localize(&file, false, true)?;
+            }
+        }
+        if let Some(sys) = &mut files.platform
+            && let Some(x) = sys.remove(&FileMode::Executable)
+        {
+            for file in x {
+                handle_localize(&file, false, true)?;
             }
         }
         if let Some(direct) = &mut files.direct
@@ -447,17 +456,28 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         {
             x.iter().try_for_each(|(file, _)| {
                 let path = direct_path(file);
-                handle_localize(&path.to_string_lossy(), false)
+                handle_localize(&path.to_string_lossy(), false, false)
             })?;
         }
     }
 
     // Parse the binaries
+    debug!("Localizing binaries");
     resolved
         .iter()
-        .try_for_each(|binary| handle_localize(binary, false))?;
+        .try_for_each(|binary| handle_localize(binary, false, true))?;
 
-    let parsed = Arc::try_unwrap(parsed).unwrap();
+    Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
+}
+
+pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<()> {
+    if COMPGEN.is_empty() {
+        return Err(anyhow!("Could not calculate bash builtins"));
+    }
+
+    let mut elf_binaries = BTreeSet::<String>::new();
+
+    let parsed = collect(profile, name)?;
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
@@ -495,6 +515,11 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
                 Ok(())
             }
         })?;
+
+    parsed
+        .localized
+        .into_par_iter()
+        .try_for_each(|(src, dst)| handle.args_i(["--ro-bind", &src, &dst]))?;
 
     profile
         .libraries

@@ -11,9 +11,13 @@ libraries = [
 
 devices = ["/dev/dri"]
 
-files.system.ReadOnly = [
+[files]
+platform.ReadOnly = [
   "/sys/devices/pci0000:00",
-  "/sys/dev/char",
+  "/sys/dev/char"
+]
+
+resources.ReadOnly = [
   "/usr/share/glvnd",
   "/usr/share/libdrm",
 ]

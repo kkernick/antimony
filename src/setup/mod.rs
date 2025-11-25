@@ -10,6 +10,7 @@ mod wait;
 use crate::{
     aux::{
         env::{AT_HOME, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
+        package::extract,
         path::{user_dir, which_exclude},
         profile::Profile,
     },
@@ -31,28 +32,57 @@ struct Args<'a> {
     pub watches: HashSet<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: String,
+    pub package: Option<PathBuf>,
     pub args: &'a mut super::cli::run::Args,
 }
 
 pub struct Info {
+    pub name: String,
     pub handle: Spawner,
     pub post: Vec<String>,
     pub profile: Profile,
     pub instance: String,
 }
 
-pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
-    let mut profile = match Profile::new(&name) {
-        Ok(profile) => profile,
-        Err(crate::aux::profile::Error::NotFound(_, reason)) => {
-            debug!("No profile: {name}: {reason}, assuming binary");
-            Profile {
-                path: Some(which_exclude(&name)?),
-                ..Default::default()
-            }
+pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
+    // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
+    let mut bytes = [0; 5];
+    rand::rng().fill_bytes(&mut bytes);
+    let instance = hex::encode(bytes);
+
+    let (mut profile, package) = if name.ends_with(".sb") {
+        let src = PathBuf::from(name.clone().into_owned());
+        let file_name = src.file_stem().unwrap().to_string_lossy();
+
+        let package_path = AT_HOME.join("cache").join(format!("package-{file_name}"));
+
+        if !package_path.exists() {
+            debug!("Extracting package");
+            extract(&src, &package_path)?;
         }
-        Err(e) => return Err(e.into()),
+
+        let file_name = src.file_stem().unwrap().to_string_lossy();
+        name = Cow::Owned(file_name.into_owned());
+
+        let profile = package_path.join("profile.toml");
+        let profile = Profile::new(&profile.to_string_lossy())?;
+        (profile, Some(package_path))
+    } else {
+        let profile = match Profile::new(&name) {
+            Ok(profile) => profile,
+            Err(crate::aux::profile::Error::NotFound(_, reason)) => {
+                debug!("No profile: {name}: {reason}, assuming binary");
+                Profile {
+                    path: Some(which_exclude(&name)?),
+                    ..Default::default()
+                }
+            }
+            Err(e) => return Err(e.into()),
+        };
+        (profile, None)
     };
+
+    debug!("NAME: {name}");
 
     if let Some(config) = args.config.take() {
         match profile.configuration.take() {
@@ -68,11 +98,6 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     let cmd_profile = Profile::from_args(args);
     profile = profile.base(cmd_profile)?;
-
-    // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let mut bytes = [0; 5];
-    rand::rng().fill_bytes(&mut bytes);
-    let instance = hex::encode(bytes);
 
     let runtime = RUNTIME_STR.as_str();
 
@@ -127,12 +152,13 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     let mut a = Args {
         profile,
-        name,
+        name: name.clone(),
         handle,
         inotify,
         watches,
         sys_dir,
         instance,
+        package,
         args,
     };
 
@@ -149,6 +175,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     wait::setup(&mut a)?;
 
     Ok(Info {
+        name: name.into_owned(),
         handle: a.handle,
         post,
         profile: a.profile,

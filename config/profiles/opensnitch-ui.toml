@@ -4,5 +4,5 @@ home.policy = "Enabled"
 features = ["qt5", "python", "tray"]
 namespaces = ["Pid"]
 
-[files.system]
+[files.platform]
 ReadWrite = ["/tmp"]

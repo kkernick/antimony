@@ -6,6 +6,7 @@ pub mod edit;
 pub mod feature;
 pub mod info;
 pub mod integrate;
+pub mod package;
 pub mod refresh;
 pub mod reset;
 pub mod run;
@@ -78,6 +79,9 @@ pub enum Command {
 
     /// Perform operations on the SECCOMP Database.
     Seccomp(seccomp::Args),
+
+    /// Package a Profile into a self-contained package.
+    Package(package::Args),
 }
 impl Run for Command {
     fn run(self) -> Result<()> {
@@ -95,6 +99,7 @@ impl Run for Command {
             Command::Info(args) => args.run(),
             Command::DebugShell(args) => args.run(),
             Command::Seccomp(args) => args.run(),
+            Command::Package(args) => args.run(),
         }
     }
 }

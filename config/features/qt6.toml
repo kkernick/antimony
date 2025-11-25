@@ -13,7 +13,7 @@ user.ReadOnly = [
   "$XDG_CONFIG_HOME/Trolltech.conf",
   "$XDG_CONFIG_HOME/kde.org"
 ]
-system.ReadOnly = [
+resources.ReadOnly = [
   "/usr/share/qt6"
 ]
 

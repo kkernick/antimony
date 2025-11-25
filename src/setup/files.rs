@@ -52,7 +52,14 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
             user::revert()?;
         }
-        if let Some(system) = &mut files.system
+        if let Some(system) = &mut files.platform
+            && let Some(exe) = system.remove(&FileMode::Executable)
+        {
+            exe.into_par_iter()
+                .try_for_each(|file| get_x(&file, &args.handle))?;
+        }
+
+        if let Some(system) = &mut files.resources
             && let Some(exe) = system.remove(&FileMode::Executable)
         {
             exe.into_par_iter()

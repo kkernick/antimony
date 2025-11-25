@@ -5,7 +5,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<(), SpawnErr
     let mut namespaces = profile.namespaces.take().unwrap_or_default();
 
     // All overrules None.
-    if namespaces.is_empty() || namespaces.contains(&Namespace::All) {
+    if namespaces.contains(&Namespace::All) {
         namespaces.extend([
             Namespace::User,
             Namespace::Ipc,
@@ -14,8 +14,6 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<(), SpawnErr
             Namespace::Uts,
             Namespace::CGroup,
         ]);
-    } else if namespaces.contains(&Namespace::None) {
-        return Ok(());
     }
 
     if !namespaces.contains(&Namespace::User) {

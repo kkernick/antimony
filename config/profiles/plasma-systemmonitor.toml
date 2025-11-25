@@ -10,5 +10,5 @@ policy = "Enabled"
 talk = ["org.kde.ksystemstats", "org.kde.ksystemstats1.*"]
 own = ["org.kde.plasma-systemmonitor"]
 
-[files.system]
+[files.platform]
 ReadOnly = ["/sys"]

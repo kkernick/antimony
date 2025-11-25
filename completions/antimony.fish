@@ -39,6 +39,7 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "stat" -d 'Collect
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "info" -d 'List installed profiles and features'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "debug-shell" -d 'Drop into a debugging shell within a profile\'s sandbox'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
+complete -c antimony -n "__fish_antimony_needs_command" -f -a "package" -d 'Package a Profile into a self-contained package'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
@@ -82,8 +83,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add rea
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "none\t''
-all\t''
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t''
 user\t'The user namespace is needed to create additional sandboxes (Such as chromium)'
 ipc\t''
 pid\t''
@@ -122,17 +122,20 @@ complete -c antimony -n "__fish_antimony_using_subcommand info" -s h -l help -d 
 complete -c antimony -n "__fish_antimony_using_subcommand debug-shell" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand debug-shell" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "run" -d 'Run a profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "create" -d 'Create a new profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "edit" -d 'Edit an existing profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "default" -d 'Edit the default profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "feature" -d 'Modify the system features'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "refresh" -d 'Refresh caches'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "integrate" -d 'Integrate a profile into the user environment'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "reset" -d 'Reset a profile back to the system-defined profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "trace" -d 'Trace a profile for missing syscalls or files'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "stat" -d 'Collect stats about a profile\'s sandbox'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "info" -d 'List installed profiles and features'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "debug-shell" -d 'Drop into a debugging shell within a profile\'s sandbox'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c antimony -n "__fish_antimony_using_subcommand package" -s c -l config -d 'Use a configuration within the profile' -r
+complete -c antimony -n "__fish_antimony_using_subcommand package" -s h -l help -d 'Print help'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "run" -d 'Run a profile'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "create" -d 'Create a new profile'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "edit" -d 'Edit an existing profile'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "default" -d 'Edit the default profile'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "feature" -d 'Modify the system features'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "refresh" -d 'Refresh caches'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "integrate" -d 'Integrate a profile into the user environment'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "reset" -d 'Reset a profile back to the system-defined profile'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "trace" -d 'Trace a profile for missing syscalls or files'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "stat" -d 'Collect stats about a profile\'s sandbox'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "info" -d 'List installed profiles and features'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "debug-shell" -d 'Drop into a debugging shell within a profile\'s sandbox'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "package" -d 'Package a Profile into a self-contained package'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run create edit default feature refresh integrate reset trace stat info debug-shell seccomp package help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

@@ -8,8 +8,10 @@ libraries = [
 ]
 
 [files]
-system.ReadOnly = [
+platform.ReadOnly = [
   "/etc/gnutls",
-  "/usr/share/p11-kit/",
   "/etc/pkcs11",
+]
+resources.ReadOnly = [
+  "/usr/share/p11-kit/",
 ]

@@ -77,7 +77,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
     };
 
     let mut handle = handle
-        .arg(info.profile.app_path(&args.profile))?
+        .arg(info.profile.app_path(&info.name))?
         .args(info.post)?
         .error(true)
         .spawn()?;
@@ -185,7 +185,16 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
                                     }
                                 }
                             }
-                            if let Some(system) = &files.system {
+                            if let Some(system) = &files.platform {
+                                for (mode, entry) in system {
+                                    for d_name in entry {
+                                        if matches(mode, d_name, &file).is_some() {
+                                            break 'feature_loop;
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(system) = &files.resources {
                                 for (mode, entry) in system {
                                     for d_name in entry {
                                         if matches(mode, d_name, &file).is_some() {

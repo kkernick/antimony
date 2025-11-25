@@ -3,5 +3,5 @@ description = "Access to installed applications"
 caveat = "This feature provides write access to the user's applications folder"
 
 [files]
-system.ReadOnly = ["/usr/share/applications"]
+platform.ReadOnly = ["/usr/share/applications"]
 user.ReadWrite = ["$XDG_DATA_HOME/applications"]

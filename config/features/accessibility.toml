@@ -2,7 +2,7 @@ name = "accessibility"
 description = "Access to the Accesibility Bus"
 
 [files]
-system.ReadOnly = ["$XDG_RUNTIME_DIR/at-spi"]
+platform.ReadOnly = ["$XDG_RUNTIME_DIR/at-spi"]
 
 [ipc]
 talk = ["org.a11y.Bus"]

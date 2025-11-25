@@ -2,7 +2,7 @@ name = "fonts"
 description = "Provide host fonts and config."
 
 [files]
-system.ReadOnly = [
+platform.ReadOnly = [
   "/usr/share/fonts",
   "/usr/share/fontconfig",
   "/etc/fonts"

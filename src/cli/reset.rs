@@ -25,6 +25,8 @@ impl super::Run for Args {
                 if confirm {
                     std::fs::remove_file(dest)?;
                 }
+            } else {
+                std::fs::remove_file(dest)?;
             }
             Ok(())
         } else {

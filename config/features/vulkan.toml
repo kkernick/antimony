@@ -1,5 +1,6 @@
 name = "vulkan"
 description = "Vulkan libraries and configuration."
 
-files.system.ReadOnly = ["/etc/vulkan", "/usr/share/vulkan"]
+files.platform.ReadOnly = ["/etc/vulkan"]
+files.resources.ReadOnly = ["/usr/share/vulkan"]
 libraries = ["libvulkan*", "libVkLayer*"]

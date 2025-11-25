@@ -81,7 +81,7 @@
 # Devices to pass, such as /dev/dri
 # devices = []
 
-# Namespaces: "None", "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
+# Namespaces: "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
 # Unless you know what you are doing, don't add namespaces to the profile.
 # Relevant features, such as "network" or "electron" will add needed namespaces
 # automatically.
@@ -177,8 +177,20 @@
 # ReadWrite = []
 # Executable = []
 #
-# System files have the normal root as canonical (/).
-# [files.system]
+# There are two forms of system files: Platform Files, and Resource Files. They are both canonical
+# to root.
+#
+# Platform Files are specific to the current device. This includes things like configurations
+# in /etc, locales, ephemeral directories like /sys, etc. These files do not need to exist
+# on the system in order for the sandbox to run.
+# [files.platform]
+# ReadOnly = []
+# ReadWrite = []
+# Executable = []
+#
+# Resource Files are files used by the application or its dependencies. This includes things
+# like library configuration in /usr/share. These files must be present on the system.
+# [files.resources]
 # ReadOnly = []
 # ReadWrite = []
 # Executable = []

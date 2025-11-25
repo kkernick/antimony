@@ -3,17 +3,19 @@ description = "Give applications network connectivity."
 
 namespaces = ["Net"]
 
-files.system.ReadOnly = [
+files.platform.ReadOnly = [
   "/etc/gai.conf",
   "/etc/host.conf",
   "/etc/hosts",
   "/etc/nsswitch.conf",
   "/etc/resolv.conf",
   "/etc/ca-certificates",
-  "/usr/share/ca-certificates",
   "/etc/pki",
-  "/usr/share/pki",
   "/etc/ssl",
+]
+files.resources.ReadOnly = [
+  "/usr/share/ca-certificates",
+  "/usr/share/pki",
   "/usr/share/ssl",
 ]
 

@@ -13,4 +13,4 @@ ARGS="--shell=none --time-unit=millisecond"
 
 hyperfine --command-name "Local Refresh" $ARGS "$ANTIMONY refresh $PROFILE --dry"
 
-hyperfine --command-name "Setup" $ARGS  --warmup 1 "$ANTIMONY run $PROFILE --dry"
+hyperfine --command-name "Cached" $ARGS  --warmup 1 "$ANTIMONY run $PROFILE --dry"

@@ -364,7 +364,9 @@ impl Profile {
 
         // Try and lookup the path. If it doesn't work, then the corresponding application
         // isn't installed. This is fine, as long as the user doesn't try and run the profile.
-        profile.path = Some(which_exclude(profile.app_path(name))?);
+        if !name.ends_with(".toml") {
+            profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
+        }
 
         Ok(profile)
     }
@@ -453,25 +455,29 @@ impl Profile {
         Ok(())
     }
 
-    pub fn app_path<'a>(&'a self, name: &'a str) -> &'a str {
+    pub fn app_path<'a>(&'a self, name: &'a str) -> Cow<'a, str> {
         match &self.path {
-            Some(path) => path,
-            None => name,
+            Some(path) => Cow::Borrowed(path),
+            None => match which_exclude(name) {
+                Ok(path) => Cow::Owned(path),
+                Err(_) => Cow::Borrowed(name),
+            },
         }
     }
 
     /// Get the id name, using as the Flatpak ID.
     /// It's either the id name, or from name()
-    pub fn desktop<'a, 'b>(&'b self, name: &'a str) -> &'a str
+    pub fn desktop<'a, 'b>(&'b self, name: &'a str) -> Cow<'a, str>
     where
         'b: 'a,
     {
         if let Some(id) = &self.id {
-            id
+            Cow::Borrowed(id)
         } else {
             let path = self.app_path(name);
             let bin_name = if let Some(i) = path.rfind('/') {
-                &path[i + 1..]
+                let slice = &path[i + 1..];
+                Cow::Owned(slice.to_string())
             } else {
                 path
             };
@@ -479,7 +485,7 @@ impl Profile {
             if bin_name.contains('.') {
                 bin_name
             } else {
-                name
+                Cow::Borrowed(name)
             }
         }
     }
@@ -733,8 +739,11 @@ pub struct Files {
     /// User files assume a root of /home/antimony unless absolute.
     pub user: Option<FileList>,
 
-    /// System files are mounted at the sandbox root.
-    pub system: Option<FileList>,
+    /// Platform files are device-specific system files (Locale, Configuration, etc)
+    pub platform: Option<FileList>,
+
+    /// Resource files are system files required by libraries/binaries.
+    pub resources: Option<FileList>,
 
     /// Direct files take a path, and file contents.
     pub direct: Option<BTreeMap<FileMode, BTreeMap<String, String>>>,
@@ -758,8 +767,20 @@ impl Files {
             }
         }
 
-        if let Some(mut sys) = files.system.take() {
-            let s_user = self.system.get_or_insert_default();
+        if let Some(mut sys) = files.platform.take() {
+            let s_user = self.platform.get_or_insert_default();
+            for mode in FileMode::iter() {
+                if let Some(map) = sys.remove(&mode) {
+                    s_user
+                        .get_mut(&mode)
+                        .get_or_insert(&mut BTreeSet::new())
+                        .extend(map);
+                }
+            }
+        }
+
+        if let Some(mut sys) = files.resources.take() {
+            let s_user = self.resources.get_or_insert_default();
             for mode in FileMode::iter() {
                 if let Some(map) = sys.remove(&mode) {
                     s_user
@@ -796,7 +817,7 @@ impl Files {
                 let list = if file.starts_with("/home") {
                     files.user.get_or_insert_default()
                 } else {
-                    files.system.get_or_insert_default()
+                    files.platform.get_or_insert_default()
                 };
                 list.entry(FileMode::ReadOnly).or_default().insert(file);
             });
@@ -807,7 +828,7 @@ impl Files {
                 let list = if file.starts_with("/home") {
                     files.user.get_or_insert_default()
                 } else {
-                    files.system.get_or_insert_default()
+                    files.platform.get_or_insert_default()
                 };
                 list.entry(FileMode::ReadWrite).or_default().insert(file);
             });
@@ -833,7 +854,10 @@ impl Files {
 
         for mode in FileMode::iter() {
             let mut files = HashSet::new();
-            if let Some(system) = &self.system {
+            if let Some(system) = &self.platform {
+                files.extend(get_files(system, mode));
+            }
+            if let Some(system) = &self.resources {
                 files.extend(get_files(system, mode));
             }
             if let Some(user) = &self.user {
@@ -890,10 +914,22 @@ pub enum FileMode {
 }
 impl FileMode {
     /// Get the bwrap argument for binding this file.
-    pub fn bind(&self) -> &'static str {
+    pub fn bind(&self, can_try: bool) -> &'static str {
         match self {
-            Self::ReadWrite => "--bind-try",
-            _ => "--ro-bind-try",
+            Self::ReadWrite => {
+                if can_try {
+                    "--bind-try"
+                } else {
+                    "--bind"
+                }
+            }
+            _ => {
+                if can_try {
+                    "--ro-bind-try"
+                } else {
+                    "--ro-bind"
+                }
+            }
         }
     }
 
@@ -1054,13 +1090,9 @@ pub enum Portal {
 
 /// Namespaces. By default, none are shared. You will likely not need to use these
 /// directly, as they are included in relevant features.
-#[derive(
-    Default, Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, PartialOrd, Ord,
-)]
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, PartialOrd, Ord)]
 #[serde(deny_unknown_fields)]
 pub enum Namespace {
-    #[default]
-    None,
     All,
 
     /// The user namespace is needed to create additional sandboxes (Such as chromium)

@@ -2,7 +2,7 @@ pub mod bin;
 pub mod dev;
 pub mod etc;
 pub mod features;
-pub mod home;
+pub mod files;
 pub mod lib;
 pub mod ns;
 

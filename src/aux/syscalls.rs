@@ -303,9 +303,11 @@ pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> Result<Ha
     }()?;
 
     let mut syscalls = HashSet::new();
-    binaries
-        .iter()
-        .try_for_each(|bin| extend(bin, &mut syscalls))?;
+    binaries.iter().for_each(|bin| {
+        if let Err(e) = extend(bin, &mut syscalls) {
+            warn!("Failed to extend syscalls for binary {bin}: {e}");
+        }
+    });
     Ok(syscalls)
 }
 

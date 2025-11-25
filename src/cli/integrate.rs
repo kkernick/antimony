@@ -85,7 +85,7 @@ pub fn remove(cmd: Args) -> Result<()> {
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         Cow::Owned(profile.id(name))
     } else {
-        Cow::Borrowed(profile.desktop(name))
+        profile.desktop(name)
     };
 
     if let Some(configs) = &profile.configuration {
@@ -142,7 +142,7 @@ fn format_desktop(
         write!(File::create(shadow)?, "{}", local_desktop.join("\n"))?;
         Cow::Owned(profile.id(name))
     } else {
-        Cow::Borrowed(profile.desktop(name))
+        profile.desktop(name)
     };
 
     let desktop =

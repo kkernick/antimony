@@ -197,8 +197,21 @@ fn add_feature(
             }
         }
 
-        if let Some(mut system) = files.system.take() {
-            let p_sys = p_files.system.get_or_insert_default();
+        if let Some(mut system) = files.platform.take() {
+            let p_sys = p_files.platform.get_or_insert_default();
+            for mode in FileMode::iter() {
+                if let Some(sys_files) = system.remove(&mode) {
+                    p_sys.entry(mode).or_default().extend(
+                        sys_files
+                            .into_iter()
+                            .map(|s| resolve(Cow::Owned(s)).into_owned()),
+                    );
+                }
+            }
+        }
+
+        if let Some(mut system) = files.resources.take() {
+            let p_sys = p_files.resources.get_or_insert_default();
             for mode in FileMode::iter() {
                 if let Some(sys_files) = system.remove(&mode) {
                     p_sys.entry(mode).or_default().extend(
