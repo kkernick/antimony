@@ -13,9 +13,7 @@ pub fn package(src: &Path, dst: &Path) -> Result<()> {
     let file = File::create(dst)?;
     let dir = WalkDir::new(src);
     let mut zip = zip::ZipWriter::new(file);
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Zstd)
-        .unix_permissions(0o755);
+    let options = SimpleFileOptions::default().unix_permissions(0o755);
 
     let prefix = Path::new(src);
     let mut buffer = Vec::new();
