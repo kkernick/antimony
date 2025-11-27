@@ -98,8 +98,51 @@ Antimony --> Sandbox: Spawn
 
 When a Profile is set to *Enforcing*, Antimony will query the SECCOMP Database to retrieve an allow list for both the Sandbox, and the IPC Proxy if one is used by the former (This is automatically logged by the Monitor in *Permissive* mode). It will then create a Filter that denies any syscall not in the database. Antimony denies syscalls in the most aggressive manner possible—killing the entire offending process. If you have not made a policy for the profile, or it is not exhaustive, this will almost certainly crash the application.
 
+While in *Enforcing* Mode, Antimony will load two filters:
+1. The Higher Level filter is applied to Bubblewrap, which includes all syscalls needed for it, and the Profile (As as filter can only be loaded if it is more restrictive). This provides a layer of defense in case of sandbox breach.
+2. The Lower Level filter is applied by Bubblewrap itself, as Antimony generates a BPF Filter identical to the High Level, sans Bubblewrap’s Syscalls.
+
+## Notify Mode
+
+```mermaid
+stateDiagram-v2
+
+Kernel --> Sandbox: Response
+Sandbox --> Kernel: Syscall
+
+Kernel --> Monitor: Syscall
+Monitor --> Kernel: Response
+
+state selection <<choice>> 
+Monitor --> selection: Notify
+selection --> Allow
+selection --> Deny
+selection --> Kill
+selection --> Timeout
+
+Allow --> DB: Store
+Allow --> Kernel: Allow
+Deny --> Kernel: EPERM
+Kill --> Kernel: SIGKILL
+Timeout --> Kernel: Allow
+```
+
+
+In *Notify* Mode, Antimony operates similarly to *Permissive*, but rather than the Monitor allowing and storing all Syscalls encountered, it will ask for the user to make a selection via `notify-send`. This will result in a notification appearing on the user’s Desktop, outlining the Profile and Syscall, with the following options:
+1. Allow: The Syscall will be permitted, and stored in the Database (IE subsequent runs will allow this without prompt).
+2. Deny: The Syscall will fail with `EPERM`. This decision persists across the instance (IE subsequent runs will request permission for this Syscall)
+3. Kill: Send the process that requested the Syscall `SIGKILL`. Then, send `SIGTERM` to the entire process group, gracefully tearing down the sandbox.
+
+If no response is provided to the Notification, Antimony will permit the Syscall, but it will *not* store it in the database. An explicit Allow is required to trust the Syscall for this profile.
+
+>[!warning]
+>*Notify* should be used in between *Permissive* and *Enforcing*, where the majority of the Syscalls have already been stored in the former mode. Running a profile in *Notify* mode without any existing filter will send a torrent of notifications, often enough that the Desktop Environment may impose a cooldown.
+
+
 ## The Database
 
 There are two ways of interacting with the SECCOMP Database:
 1. `antimony info seccomp` will provide information about the binaries used by a profile, and the syscalls used by a binary.
 2. `antimony seccomp` performs actions against the database itself. You can use it to optimize the database, delete it, export it wherever you want, or merge it with another database.
+
+

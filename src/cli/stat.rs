@@ -2,7 +2,7 @@
 use crate::setup::setup;
 use anyhow::{Result, anyhow};
 use nix::sys::signal::Signal::SIGTERM;
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -44,6 +44,8 @@ fn stat(info: crate::setup::Info) -> Result<()> {
                 for dir in $(ls /usr/share); do echo \"    $dir => $(find /usr/share/$dir -type f | wc -l)\"; done;
             ",
         ])?;
-    info.handle.spawn()?.wait_for_signal(SIGTERM)?;
+    info.handle
+        .spawn()?
+        .wait_for_signal(SIGTERM, Duration::from_millis(100))?;
     crate::setup::cleanup(info.instance)
 }

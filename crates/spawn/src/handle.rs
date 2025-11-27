@@ -342,7 +342,7 @@ impl Handle {
     /// When SIGTERM or SIGINT is sent to the parent, it will send `sig` to the child,
     /// collect the exit code, and return gracefully.
     /// Because we are busy waiting, the loop waits 1 seconds between checking the state.
-    pub fn wait_for_signal(&mut self, sig: Signal) -> Result<i32, Error> {
+    pub fn wait_for_signal(&mut self, sig: Signal, timeout: Duration) -> Result<i32, Error> {
         if let Some(pid) = self.child {
             // Hook SIGTERM and SIGINT
             let term = Arc::new(AtomicBool::new(false));
@@ -363,7 +363,7 @@ impl Handle {
                     }
                     Err(e) => return Err(Error::Comm(e)),
                 }
-                sleep(Duration::from_secs(1));
+                sleep(timeout);
             }
 
             // If the child is still alive, send it the signal

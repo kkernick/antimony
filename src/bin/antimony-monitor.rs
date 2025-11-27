@@ -13,6 +13,7 @@ use antimony::aux::{
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use dashmap::DashMap;
+use inflector::Inflector;
 use log::{debug, error, info, trace, warn};
 use nix::{
     libc::{EPERM, PR_SET_SECCOMP},
@@ -183,7 +184,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
     let mut handle = Spawner::new("notify-send")
         .args([
-            &format!("Syscall Request: {profile} => {name}"),
+            &format!("Syscall Request: {} => {}", profile.to_title_case(), name.to_title_case()),
             &format!("The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?", path.to_string_lossy()),
             "-a", "Antimony",
             "-t", "30000",

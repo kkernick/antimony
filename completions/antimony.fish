@@ -95,6 +95,7 @@ uts\t''
 c-group\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -s l -l log -d 'Collect output from the sandbox, and output it to a log file'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
@@ -108,7 +109,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand feature" -s d -l delet
 complete -c antimony -n "__fish_antimony_using_subcommand feature" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
-complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'
+complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s i -l integrate -d 'Integrate all profiles as well'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'

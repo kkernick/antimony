@@ -19,6 +19,7 @@ Antimony relies on the following runtime-dependencies:
 * `sqlite3`
 * `libseccomp`
 * `libnotify`
+* `xdg-open`
 
 ### Compiling
 

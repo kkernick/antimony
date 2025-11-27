@@ -6,7 +6,7 @@ use crate::aux::{
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use dialoguer::Confirm;
-use nix::unistd::getcwd;
+use nix::unistd::{getcwd, getpid};
 use rusqlite::params;
 use spawn::Spawner;
 use std::{
@@ -46,60 +46,76 @@ pub enum Operation {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        match self.operation {
-            Operation::Optimize => {
-                let conn = DB_POOL.get()?;
-                conn.execute("VACUUM;", [])?;
-                conn.execute("ANALYZE;", [])?;
-                println!("Optimized!");
-                Ok(())
-            }
-            Operation::Remove => {
-                let confirm = Confirm::new()
-                    .with_prompt("Are you sure you want to delete the SECCOMP Database?")
-                    .interact()?;
-
-                if confirm {
-                    fs::remove_dir_all(AT_HOME.join("seccomp"))?;
-                    println!("Deleted");
+        let result = Spawner::new("pkcheck")
+            .args([
+                "--action-id",
+                "org.freedesktop.policykit.exec",
+                "--allow-user-interaction",
+                "--process",
+                &format!("{}", getpid().as_raw()),
+            ])?
+            .mode(user::Mode::Real)
+            .spawn()?
+            .wait()?;
+        if result != 0 {
+            Err(anyhow!(
+                "Administrative privilege and Polkit is required to modify the SECCOMP database!"
+            ))
+        } else {
+            match self.operation {
+                Operation::Optimize => {
+                    let conn = DB_POOL.get()?;
+                    conn.execute("VACUUM;", [])?;
+                    conn.execute("ANALYZE;", [])?;
+                    println!("Optimized!");
+                    Ok(())
                 }
-                Ok(())
-            }
-            Operation::Export => {
-                user::set(user::Mode::Real)?;
-                let db = AT_HOME.join("seccomp").join("syscalls.db");
-                if !db.exists() {
-                    return Err(anyhow!("No database exists!"));
-                } else {
-                    let dest = match self.path {
+                Operation::Remove => {
+                    let confirm = Confirm::new()
+                        .with_prompt("Are you sure you want to delete the SECCOMP Database?")
+                        .interact()?;
+
+                    if confirm {
+                        fs::remove_dir_all(AT_HOME.join("seccomp"))?;
+                        println!("Deleted");
+                    }
+                    Ok(())
+                }
+                Operation::Export => {
+                    user::set(user::Mode::Real)?;
+                    let db = AT_HOME.join("seccomp").join("syscalls.db");
+                    if !db.exists() {
+                        return Err(anyhow!("No database exists!"));
+                    } else {
+                        let dest = match self.path {
+                            Some(path) => PathBuf::from(path),
+                            None => getcwd()?.join("syscalls.db"),
+                        };
+
+                        io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
+                        println!("Exported to {dest:?}")
+                    }
+                    Ok(())
+                }
+
+                Operation::Merge => {
+                    user::set(user::Mode::Effective)?;
+                    let db = match self.path {
                         Some(path) => PathBuf::from(path),
                         None => getcwd()?.join("syscalls.db"),
                     };
 
-                    io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
-                    println!("Exported to {dest:?}")
-                }
-                Ok(())
-            }
+                    let temp = NamedTempFile::new_in(AT_HOME.join("seccomp"))?;
+                    fs::copy(&db, temp.path())?;
 
-            Operation::Merge => {
-                user::set(user::Mode::Effective)?;
-                let db = match self.path {
-                    Some(path) => PathBuf::from(path),
-                    None => getcwd()?.join("syscalls.db"),
-                };
-
-                let temp = NamedTempFile::new_in(AT_HOME.join("seccomp"))?;
-                fs::copy(&db, temp.path())?;
-
-                let mut conn = DB_POOL.get()?;
-                let tx = conn.transaction()?;
-                tx.execute(
-                    &format!("ATTACH DATABASE '{}' AS other", temp.path().display()),
-                    [],
-                )?;
-                tx.execute_batch(
-                    "
+                    let mut conn = DB_POOL.get()?;
+                    let tx = conn.transaction()?;
+                    tx.execute(
+                        &format!("ATTACH DATABASE '{}' AS other", temp.path().display()),
+                        [],
+                    )?;
+                    tx.execute_batch(
+                        "
                      INSERT OR IGNORE INTO binaries (path)
                      SELECT path FROM other.binaries;
 
@@ -125,84 +141,87 @@ impl super::Run for Args {
                      JOIN other.binaries b2 ON pb.binary_id = b2.id
                      JOIN binaries b1 ON b1.path = b2.path;
                      ",
-                )?;
-                tx.commit()?;
-                Ok(())
-            }
+                    )?;
+                    tx.commit()?;
+                    Ok(())
+                }
 
-            Operation::Clean => {
-                let mut conn = syscalls::DB_POOL.get()?;
-                let tx = conn.transaction()?;
+                Operation::Clean => {
+                    let mut conn = syscalls::DB_POOL.get()?;
+                    let tx = conn.transaction()?;
 
-                || -> Result<()> {
-                    let mut stmt = tx.prepare("SELECT id, name FROM profiles")?;
-                    let profiles = stmt.query_map([], |row| {
-                        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-                    })?;
+                    || -> Result<()> {
+                        let mut stmt = tx.prepare("SELECT id, name FROM profiles")?;
+                        let profiles = stmt.query_map([], |row| {
+                            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                        })?;
 
-                    for profile in profiles {
-                        let (id, name) = profile?;
-                        if name == "xdg-dbus-proxy" {
-                            continue;
+                        for profile in profiles {
+                            let (id, name) = profile?;
+                            if name == "xdg-dbus-proxy" {
+                                continue;
+                            }
+
+                            if !AT_HOME
+                                .join("profiles")
+                                .join(format!("{name}.toml"))
+                                .exists()
+                            {
+                                println!("Removing missing profile: {name}");
+                                tx.execute("DELETE FROM profiles WHERE id = ?", params![id])?;
+                            }
                         }
+                        Ok(())
+                    }()?;
 
-                        if !AT_HOME
-                            .join("profiles")
-                            .join(format!("{name}.toml"))
-                            .exists()
-                        {
-                            println!("Removing missing profile: {name}");
-                            tx.execute("DELETE FROM profiles WHERE id = ?", params![id])?;
+                    || -> Result<()> {
+                        tx.execute("DELETE FROM profile_binaries WHERE profile_id NOT IN (SELECT id FROM profiles);", [])?;
+                        Ok(())
+                    }()?;
+
+                    // Remove missing binaries
+                    || -> Result<()> {
+                        let mut stmt = tx.prepare("SELECT id, path FROM binaries")?;
+                        let binaries = stmt.query_map([], |row| {
+                            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                        })?;
+
+                        for binary in binaries {
+                            let (id, path) = binary?;
+                            let remove = if path.starts_with("/home/antimony") {
+                                // If any profile's home has the binary in it, we preserve.
+                                let wild = path.replace("/home/antimony", "*");
+                                Spawner::new("/usr/bin/find")
+                                    .arg(DATA_HOME.join("antimony").to_string_lossy())?
+                                    .args(["-wholename", &wild])?
+                                    .mode(user::Mode::Real)
+                                    .output(true)
+                                    .spawn()?
+                                    .output_all()?
+                                    .is_empty()
+                            } else if path.ends_with("flatpak-spawn") {
+                                false
+                            } else {
+                                !Path::new(&path).exists()
+                            };
+
+                            if remove {
+                                println!("Removing missing binary: {path}");
+                                tx.execute("DELETE FROM binaries WHERE id = ?", params![id])?;
+                            }
                         }
-                    }
+                        Ok(())
+                    }()?;
+
+                    // Remove Orphans
+                    || -> Result<()> {
+                        tx.execute("DELETE FROM binaries WHERE id NOT IN (SELECT DISTINCT binary_id FROM profile_binaries);", [])?;
+                        Ok(())
+                    }()?;
+
+                    tx.commit()?;
                     Ok(())
-                }()?;
-
-                || -> Result<()> {
-                    tx.execute("DELETE FROM profile_binaries WHERE profile_id NOT IN (SELECT id FROM profiles);", [])?;
-                    Ok(())
-                }()?;
-
-                // Remove missing binaries
-                || -> Result<()> {
-                    let mut stmt = tx.prepare("SELECT id, path FROM binaries")?;
-                    let binaries = stmt.query_map([], |row| {
-                        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
-                    })?;
-
-                    for binary in binaries {
-                        let (id, path) = binary?;
-                        let remove = if path.starts_with("/home/antimony") {
-                            // If any profile's home has the binary in it, we preserve.
-                            let wild = path.replace("/home/antimony", "*");
-                            Spawner::new("/usr/bin/find")
-                                .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                                .args(["-wholename", &wild])?
-                                .mode(user::Mode::Real)
-                                .output(true)
-                                .spawn()?
-                                .output_all()?
-                                .is_empty()
-                        } else {
-                            !Path::new(&path).exists()
-                        };
-
-                        if remove {
-                            println!("Removing missing binary: {path}");
-                            tx.execute("DELETE FROM binaries WHERE id = ?", params![id])?;
-                        }
-                    }
-                    Ok(())
-                }()?;
-
-                // Remove Orphans
-                || -> Result<()> {
-                    tx.execute("DELETE FROM binaries WHERE id NOT IN (SELECT DISTINCT binary_id FROM profile_binaries);", [])?;
-                    Ok(())
-                }()?;
-
-                tx.commit()?;
-                Ok(())
+                }
             }
         }
     }

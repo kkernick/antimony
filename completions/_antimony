@@ -66,6 +66,8 @@ c-group\:""))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
 '-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \
+'-l[Collect output from the sandbox, and output it to a log file]' \
+'--log[Collect output from the sandbox, and output it to a log file]' \
 '-r[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--refresh[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
@@ -114,7 +116,6 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '-d[Just delete the cache, don'\''t repopulate]' \
 '--dry[Just delete the cache, don'\''t repopulate]' \
-'-h[Delete the entire Cache directory. Will break any instance currently running!]' \
 '--hard[Delete the entire Cache directory. Will break any instance currently running!]' \
 '-i[Integrate all profiles as well]' \
 '--integrate[Integrate all profiles as well]' \

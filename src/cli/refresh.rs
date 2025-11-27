@@ -20,7 +20,7 @@ pub struct Args {
     dry: bool,
 
     /// Delete the entire Cache directory. Will break any instance currently running!
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     hard: bool,
 
     /// Integrate all profiles as well.
@@ -47,6 +47,7 @@ impl super::Run for Args {
             // or trying to open direct files.
             let _ = fs::remove_dir_all(cache.join(".proxy"));
             let _ = fs::remove_dir_all(cache.join(".direct"));
+            let _ = fs::remove_dir_all(cache.join(".seccomp"));
         }
 
         // If a single profile exist, refresh it and it alone.
