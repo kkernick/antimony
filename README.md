@@ -18,6 +18,7 @@ Antimony relies on the following runtime-dependencies:
 * `xdg-dbus-proxy`
 * `sqlite3`
 * `libseccomp`
+* `libnotify`
 
 ### Compiling
 
@@ -50,4 +51,3 @@ sudo chmod ug+s /usr/bin/antimony
 >If Antimony cannot create hard links, it will default to copies. This has a drastic toll on performance.
 
 3. You should create a folder for Antimony to store configurations and caches. It defaults to `/usr/share/antimony`.
-
