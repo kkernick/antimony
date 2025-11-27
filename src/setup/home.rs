@@ -6,7 +6,7 @@ use anyhow::Result;
 use log::{debug, error};
 use std::{fs, process::exit};
 
-pub fn setup(args: &mut super::Args) -> Result<()> {
+pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
     if let Some(home) = &args.profile.home {
         let home_dir = DATA_HOME.join("antimony").join(match &home.name {
             Some(name) => name,
@@ -14,7 +14,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         });
 
         match home.policy.unwrap_or_default() {
-            HomePolicy::None => {}
+            HomePolicy::None => Ok(None),
             policy => {
                 let saved = user::save()?;
                 user::set(user::Mode::Real)?;
@@ -43,9 +43,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     }
                 };
                 user::restore(saved)?;
+                Ok(Some(home_str.into_owned()))
             }
         }
+    } else {
+        Ok(None)
     }
-    debug!("DONE");
-    Ok(())
 }

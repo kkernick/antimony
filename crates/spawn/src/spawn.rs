@@ -59,6 +59,9 @@ pub enum Error {
     /// An error when trying to fork.
     Fork(nix::errno::Errno),
 
+    /// An error when the spawner fails to parse the environment.
+    Environment,
+
     /// An error trying to apply the *SECCOMP* Filter.
     #[cfg(feature = "seccomp")]
     Seccomp(seccomp::filter::Error),
@@ -84,6 +87,7 @@ impl fmt::Display for Error {
             }
             Self::Path(path) => write!(f, "Could not resolve binary: {path}"),
             Self::Fork(errno) => write!(f, "Failed to fork: {errno}"),
+            Self::Environment => write!(f, "Failed to parse environment"),
 
             #[cfg(feature = "seccomp")]
             Self::Seccomp(error) => write!(f, "Failed to load SECCOMP filter: {error}"),
@@ -302,7 +306,6 @@ impl<'a> Spawner {
     /// in the parent environment
     ///
     /// This function is not thread safe.
-    /// Note that if preserve_env is set, this function is a no-op.
     pub fn env(mut self, var: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
         self.env_i(var)?;
         Ok(self)
@@ -432,7 +435,6 @@ impl<'a> Spawner {
 
     /// Sets an environment variable to the child process.
     /// Fails if the key doesn't exist, or the var contains a NULL byte.
-    /// Note that if preserve_env is set, this function is a no-op.
     pub fn env_i(&mut self, var: impl Into<Cow<'a, str>>) -> Result<(), Error> {
         self.env.push(Self::resolve_env(var.into().into_owned())?);
         Ok(())
@@ -737,6 +739,15 @@ impl<'a> Spawner {
                 #[cfg(feature = "seccomp")]
                 if let Some(filter) = self.seccomp {
                     filter.load().map_err(Error::Seccomp)?;
+                }
+
+                for env in &self.env {
+                    // We already converted from Strings, so these are UT8-safe.
+                    let estr = env.clone().into_string().map_err(|_| Error::Environment)?;
+                    let mut split = estr.split('=');
+                    let key = split.next().ok_or(Error::Environment)?;
+                    let value = split.next().ok_or(Error::Environment)?;
+                    unsafe { env::set_var(key, value) }
                 }
 
                 // Execve

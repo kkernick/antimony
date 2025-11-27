@@ -3,7 +3,9 @@ pub mod create;
 pub mod debug_shell;
 pub mod default;
 pub mod edit;
+pub mod export;
 pub mod feature;
+pub mod import;
 pub mod info;
 pub mod integrate;
 pub mod package;
@@ -82,6 +84,12 @@ pub enum Command {
 
     /// Package a Profile into a self-contained package.
     Package(package::Args),
+
+    /// Export user profiles.
+    Export(export::Args),
+
+    /// Import user profiles.
+    Import(import::Args),
 }
 impl Run for Command {
     fn run(self) -> Result<()> {
@@ -100,6 +108,8 @@ impl Run for Command {
             Command::DebugShell(args) => args.run(),
             Command::Seccomp(args) => args.run(),
             Command::Package(args) => args.run(),
+            Command::Export(args) => args.run(),
+            Command::Import(args) => args.run(),
         }
     }
 }

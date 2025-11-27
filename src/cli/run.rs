@@ -153,12 +153,26 @@ pub fn wait_for_doc() {
     }
 }
 
-pub fn run(info: crate::setup::Info, args: &mut Args) -> Result<()> {
+pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
     info.handle.arg_i(info.profile.app_path(&info.name))?;
     info.handle.args_i(info.post)?;
 
     // Run it
     if !args.dry {
+        if let Some(hooks) = &mut info.profile.hooks
+            && let Some(pre) = hooks.pre.take()
+        {
+            debug!("Processing pre-hooks");
+            for hook in pre {
+                hook.process(
+                    Some(&mut info.handle),
+                    &info.name,
+                    &info.sys_dir.to_string_lossy(),
+                    &info.home,
+                )?;
+            }
+        }
+
         debug!("Waiting for document portal");
         wait_for_doc();
 
@@ -167,6 +181,20 @@ pub fn run(info: crate::setup::Info, args: &mut Args) -> Result<()> {
             error!(
                 "The subcommand finished with a non-zero exit code! You may want to try `antimony trace` to see if there are missing files!"
             );
+        }
+
+        if let Some(mut hooks) = info.profile.hooks.take()
+            && let Some(post) = hooks.post.take()
+        {
+            debug!("Processing post-hooks");
+            for hook in post {
+                hook.process(
+                    None,
+                    &info.name,
+                    &info.sys_dir.to_string_lossy(),
+                    &info.home,
+                )?;
+            }
         }
     }
 

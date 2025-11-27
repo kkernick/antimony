@@ -13,6 +13,7 @@ use clap::ValueEnum;
 use console::style;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use spawn::{HandleError, SpawnError, Spawner};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -133,6 +134,25 @@ where
     }
 }
 
+/// Print info about the libraries used in a feature/profile.
+pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
+    println!("\t- Libraries:");
+    for library in libraries {
+        if verbose > 2 && library.contains("*") {
+            match get_wildcards(library, true) {
+                Ok(wilds) => {
+                    for wild in wilds {
+                        println!("\t\t- {}", style(wild).italic());
+                    }
+                }
+                Err(_) => println!("\t\t- {}", style(library).italic()),
+            }
+        } else {
+            println!("\t\t- {}", style(library).italic());
+        }
+    }
+}
+
 /// The definitions needed to sandbox an application.
 #[derive(Debug, Hash, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields, default)]
@@ -218,6 +238,9 @@ pub struct Profile {
 
     /// Configurations act as embedded profiles, inheriting the main one.
     pub configuration: Option<BTreeMap<String, Profile>>,
+
+    /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
+    pub hooks: Option<Hooks>,
 }
 impl Profile {
     /// Get where the profile's user location is.
@@ -451,6 +474,14 @@ impl Profile {
             }
         }
 
+        if let Some(hooks) = profile.hooks {
+            if let Some(s_hooks) = &mut self.hooks {
+                s_hooks.merge(hooks)
+            } else {
+                self.hooks = Some(hooks)
+            }
+        }
+
         extend(&mut self.namespaces, profile.namespaces);
         extend(&mut self.binaries, profile.binaries);
         extend(&mut self.libraries, profile.libraries);
@@ -611,6 +642,21 @@ impl Profile {
                         .join(" ")
                 );
             }
+
+            if let Some(hooks) = &self.hooks {
+                if let Some(pre) = &hooks.pre {
+                    println!("Pre-Hooks:");
+                    for hook in pre {
+                        println!("{hook:?}");
+                    }
+                }
+                if let Some(post) = &hooks.post {
+                    println!("Post-Hooks:");
+                    for hook in post {
+                        println!("{hook:?}");
+                    }
+                }
+            }
         }
     }
 
@@ -643,22 +689,137 @@ impl Profile {
     }
 }
 
-/// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
-    println!("\t- Libraries:");
-    for library in libraries {
-        if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true) {
-                Ok(wilds) => {
-                    for wild in wilds {
-                        println!("\t\t- {}", style(wild).italic());
-                    }
-                }
-                Err(_) => println!("\t\t- {}", style(library).italic()),
+/// An error for hooks.
+#[derive(Debug)]
+pub enum HookError {
+    /// If the path and content are both missing
+    Missing,
+
+    /// If the hook doesn't support attaching
+    Attach,
+
+    /// If the hook did not terminate successfully, and it's not no_fail
+    Fail(i32),
+
+    /// Errors spawning the hook
+    Spawn(SpawnError),
+
+    /// Error handling the hook
+    Handle(HandleError),
+}
+impl fmt::Display for HookError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Missing => write!(f, "Hooks needs either a path or content"),
+            Self::Attach => write!(f, "This hook doesn't support attaching!"),
+            Self::Fail(e) => write!(f, "Hooks exited with error code {e}"),
+            Self::Spawn(e) => write!(f, "Error spawning hook: {e}"),
+            Self::Handle(e) => write!(f, "Error handling the hook: {e}"),
+        }
+    }
+}
+impl error::Error for HookError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            Self::Spawn(e) => Some(e),
+            Self::Handle(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+impl From<SpawnError> for HookError {
+    fn from(value: SpawnError) -> Self {
+        Self::Spawn(value)
+    }
+}
+impl From<HandleError> for HookError {
+    fn from(value: HandleError) -> Self {
+        Self::Handle(value)
+    }
+}
+
+/// The Hooks structure contains both pre and post hooks.
+#[derive(Debug, Hash, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hooks {
+    /// Pre-Hooks are run before the executes.
+    pub pre: Option<Vec<Hook>>,
+
+    /// Post-Hooks are run on cleanup.
+    pub post: Option<Vec<Hook>>,
+}
+impl Hooks {
+    /// Merge two IPC sets together.
+    pub fn merge(&mut self, hooks: Self) {
+        append(&mut self.pre, hooks.pre);
+        append(&mut self.post, hooks.post);
+    }
+}
+
+/// A Hook is a program run in coordination with the profile.
+/// Hooks are run as the user.
+/// Hooks are invoked with the following environment variables:
+///     ANTIMONY_NAME: The name of the current profile.
+///     ANTIMONY_HOME: The path to the home folder, if it exists.
+///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
+#[derive(Debug, Hash, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[serde(deny_unknown_fields, default)]
+pub struct Hook {
+    /// The path to a binary
+    pub path: Option<String>,
+
+    /// The raw content of a shell script. If both path and content are defined, path is used.
+    pub content: Option<String>,
+
+    /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside
+    /// the sandbox. If false, the program waits for the hook to terminate before launching
+    /// the sandbox.
+    pub attach: Option<bool>,
+
+    /// Share the environment with the hook.
+    pub env: Option<bool>,
+
+    /// If the Hook can fail. If false, an error will abort the program.
+    pub can_fail: Option<bool>,
+}
+impl Hook {
+    pub fn process(
+        self,
+        main: Option<&mut Spawner>,
+        name: &str,
+        cache: &str,
+        home: &Option<String>,
+    ) -> Result<(), HookError> {
+        let mut handle = if let Some(path) = self.path {
+            Spawner::new(path)
+        } else if let Some(content) = self.content {
+            Spawner::new("/usr/bin/bash").args(["-c", content.as_str()])?
+        } else {
+            return Err(HookError::Missing);
+        };
+        handle.preserve_env_i(self.env.unwrap_or(false));
+        handle.env_i(format!("ANTIMONY_NAME={name}"))?;
+        handle.env_i(format!("ANTIMONY_CACHE={cache}"))?;
+        handle.mode_i(user::Mode::Real);
+
+        if let Some(home) = home {
+            handle.env_i(format!("ANTIMONY_HOME={home}"))?;
+        }
+
+        let mut handle = handle.spawn()?;
+        if self.attach.unwrap_or(false) {
+            if let Some(main) = main {
+                main.associate(handle);
+            } else {
+                return Err(HookError::Attach);
             }
         } else {
-            println!("\t\t- {}", style(library).italic());
+            let code = handle.wait()?;
+            if code != 0 && !self.can_fail.unwrap_or(false) {
+                return Err(HookError::Fail(code));
+            }
         }
+        Ok(())
     }
 }
 

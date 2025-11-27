@@ -49,6 +49,8 @@ pub struct Info {
     pub post: Vec<String>,
     pub profile: Profile,
     pub instance: PathBuf,
+    pub home: Option<String>,
+    pub sys_dir: PathBuf,
 }
 
 pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
@@ -207,14 +209,14 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         handle,
         inotify,
         watches,
-        sys_dir,
+        sys_dir: sys_dir.clone(),
         instance,
         package,
         args,
     };
 
     proxy::setup(&mut a)?;
-    home::setup(&mut a)?;
+    let home = home::setup(&mut a)?;
     files::setup(&mut a)?;
     env::setup(&mut a);
     fab::setup(&mut a)?;
@@ -231,6 +233,8 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         post,
         profile: a.profile,
         instance: instances.join(a.instance),
+        home,
+        sys_dir,
     })
 }
 

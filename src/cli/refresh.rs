@@ -36,17 +36,17 @@ impl super::Run for Args {
         let cache = AT_HOME.join("cache");
 
         if self.hard {
-            fs::remove_dir_all(&cache)?;
+            let _ = fs::remove_dir_all(&cache);
         } else {
             // Cached definitions can be removed safely.
-            fs::remove_dir_all(cache.join(".bin"))?;
-            fs::remove_dir_all(cache.join(".lib"))?;
+            let _ = fs::remove_dir_all(cache.join(".bin"));
+            let _ = fs::remove_dir_all(cache.join(".lib"));
 
             // This seems to be safe. Even if instances are in use,
             // deleting the source does not affect either the proxy,
             // or trying to open direct files.
-            fs::remove_dir_all(cache.join(".proxy"))?;
-            fs::remove_dir_all(cache.join(".direct"))?;
+            let _ = fs::remove_dir_all(cache.join(".proxy"));
+            let _ = fs::remove_dir_all(cache.join(".direct"));
         }
 
         // If a single profile exist, refresh it and it alone.

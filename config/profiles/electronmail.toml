@@ -1,6 +1,6 @@
 home.policy = "Enabled"
 
-features = ["electron", "network", "xdg-open", "secrets"]
+features = ["electron", "network", "xdg-open", "tray", "secrets"]
 arguments = ["--ozone-platform=wayland"]
 
 libraries = ["/opt/ElectronMail"]

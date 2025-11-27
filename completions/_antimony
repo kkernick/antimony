@@ -141,7 +141,7 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-':profile -- The name of the profile:_default' \
+'::profile -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
 && ret=0
 ;;
 (trace)
@@ -207,6 +207,23 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The name of the profile:_default' \
+&& ret=0
+;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+'::profile -- The name of a profile to export. If absent, export all user-profiles:_default' \
+'::dest -- Where to export to. Defaults to current directory:_default' \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+'-o[Overwrite existing entries]' \
+'--overwrite[Overwrite existing entries]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':profile -- The path of the profile. Can also be a directory, which will import all files within:_default' \
 && ret=0
 ;;
 (help)
@@ -277,6 +294,14 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(export)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(import)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -307,6 +332,8 @@ _antimony_commands() {
 'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'package:Package a Profile into a self-contained package' \
+'export:Export user profiles' \
+'import:Import user profiles' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony commands' commands "$@"
@@ -331,6 +358,11 @@ _antimony__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony edit commands' commands "$@"
 }
+(( $+functions[_antimony__export_commands] )) ||
+_antimony__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony export commands' commands "$@"
+}
 (( $+functions[_antimony__feature_commands] )) ||
 _antimony__feature_commands() {
     local commands; commands=()
@@ -353,6 +385,8 @@ _antimony__help_commands() {
 'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'package:Package a Profile into a self-contained package' \
+'export:Export user profiles' \
+'import:Import user profiles' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony help commands' commands "$@"
@@ -377,6 +411,11 @@ _antimony__help__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help edit commands' commands "$@"
 }
+(( $+functions[_antimony__help__export_commands] )) ||
+_antimony__help__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help export commands' commands "$@"
+}
 (( $+functions[_antimony__help__feature_commands] )) ||
 _antimony__help__feature_commands() {
     local commands; commands=()
@@ -386,6 +425,11 @@ _antimony__help__feature_commands() {
 _antimony__help__help_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help help commands' commands "$@"
+}
+(( $+functions[_antimony__help__import_commands] )) ||
+_antimony__help__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help import commands' commands "$@"
 }
 (( $+functions[_antimony__help__info_commands] )) ||
 _antimony__help__info_commands() {
@@ -431,6 +475,11 @@ _antimony__help__stat_commands() {
 _antimony__help__trace_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help trace commands' commands "$@"
+}
+(( $+functions[_antimony__import_commands] )) ||
+_antimony__import_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony import commands' commands "$@"
 }
 (( $+functions[_antimony__info_commands] )) ||
 _antimony__info_commands() {
