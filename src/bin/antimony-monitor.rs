@@ -7,18 +7,27 @@
 
 use antimony::aux::{
     env::{DATA_HOME, RUNTIME_DIR},
+    profile::SeccompPolicy,
     syscalls,
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
+use clap::Parser;
 use dashmap::DashMap;
 use log::{debug, error, info, trace, warn};
 use nix::{
     libc::{EPERM, PR_SET_SECCOMP},
     poll::{PollFd, PollFlags, PollTimeout, poll},
-    sys::socket::{
-        AddressFamily, ControlMessageOwned, MsgFlags, NetlinkAddr, SockFlag, SockProtocol,
-        SockType, bind, recv, recvmsg, socket,
+    sys::{
+        signal::{
+            Signal::{SIGKILL, SIGTERM},
+            kill,
+        },
+        socket::{
+            AddressFamily, ControlMessageOwned, MsgFlags, NetlinkAddr, SockFlag, SockProtocol,
+            SockType, bind, recv, recvmsg, socket,
+        },
     },
+    unistd::Pid,
 };
 use once_cell::sync::Lazy;
 use rusqlite::Transaction;
@@ -26,7 +35,7 @@ use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::Spawner;
 use std::{
     collections::HashSet,
-    env, fs,
+    fs,
     io::{self, IoSliceMut},
     os::{
         self,
@@ -41,6 +50,21 @@ use std::{
     thread,
 };
 use user::Mode;
+
+#[derive(Parser, Debug, Default)]
+#[command(name = "Antimony-Monitor")]
+#[command(version)]
+#[command(about = "A SECCOMP-Notify application")]
+pub struct Cli {
+    #[arg(short, long)]
+    pub instance: String,
+
+    #[arg(short, long)]
+    pub profile: String,
+
+    #[arg(short, long)]
+    pub mode: SeccompPolicy,
+}
 
 fn update_binary(tx: &Transaction, binary: &str, syscalls: &HashSet<i32>) -> Result<()> {
     let binary_id = syscalls::insert_binary(tx, binary)?;
@@ -155,11 +179,42 @@ static FCHMOD: Lazy<i32> = Lazy::new(|| {
         .get_number()
 });
 
+pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
+    let name = Syscall::get_name(call)?;
+    let mut handle = Spawner::new("notify-send")
+        .args([
+            &format!("Syscall Request: {profile} => {name}"),
+            &format!("The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?", path.to_string_lossy()),
+            "-a", "Antimony",
+            "-t", "30000",
+            "-A", "Allow=Allow",
+            "-A", "Deny=Deny",
+            "-A", "Kill=Kill",
+            "-A", "Save=Save"
+        ])?
+        .preserve_env(true)
+        .mode(Mode::Real)
+        .output(true)
+        .spawn()?;
+
+    let output = handle.output_all()?;
+    if handle.wait()? != 0 {
+        return Err(anyhow!("Failed to get input!"));
+    }
+
+    Ok(output)
+}
+
 pub fn notify_reader(
     term: Arc<AtomicBool>,
     stats: Arc<DashMap<String, HashSet<i32>>>,
     fd: OwnedFd,
+    name: String,
+    ask: bool,
 ) -> Result<()> {
+    let deny = DashMap::<String, HashSet<i32>>::new();
+    let deny_arc = Arc::new(deny);
+
     while !term.load(Ordering::Relaxed) {
         // New pair for each loop, since we don't want to mediate access to one.
         let pair = Pair::new()?;
@@ -168,7 +223,9 @@ pub fn notify_reader(
         match pair.recv(fd.as_raw_fd()) {
             Ok(Some(_)) => {
                 let log = Arc::clone(&stats_clone);
+                let deny_clone = Arc::clone(&deny_arc);
                 let raw = fd.as_raw_fd();
+                let profile_name = name.clone();
 
                 // Spawn a handler.
                 rayon::spawn(move || {
@@ -184,14 +241,73 @@ pub fn notify_reader(
                             let call = req.data.nr;
                             let mut entry = log.entry(path.clone()).or_default();
 
+                            if let Some(value) = deny_clone.get(&path)
+                                && value.contains(&call)
+                            {
+                                resp.error = -EPERM;
+                                resp.flags = 0;
+                                return;
+                            }
+
                             // Add new values.
                             if !entry.contains(&call) {
-                                entry.insert(call);
+                                if ask {
+                                    match notify(&profile_name, call, &exe_path) {
+                                        Ok(result) => {
+                                            resp.val = 0;
+                                            resp.error = 0;
+                                            resp.flags = 1;
+
+                                            if !result.is_empty() {
+                                                match &result[..result.len() - 1] {
+                                                    "Save" => {
+                                                        entry.insert(call);
+                                                    }
+                                                    "Deny" => {
+                                                        resp.error = -EPERM;
+                                                        resp.flags = 0;
+                                                        deny_clone
+                                                            .entry(path.clone())
+                                                            .or_default()
+                                                            .insert(call);
+                                                    }
+                                                    "Kill" => {
+                                                        // Kill the offending process with recourse.
+                                                        let _ = kill(
+                                                            Pid::from_raw(pid as i32),
+                                                            SIGKILL,
+                                                        );
+
+                                                        // Let the others clean up.
+                                                        if let Err(e) =
+                                                            kill(Pid::from_raw(0), SIGTERM)
+                                                        {
+                                                            error!("Failed to kill child: {e}");
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                            }
+                                            return;
+                                        }
+                                        Err(e) => {
+                                            warn!("Failed to ask user: {e}");
+                                        }
+                                    };
+                                } else {
+                                    entry.insert(call);
+                                }
                             }
-                        }
+                        } else {
+                            warn!("Invalid exe at PID {pid}");
+                        };
 
                         let call = req.data.nr;
                         let args = req.data.args;
+
+                        resp.val = 0;
+                        resp.error = 0;
+                        resp.flags = 1;
 
                         // If a SECCOMP Policy is installed with a higher precedence than
                         // ours (NOTIFY is pretty low), it will replace the filter, and deny
@@ -206,22 +322,13 @@ pub fn notify_reader(
                             && args[2] != 0
                         {
                             trace!("Ignoring SECCOMP request");
-                            resp.val = 0;
-                            resp.error = 0;
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
                         } else if call == *FCHMOD && args[0] as i32 == -1 && args[1] == 0o7777 {
                             trace!("Injected fchmod => EPERM");
-                            resp.val = 0;
                             resp.error = -EPERM;
                             resp.flags = 0;
-
-                        // Otherwise just pass the syscall along
-                        } else {
-                            resp.val = 0;
-                            resp.error = 0;
-                            resp.flags = 1;
                         }
                     }) {
                         warn!("Failed to reply: {e}");
@@ -300,19 +407,23 @@ pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>> 
 /// Receive and Respond to Notify Requests.
 fn main() -> Result<()> {
     env_logger::init();
+    let cli = Cli::parse();
 
     // We dispatch requests to a thread pool for performance.
     rayon::ThreadPoolBuilder::new().build_global()?;
 
-    // We need an instance, for where to put the socket.
-    let instance = env::args().nth(1).expect("No argument provided");
-
-    info!("SECCOMP Monitor Started!");
+    info!(
+        "SECCOMP Monitor Started! ({} at {} using {:?})",
+        cli.profile, cli.instance, cli.mode
+    );
     let mut conn = syscalls::DB_POOL.get()?;
 
     // Setup the socket. We run this as the user.
     user::set(Mode::Real)?;
-    let monitor_path = RUNTIME_DIR.join("antimony").join(&instance).join("monitor");
+    let monitor_path = RUNTIME_DIR
+        .join("antimony")
+        .join(&cli.instance)
+        .join("monitor");
     let listener = UnixListener::bind(&monitor_path)?;
 
     // Ensure that we can record syscall info after the attached process dies.
@@ -343,7 +454,16 @@ fn main() -> Result<()> {
                     .or_insert_with(|| Arc::new(DashMap::new()))
                     .clone();
 
-                thread::spawn(move || notify_reader(term_clone, profile, fd));
+                let profile_name = cli.profile.clone();
+                thread::spawn(move || {
+                    notify_reader(
+                        term_clone,
+                        profile,
+                        fd,
+                        profile_name.clone(),
+                        cli.mode == SeccompPolicy::Notify,
+                    )
+                });
             }
             Ok(None) => continue,
             Err(_) => break,
@@ -420,6 +540,6 @@ fn main() -> Result<()> {
         conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
             .with_context(|| "Flushing WAL")?;
     }
-    info!("Finished: {instance}");
+    info!("Finished: {}", cli.instance);
     Ok(())
 }

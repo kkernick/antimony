@@ -3,8 +3,11 @@ use crate::aux::{
     path::{user_dir, which_exclude},
     profile::SeccompPolicy,
 };
-use log::{info, trace, warn};
-use nix::sys::socket::{self, ControlMessage, MsgFlags};
+use log::{debug, info, trace, warn};
+use nix::{
+    errno,
+    sys::socket::{self, ControlMessage, MsgFlags},
+};
 use once_cell::sync::Lazy;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -13,8 +16,10 @@ use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscal
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashSet},
-    error, fmt, fs,
-    io::IoSlice,
+    error, fmt,
+    fs::{self, File},
+    hash::{DefaultHasher, Hash, Hasher},
+    io::{self, IoSlice},
     os::{
         fd::{AsRawFd, IntoRawFd, OwnedFd},
         unix::net::UnixStream,
@@ -90,6 +95,11 @@ pub enum Error {
 
     /// Errors connecting to the database.
     Connection(r2d2::Error),
+
+    /// Errors for IO.
+    Io(io::Error),
+
+    Errno(errno::Errno),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -97,6 +107,8 @@ impl fmt::Display for Error {
             Self::Seccomp(e) => write!(f, "SECCOMP Error: {e}"),
             Self::Database(e) => write!(f, "Database Error: {e}"),
             Self::Connection(e) => write!(f, "Connection Error: {e}"),
+            Self::Io(e) => write!(f, "Io Error: {e}"),
+            Self::Errno(e) => write!(f, "Error {e}"),
         }
     }
 }
@@ -106,6 +118,8 @@ impl error::Error for Error {
             Self::Seccomp(e) => Some(e),
             Self::Database(e) => Some(e),
             Self::Connection(e) => Some(e),
+            Self::Io(e) => Some(e),
+            Self::Errno(e) => Some(e),
         }
     }
 }
@@ -137,6 +151,16 @@ impl From<rusqlite::Error> for Error {
 impl From<r2d2::Error> for Error {
     fn from(value: r2d2::Error) -> Self {
         Error::Connection(value)
+    }
+}
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::Io(value)
+    }
+}
+impl From<errno::Errno> for Error {
+    fn from(value: errno::Errno) -> Self {
+        Error::Errno(value)
     }
 }
 
@@ -237,21 +261,34 @@ pub fn get_names(syscalls: HashSet<i32>) -> Vec<String> {
         .collect()
 }
 
+pub fn id_syscalls(
+    tx: &Transaction,
+    binary: &str,
+    id: i64,
+    syscalls: &mut HashSet<i32>,
+) -> Result<(), Error> {
+    let mut stmt = tx
+    .prepare("SELECT s.name FROM syscalls s JOIN binary_syscalls bs ON s.id = bs.syscall_id WHERE bs.binary_id = ?1")?;
+
+    info!("Adding syscalls from {binary}");
+    let rows = stmt.query_map([id], |row| row.get::<_, i32>(0))?;
+    for row in rows.flatten() {
+        syscalls.insert(row);
+    }
+    Ok(())
+}
+
 /// Get the syscalls used by a binary.
 pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<HashSet<i32>, Error> {
     let mut syscalls = HashSet::new();
-    match binary_id(tx, binary) {
-        Ok(binary_id) => {
-            let mut stmt = tx
-            .prepare("SELECT s.name FROM syscalls s JOIN binary_syscalls bs ON s.id = bs.syscall_id WHERE bs.binary_id = ?1")?;
-
-            info!("Adding syscalls from {binary}");
-            let rows = stmt.query_map([binary_id], |row| row.get::<_, i32>(0))?;
-            for row in rows.flatten() {
-                syscalls.insert(row);
-            }
+    if let Ok(id) = binary_id(tx, binary) {
+        id_syscalls(tx, binary, id, &mut syscalls)?;
+    } else if let Ok(link) = fs::read_link(PathBuf::from(binary)) {
+        if let Ok(id) = binary_id(tx, &link.to_string_lossy()) {
+            id_syscalls(tx, binary, id, &mut syscalls)?;
         }
-        Err(e) => warn!("{binary} not found in binaries table: {e}"),
+    } else {
+        warn!("{binary} not found in binaries table")
     }
     Ok(syscalls)
 }
@@ -278,7 +315,10 @@ fn extend(binary: &str, syscalls: &mut HashSet<i32>) -> Result<(), Error> {
 }
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> Result<HashSet<i32>, Error> {
+pub fn get_calls(
+    name: &str,
+    p_binaries: &Option<BTreeSet<String>>,
+) -> Result<(HashSet<i32>, HashSet<i32>), Error> {
     let mut conn = DB_POOL.get()?;
     let binaries = || -> Result<HashSet<String>, Error> {
         let tx = conn.transaction()?;
@@ -310,12 +350,20 @@ pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> Result<Ha
     }()?;
 
     let mut syscalls = HashSet::new();
+    let mut bwrap = HashSet::new();
     binaries.iter().for_each(|bin| {
-        if let Err(e) = extend(bin, &mut syscalls) {
+        if let Err(e) = extend(
+            bin,
+            if bin.ends_with("bwrap") {
+                &mut bwrap
+            } else {
+                &mut syscalls
+            },
+        ) {
             warn!("Failed to extend syscalls for binary {bin}: {e}");
         }
     });
-    Ok(syscalls)
+    Ok((syscalls, bwrap))
 }
 
 /// Return a new Policy
@@ -324,10 +372,10 @@ pub fn new(
     instance: &str,
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
-) -> Result<Filter, Error> {
-    let syscalls = get_calls(name, binaries).unwrap_or_default();
+) -> Result<(Filter, Option<OwnedFd>), Error> {
+    let (syscalls, bwrap) = get_calls(name, binaries).unwrap_or_default();
 
-    let mut filter = if policy == SeccompPolicy::Permissive {
+    let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
         let mut filter = Filter::new(Action::Notify)?;
         filter.set_notifier(Notifier::new(
             user_dir(instance).join("monitor"),
@@ -343,9 +391,58 @@ pub fn new(
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-    trace!("Allowing syscalls: {syscalls:?}");
-    for syscall in syscalls {
+    trace!("Allowing internal syscalls: {}", syscalls.len());
+
+    let mut syscalls = syscalls.into_iter().collect::<Vec<_>>();
+    syscalls.sort();
+    for syscall in &syscalls {
+        filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
+    }
+
+    let required = ["execve", "wait4"];
+    for call in required {
+        filter.add_rule(Action::Allow, Syscall::from_name(call)?)?;
+    }
+
+    let fd = if policy == SeccompPolicy::Enforcing {
+        let mut s = DefaultHasher::new();
+        syscalls.hash(&mut s);
+        let hash = format!("{}", s.finish());
+
+        debug!("Enforcing BPF");
+        let filter_bpf = AT_HOME
+            .join("cache")
+            .join(".seccomp")
+            .join(format!("{hash}.bpf"));
+
+        if let Some(parent) = filter_bpf.parent()
+            && !parent.exists()
+        {
+            let save = user::save()?;
+            user::set(user::Mode::Effective)?;
+            fs::create_dir_all(parent)?;
+            user::restore(save)?;
+        }
+
+        Some(if !filter_bpf.exists() {
+            debug!("Writing filter...");
+
+            let saved = user::save()?;
+            user::set(user::Mode::Effective)?;
+
+            let fd = filter.write(&filter_bpf)?;
+
+            user::restore(saved)?;
+            fd
+        } else {
+            File::open(&filter_bpf)?.into()
+        })
+    } else {
+        None
+    };
+
+    for syscall in bwrap {
         filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
     }
-    Ok(filter)
+    Ok((filter, fd))
 }

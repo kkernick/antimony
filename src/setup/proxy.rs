@@ -86,7 +86,11 @@ pub fn run(
 
     // Setup SECCOMP.
     if let Some(policy) = profile.seccomp {
-        proxy.seccomp_i(syscalls::new("xdg-dbus-proxy", instance, policy, &None)?);
+        let (filter, fd) = syscalls::new("xdg-dbus-proxy", instance, policy, &None)?;
+        proxy.seccomp_i(filter);
+        if let Some(fd) = fd {
+            proxy.fd_arg_i("--seccomp", fd)?;
+        }
     }
 
     proxy.args_i([

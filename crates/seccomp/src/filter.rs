@@ -5,12 +5,12 @@ use std::{
     error, fmt,
     fs::File,
     io,
-    os::fd::IntoRawFd,
+    os::fd::{IntoRawFd, OwnedFd},
     path::{Path, PathBuf},
 };
 
 #[cfg(feature = "notify")]
-use std::os::fd::{FromRawFd, OwnedFd};
+use std::os::fd::FromRawFd;
 
 /// Errors related to filter generation.
 #[derive(Debug)]
@@ -25,7 +25,7 @@ pub enum Error {
     AddRule(Action, Syscall, Errno),
 
     /// Failed to write out as BPF
-    Write(PathBuf, io::Error),
+    Io(PathBuf, io::Error),
 
     /// Failed to export the SECCOMP to BPF.
     Export(Errno),
@@ -42,7 +42,7 @@ impl error::Error for Error {
         match self {
             Self::SetAttribute(_, errno) => Some(errno),
             Self::AddRule(_, _, errno) => Some(errno),
-            Self::Write(_, error) => Some(error),
+            Self::Io(_, error) => Some(error),
             Self::Export(errno) => Some(errno),
             Self::Load(errno) => Some(errno),
             _ => None,
@@ -57,12 +57,8 @@ impl fmt::Display for Error {
             Self::AddRule(action, syscall, errno) => {
                 write!(f, "Failed to add rule {action} = {syscall}: {errno}")
             }
-            Self::Write(path, error) => {
-                write!(
-                    f,
-                    "Failed to write filter at {}: {error}",
-                    path.to_string_lossy()
-                )
+            Self::Io(path, error) => {
+                write!(f, "IO error {}: {error}", path.to_string_lossy())
             }
             Self::Export(errno) => {
                 write!(f, "Failed to export to BPF: {errno}",)
@@ -186,10 +182,12 @@ impl Filter {
     }
 
     /// Consumes and Write the filter to a new file with the BPF format of the filter.
-    pub fn write(self, path: &Path) -> Result<(), Error> {
-        let file = File::create(path).map_err(|e| Error::Write(path.to_path_buf(), e))?;
+    pub fn write(&self, path: &Path) -> Result<OwnedFd, Error> {
+        let file = File::create(path).map_err(|e| Error::Io(path.to_path_buf(), e))?;
         match unsafe { raw::seccomp_export_bpf(self.ctx, file.into_raw_fd()) } {
-            0 => Ok(()),
+            0 => Ok(File::open(path)
+                .map_err(|e| Error::Io(path.to_path_buf(), e))?
+                .into()),
             e => Err(Error::Export(Errno::from_raw(e))),
         }
     }

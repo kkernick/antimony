@@ -1,5 +1,5 @@
 //! Edit an existing profile.
-use crate::aux::profile::Profile;
+use crate::{aux::profile::Profile, cli::default};
 use anyhow::Result;
 use std::fs;
 
@@ -10,26 +10,31 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        // Edit the profile
-        let user = Profile::user_profile(&self.profile);
-        let new = !user.exists();
-        if new {
-            let source = Profile::path(&self.profile)?;
-            if let Some(parent) = user.parent() {
-                user::set(user::Mode::Effective)?;
-                fs::create_dir_all(parent)?;
-                user::revert()?;
+        if self.profile == "default" {
+            let args = default::Args::default();
+            args.run()
+        } else {
+            // Edit the profile
+            let user = Profile::user_profile(&self.profile);
+            let new = !user.exists();
+            if new {
+                let source = Profile::path(&self.profile)?;
+                if let Some(parent) = user.parent() {
+                    user::set(user::Mode::Effective)?;
+                    fs::create_dir_all(parent)?;
+                    user::revert()?;
+                }
+                fs::copy(source, &user)?;
             }
-            fs::copy(source, &user)?;
-        }
 
-        // Edit it.
-        if Profile::edit(&user)?.is_none() && new {
-            // If there was no modifications, delete the profile
-            // since it's identical to the system one.
-            user::set(user::Mode::Effective)?;
-            fs::remove_file(user)?;
+            // Edit it.
+            if Profile::edit(&user)?.is_none() && new {
+                // If there was no modifications, delete the profile
+                // since it's identical to the system one.
+                user::set(user::Mode::Effective)?;
+                fs::remove_file(user)?;
+            }
+            Ok(())
         }
-        Ok(())
     }
 }

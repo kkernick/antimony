@@ -587,6 +587,7 @@ impl Profile {
                 match self.seccomp.unwrap_or_default() {
                     SeccompPolicy::Permissive => style("Permissive").yellow(),
                     SeccompPolicy::Enforcing => style("Enforcing").green(),
+                    SeccompPolicy::Notify => style("Notify").blue(),
                     SeccompPolicy::Disabled => style("Disabled").red(),
                 }
             );
@@ -836,6 +837,9 @@ pub enum SeccompPolicy {
 
     /// The policy is enforced: unrecognized syscalls return with EPERM.
     Enforcing,
+
+    /// The policy is enforced: unrecognized syscalls are presented to the user for decision.
+    Notify,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Default)]

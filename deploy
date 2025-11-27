@@ -11,10 +11,10 @@ if [[ "${RECIPE}" == "dev" ]]; then
     RECIPE="debug"
 fi
 
-sudo rm /usr/bin/antimony{,-monitor,-spawn}
+sudo rm /usr/bin/antimony-*
 
 echo "Copying binaries"
-sudo cp target/$RECIPE/antimony{,-monitor,-spawn} /usr/bin
+sudo cp target/$RECIPE/antimony-* /usr/bin
 
 sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
 

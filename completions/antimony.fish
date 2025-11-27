@@ -53,7 +53,8 @@ overlay\t'Once an application has been configured, Overlay effectively freezes i
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-name -d 'Override the home name' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l seccomp -d 'Override the seccomp policy' -r -f -a "disabled\t'Disable SECCOMP'
 permissive\t'Syscalls are logged to construct a policy for the profile'
-enforcing\t'The policy is enforced: unrecognized syscalls return with EPERM'"
+enforcing\t'The policy is enforced: unrecognized syscalls return with EPERM'
+notify\t'The policy is enforced: unrecognized syscalls are presented to the user for decision'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l portals -d 'Add portals' -r -f -a "background\t''
 camera\t''
 clipboard\t''

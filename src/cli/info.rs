@@ -9,6 +9,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use console::style;
 use log::error;
+use seccomp::syscall::Syscall;
 use std::{collections::HashSet, fs, path::Path};
 
 /// What to get information on.
@@ -112,11 +113,18 @@ impl super::Run for Args {
                         tx.commit()?;
                         calls
                     } else {
-                        syscalls::get_calls(&name, &None)?.into_iter().collect()
+                        let (syscalls, _) = syscalls::get_calls(&name, &None)?;
+                        syscalls.into_iter().collect()
                     };
 
                     if self.verbosity > 0 {
-                        for call in calls {
+                        let mut syscalls = calls
+                            .into_iter()
+                            .filter_map(|e| Syscall::get_name(e).ok())
+                            .collect::<Vec<_>>();
+
+                        syscalls.sort();
+                        for call in syscalls {
                             print!("{call} ");
                         }
                     } else {

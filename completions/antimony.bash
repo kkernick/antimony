@@ -626,7 +626,7 @@ _antimony() {
                     return 0
                     ;;
                 --seccomp)
-                    COMPREPLY=($(compgen -W "disabled permissive enforcing" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "disabled permissive enforcing notify" -- "${cur}"))
                     return 0
                     ;;
                 --portals)

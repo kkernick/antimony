@@ -267,7 +267,7 @@ impl Drop for Stream {
 /// a Spawner.
 pub struct Handle {
     /// The name of the spawned binary.
-    name: String,
+    pub(super) name: String,
 
     /// The child PID. Once wait has been called, it is set to None
     child: Option<Pid>,
@@ -306,6 +306,15 @@ impl Handle {
             stderr: stderr.map(Stream::new),
             associated: associates,
         }
+    }
+
+    /// Get the name of the handle.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn pid(&self) -> &Option<Pid> {
+        &self.child
     }
 
     /// Wait for the child to terminate, then return the exit
