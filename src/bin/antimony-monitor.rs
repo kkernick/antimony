@@ -493,6 +493,8 @@ fn main() -> Result<()> {
                     .spawn()?
                     .output_all()?
                     .is_empty()
+            } else if path.ends_with("flatpak-spawn") {
+                true
             } else {
                 Path::new(&path).exists()
             })
