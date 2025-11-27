@@ -190,7 +190,6 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
             "-A", "Allow=Allow",
             "-A", "Deny=Deny",
             "-A", "Kill=Kill",
-            "-A", "Save=Save"
         ])?
         .preserve_env(true)
         .mode(Mode::Real)
@@ -260,7 +259,7 @@ pub fn notify_reader(
 
                                             if !result.is_empty() {
                                                 match &result[..result.len() - 1] {
-                                                    "Save" => {
+                                                    "Allow" => {
                                                         entry.insert(call);
                                                     }
                                                     "Deny" => {
@@ -285,7 +284,9 @@ pub fn notify_reader(
                                                             error!("Failed to kill child: {e}");
                                                         }
                                                     }
-                                                    _ => {}
+                                                    e => {
+                                                        warn!("Unrecognized option: {e}");
+                                                    }
                                                 }
                                             }
                                             return;
