@@ -1,8 +1,12 @@
 id = "opensnitch_ui"
-home.policy = "Enabled"
-
 features = ["qt5", "python", "tray"]
 namespaces = ["Pid"]
 
+[home]
+policy = "Enabled"
+
 [files.platform]
 ReadWrite = ["/tmp"]
+
+[[hooks.pre]]
+content = "sleep 0.5"
