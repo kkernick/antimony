@@ -87,6 +87,24 @@
 # automatically.
 # namespaces = []
 
+# A list of arguments to pass to the sandbox before adding the main application. This can be used
+# to add arguments to Bubblewrap directly, or to install a wrapper (Such as zypak). There are special
+# values, as well:
+#
+# "#" Delineates the start of the sandbox_args. In essence, if the args starts with a "#", then it
+# effectively means that it is taking exclusive control of the arguments. It guarantees to be put first,
+# and all other arguments are truncated.
+#
+# "!" Delineates the end of the sandbox_arg. This is used in coordination with "#" for a feature/profile
+# to ensure exclusive access to the sandbox arguments. If two #'s are detected, the sandbox bails.
+#
+# Because your order is not guaranteed, this presents two ways of using this argument:
+# 1.  Cooperatively. You expect to be placed on the command line, but do not prioritize it. For example,
+#     Zypak only has the wrapper.
+# 2.  Exclusively. You use both # and ! to ensure only your arguments are passed. Debug-Shell and Stats
+#     does this, as it changed how the sandbox behaves.
+# sandbox_args = []
+
 # Home specifies whether to create a home folder for the application, located at:
 # ~/.local/share/antimony/{name}
 # This allows for configuration to persist between runs. If no home is defined, settings,

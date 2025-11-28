@@ -1,6 +1,5 @@
 /// Antimony's CLI.
 pub mod create;
-pub mod debug_shell;
 pub mod default;
 pub mod edit;
 pub mod export;
@@ -13,7 +12,6 @@ pub mod refresh;
 pub mod reset;
 pub mod run;
 pub mod seccomp;
-pub mod stat;
 pub mod trace;
 
 use anyhow::Result;
@@ -70,14 +68,8 @@ pub enum Command {
     /// Trace a profile for missing syscalls or files.
     Trace(trace::Args),
 
-    /// Collect stats about a profile's sandbox
-    Stat(stat::Args),
-
     /// List installed profiles and features
     Info(info::Args),
-
-    /// Drop into a debugging shell within a profile's sandbox
-    DebugShell(debug_shell::Args),
 
     /// Perform operations on the SECCOMP Database.
     Seccomp(seccomp::Args),
@@ -103,9 +95,7 @@ impl Run for Command {
             Command::Integrate(args) => args.run(),
             Command::Reset(args) => args.run(),
             Command::Trace(args) => args.run(),
-            Command::Stat(args) => args.run(),
             Command::Info(args) => args.run(),
-            Command::DebugShell(args) => args.run(),
             Command::Seccomp(args) => args.run(),
             Command::Package(args) => args.run(),
             Command::Export(args) => args.run(),

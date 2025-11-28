@@ -132,6 +132,10 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
 
+    /// Arguments to pass to bubblewrap/wrapper
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub sandbox_args: Option<Vec<String>>,
+
     /// Arguments to pass to the profile application.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
@@ -161,9 +165,41 @@ pub fn wait_for_doc() {
 }
 
 pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
-    info.handle.arg_i(info.profile.app_path(&info.name))?;
-    info.handle.args_i(info.post)?;
-    info.handle.error_i(true);
+    let add_regular = if let Some(args) = info.profile.sandbox_args.take() {
+        let mut add = true;
+        if args.iter().filter(|&e| *e == "#").count() > 1 {
+            return Err(anyhow!("Conflicting features! Only one feature can use #"));
+        }
+
+        let slice = match args.iter().position(|e| e == "#") {
+            Some(index) => {
+                if index < args.len() - 1 {
+                    &args[index + 1..]
+                } else {
+                    &args[..]
+                }
+            }
+            None => &args[..],
+        };
+
+        for arg in slice {
+            if arg == "!" {
+                add = false;
+                break;
+            } else {
+                info.handle.arg_i(arg)?
+            }
+        }
+        add
+    } else {
+        true
+    };
+
+    if add_regular {
+        info.handle.arg_i(info.profile.app_path(&info.name))?;
+        info.handle.args_i(info.post)?;
+        info.handle.error_i(true);
+    }
 
     // Run it
     if !args.dry {

@@ -1,0 +1,10 @@
+name = "stats"
+description = "Compute sandbox statistics"
+
+binaries = ["find", "ls", "wc"]
+sandbox_args = ["#", "sh", "-c", """
+  echo \"/etc => $(find /etc -type f | wc -l)\";
+  for dir in $(ls /etc); do echo \"   $dir => $(find /etc/$dir -type f | wc -l)\"; done;
+  for dir in /usr/bin /usr/lib /usr/share; do echo \"$dir => $(find $dir -type f | wc -l)\"; done;
+  for dir in $(ls /usr/share); do echo \"    $dir => $(find /usr/share/$dir -type f | wc -l)\"; done;
+  """, "!"]

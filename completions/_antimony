@@ -64,6 +64,7 @@ net\:"Use the network feature instead"
 uts\:""
 c-group\:""))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
+'*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
 '-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \
 '-l[Collect output from the sandbox, and output it to a log file]' \
@@ -160,15 +161,6 @@ all\:"Trace all syscalls, even those that succeed. Useful to see the context in 
 '*::passthrough -- Arguments to pass to strace:_default' \
 && ret=0
 ;;
-(stat)
-_arguments "${_arguments_options[@]}" : \
-'-c+[Use a configuration within the profile]:CONFIG:_default' \
-'--config=[Use a configuration within the profile]:CONFIG:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':profile -- The name of the profile:_default' \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 '*-v[The verbosity of information]' \
@@ -179,15 +171,6 @@ _arguments "${_arguments_options[@]}" : \
 feature\:"A Feature"
 seccomp\:"Query the SECCOMP database"))' \
 '::name -- Profile/Feature/Binary name:_default' \
-&& ret=0
-;;
-(debug-shell)
-_arguments "${_arguments_options[@]}" : \
-'-c+[Use a configuration within the profile]:CONFIG:_default' \
-'--config=[Use a configuration within the profile]:CONFIG:_default' \
-'-h[Print help]' \
-'--help[Print help]' \
-':profile -- The name of the profile:_default' \
 && ret=0
 ;;
 (seccomp)
@@ -276,15 +259,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(stat)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(debug-shell)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -329,9 +304,7 @@ _antimony_commands() {
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
 'trace:Trace a profile for missing syscalls or files' \
-'stat:Collect stats about a profile'\''s sandbox' \
 'info:List installed profiles and features' \
-'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'package:Package a Profile into a self-contained package' \
 'export:Export user profiles' \
@@ -344,11 +317,6 @@ _antimony_commands() {
 _antimony__create_commands() {
     local commands; commands=()
     _describe -t commands 'antimony create commands' commands "$@"
-}
-(( $+functions[_antimony__debug-shell_commands] )) ||
-_antimony__debug-shell_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony debug-shell commands' commands "$@"
 }
 (( $+functions[_antimony__default_commands] )) ||
 _antimony__default_commands() {
@@ -382,9 +350,7 @@ _antimony__help_commands() {
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
 'trace:Trace a profile for missing syscalls or files' \
-'stat:Collect stats about a profile'\''s sandbox' \
 'info:List installed profiles and features' \
-'debug-shell:Drop into a debugging shell within a profile'\''s sandbox' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'package:Package a Profile into a self-contained package' \
 'export:Export user profiles' \
@@ -397,11 +363,6 @@ _antimony__help_commands() {
 _antimony__help__create_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help create commands' commands "$@"
-}
-(( $+functions[_antimony__help__debug-shell_commands] )) ||
-_antimony__help__debug-shell_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help debug-shell commands' commands "$@"
 }
 (( $+functions[_antimony__help__default_commands] )) ||
 _antimony__help__default_commands() {
@@ -468,11 +429,6 @@ _antimony__help__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help seccomp commands' commands "$@"
 }
-(( $+functions[_antimony__help__stat_commands] )) ||
-_antimony__help__stat_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help stat commands' commands "$@"
-}
 (( $+functions[_antimony__help__trace_commands] )) ||
 _antimony__help__trace_commands() {
     local commands; commands=()
@@ -517,11 +473,6 @@ _antimony__run_commands() {
 _antimony__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony seccomp commands' commands "$@"
-}
-(( $+functions[_antimony__stat_commands] )) ||
-_antimony__stat_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony stat commands' commands "$@"
 }
 (( $+functions[_antimony__trace_commands] )) ||
 _antimony__trace_commands() {

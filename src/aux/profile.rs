@@ -241,6 +241,10 @@ pub struct Profile {
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<Hooks>,
+
+    /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
+    /// or a wrapper for the sandbox.
+    pub sandbox_args: Option<Vec<String>>,
 }
 impl Profile {
     /// Get where the profile's user location is.
@@ -320,6 +324,7 @@ impl Profile {
         let mut profile = Self {
             seccomp: args.seccomp.take(),
             arguments: args.passthrough.take(),
+            sandbox_args: args.sandbox_args.take(),
             ..Default::default()
         };
 
@@ -489,6 +494,7 @@ impl Profile {
         extend(&mut self.features, profile.features);
         extend(&mut self.conflicts, profile.conflicts);
         append(&mut self.arguments, profile.arguments);
+        append(&mut self.sandbox_args, profile.sandbox_args);
         Ok(())
     }
 

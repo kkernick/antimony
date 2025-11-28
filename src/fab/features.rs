@@ -6,6 +6,7 @@ use crate::{
     fab::resolve,
 };
 use log::{debug, warn};
+use spawn::Spawner;
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
@@ -177,6 +178,36 @@ fn add_feature(
     map: &HashMap<&str, String>,
     feature: &mut Feature,
 ) -> Result<(), Error> {
+    if let Some(condition) = feature.conditional.take() {
+        let code = || -> anyhow::Result<i32> {
+            let code = Spawner::new("/usr/bin/bash")
+                .args(["-c", &condition])?
+                .preserve_env(true)
+                .mode(user::Mode::Real)
+                .output(true)
+                .error(true)
+                .spawn()?
+                .wait()?;
+            Ok(code)
+        }();
+
+        match code {
+            Ok(code) => {
+                if code != 0 {
+                    debug!("Condition for feature {} not met", &feature.name);
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                debug!(
+                    "Failed to check condition for feature {}: {e}",
+                    &feature.name
+                );
+                return Ok(());
+            }
+        }
+    }
+
     if let Some(caveat) = feature.caveat.take() {
         warn!(
             "This profile uses a dangerous feature! {}: {}",
@@ -253,6 +284,9 @@ fn add_feature(
             .namespaces
             .get_or_insert_default()
             .extend(namespaces);
+    }
+    if let Some(args) = feature.sandbox_args.take() {
+        profile.sandbox_args.get_or_insert_default().extend(args);
     }
 
     if let Some(mut ipc) = feature.ipc.take() {

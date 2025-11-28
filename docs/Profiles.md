@@ -95,7 +95,9 @@ While the `udev` feature can indeed provide this file, it does so by providing t
 The `info` command dumps information related to Features, Profiles, and [SECCOMP](SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`.
 
 #### Debug Shell
-The `debug-shell` command will create the sandbox for the Profile, but rather than executing the application will drop you into a shell with some utilities for navigating the command line. You can check the contents of the environment, validate files and libraries, and even try and run the application with your own arguments or under different traces (So long as you provide them with `binaries`).
+The `debug-shell` feature will create the sandbox for the Profile, but rather than executing the application will drop you into a shell with some utilities for navigating the command line. You can check the contents of the environment, validate files and libraries, and even try and run the application with your own arguments or under different traces (So long as you provide them with `binaries`).
+
+You can use it via `antimony run $PROFILE --features debug-shell`
 
 ## Editing a Profile
 
