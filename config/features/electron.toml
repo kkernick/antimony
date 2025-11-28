@@ -1,6 +1,6 @@
 name = "electron"
 description = "For Chromium/Electron applications"
-requires = ["gtk3"]
+requires = ["gtk3", "zypak"]
 
 devices = ["/dev/null", "/dev/urandom", "/dev/shm"]
 libraries = ["libsoftokn3*", "libfreeblpriv3*", "libsmime3*"]

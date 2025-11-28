@@ -1,0 +1,6 @@
+name = "debug-shell"
+description = "Drop into a debug shell"
+
+conditional = "command -v /usr/bin/sh"
+binaries = ["sh", "cat", "ls"]
+sandbox_args = ["#", "sh", "!"]

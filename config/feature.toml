@@ -9,6 +9,10 @@ name = "feature"
 # the name and description are optional
 description = ""
 
+# The conditional is an optional shell-command that must return 0 for the feature to be included.
+# This can be used to ensure a optional resource is installed on the system.
+# conditional = ""
+
 # The caveat is any warning that should be displayed when a profile uses this feature. This could
 # include anything from performance consideration (hardened_malloc), attack surface increases (lib),
 # etc.
@@ -36,6 +40,24 @@ description = ""
 
 # Devices to pass, such as /dev/dri
 # devices = []
+
+# A list of arguments to pass to the sandbox before adding the main application. This can be used
+# to add arguments to Bubblewrap directly, or to install a wrapper (Such as zypak). There are special
+# values, as well:
+#
+# "#" Delineates the start of the sandbox_args. In essence, if the args starts with a "#", then it
+# effectively means that it is taking exclusive control of the arguments. It guarantees to be put first,
+# and all other arguments are truncated.
+#
+# "!" Delineates the end of the sandbox_arg. This is used in coordination with "#" for a feature/profile
+# to ensure exclusive access to the sandbox arguments. If two #'s are detected, the sandbox bails.
+#
+# Because your order is not guaranteed, this presents two ways of using this argument:
+# 1.  Cooperatively. You expect to be placed on the command line, but do not prioritize it. For example,
+#     Zypak only has the wrapper.
+# 2.  Exclusively. You use both # and ! to ensure only your arguments are passed. Debug-Shell and Stats
+#     does this, as it changed how the sandbox behaves.
+# sandbox_args = []
 
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.

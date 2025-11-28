@@ -31,9 +31,7 @@ refresh      Refresh caches
 integrate    Integrate a profile into the user environment  
 reset        Reset a profile back to the system-defined profile  
 trace        Trace a profile for missing syscalls or files  
-stat         Collect stats about a profile's sandbox  
 info         List installed profiles and features  
-debug-shell  Drop into a debugging shell within a profile's sandbox  
 seccomp      Perform operations on the SECCOMP Database  
 package      Package a Profile into a self-contained package  
 export       Export user profiles  
@@ -151,14 +149,6 @@ Usage: antimony trace [OPTIONS] <PROFILE> <MODE> [PASSTHROUGH]...
 
 The `--report` flag will summarize the details, and present a list of files that the sandbox tried to access, but did not exist—but that *do* exist on the host. It also lists Features that provide those files.
 
-## Stat
-
-```
-Usage: antimony stat [OPTIONS] <PROFILE>
-```
-
-*Stat* runs a diagnostic tool in the sandbox, rather than the application, to collect information about available files. 
-
 ## Info
 
 ```
@@ -172,14 +162,6 @@ Usage: antimony info [OPTIONS] <WHAT> [NAME]
 3. `seccomp` to query the SECCOMP database
 
 The optional Name argument can return only the information to a relevant Profile, Feature, or Binary, but it can be omitted to provide all available information. `-v` can be increment to increase the detail.
-
-## Debug Shell
-
-```
-Usage: antimony debug-shell [OPTIONS] <PROFILE>
-```
-
-*Debug Shell* drops the terminal into a shell within the sandbox.
 
 ## SECCOMP
 

@@ -64,6 +64,12 @@ pub struct Feature {
     /// A description of what the feature is for.
     pub description: String,
 
+    /// An optional shell-script that must return 0 for
+    /// the feature to be included. If it fails, the feature
+    /// is skipped. Useful to ensure a required resource
+    /// actually exists
+    pub conditional: Option<String>,
+
     /// If the feature introduces a significant change to the sandbox, warn users.
     pub caveat: Option<String>,
 
@@ -93,6 +99,10 @@ pub struct Feature {
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
     pub environment: Option<BTreeMap<String, String>>,
+
+    /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
+    /// or a wrapper for the sandbox.
+    pub sandbox_args: Option<Vec<String>>,
 }
 impl Feature {
     /// Get the path to a feature.
