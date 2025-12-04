@@ -1,7 +1,7 @@
 //! Create a new profile.
 use crate::{
-    aux::{env::AT_HOME, profile::Profile},
     cli::default,
+    shared::{env::AT_HOME, profile::Profile},
 };
 use anyhow::Result;
 use std::fs::{self, File};

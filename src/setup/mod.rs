@@ -8,13 +8,13 @@ mod syscalls;
 mod wait;
 
 use crate::{
-    aux::{
-        env::{AT_HOME, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
+    cli::run::mounted,
+    shared::{
+        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
         package::extract,
         path::{user_dir, which_exclude},
         profile::Profile,
     },
-    cli::run::mounted,
 };
 use anyhow::{Result, anyhow};
 use inotify::{Inotify, WatchDescriptor};
@@ -28,7 +28,7 @@ use std::{
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
-use user::restore;
+use user::run_as;
 use zbus::blocking;
 
 struct Args<'a> {
@@ -63,7 +63,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         let src = PathBuf::from(name.clone().into_owned());
         let file_name = src.file_stem().unwrap().to_string_lossy();
 
-        let package_path = AT_HOME.join("cache").join(format!("package-{file_name}"));
+        let package_path = CACHE_DIR.join(format!("package-{file_name}"));
 
         if !package_path.exists() {
             debug!("Extracting package");
@@ -79,14 +79,13 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     } else {
         let profile = match Profile::new(&name) {
             Ok(profile) => profile,
-            Err(crate::aux::profile::Error::NotFound(_, reason)) => {
-                debug!("No profile: {name}: {reason}, assuming binary");
+            Err(e) => {
+                debug!("No profile: {name}: {e}, assuming binary");
                 Profile {
                     path: Some(which_exclude(&name)?),
                     ..Default::default()
                 }
             }
-            Err(e) => return Err(e.into()),
         };
         (profile, None)
     };
@@ -116,8 +115,9 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 
     // Get the system directory, which contains the SOF.
     let hash = profile.hash_str();
-    let mut sys_dir = AT_HOME.join("cache").join(&hash);
-    let refresh_dir = AT_HOME.join("cache").join(format!("{hash}-refresh"));
+
+    let mut sys_dir = CACHE_DIR.join(&hash);
+    let refresh_dir = CACHE_DIR.join(format!("{hash}-refresh"));
 
     if refresh_dir.exists() {
         if !busy(&sys_dir.join("instances")) && !busy(&refresh_dir.join("instances")) {
@@ -156,21 +156,22 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 
     fs::create_dir_all(&instances)?;
 
-    user::set(user::Mode::Real)?;
-    if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
-        let connection = blocking::Connection::session()?;
-        let proxy = blocking::Proxy::new(
-            &connection,
-            "org.freedesktop.portal.Documents",
-            "/org/freedesktop/portal/documents",
-            "org.freedesktop.DBus.Peer",
-        )?;
-        proxy.call_method("Ping", &())?;
-    }
+    run_as!(user::Mode::Real, Result<()>, {
+        if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
+            let connection = blocking::Connection::session()?;
+            let proxy = blocking::Proxy::new(
+                &connection,
+                "org.freedesktop.portal.Documents",
+                "/org/freedesktop/portal/documents",
+                "org.freedesktop.DBus.Peer",
+            )?;
+            proxy.call_method("Ping", &())?;
+        }
 
-    // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
-    fs::create_dir_all(user_dir(&instance).as_path())?;
-    user::revert()?;
+        // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
+        fs::create_dir_all(user_dir(&instance).as_path())?;
+        Ok(())
+    })?;
 
     symlink(user_dir(&instance), instances.join(&instance))?;
 
@@ -198,10 +199,8 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         .mode(user::Mode::Real);
 
     debug!("Initializing inotify handle");
-    user::set(user::Mode::Real)?;
-    let inotify = Inotify::init()?;
+    let inotify = run_as!(user::Mode::Real, Inotify::init())?;
     let watches = HashSet::new();
-    user::revert()?;
 
     let mut a = Args {
         profile,
@@ -239,24 +238,24 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 }
 
 pub fn cleanup(instance: PathBuf) -> Result<()> {
-    let save = user::save()?;
     debug!("Cleaning up!");
-
     let user_dir = fs::read_link(&instance)?;
     fs::remove_file(&instance)?;
 
-    user::set(user::Mode::Real)?;
-    let runtime = RUNTIME_DIR.join(".flatpak").join(&instance);
-    if runtime.exists() {
-        fs::remove_dir_all(runtime)?;
-    }
+    run_as!(user::Mode::Real, Result<()>, {
+        let runtime = RUNTIME_DIR.join(".flatpak").join(&instance);
+        if runtime.exists() {
+            fs::remove_dir_all(runtime)?;
+        }
 
-    if user_dir.exists() {
-        debug!("Removing instance at {user_dir:?}");
-        fs::remove_dir_all(user_dir)?;
-    }
+        if user_dir.exists() {
+            debug!("Removing instance at {user_dir:?}");
+            fs::remove_dir_all(user_dir)?;
+        }
 
-    restore(save)?;
+        Ok(())
+    })?;
+
     debug!("Goodbye!");
     Ok(())
 }

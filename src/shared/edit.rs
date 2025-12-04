@@ -9,8 +9,9 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use user::run_as;
 
-use crate::aux::env::EDITOR;
+use crate::shared::env::EDITOR;
 
 /// An error for issues around Profiles.
 #[derive(Debug)]
@@ -96,10 +97,13 @@ impl From<dialoguer::Error> for Error {
         Error::Dialog(val)
     }
 }
+impl From<nix::errno::Errno> for Error {
+    fn from(val: nix::errno::Errno) -> Self {
+        Error::Errno("Generic Error", val)
+    }
+}
 
 pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, Error> {
-    let saved = user::save().map_err(|e| Error::Errno("Get User", e))?;
-
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
@@ -108,7 +112,6 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         .suffix(".toml")
         .tempfile()
         .map_err(|e| Error::Io("open temporary file", e))?;
-
     fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
     let original = fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
 
@@ -145,25 +148,22 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
                         .interact()?;
 
                     if !retry {
-                        user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
                         return Ok(Some(()));
                     }
                 }
             },
             Err(e) => {
                 error!("Failed to read temporary profile: {e}");
-                user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
                 return Ok(None);
             }
         }
     };
-    user::set(user::Mode::Effective).map_err(|e| Error::Errno("Set user", e))?;
-    write!(
-        File::create(path).map_err(|e| Error::Io("write", e))?,
-        "{}",
-        toml::to_string(&buffer)?
-    )
-    .map_err(|e| Error::Io("write", e))?;
-    user::restore(saved).map_err(|e| Error::Errno("Set user", e))?;
+
+    run_as!(user::Mode::Effective, Result<(), Error>, {
+        write!(File::create(path).map_err(|e| Error::Io("write", e))?, "{}", toml::to_string(&buffer)?)
+            .map_err(|e| Error::Io("write", e))?;
+        Ok(())
+    })?;
+
     Ok(Some(()))
 }

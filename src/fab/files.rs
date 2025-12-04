@@ -1,6 +1,6 @@
 use crate::{
-    aux::profile::{FileMode, Profile},
     fab::localize_path,
+    shared::profile::{FileMode, Profile},
 };
 use anyhow::Result;
 use log::warn;
@@ -26,43 +26,41 @@ fn localize(
 }
 
 pub fn fabricate(profile: &mut Profile, handle: &Spawner, packaged: bool) -> Result<()> {
-    let saved = user::save()?;
-    user::set(user::Mode::Real)?;
+    user::run_as!(user::Mode::Real, {
+        if let Some(files) = &mut profile.files {
+            if let Some(mut user_files) = files.user.take() {
+                for mode in FileMode::iter() {
+                    if let Some(files) = user_files.remove(&mode) {
+                        files
+                            .into_par_iter()
+                            .try_for_each(|file| localize(mode, &file, true, handle, true))
+                            .ok();
+                    }
+                }
+            }
 
-    if let Some(files) = &mut profile.files {
-        if let Some(mut user_files) = files.user.take() {
-            for mode in FileMode::iter() {
-                if let Some(files) = user_files.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| localize(mode, &file, true, handle, true))
-                        .ok();
+            if let Some(mut system) = files.platform.take() {
+                for mode in FileMode::iter() {
+                    if let Some(files) = system.remove(&mode) {
+                        files
+                            .into_par_iter()
+                            .try_for_each(|file| localize(mode, &file, false, handle, true))
+                            .ok();
+                    }
+                }
+            }
+
+            if !packaged && let Some(mut system) = files.resources.take() {
+                for mode in FileMode::iter() {
+                    if let Some(files) = system.remove(&mode) {
+                        files
+                            .into_par_iter()
+                            .try_for_each(|file| localize(mode, &file, false, handle, false))
+                            .ok();
+                    }
                 }
             }
         }
-
-        if let Some(mut system) = files.platform.take() {
-            for mode in FileMode::iter() {
-                if let Some(files) = system.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| localize(mode, &file, false, handle, true))
-                        .ok();
-                }
-            }
-        }
-
-        if !packaged && let Some(mut system) = files.resources.take() {
-            for mode in FileMode::iter() {
-                if let Some(files) = system.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| localize(mode, &file, false, handle, false))
-                        .ok();
-                }
-            }
-        }
-    }
-    user::restore(saved)?;
-    Ok(())
+        Ok(())
+    })
 }

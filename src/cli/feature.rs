@@ -5,8 +5,9 @@ use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 use nix::unistd::getpid;
 use spawn::Spawner;
+use user::run_as;
 
-use crate::aux::{env::AT_HOME, feature::Feature};
+use crate::shared::{env::AT_HOME, feature::Feature};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -48,9 +49,7 @@ impl super::Run for Args {
                     return Err(anyhow!("Requested feature does not exist!"));
                 }
                 if let Some(parent) = feature.parent() {
-                    user::set(user::Mode::Effective)?;
-                    fs::create_dir_all(parent)?;
-                    user::revert()?;
+                    run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
                 }
                 fs::copy(AT_HOME.join("config").join("feature.toml"), &feature)?;
             } else if self.delete {
@@ -59,8 +58,7 @@ impl super::Run for Args {
                     .interact()?;
                 if confirm {
                     println!("Deleting {feature:?}");
-                    user::set(user::Mode::Effective)?;
-                    fs::remove_file(&feature)?;
+                    run_as!(user::Mode::Effective, fs::remove_file(&feature))?;
                 }
                 return Ok(());
             }
@@ -68,8 +66,7 @@ impl super::Run for Args {
             // Edit it.
             if Feature::edit(&feature)?.is_none() && new {
                 // If there was no modifications, delete the empty feature
-                user::set(user::Mode::Effective)?;
-                fs::remove_file(feature)?;
+                run_as!(user::Mode::Effective, fs::remove_file(feature))?;
             }
         }
         Ok(())

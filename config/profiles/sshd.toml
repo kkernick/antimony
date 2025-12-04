@@ -1,0 +1,29 @@
+# Some notes on using this profile:
+# 1.  You will need to create your /etc/ssh directory yourself.
+#     Place it in ~/.local/share/antimony/sshd/etc. You'll need to create
+#     keys (ssh-keygen -A), and a configuration file. Note that because
+#     Antimony profiles do not have any superuser privilege, you'll need
+#     to pick a port that isn't reserved
+# 2.  You will need to generate a keypair to sign in. Antimony has no ability
+#     to store the shadow file, nor can SSH verify passwords in the sandbox.
+#     Logging in will require using a public key. Create a keypair, then
+#     create a configuration folder in ~/.local/share/antimony/home/.ssh
+#     From there, add the public key to the authorized_keys file.
+# 3.  This profile doesn't have anything more than necessary to log in
+#     with the above steps. Add whatever files and resources you'll need in this
+#     sandbox.
+# 4.  Use configurations! Instead of having a global SSH profile at sshd, create
+#     a subfolder for each configuration, with its own /etc/ssh, authorized_keys,
+#     etc. Then, you can pull in what files you need, and even listen on different
+#     ports so multiple configurations can be up simultaneously!
+
+features = ["network", "passwd"]
+binaries = ["sh"]
+libraries = ["/usr/lib/ssh"]
+
+[home]
+name = "sshd/home"
+policy = "Enabled"
+
+[files.resources]
+ReadOnly = ["$XDG_DATA_HOME/antimony/sshd/etc=/etc/ssh"]

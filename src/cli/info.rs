@@ -1,6 +1,6 @@
 //! Get info about the installed configuration.
-use crate::aux::{
-    env::{AT_HOME, USER_NAME},
+use crate::shared::{
+    env::{AT_HOME, CACHE_DIR, USER_NAME},
     feature::Feature,
     profile::{self, Profile},
     syscalls,
@@ -51,7 +51,7 @@ impl super::Run for Args {
 
                     match Profile::new(path) {
                         Ok(mut profile) => {
-                            let sys_dir = AT_HOME.join("cache").join(profile.hash_str());
+                            let sys_dir = CACHE_DIR.join(profile.hash_str());
                             let user_dir = sys_dir.join(USER_NAME.as_str());
                             if verbosity > 1 {
                                 profile = profile.integrate(name, &user_dir)?;

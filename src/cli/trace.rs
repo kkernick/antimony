@@ -1,8 +1,8 @@
 //! Run the sandbox under strace to locate missing files.
 use crate::{
-    aux::{env::AT_HOME, feature::Feature, profile::FileMode},
     fab::{lib::get_wildcards, resolve},
     setup::setup,
+    shared::{env::AT_HOME, feature::Feature, profile::FileMode},
 };
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
@@ -18,9 +18,10 @@ use std::{
 };
 
 /// The mode to run strace under
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum, Default)]
 pub enum Mode {
     /// Only trace syscalls that return errors.
+    #[default]
     Errors,
 
     /// Trace all syscalls, even those that succeed.
@@ -28,7 +29,7 @@ pub enum Mode {
     All,
 }
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args, Debug, Default)]
 pub struct Args {
     /// The name of the profile
     pub profile: String,
@@ -45,16 +46,21 @@ pub struct Args {
     #[arg(short, long)]
     pub config: Option<String>,
 
-    /// Arguments to pass to strace
+    /// Arguments to pass to strace directly
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub trace_args: Option<Vec<String>>,
+
+    /// Arguments to pass to the sandbox application.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }
 
 impl super::Run for Args {
-    fn run(self) -> Result<()> {
+    fn run(mut self) -> Result<()> {
         let mut args = super::run::Args {
             binaries: Some(vec!["strace".to_string()]),
             config: self.config.clone(),
+            passthrough: self.passthrough.take(),
             ..Default::default()
         };
 
@@ -75,16 +81,16 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
     let handle = info.handle.args([
         "strace",
         match args.mode {
-            Mode::Errors => "-fyZ",
-            Mode::All => "-fy",
+            Mode::Errors => "-ffyYZ",
+            Mode::All => "-ffyY",
         },
         "-v",
         "-s",
         "256",
     ])?;
 
-    if let Some(passthrough) = args.passthrough.take() {
-        handle.args_i(passthrough)?;
+    if let Some(args) = args.trace_args.take() {
+        handle.args_i(args)?;
     };
 
     let mut handle = handle

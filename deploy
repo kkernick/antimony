@@ -1,20 +1,31 @@
 #!/bin/bash
+set -e
 
 RECIPE="${1}"
 if [[ -z $RECIPE ]]; then
   RECIPE="release"
 fi
 
-cargo build --profile $RECIPE --workspace
-
-if [[ "${RECIPE}" == "dev" ]]; then
-    RECIPE="debug"
+if [[ "${RECIPE}" == "pgo" ]]; then
+  ./pgo
+  RECIPE="x86_64-unknown-linux-gnu/release"
+elif [[ "${RECIPE}" == "bolt" ]]; then
+  ./bolt
+  RECIPE="x86_64-unknown-linux-gnu/release"
+  SUFFIX="-bolt-optimized"
+else
+  RUSTFLAGS="-C target-cpu=native" cargo build --profile $RECIPE --workspace
+  if [[ "${RECIPE}" == "dev" ]]; then
+      RECIPE="debug"
+  fi
 fi
 
 sudo rm -v /usr/bin/antimony*
 
 echo "Copying binaries"
-sudo cp -v target/$RECIPE/antimony{,-spawn,-monitor} /usr/bin
+sudo cp -v "target/$RECIPE/antimony${SUFFIX}" "/usr/bin/antimony"
+sudo cp -v "target/$RECIPE/antimony-spawn${SUFFIX}" "/usr/bin/antimony-spawn"
+sudo cp -v "target/$RECIPE/antimony-monitor${SUFFIX}" "/usr/bin/antimony-monitor"
 
 sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
 

@@ -1,5 +1,5 @@
 //! Tools and definitions related to paths.
-use crate::aux::env::{AT_HOME, PATH, PWD, RUNTIME_DIR};
+use crate::shared::env::{CACHE_DIR, PATH, PWD, RUNTIME_DIR};
 use std::path::PathBuf;
 use which::which_in;
 
@@ -18,5 +18,5 @@ pub fn user_dir(instance: &str) -> PathBuf {
 
 /// Get where direct files should be placed.
 pub fn direct_path(file: &str) -> PathBuf {
-    AT_HOME.join("cache").join(".direct").join(&file[1..])
+    CACHE_DIR.join(".direct").join(&file[1..])
 }

@@ -1,7 +1,8 @@
 //! Edit an existing profile.
-use crate::{aux::profile::Profile, cli::default};
+use crate::{cli::default, shared::profile::Profile};
 use anyhow::Result;
 use std::fs;
+use user::run_as;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -20,9 +21,7 @@ impl super::Run for Args {
             if new {
                 let source = Profile::path(&self.profile)?;
                 if let Some(parent) = user.parent() {
-                    user::set(user::Mode::Effective)?;
-                    fs::create_dir_all(parent)?;
-                    user::revert()?;
+                    run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
                 }
                 fs::copy(source, &user)?;
             }
@@ -31,8 +30,7 @@ impl super::Run for Args {
             if Profile::edit(&user)?.is_none() && new {
                 // If there was no modifications, delete the profile
                 // since it's identical to the system one.
-                user::set(user::Mode::Effective)?;
-                fs::remove_file(user)?;
+                run_as!(user::Mode::Effective, fs::remove_file(user))?;
             }
             Ok(())
         }

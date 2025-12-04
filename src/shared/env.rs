@@ -4,7 +4,9 @@ use log::{debug, warn};
 use once_cell::sync::Lazy;
 use spawn::Spawner;
 use std::{
-    env, fs,
+    env::{self, temp_dir},
+    fs,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 use which::which;
@@ -44,7 +46,7 @@ pub static PATH: Lazy<String> = Lazy::new(|| {
         .join(":")
 });
 
-/// Antimony's home folder is where configuration and caches are stored.
+/// Antimony's home folder is where configuration is stored
 pub static AT_HOME: Lazy<PathBuf> = Lazy::new(|| {
     let path = PathBuf::from(env::var("AT_HOME").unwrap_or("/usr/share/antimony".to_string()));
     if !path.starts_with("/usr/") {
@@ -56,6 +58,30 @@ pub static AT_HOME: Lazy<PathBuf> = Lazy::new(|| {
     }
 
     path
+});
+
+/// THe Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
+pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let mut cache_dir = AT_HOME.join("cache");
+    let writeable = if !cache_dir.exists() {
+        fs::create_dir(&cache_dir).is_ok()
+    } else {
+        fs::File::create(cache_dir.join(".test")).is_ok()
+    };
+
+    if !writeable {
+        debug!("Cache dir not-writable. Pivoting to /tmp");
+        cache_dir = temp_dir().join("antimony");
+        let save = user::save().expect("Failed to save user!");
+        user::set(user::Mode::Effective).expect("Failed to change user!");
+        if !cache_dir.exists() {
+            fs::create_dir(&cache_dir).unwrap();
+        }
+        fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))
+            .expect("Failed to set permissions for cache!");
+        user::restore(save).expect("Failed to restore user!");
+    }
+    cache_dir
 });
 
 /// The user's home folder.

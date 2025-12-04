@@ -1,4 +1,4 @@
-use crate::aux::{profile::SeccompPolicy, syscalls};
+use crate::shared::{profile::SeccompPolicy, syscalls};
 use anyhow::Result;
 use log::debug;
 use spawn::Spawner;

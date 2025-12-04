@@ -1,5 +1,5 @@
 //! Reset a user profile back to the system default.
-use crate::aux::{
+use crate::shared::{
     env::{AT_HOME, USER_NAME},
     profile::Profile,
 };

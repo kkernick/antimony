@@ -1,5 +1,5 @@
 //! Modify the SECCOMP Database.
-use crate::aux::{
+use crate::shared::{
     env::{AT_HOME, DATA_HOME},
     syscalls::{self, DB_POOL},
 };

@@ -1,0 +1,21 @@
+#!/bin/bash
+# Requires
+# rustup component add rust-src --toolchain nightly
+# rustup component add llvm-tools-preview
+# cargo install cargo-pgo
+
+RUSTFLAGS="-Ctarget-cpu=native"
+ARGS="--bin antimony"
+
+echo "Building Profiling Binary"
+ANTIMONY=$(cargo pgo build -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
+
+echo "Profiling"
+$ANTIMONY refresh --hard
+
+for profile in $(ls ~/.local/bin/); do
+    ./bench $profile $ANTIMONY 1
+done
+
+echo "Building Final PGO"
+cargo pgo optimize build -- --workspace

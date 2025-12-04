@@ -85,7 +85,7 @@ impl fmt::Display for Error {
 /// 4. Call `Notifier::handle()`
 ///
 /// Then, you should call `execve()`.
-/// See `antimony::aux::syscalls::Notifier` for a socket implementation.
+/// See `antimony::shared::syscalls::Notifier` for a socket implementation.
 #[cfg(feature = "notify")]
 pub trait Notifier: Send + 'static {
     /// Return the list of syscalls that are used by the Notifier itself

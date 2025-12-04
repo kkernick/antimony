@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 use log::warn;
 
-use crate::aux::{
+use crate::shared::{
     env::{AT_HOME, USER_NAME},
     profile::Profile,
 };

@@ -1,4 +1,4 @@
-use crate::aux::profile::Profile;
+use crate::shared::profile::Profile;
 use std::path::Path;
 
 pub fn fabricate(profile: &mut Profile, name: &str) {

@@ -37,8 +37,10 @@ _arguments "${_arguments_options[@]}" : \
 '*--inherits=[Additional inheritance]:INHERITS:_default' \
 '--home-policy=[Override the home policy]:HOME_POLICY:((none\:"Do not use a home profile"
 enabled\:"The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox"
+read-only\:"Mount the Home Folder as a Read-Only overlay"
 overlay\:"Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn'\''t typically support multiple instances (Zed, Chromium, etc)"))' \
 '--home-name=[Override the home name]:HOME_NAME:_default' \
+'--home-path=[Override the home mount]:HOME_PATH:_default' \
 '--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
 permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"
@@ -135,6 +137,7 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 '--remove[Undo integration for the profile]' \
 '-s[Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don'\''t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option]' \
 '--shadow[Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don'\''t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option]' \
+'--create-desktop[Create a desktop file if one does not exist]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':profile -- The name of the profile:_default' \
@@ -151,6 +154,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
+'*--trace-args=[Arguments to pass to strace directly]:TRACE_ARGS:_default' \
 '-r[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
 '--report[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -158,7 +162,7 @@ _arguments "${_arguments_options[@]}" : \
 ':profile -- The name of the profile:_default' \
 ':mode -- What to trace:((errors\:"Only trace syscalls that return errors"
 all\:"Trace all syscalls, even those that succeed. Useful to see the context in which an error occurred"))' \
-'*::passthrough -- Arguments to pass to strace:_default' \
+'*::passthrough -- Arguments to pass to the sandbox application:_default' \
 && ret=0
 ;;
 (info)

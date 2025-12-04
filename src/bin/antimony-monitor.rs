@@ -5,7 +5,7 @@
 //! *Enforcing*, the logged syscalls are the only ones permitted, and the
 //! `Filter` is loaded immediately.
 
-use antimony::aux::{
+use antimony::shared::{
     env::{DATA_HOME, RUNTIME_DIR},
     profile::SeccompPolicy,
     syscalls,

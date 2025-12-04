@@ -2,8 +2,20 @@
 
 Antimony is *fast*. This document outlines the techniques used to optimize a very slow process, and to highlight Antimony’s improvements over its predecessors.
 
-
 ## Comparisons
+
+### Configuration
+
+The configuration of Antimony’s installation can have a profound effect on performance. These are divided into *Build Time* configuration, and *Run Time* configuration.
+
+1. *Build Time*: Choosing to compile Antimony yourself, and using `-Ctarget-cpu=native` in your `RUSTFLAGS` optimizing the resulting binary for your architecture, and can drastically improve performance. Antimony publishes binaries for each release, but these are tailored to work on all x86 machines. Additionally, further optimization can be squeezed out of the binary for your particular workflow and profiles using the `pgo` or `bolt` helper scripts (Which require additional dependencies).
+2. *Run Time*: The most important performance consideration is the privileges given to the `antimony` executable, and the location of `AT_HOME`. By default, Antimony creates hard-links for library files in a cache located within `AT_HOME`. If it cannot do this, such as if its lacking the `FOWNER` capability, or if `AT_HOME` isn’t on the same partition as `/usr/lib`, then it will create copies in `/tmp`. This has a drastic toll on performance.
+
+>[!warning]
+>Creating files in `/tmp` can have security considerations on top of performance if Antimony is not `setuid`. If running as a regular user, Antimony’s cache folder will globally accessible to all programs running as the user. With `setuid`, Antimony can protect write-access to to its temporary cache.
+
+### Older Implementations
+
 Antimony is the final iteration of a several year long object to create fast, usable, and function sandboxes for Linux. This project initially started as a Shell Script, borrowing from an example provided on the [Arch Wiki](https://wiki.archlinux.org/title/Bubblewrap) describing a way to coordinate a `bubblewrap` invocation with `xdg-dbus-proxy` to get Portals to work outside of Flatpak. That script eventually became too complicated, and turned into SB, a Python program. Speed and complexity eventually lead to a re-implementation in C++. 
 
 Antimony breaks off from SB (Only sharing a name and general goal), allowing a stark departure from the shell script roots. Despite that, all three programs serve the same purpose, and can thus be bench-marked against each other. 
@@ -78,4 +90,3 @@ SB++ introduced support for SECCOMP Filters, leveraging `bubblewrap`’s ability
 Antimony’s SECCOMP support is [much better](SECCOMP.md) than SB++’s, leveraging a custom built interface for the Notify framework to ensure more reliable, permission-less capturing. Part of this required using SECCOMP directly, rather than passing it to Bubblewrap, which allowed Bubblewrap itself to be confined. 
 
 Antimony uses an SQLite database to store syscall information—far faster than the naive file-based solution in earlier implementations—and can produce Filters faster than SB++ could, despite not caching it to disk. This is on top of superior logging and generation, and a more reliable storage medium via a database.
-

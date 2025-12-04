@@ -1,4 +1,4 @@
-use crate::aux::profile::Profile;
+use crate::shared::profile::Profile;
 use anyhow::Result;
 use rayon::prelude::*;
 use spawn::Spawner;

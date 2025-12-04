@@ -5,10 +5,11 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::Path,
 };
+use user::run_as;
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
 
-use crate::aux::env::PWD;
+use crate::shared::env::PWD;
 
 pub fn package(src: &Path, dst: &Path) -> Result<()> {
     let file = File::create(dst)?;
@@ -37,9 +38,11 @@ pub fn package(src: &Path, dst: &Path) -> Result<()> {
     }
     zip.finish()?;
 
-    user::set(user::Mode::Real)?;
-    copy(dst, PWD.join(dst.file_name().unwrap()))?;
-    user::revert()?;
+    run_as!(
+        user::Mode::Real,
+        io::Result<u64>,
+        copy(dst, PWD.join(dst.file_name().unwrap()))
+    )?;
     remove_file(dst)?;
     Ok(())
 }

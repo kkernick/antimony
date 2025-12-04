@@ -6,7 +6,7 @@ pub mod files;
 pub mod lib;
 pub mod ns;
 
-use crate::aux::env::HOME;
+use crate::shared::env::HOME;
 use std::{borrow::Cow, env, path::Path};
 
 pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {

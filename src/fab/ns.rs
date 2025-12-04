@@ -1,4 +1,4 @@
-use crate::aux::profile::{Namespace, Profile};
+use crate::shared::profile::{Namespace, Profile};
 use spawn::{SpawnError, Spawner};
 
 pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<(), SpawnError> {

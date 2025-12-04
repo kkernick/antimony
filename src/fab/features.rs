@@ -1,5 +1,5 @@
 use crate::{
-    aux::{
+    shared::{
         feature::Feature,
         profile::{FileMode, Profile},
     },
@@ -21,7 +21,7 @@ pub enum Error {
     InvalidBus(String),
 
     /// Feature error.
-    Feature(crate::aux::feature::Error),
+    Feature(crate::shared::feature::Error),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -1,4 +1,4 @@
-use crate::aux::env::HOME;
+use crate::shared::env::HOME;
 use log::debug;
 use rayon::prelude::*;
 

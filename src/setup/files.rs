@@ -1,6 +1,6 @@
 use crate::{
-    aux::{path::direct_path, profile::FileMode},
     fab::{localize_path, resolve_env},
+    shared::{path::direct_path, profile::FileMode},
 };
 use anyhow::Result;
 use log::debug;
@@ -11,7 +11,7 @@ use std::{
     fs::{self, File},
 };
 use strum::IntoEnumIterator;
-use user;
+use user::{self, run_as};
 
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
     handle.fd_arg_i("--file", File::open(file)?)?;
@@ -21,23 +21,19 @@ fn get_x(file: &str, handle: &Spawner) -> Result<()> {
 }
 
 pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
-    let saved = user::save()?;
-    user::set(user::Mode::Effective)?;
+    run_as!(user::Mode::Effective, {
+        let path = direct_path(file);
+        if !path.exists() {
+            fs::create_dir_all(path.parent().unwrap())?;
+            let contents = resolve_env(Cow::Borrowed(&contents));
+            fs::write(&path, contents.as_ref())?;
+        }
 
-    let path = direct_path(file);
-
-    if !path.exists() {
-        fs::create_dir_all(path.parent().unwrap())?;
-        let contents = resolve_env(Cow::Borrowed(&contents));
-        fs::write(&path, contents.as_ref())?;
-    }
-
-    handle.fd_arg_i("--file", File::open(path)?)?;
-    handle.arg_i(file)?;
-    handle.args_i(["--chmod", op.chmod(), file])?;
-
-    user::restore(saved)?;
-    Ok(())
+        handle.fd_arg_i("--file", File::open(path)?)?;
+        handle.arg_i(file)?;
+        handle.args_i(["--chmod", op.chmod(), file])?;
+        Ok(())
+    })
 }
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
@@ -47,13 +43,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         if let Some(user) = &mut files.user
             && let Some(exe) = user.remove(&FileMode::Executable)
         {
-            user::set(user::Mode::Real)?;
-            exe.into_par_iter().try_for_each(|file| {
-                let (_, dest) = localize_path(&file, true);
-                get_x(&dest, &args.handle)
-            })?;
-
-            user::revert()?;
+            run_as!(
+                user::Mode::Real,
+                exe.into_par_iter().try_for_each(|file| {
+                    let (_, dest) = localize_path(&file, true);
+                    get_x(&dest, &args.handle)
+                })
+            )?;
         }
         if let Some(system) = &mut files.platform
             && let Some(exe) = system.remove(&FileMode::Executable)

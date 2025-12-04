@@ -1,7 +1,7 @@
 //!  Features are miniature profiles used by the latter for common functionality.
 
 use super::profile::{Ipc, Namespace};
-use crate::aux::{
+use crate::shared::{
     edit,
     env::{AT_HOME, PWD},
     profile::Files,

@@ -1,0 +1,9 @@
+features = ["electron", "kf6", "tray"]
+libraries = ["libsyncthing*"]
+namespaces = ["Net"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["Notifications"]

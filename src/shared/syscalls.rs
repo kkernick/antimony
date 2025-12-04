@@ -1,4 +1,4 @@
-use crate::aux::{
+use crate::shared::{
     env::AT_HOME,
     path::{user_dir, which_exclude},
     profile::SeccompPolicy,
@@ -28,6 +28,7 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use user::run_as;
 
 /// Connection to the Database
 pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
@@ -410,32 +411,22 @@ pub fn new(
         let hash = format!("{}", s.finish());
 
         debug!("Enforcing BPF");
-        let filter_bpf = AT_HOME
+        let bpf = AT_HOME
             .join("cache")
             .join(".seccomp")
             .join(format!("{hash}.bpf"));
 
-        if let Some(parent) = filter_bpf.parent()
+        if let Some(parent) = bpf.parent()
             && !parent.exists()
         {
-            let save = user::save()?;
-            user::set(user::Mode::Effective)?;
-            fs::create_dir_all(parent)?;
-            user::restore(save)?;
+            run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
         }
 
-        Some(if !filter_bpf.exists() {
+        Some(if !bpf.exists() {
             debug!("Writing filter...");
-
-            let saved = user::save()?;
-            user::set(user::Mode::Effective)?;
-
-            let fd = filter.write(&filter_bpf)?;
-
-            user::restore(saved)?;
-            fd
+            run_as!(user::Mode::Effective, filter.write(&bpf))?
         } else {
-            File::open(&filter_bpf)?.into()
+            File::open(&bpf)?.into()
         })
     } else {
         None

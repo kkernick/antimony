@@ -1,4 +1,4 @@
-use crate::aux::{
+use crate::shared::{
     env::{DATA_HOME, OVERLAY},
     profile::HomePolicy,
 };
@@ -16,33 +16,53 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         match home.policy.unwrap_or_default() {
             HomePolicy::None => Ok(None),
             policy => {
-                let saved = user::save()?;
-                user::set(user::Mode::Real)?;
-                debug!("Setting up home at {home_dir:?}");
-                fs::create_dir_all(&home_dir)?;
-
-                debug!("Adding args");
                 let home_str = home_dir.to_string_lossy();
-                match policy {
-                    HomePolicy::Enabled => {
-                        args.handle
-                            .args_i(["--bind", &home_str, "/home/antimony"])?;
-                    }
-                    _ => {
-                        if *OVERLAY {
-                            args.handle.args_i([
-                                "--overlay-src",
-                                &home_str,
-                                "--tmp-overlay",
-                                "/home/antimony",
-                            ])?;
-                        } else {
-                            error!("Bubblewrap version too old for overlays!");
-                            exit(1);
+                user::run_as!(user::Mode::Real, Result<()>, {
+                    debug!("Setting up home at {home_dir:?}");
+                    fs::create_dir_all(&home_dir)?;
+
+                    debug!("Adding args");
+
+                    let dest = match &home.path {
+                        Some(path) => path,
+                        None => "/home/antimony",
+                    };
+
+                    match policy {
+                        HomePolicy::Enabled => {
+                            args.handle.args_i(["--bind", &home_str, dest])?;
+                        }
+                        _ => {
+                            if *OVERLAY {
+                                if policy == HomePolicy::Overlay {
+                                    #[rustfmt::skip]
+                                args.handle.args_i([
+                                    "--overlay-src", &home_str,
+                                    "--tmp-overlay", dest,
+                                ])?;
+                                } else {
+                                    let work = args.sys_dir.join("work");
+                                    let work_str = work.to_string_lossy();
+                                    user::run_as!(
+                                        user::Mode::Effective,
+                                        fs::create_dir_all(&work)
+                                    )?;
+
+                                    #[rustfmt::skip]
+                                args.handle.args_i([
+                                    "--overlay-src", &work_str,
+                                    "--overlay-src", &home_str,
+                                    "--ro-overlay", dest,
+                                ])?;
+                                }
+                            } else {
+                                error!("Bubblewrap version too old for overlays!");
+                                exit(1);
+                            }
                         }
                     }
-                };
-                user::restore(saved)?;
+                    Ok(())
+                })?;
                 Ok(Some(home_str.into_owned()))
             }
         }

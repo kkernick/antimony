@@ -1,11 +1,11 @@
 use crate::{
-    aux::{
-        env::{AT_HOME, RUNTIME_DIR, RUNTIME_STR},
+    fab::lib::{add_sof, get_libraries},
+    shared::{
+        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
         profile::{Namespace, Portal, Profile},
         syscalls,
     },
-    fab::lib::{add_sof, get_libraries},
 };
 use anyhow::Result;
 use inotify::WatchMask;
@@ -19,7 +19,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use user;
+use user::{self, run_as};
 use which::which;
 
 pub fn run(
@@ -29,32 +29,30 @@ pub fn run(
     info: &Path,
     id: &str,
 ) -> Result<Spawner> {
-    let saved = user::save()?;
-
     let runtime = RUNTIME_DIR.to_string_lossy();
     let resolve = which("xdg-dbus-proxy")?.to_string_lossy().into_owned();
-
-    user::set(user::Mode::Effective)?;
-    // Create an SOF for the proxy.
-    // It's shared between every application and instance.
-    // Performed before we drop to the user.
-    let sof = Path::new(AT_HOME.as_path()).join("cache").join(".proxy");
-
-    if !sof.exists() {
-        let libraries = get_libraries(Cow::Borrowed(&resolve))?;
-
-        libraries
-            .into_par_iter()
-            .try_for_each(|library| add_sof(&sof, library))?;
-    }
-    user::set(user::Mode::Real)?;
-
-    let sof_str = sof.to_string_lossy();
+    let sof = CACHE_DIR.join(".proxy");
 
     debug!("Creating proxy directory");
     let proxy = user_dir(instance).join("proxy");
-    fs::create_dir_all(&proxy)?;
+    run_as!(user::Mode::Real, fs::create_dir_all(&proxy))?;
 
+    debug!("Creating SOF");
+    run_as!(user::Mode::Effective, Result<()>, {
+        // Create an SOF for the proxy.
+        // It's shared between every application and instance.
+        // Performed before we drop to the user.
+        if !sof.exists() {
+            let libraries = get_libraries(Cow::Borrowed(&resolve))?;
+
+            libraries
+                .into_par_iter()
+                .try_for_each(|library| add_sof(&sof, Cow::Owned(library)))?;
+        }
+        Ok(())
+    })?;
+
+    let sof_str = sof.to_string_lossy();
     #[rustfmt::skip]
     let mut proxy = Spawner::new("/usr/bin/bwrap")
         .mode(user::Mode::Real).args([
@@ -74,7 +72,7 @@ pub fn run(
         ])?;
 
     let app_dir = RUNTIME_DIR.join("app").join(id);
-    fs::create_dir_all(&app_dir)?;
+    run_as!(user::Mode::Real, fs::create_dir_all(&app_dir))?;
 
     #[rustfmt::skip]
     proxy.args_i([
@@ -109,8 +107,7 @@ pub fn run(
 
     let cache = sys_dir.join("proxy.cache");
     if cache.exists() {
-        user::set(user::Mode::Effective)?;
-        proxy.cache_read(&cache)?;
+        run_as!(user::Mode::Effective, proxy.cache_read(&cache))?;
     } else {
         proxy.cache_start()?;
 
@@ -155,12 +152,8 @@ pub fn run(
                 proxy.arg_i(format!("--call={portal}"))?;
             }
         }
-
-        user::set(user::Mode::Effective)?;
-        proxy.cache_write(&cache)?;
+        run_as!(user::Mode::Effective, proxy.cache_write(&cache))?;
     }
-
-    user::restore(saved)?;
     Ok(proxy)
 }
 
@@ -182,52 +175,56 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
         let instance = &args.instance;
         let id = args.profile.id(&args.name);
+        let user_dir_str = user_dir(&args.instance).to_string_lossy().into_owned();
+        let info = user_dir(instance).join(".flatpak-info");
 
         // Create the flatpak-info
-        user::set(user::Mode::Real)?;
-        debug!("Creating flatpak info");
-        let info = user_dir(instance).join(".flatpak-info");
-        let out = fs::File::create_new(&info)?;
+        run_as!(user::Mode::Real, Result<()>, {
+            debug!("Creating flatpak info");
+            let out = fs::File::create_new(&info)?;
 
-        // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
-        #[rustfmt::skip]
-        let mut info_contents: Vec<String> = vec![
-            "[Application]",
-            &format!("name={id}"),
-            "[Instance]",
-            &format!("instance-id={instance}"),
-            "app-path=/usr",
-            "[Context]",
-            "sockets=session-bus;system-bus;",
-        ].into_iter().map(|e| e.to_string()).collect();
-        if let Some(ns) = &args.profile.namespaces
-            && ns.contains(&Namespace::Net)
-        {
-            info_contents.push("shared=network;".to_string());
-        }
-        write!(&out, "{}", info_contents.join("\n"))?;
+            // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
+            #[rustfmt::skip]
+            let mut info_contents: Vec<String> = vec![
+                "[Application]",
+                &format!("name={id}"),
+                "[Instance]",
+                &format!("instance-id={instance}"),
+                "app-path=/usr",
+                "[Context]",
+                "sockets=session-bus;system-bus;",
+            ].into_iter().map(|e| e.to_string()).collect();
+            if let Some(ns) = &args.profile.namespaces
+                && ns.contains(&Namespace::Net)
+            {
+                info_contents.push("shared=network;".to_string());
+            }
+            write!(&out, "{}", info_contents.join("\n"))?;
 
-        // Add the required files.
-        let user_dir_str = user_dir(&args.instance).to_string_lossy().into_owned();
-        #[rustfmt::skip]
-        args.handle.args_i([
-            "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
-            "--ro-bind", "/run/dbus", "/run/dbus",
-            "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
-            "--ro-bind", &format!("{user_dir_str}/.flatpak-info"), "/.flatpak-info",
-            "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-        ])?;
+            // Add the required files.
+            #[rustfmt::skip]
+            args.handle.args_i([
+                "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
+                "--ro-bind", "/run/dbus", "/run/dbus",
+                "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
+                "--ro-bind", &format!("{user_dir_str}/.flatpak-info"), "/.flatpak-info",
+                "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
+            ])?;
+            Ok(())
+        })?;
 
-        // Add the bwrapinfo status.
-        debug!("Creating flatpak directory");
-        let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
-        fs::create_dir_all(&flatpak_dir)?;
-        args.handle.fd_arg_i(
-            "--json-status-fd",
-            File::create(flatpak_dir.join("bwrapinfo.json"))?,
-        )?;
-        user::revert()?;
+        run_as!(user::Mode::Real, Result<()>, {
+            debug!("Creating flatpak directory");
+            let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
+            fs::create_dir_all(&flatpak_dir)?;
+            args.handle.fd_arg_i(
+                "--json-status-fd",
+                File::create(flatpak_dir.join("bwrapinfo.json"))?,
+            )?;
+            Ok(())
+        })?;
 
+        debug!("Setting up user bus");
         let user_bus = ipc.user_bus.unwrap_or(false);
         // Either mount the bus directly
         if user_bus {
@@ -247,21 +244,18 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             ])?;
 
             if !args.args.dry {
-                user::set(user::Mode::Real)?;
-                if !args.args.dry {
+                run_as!(user::Mode::Real, Result<()>, {
                     debug!("Creating proxy watch");
                     args.watches.insert(
                         args.inotify
                             .watches()
                             .add(user_dir(&args.instance).join("proxy"), WatchMask::CREATE)?,
                     );
-                }
-                user::revert()?;
+                    Ok(())
+                })?;
                 args.handle.associate(proxy.spawn()?);
             }
         }
     }
-
-    user::revert()?;
     Ok(())
 }

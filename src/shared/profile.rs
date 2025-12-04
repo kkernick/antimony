@@ -1,13 +1,13 @@
 //! The Profile defines what application should be run, and what features it needs
 //! to function properly.
 use crate::{
-    aux::{
+    cli,
+    fab::{self, lib::get_wildcards, resolve},
+    shared::{
         edit,
         env::{AT_HOME, PWD, USER_NAME},
         path::which_exclude,
     },
-    cli,
-    fab::{self, lib::get_wildcards, resolve},
 };
 use clap::ValueEnum;
 use console::style;
@@ -651,18 +651,7 @@ impl Profile {
             }
 
             if let Some(hooks) = &self.hooks {
-                if let Some(pre) = &hooks.pre {
-                    println!("Pre-Hooks:");
-                    for hook in pre {
-                        println!("{hook:?}");
-                    }
-                }
-                if let Some(post) = &hooks.post {
-                    println!("Post-Hooks:");
-                    for hook in post {
-                        println!("{hook:?}");
-                    }
-                }
+                hooks.info();
             }
         }
     }
@@ -713,6 +702,9 @@ pub enum HookError {
 
     /// Error handling the hook
     Handle(HandleError),
+
+    /// Error for the Parent not being provided the correct handle
+    Parent,
 }
 impl fmt::Display for HookError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -722,6 +714,7 @@ impl fmt::Display for HookError {
             Self::Fail(e) => write!(f, "Hooks exited with error code {e}"),
             Self::Spawn(e) => write!(f, "Error spawning hook: {e}"),
             Self::Handle(e) => write!(f, "Error handling the hook: {e}"),
+            Self::Parent => write!(f, "Parent is missing sandbox handle!"),
         }
     }
 }
@@ -754,12 +747,35 @@ pub struct Hooks {
 
     /// Post-Hooks are run on cleanup.
     pub post: Option<Vec<Hook>>,
+
+    /// The parent Hook is an Attached Pre-Hook who controls the lifespan of the
+    /// sandbox. When the parent dies, the sandbox does.
+    pub parent: Option<Hook>,
 }
 impl Hooks {
     /// Merge two IPC sets together.
     pub fn merge(&mut self, hooks: Self) {
         append(&mut self.pre, hooks.pre);
         append(&mut self.post, hooks.post);
+
+        if self.parent.is_none() {
+            self.parent = hooks.parent;
+        }
+    }
+
+    pub fn info(&self) {
+        if let Some(pre) = &self.pre {
+            println!("\tPre-Hooks");
+            for hook in pre {
+                hook.info();
+            }
+        }
+        if let Some(post) = &self.post {
+            println!("\tPost-Hooks");
+            for hook in post {
+                hook.info();
+            }
+        }
     }
 }
 
@@ -778,6 +794,9 @@ pub struct Hook {
     /// The raw content of a shell script. If both path and content are defined, path is used.
     pub content: Option<String>,
 
+    /// A list of arguments to be passed to the hook
+    pub args: Option<Vec<String>>,
+
     /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside
     /// the sandbox. If false, the program waits for the hook to terminate before launching
     /// the sandbox.
@@ -792,11 +811,12 @@ pub struct Hook {
 impl Hook {
     pub fn process(
         self,
-        main: Option<&mut Spawner>,
+        main: Option<Spawner>,
         name: &str,
         cache: &str,
         home: &Option<String>,
-    ) -> Result<(), HookError> {
+        parent: bool,
+    ) -> Result<Option<Spawner>, HookError> {
         let mut handle = if let Some(path) = self.path {
             Spawner::new(path)
         } else if let Some(content) = self.content {
@@ -809,24 +829,64 @@ impl Hook {
         handle.env_i(format!("ANTIMONY_CACHE={cache}"))?;
         handle.mode_i(user::Mode::Real);
 
+        if let Some(args) = self.args {
+            handle.args_i(args)?;
+        }
+
         if let Some(home) = home {
             handle.env_i(format!("ANTIMONY_HOME={home}"))?;
         }
 
-        let mut handle = handle.spawn()?;
-        if self.attach.unwrap_or(false) {
+        if parent {
             if let Some(main) = main {
-                main.associate(handle);
+                handle.associate(main.spawn()?);
+                Ok(Some(handle))
             } else {
-                return Err(HookError::Attach);
+                Err(HookError::Parent)
             }
         } else {
-            let code = handle.wait()?;
-            if code != 0 && !self.can_fail.unwrap_or(false) {
-                return Err(HookError::Fail(code));
+            let mut handle = handle.spawn()?;
+            if self.attach.unwrap_or(false) {
+                if let Some(mut m) = main {
+                    m.associate(handle);
+                    Ok(Some(m))
+                } else {
+                    Err(HookError::Attach)
+                }
+            } else {
+                let code = handle.wait()?;
+                if code != 0 && !self.can_fail.unwrap_or(false) {
+                    return Err(HookError::Fail(code));
+                }
+                Ok(main)
             }
         }
-        Ok(())
+    }
+
+    pub fn info(&self) {
+        if self.content.is_some() {
+            print!("\t\t/usr/bin/bash -c ...")
+        } else if let Some(path) = &self.path {
+            print!("\t\t{path} ")
+        }
+
+        if let Some(args) = &self.args {
+            for arg in args {
+                print!("{arg} ")
+            }
+        }
+        println!();
+        if self.can_fail.unwrap_or(false) {
+            println!("\t\t\t-> Non-Failing")
+        }
+
+        if self.env.unwrap_or(false) {
+            println!("\t\t\t-> Environment Aware")
+        }
+
+        if self.attach.unwrap_or(false) {
+            println!("\t\t\t-> Attached")
+        }
     }
 }
 
@@ -850,8 +910,15 @@ pub enum SeccompPolicy {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Default)]
 pub struct Home {
+    /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
+
+    /// How to mount the home
     pub policy: Option<HomePolicy>,
+
+    /// Where to mount the home within the sandbox. Defaults to ~/antimony
+    /// Changing this feature requires overlays.
+    pub path: Option<String>,
 }
 impl Home {
     pub fn merge(&mut self, home: Self) {
@@ -861,21 +928,29 @@ impl Home {
         if self.policy.is_none() {
             self.policy = home.policy;
         }
+        if self.path.is_none() {
+            self.path = home.path;
+        }
     }
 
     pub fn from_args(args: &mut cli::run::Args) -> Self {
         Self {
             name: args.home_name.take(),
             policy: args.home_policy.take(),
+            path: args.home_path.take(),
         }
     }
 
     pub fn info(&self, name: &str) {
         println!(
-            "\t\t- Home Path: ~/.local/share/antimony/{}",
+            "\t\t- Home Path: ~/.local/share/antimony/{} on {}",
             match &self.name {
                 Some(name) => name,
                 None => name,
+            },
+            match &self.path {
+                Some(path) => path,
+                None => "~/antimony",
             }
         );
         if let Some(policy) = &self.name {
@@ -896,6 +971,9 @@ pub enum HomePolicy {
     /// instance, such as Chromium, will get upset if you launch multiple instances of
     /// the sandbox.
     Enabled,
+    
+    /// Mount the Home Folder as a Read-Only overlay.
+    ReadOnly,
 
     /// Once an application has been configured, Overlay effectively freezes it in place by
     /// mounting it as a temporary overlay. Changes made in the sandbox are discarded, and

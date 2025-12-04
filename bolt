@@ -1,0 +1,25 @@
+#!/bin/bash
+# Requires
+# Everything from the PGO script
+# LLVM-Bolt
+
+profile () {
+  echo "Profiling"
+  $1 refresh --hard
+  for profile in $(ls ~/.local/bin/); do
+      ./bench $profile $1 1
+  done
+}
+
+RUSTFLAGS="-Ctarget-cpu=native"
+ARGS="--bin antimony"
+
+echo "Building Profiling Binary"
+ANTIMONY=$(cargo pgo build -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
+profile $ANTIMONY
+
+ANTIMONY=$(cargo pgo bolt build --with-pgo -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
+profile $ANTIMONY
+
+echo "Building Final Bolt+PGO"
+cargo pgo bolt optimize --with-pgo -- --workspace

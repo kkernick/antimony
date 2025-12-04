@@ -5,10 +5,12 @@ edition = "2024"
 
 [workspace]
 members = [
+    ".",
     "crates/seccomp",
     "crates/spawn",
-    "."
-, "crates/user", "crates/antimony_completions"]
+    "crates/user",
+    "crates/antimony_completions"
+]
 
 [dependencies]
 user = { path = "crates/user" }
@@ -45,7 +47,11 @@ zip = { version = "6.0.0", features = ["deflate"], default-features = false }
 walkdir = "2.5.0"
 copy_dir = "0.1.3"
 
+[profile.dev]
+debug = false
+
 [profile.release]
 opt-level = 3
-lto = "off"
+codegen-units = 1
+lto = "fat"
 panic = "abort"

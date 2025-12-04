@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 
 use anyhow::{Result, anyhow};
 
-use crate::aux::env::{AT_HOME, PWD, USER_NAME};
+use crate::shared::env::{AT_HOME, PWD, USER_NAME};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {

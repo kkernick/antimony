@@ -1,12 +1,12 @@
 use crate::{
-    aux::{
-        env::{AT_HOME, DATA_HOME},
-        path::direct_path,
-        profile::{FileMode, Profile},
-    },
     fab::{
         lib::{get_dir, get_wildcards},
         localize_path,
+    },
+    shared::{
+        env::DATA_HOME,
+        path::direct_path,
+        profile::{FileMode, Profile},
     },
 };
 use anyhow::{Context, Result, anyhow};
@@ -23,6 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use user::run_as;
 use which::which;
 
 /// Characters used for splitting.
@@ -58,8 +59,7 @@ static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
 pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
 
 /// The location to store cache files.
-static CACHE_DIR: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(AT_HOME.as_path()).join("cache").join(".bin"));
+static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".bin"));
 
 #[derive(Debug)]
 pub enum Type {
@@ -527,10 +527,8 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         .extend(parsed.directories);
 
     if profile.home.is_some() {
-        user::set(user::Mode::Real)?;
         let home_dir = Path::new(DATA_HOME.as_path()).join("antimony").join(name);
-        fs::create_dir_all(&home_dir)?;
-        user::revert()?;
+        run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
 
         debug!("Finding home binaries");
         let home_str = home_dir.to_string_lossy();

@@ -1,6 +1,6 @@
 use crate::{
-    aux::env::{OVERLAY, USER_NAME},
     fab,
+    shared::env::{OVERLAY, USER_NAME},
 };
 use anyhow::{Result, anyhow};
 use log::debug;

@@ -1,10 +1,10 @@
 //! Run a profile.
 use crate::{
-    aux::{
+    setup::setup,
+    shared::{
         env::RUNTIME_DIR,
         profile::{FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
     },
-    setup::setup,
 };
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
@@ -63,6 +63,10 @@ pub struct Args {
     /// Override the home name
     #[arg(long)]
     pub home_name: Option<String>,
+
+    /// Override the home mount
+    #[arg(long)]
+    pub home_path: Option<String>,
 
     /// Override the seccomp policy
     #[arg(long)]
@@ -203,22 +207,38 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
     // Run it
     if !args.dry {
-        if let Some(hooks) = &mut info.profile.hooks
-            && let Some(pre) = hooks.pre.take()
-        {
-            debug!("Processing pre-hooks");
-            for hook in pre {
-                hook.process(
-                    Some(&mut info.handle),
-                    &info.name,
-                    &info.sys_dir.to_string_lossy(),
-                    &info.home,
-                )?;
-            }
-        }
-
         debug!("Waiting for document portal");
         wait_for_doc();
+
+        if let Some(hooks) = &mut info.profile.hooks {
+            if let Some(pre) = hooks.pre.take() {
+                debug!("Processing pre-hooks");
+                for hook in pre {
+                    info.handle = hook
+                        .process(
+                            Some(info.handle),
+                            &info.name,
+                            &info.sys_dir.to_string_lossy(),
+                            &info.home,
+                            false,
+                        )?
+                        .unwrap();
+                }
+            }
+
+            // Attaching to the parent means info.handle becomes the parent
+            if let Some(parent) = hooks.parent.take() {
+                info.handle = parent
+                    .process(
+                        Some(info.handle),
+                        &info.name,
+                        &info.sys_dir.to_string_lossy(),
+                        &info.home,
+                        true,
+                    )?
+                    .unwrap();
+            }
+        }
 
         debug!("Spawning");
         let mut handle = info.handle.spawn()?;
@@ -294,6 +314,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                     &info.name,
                     &info.sys_dir.to_string_lossy(),
                     &info.home,
+                    false,
                 )?;
             }
         }

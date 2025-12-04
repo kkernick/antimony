@@ -1,5 +1,5 @@
 //! Edit the default profile
-use crate::aux::{env::AT_HOME, profile::Profile};
+use crate::shared::{env::AT_HOME, profile::Profile};
 use anyhow::Result;
 use std::fs::{self, File};
 

@@ -1,13 +1,13 @@
 use crate::{
-    aux::{
+    fab::bin::ELF_MAGIC,
+    shared::{
         env::{AT_HOME, SINGLE_LIB},
         profile::Profile,
     },
-    fab::bin::ELF_MAGIC,
 };
-use anyhow::{Context, Error, Result, anyhow};
+use anyhow::{Error, Result, anyhow};
 use dashmap::DashSet;
-use log::debug;
+use log::{debug, error, trace};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -22,7 +22,7 @@ use std::{
 
 /// Where to store cache data.
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
-    let path = PathBuf::from(AT_HOME.as_path()).join("cache").join(".lib");
+    let path = crate::shared::env::CACHE_DIR.join(".lib");
     fs::create_dir_all(&path).unwrap();
     path
 });
@@ -166,22 +166,36 @@ fn dir_resolve(
     Ok(dependencies)
 }
 
-pub fn sof_path(sof: &Path, library: &str) -> PathBuf {
+pub fn get_sof_path(sof: &Path, library: &str) -> PathBuf {
     PathBuf::from(library.replace("/usr", &sof.to_string_lossy()))
 }
 
-pub fn add_sof(sof: &Path, library: String) -> Result<()> {
-    let sof_path = sof_path(sof, &library);
+pub fn add_sof(sof: &Path, library: Cow<'_, str>) -> Result<()> {
+    let sof_path = get_sof_path(sof, &library);
 
     if let Some(parent) = sof_path.parent() {
         fs::create_dir_all(parent)?;
-        if let Ok(canon) = fs::canonicalize(&library)
-            && let Err(e) = fs::hard_link(&canon, &sof_path)
+        let path = PathBuf::from(library.as_ref());
+        let canon = fs::canonicalize(&path)?;
+
+        trace!("Creating SOF file: {canon:?} => {sof_path:?}");
+        if let Err(e) = fs::hard_link(&canon, &sof_path)
             && e.kind() != io::ErrorKind::AlreadyExists
         {
-            return Err(e).with_context(|| {
-                format!("Failed to hardlink {library} -> {}", sof_path.display())
-            });
+            // If we cannot hard-link directly, then we created a shared source
+            // of library copies within the CACHE_DIR, then hard-link from that.
+            //
+            // This reduces redundancy between profiles, and since shared exists
+            // in the CACHE_DIR, hard links will work.
+
+            let shared_path = get_sof_path(&CACHE_DIR.join("shared"), &library);
+            if let Some(parent) = shared_path.parent() {
+                fs::create_dir_all(parent)?;
+
+                trace!("Creating shared copy via {canon:?} => {shared_path:?} => {sof_path:?}");
+                fs::copy(&canon, &shared_path)?;
+                fs::hard_link(&shared_path, &sof_path)?;
+            }
         }
     }
     Ok(())
@@ -194,8 +208,6 @@ pub fn fabricate(
     sys_dir: &Path,
     handle: &Spawner,
 ) -> Result<()> {
-    let saved = user::save()?;
-
     if let Some(libraries) = &profile.libraries
         && libraries.contains("/usr/lib")
     {
@@ -212,6 +224,14 @@ pub fn fabricate(
     debug!("Creating SOF");
     let sof = sys_dir.join("sof");
     fs::create_dir_all(&sof)?;
+
+    if !CACHE_DIR.starts_with(AT_HOME.as_path()) {
+        let shared = CACHE_DIR.join("shared");
+        if !shared.exists() {
+            debug!("Creating shared directory at {shared:?}");
+            fs::create_dir_all(&shared)?;
+        }
+    }
 
     // Libraries needed by the program. No Binaries.
     let mut dependencies = HashSet::new();
@@ -315,10 +335,13 @@ pub fn fabricate(
             }
         })
         // Write the SOF version, as a hard link preferably.
-        .try_for_each(|lib| add_sof(&sof, lib))?;
+        .for_each(|lib| {
+            if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib)) {
+                error!("Failed to add {lib} to SOF: {e}")
+            }
+        });
 
-    // Overlays are required to mount the library directories.
-
+    debug!("Done");
     let sof_str = sof.to_string_lossy();
     #[rustfmt::skip]
     handle.args_i([
@@ -330,7 +353,7 @@ pub fn fabricate(
 
     directories.iter().try_for_each(|dir| -> Result<()> {
         if dir.contains("lib") {
-            let sof_path = sof_path(&sof, dir.as_str());
+            let sof_path = get_sof_path(&sof, dir.as_str());
             if !sof_path.exists() {
                 fs::create_dir_all(sof_path)?;
             }
@@ -345,7 +368,5 @@ pub fn fabricate(
             .into_iter()
             .collect(),
     );
-
-    user::restore(saved)?;
     Ok(())
 }

@@ -47,8 +47,10 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d '
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l inherits -d 'Additional inheritance' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-policy -d 'Override the home policy' -r -f -a "none\t'Do not use a home profile'
 enabled\t'The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox'
+read-only\t'Mount the Home Folder as a Read-Only overlay'
 overlay\t'Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn\'t typically support multiple instances (Zed, Chromium, etc)'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-name -d 'Override the home name' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-path -d 'Override the home mount' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l seccomp -d 'Override the seccomp policy' -r -f -a "disabled\t'Disable SECCOMP'
 permissive\t'Syscalls are logged to construct a policy for the profile'
 enforcing\t'The policy is enforced: unrecognized syscalls return with EPERM'
@@ -115,9 +117,11 @@ complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l con
 file\t'Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers'"
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s r -l remove -d 'Undo integration for the profile'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s s -l shadow -d 'Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don\'t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option'
+complete -c antimony -n "__fish_antimony_using_subcommand integrate" -l create-desktop -d 'Create a desktop file if one does not exist'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand reset" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand trace" -s c -l config -d 'Use a configuration within the profile' -r
+complete -c antimony -n "__fish_antimony_using_subcommand trace" -l trace-args -d 'Arguments to pass to strace directly' -r
 complete -c antimony -n "__fish_antimony_using_subcommand trace" -s r -l report -d 'Collect the trace log and list files that the sandbox tried to access, and feature they are available in'
 complete -c antimony -n "__fish_antimony_using_subcommand trace" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s v -l verbosity -d 'The verbosity of information'

@@ -1,5 +1,5 @@
 //! Integrate a profile into the DE.
-use crate::aux::{
+use crate::shared::{
     env::{CONFIG_HOME, DATA_HOME, HOME_PATH},
     profile::Profile,
 };
@@ -37,9 +37,13 @@ pub struct Args {
     /// How to integrate configurations
     #[arg(short, long)]
     pub config_mode: Option<ConfigMode>,
+
+    /// Create a desktop file if one does not exist
+    #[arg(long, default_value_t = false)]
+    pub create_desktop: bool,
 }
 
-#[derive(Default, ValueEnum, Copy, Clone, Debug, PartialEq)]
+#[derive(Default, ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConfigMode {
     ///Integrate each configuration as a separate desktop action
     /// within the main Desktop File.
@@ -115,6 +119,77 @@ pub fn remove(cmd: Args) -> Result<()> {
     Ok(())
 }
 
+fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cmd: &Args) {
+    let args = match line.find(' ') {
+        Some(index) => &line[index + 1..],
+        None => " ",
+    };
+
+    match config {
+        Some(config) => {
+            *line = format!(
+                "{name}=antimony run {} --config {config} {args}",
+                cmd.profile
+            )
+            .trim()
+            .to_string()
+        }
+        None => *line = format!("{name}={local} {args}").trim().to_string(),
+    }
+}
+
+fn manage_configurations(
+    contents: &mut Vec<String>,
+    cmd: &Args,
+    profile: &Profile,
+    name: &str,
+    local: &str,
+) -> Result<()> {
+    if let Some(configs) = &profile.configuration {
+        match cmd.config_mode.unwrap_or_default() {
+            // Integrate each into one desktop file with actions.
+            ConfigMode::Action => {
+                contents.push("\n".into());
+                for config in configs.keys() {
+                    contents.push(format!(
+                        "[Desktop Action {config}]\n\
+                        Name=Antimony {} Configuration \n\
+                        Exec=antimony run {} --config {config} %U \n",
+                        config.to_title_case(),
+                        cmd.profile
+                    ));
+                }
+            }
+
+            // Provide each configuration as a desktop file.
+            ConfigMode::File => {
+                for config in configs.keys() {
+                    let config_desktop = DATA_HOME
+                        .join("applications")
+                        .join(format!("{name}-{config}.desktop"));
+
+                    let mut contents = contents.clone();
+                    for line in &mut contents {
+                        // Point to the symlink
+                        if line.starts_with("Exec=") {
+                            fix_exec("Exec", local, line, Some(config.as_str()), cmd);
+                        }
+                        if line.starts_with("TryExec=") {
+                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
+                        }
+                        if line.starts_with("Name=") {
+                            line.push_str(&format!(" ({})", config.to_title_case()));
+                        }
+                    }
+
+                    write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Format a desktop file to point to Antimony
 fn format_desktop(
     cmd: &Args,
@@ -167,30 +242,11 @@ fn format_desktop(
         line.push_str("native;");
     };
 
-    let fix_exec = |name, line: &mut String, config: Option<&str>| {
-        let args = match line.find(' ') {
-            Some(index) => &line[index + 1..],
-            None => " ",
-        };
-
-        match config {
-            Some(config) => {
-                *line = format!(
-                    "{name}=antimony run {} --config {config} {args}",
-                    cmd.profile
-                )
-                .trim()
-                .to_string()
-            }
-            None => *line = format!("{name}={local} {args}").trim().to_string(),
-        }
-    };
-
     let mut contents: Vec<String> = desktop.lines().map(|e| e.to_string()).collect();
     for line in &mut contents {
         // Point to the symlink
         if line.starts_with("Exec=") {
-            fix_exec("Exec", line, None);
+            fix_exec("Exec", local, line, None, cmd);
             if !desktop_actions {
                 line.push_str("\nActions=");
                 append_actions(line);
@@ -223,48 +279,7 @@ fn format_desktop(
     ));
 
     // Add configurations.
-    if let Some(configs) = &profile.configuration {
-        match cmd.config_mode.unwrap_or_default() {
-            // Integrate each into one desktop file with actions.
-            ConfigMode::Action => {
-                contents.push("\n".into());
-                for config in configs.keys() {
-                    contents.push(format!(
-                        "[Desktop Action {config}]\n\
-                        Name=Antimony {} Configuration \n\
-                        Exec=antimony run {} --config {config} %U \n",
-                        config.to_title_case(),
-                        cmd.profile
-                    ));
-                }
-            }
-
-            // Provide each configuration as a desktop file.
-            ConfigMode::File => {
-                for config in configs.keys() {
-                    let config_desktop = DATA_HOME
-                        .join("applications")
-                        .join(format!("{name}-{config}.desktop"));
-
-                    let mut contents = contents.clone();
-                    for line in &mut contents {
-                        // Point to the symlink
-                        if line.starts_with("Exec=") {
-                            fix_exec("Exec", line, Some(config));
-                        }
-                        if line.starts_with("TryExec=") {
-                            fix_exec("TryExec", line, Some(config));
-                        }
-                        if line.starts_with("Name=") {
-                            line.push_str(&format!(" ({})", config.to_title_case()));
-                        }
-                    }
-
-                    write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
-                }
-            }
-        }
-    }
+    manage_configurations(&mut contents, cmd, profile, &name, local)?;
 
     let antimony_desktop = out_path.join(format!("{name}.desktop"));
     if let Some(parent) = antimony_desktop.parent() {
@@ -319,6 +334,42 @@ pub fn integrate(cmd: Args) -> Result<()> {
             &local,
             &DATA_HOME.join("applications"),
         )?;
+    } else if cmd.create_desktop {
+        let mut contents: Vec<String> = vec![
+            "[Desktop Entry]",
+            &format!("Name={name}"),
+            &format!("Exec={local}"),
+            "Type=Application",
+        ]
+        .into_iter()
+        .map(|e| e.to_string())
+        .collect();
+
+        let mut actions = "Actions=native;".to_string();
+        if let Some(config) = &profile.configuration
+            && let Some(ConfigMode::Action) = cmd.config_mode
+        {
+            for config in config.keys() {
+                actions.push_str(&format!("{config};"))
+            }
+        }
+        contents.push(actions);
+
+        contents.extend([
+            "[Desktop Action native]".to_string(),
+            format!("Name=Run {} Natively", name.to_title_case()),
+            format!("Exec={}", profile.app_path(&cmd.profile)),
+        ]);
+
+        let out = DATA_HOME
+            .join("applications")
+            .join(name)
+            .with_extension("desktop");
+        if let Some(parent) = out.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        manage_configurations(&mut contents, &cmd, &profile, name, &local)?;
+        fs::write(out, contents.join("\n"))?;
     }
 
     let service_file = Path::new("/etc")

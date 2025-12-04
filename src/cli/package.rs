@@ -1,13 +1,13 @@
 //! Convert the profile into a self-contained package.
 use crate::{
-    aux::{
-        env::{AT_HOME, USER_NAME},
-        package,
-        profile::{FileMode, Profile},
-    },
     fab::{
         bin,
-        lib::{self, sof_path},
+        lib::{self, get_sof_path},
+    },
+    shared::{
+        env::{CACHE_DIR, USER_NAME},
+        package,
+        profile::{FileMode, Profile},
     },
 };
 use anyhow::Result;
@@ -38,7 +38,7 @@ impl super::Run for Args {
         let profile_path = Profile::path(name)?;
         let mut profile = Profile::new(name)?;
 
-        let sys_dir = AT_HOME.join("cache").join(profile.hash_str());
+        let sys_dir = CACHE_DIR.join(profile.hash_str());
         let user_cache = sys_dir.join(USER_NAME.as_str());
 
         profile = profile.integrate(name, &user_cache)?;
@@ -121,7 +121,7 @@ impl super::Run for Args {
                 .into_par_iter()
                 .try_for_each(|dir| -> Result<()> {
                     debug!("Adding {dir}");
-                    let path = sof_path(&package_dir.join("sof"), &dir);
+                    let path = get_sof_path(&package_dir.join("sof"), &dir);
                     fs::remove_dir(&path)?;
                     copy_dir(&dir, path)?;
                     Ok(())
