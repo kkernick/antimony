@@ -18,7 +18,7 @@ echo "Building Profiling Binary"
 ANTIMONY=$(cargo pgo build -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
 profile $ANTIMONY
 
-ANTIMONY=$(cargo pgo bolt build --with-pgo -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
+ANTIMONY=$(cargo pgo bolt build --with-pgo -- $ARGS 2>&1 | grep "Now run" | awk '{print $10}')
 profile $ANTIMONY
 
 echo "Building Final Bolt+PGO"

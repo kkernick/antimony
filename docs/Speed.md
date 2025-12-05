@@ -14,6 +14,37 @@ The configuration of Antimony’s installation can have a profound effect on per
 >[!warning]
 >Creating files in `/tmp` can have security considerations on top of performance if Antimony is not `setuid`. If running as a regular user, Antimony’s cache folder will globally accessible to all programs running as the user. With `setuid`, Antimony can protect write-access to to its temporary cache.
 
+The following table illustrates the relative performance of applying various configurations. Note that the new-features column applies to all subsequent columns (So after `--privileged` is first mentioned, it is implied in all further tests). All testing was performed with `./bench $PROFILES --checkout tags/2.4.0 --antimony-args='hard'`
+
+| Profile (Hot)/ Configuration | Chromium | Zed | Okular | Syncthing | Sh  | New Feature        |
+| ---------------------------- | -------- | --- | ------ | --------- | --- | ------------------ |
+| Debug                        | 6.1      | 5.5 | 5.2    | 4.2       | 3.3 | `--recipe dev`     |
+| Debug (System)               | 6.3      | 5.6 | 5.5    | 3.8       | 3.4 | `--privileged`     |
+| Release                      | 3.1      | 3.0 | 2.9    | 2.1       | 1.9 | `--recipe release` |
+| PGO                          | 3.1      | 3.0 | 2.9    | 2.0       | 1.9 | `--recipe pgo`     |
+| PGO + BOLT                   | 3.0      | 2.1 | 3.0    | 1.9       | 1.7 | `--recipe bolt`    |
+^ConfigHot
+
+```chart
+type: bar
+select: [Chromium, Zed, Okular, Syncthing, Sh]
+id: ConfigHot
+```
+
+| Profile (Cold)/ Configuration | Chromium | Zed   | Okular | Syncthing | Sh   | New Feature        |
+| ----------------------------- | -------- | ----- | ------ | --------- | ---- | ------------------ |
+| Debug                         | 648.5    | 302.6 | 2166.3 | 55.4      | 11.1 | `--recipe dev`     |
+| Debug (System)                | 408.5    | 56.1  | 1407.8 | 29.1      | 9.7  | `--privileged`     |
+| Release                       | 361.3    | 48.7  | 1280.2 | 24.5      | 7.1  | `--recipe release` |
+| PGO                           | 374.9    | 48.6  | 1291.7 | 24.4      | 7.2  | `--recipe pgo`     |
+| PGO + BOLT                    | 378.3    | 48.4  | 1290.4 | 23.9      | 6.8  | `--recipe bolt`    |
+^ConfigCold
+
+```chart
+type: bar
+select: [Chromium, Zed, Okular, Syncthing, Sh]
+id: ConfigCold
+```
 ### Older Implementations
 
 Antimony is the final iteration of a several year long object to create fast, usable, and function sandboxes for Linux. This project initially started as a Shell Script, borrowing from an example provided on the [Arch Wiki](https://wiki.archlinux.org/title/Bubblewrap) describing a way to coordinate a `bubblewrap` invocation with `xdg-dbus-proxy` to get Portals to work outside of Flatpak. That script eventually became too complicated, and turned into SB, a Python program. Speed and complexity eventually lead to a re-implementation in C++. 
@@ -44,9 +75,77 @@ All test are run on an identical, Arch Virtual Machine. The raw numbers are not 
 \** SB++ is run via `benchmark.sh cpp main $PROFILE`.
 \*** Antimony is run via `bench $PROFILE` from this repository, using a system installation from `deploy`.
 
+### Older Versions
+
+We can also see how the performance of Antimony has evolved over releases. Attached to this table is an Obsidian Chart block which can visualize the data in a line chart. Results are in milliseconds.
+
+For Versions < 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG`
+For Versions ≥ 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard'`
+
+| Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
+| --------------------- | -------- | --- | ------ | --------- | --- |
+| 1.0.0                 | 2.8      | 2.6 | 2.7    | 1.9       | 1.8 |
+| 1.0.1                 | 2.8      | 2.6 | 2.5    | 1.9       | 1.8 |
+| 1.1.0                 | 2.8      | 2.7 | 2.7    | 1.9       | 1.8 |
+| 1.1.1                 | 2.8      | 2.6 | 2.5    | 2.0       | 1.8 |
+| 1.1.2                 | 2.8      | 2.7 | 2.6    | 1.9       | 1.8 |
+| 1.2.0                 | 2.8      | 2.6 | 2.5    | 1.9       | 1.8 |
+| 1.3.0                 | 2.8      | 2.6 | 2.6    | 1.9       | 1.8 |
+| 2.0.0                 | 2.9      | 2.6 | 2.5    | 2.0       | 1.8 |
+| 2.0.1                 | 2.8      | 2.7 | 2.5    | 2.0       | 1.9 |
+| 2.1.0                 | 2.9      | 2.9 | 3.0    | 2.2       | 2.0 |
+| 2.2.0                 | 3.0      | 2.9 | 2.9    | 2.2       | 2.1 |
+| 2.2.1                 | 3.3      | 2.9 | 2.9    | 2.2       | 2.1 |
+| 2.2.2                 | 3.2      | 2.9 | 3.0    | 2.2       | 2.0 |
+| 2.3.0                 | 3.0      | 2.9 | 2.8    | 2.2       | 2.0 |
+| 2.4.0                 | 3.1      | 3.0 | 2.7    | 2.2       | 2.1 |
+^HistoryHot
+
+```chart
+type: line
+id: HistoryHot
+tension: 0.5
+spanGaps: true
+```
+
+| Profile Hot / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
+| --------------------- | -------- | ---- | ------ | --------- | --- |
+| 1.0.0                 | 343.7    | 48.7 | 1281.9 | 24.7      | 7.2 |
+| 1.0.1                 | 340.5    | 47.5 | 1340.0 | 26.6      | 7.2 |
+| 1.1.0                 | 337.1    | 49.2 | 1393.4 | 24.1      | 7.1 |
+| 1.1.1                 | 353.5    | 49.3 | 1276.2 | 25.2      | 7.2 |
+| 1.1.2                 | 341.1    | 47.5 | 1277.8 | 24.2      | 7.2 |
+| 1.2.0                 | 341.6    | 47.7 | 1275.1 | 24.1      | 7.2 |
+| 1.3.0                 | 338.0    | 47.6 | 1279.5 | 24.5      | 7.2 |
+| 2.0.0                 | 338.1    | 47.6 | 1292.0 | 24.8      | 7.2 |
+| 2.0.1                 | 338.4    | 48.3 | 1279.8 | 24.3      | 7.2 |
+| 2.1.0                 | 345.3    | 48.5 | 1330.9 | 24.6      | 7.4 |
+| 2.2.0                 | 348.1    | 48.2 | 1284.7 | 25.2      | 7.4 |
+| 2.2.1                 | 351.6    | 48.1 | 1306.8 | 24.9      | 7.5 |
+| 2.2.2                 | 344.4    | 48.3 | 1308.2 | 25.1      | 7.5 |
+| 2.3.0                 | 372.6    | 48.1 | 1328.5 | 25.2      | 7.4 |
+| 2.4.0                 | 376.9    | 49.9 | 1379.2 | 30.2      | 7.5 |
+^HistoryCold
+
+```chart
+type: line
+id: HistoryCold
+tension: 0.5
+spanGaps: true
+```
+
+```chart
+type: line
+select: [Zed, Syncthing, Sh]
+id: HistoryCold
+tension: 0.5
+spanGaps: true
+```
+
 ## Techniques
 
 Antimony needs to do a lot of things very quickly. Creating a sandbox, especially a secure one, takes time, but the primary objective of Antimony in terms of speed is being unnoticeable compared to running it natively. The most expensive tasks Antimony performs, in descending order, include:
+
 1. SOF Library Resolution 
 2. Shell Script Parsing
 3. Proxy Setup

@@ -2,6 +2,8 @@ use std::{
     io::Write,
     path::PathBuf,
     sync::{Arc, atomic::AtomicBool},
+    thread::sleep,
+    time::Duration,
 };
 
 use antimony_utils::set_capabilities;
@@ -16,8 +18,13 @@ use spawn::Spawner;
 #[command(version)]
 #[command(about = "A Utility for Benchmarking Antimony, using Hyperfine")]
 pub struct Cli {
-    /// The profile to benchmark.
-    pub profile: String,
+    /// The profiles to benchmark.
+    #[arg(value_delimiter = ' ', num_args = 1..)]
+    pub profiles: Vec<String>,
+
+    /// How long to wait between each profile.
+    #[arg(long)]
+    pub cool: Option<u64>,
 
     /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
     /// wherever `antimony` resolves to, and doesn't build.
@@ -36,6 +43,14 @@ pub struct Cli {
     /// run in /usr/share/antimony, and make hard-links.
     #[arg(long, default_value_t = false)]
     pub privileged: bool,
+
+    /// Additional commands to pass to antimony
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub antimony_args: Option<Vec<String>>,
+
+    /// Additional commands to pass to hyperfine
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub hyperfine_args: Option<Vec<String>>,
 }
 
 fn main() -> Result<()> {
@@ -66,6 +81,7 @@ fn main() -> Result<()> {
                 checkout,
                 "src",
                 "config",
+                "crates",
                 "Cargo.toml",
                 "Cargo.lock",
             ])?
@@ -78,6 +94,9 @@ fn main() -> Result<()> {
         .map(String::from)
         .collect();
 
+    if let Some(h_args) = cli.hyperfine_args {
+        args.extend(h_args)
+    }
     if let Some(runs) = cli.runs {
         args.extend(["-M".to_string(), runs.to_string()])
     }
@@ -131,31 +150,63 @@ fn main() -> Result<()> {
     };
 
     println!("Using: {antimony}");
-    Spawner::new("hyperfine")
-        .args(["--command-name", &format!("Local Refresh {}", cli.profile)])?
-        .args(args.clone())?
-        .arg([&antimony, "refresh", &cli.profile, "--dry"].join(" "))?
-        .preserve_env(true)
-        .spawn()?
-        .wait()?;
 
-    Spawner::new("hyperfine")
-        .args([
-            "--command-name",
-            &format!("Cached {}", cli.profile),
-            "--warmup",
-            "1",
-        ])?
-        .args(args)?
-        .arg([&antimony, "run", &cli.profile, "--dry"].join(" "))?
-        .preserve_env(true)
-        .spawn()?
-        .wait()?;
+    for profile in &cli.profiles {
+        let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        if let Some(add) = &cli.antimony_args {
+            command.extend(add.clone());
+        }
+
+        Spawner::new("hyperfine")
+            .args(["--command-name", &format!("Local Refresh {profile}")])?
+            .args(args.clone())?
+            .arg(command.join(" "))?
+            .preserve_env(true)
+            .spawn()?
+            .wait()?;
+
+        let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        if let Some(add) = &cli.antimony_args {
+            command.extend(add.clone());
+        }
+
+        Spawner::new("hyperfine")
+            .args([
+                "--command-name",
+                &format!("Cached {profile}"),
+                "--warmup",
+                "1",
+            ])?
+            .args(args.clone())?
+            .arg(command.join(" "))?
+            .preserve_env(true)
+            .spawn()?
+            .wait()?;
+
+        if cli.profiles.len() > 1 {
+            println!("Waiting for system to cool down");
+            sleep(Duration::from_secs(cli.cool.unwrap_or(5)));
+        }
+    }
 
     if cli.checkout.is_some() {
         // Undo the checkout
         Spawner::new("git")
-            .args(["checkout", "-", "src", "config", "Cargo.toml", "Cargo.lock"])?
+            .args([
+                "checkout",
+                "-",
+                "src",
+                "config",
+                "crates",
+                "Cargo.toml",
+                "Cargo.lock",
+            ])?
             .spawn()?
             .wait()?;
 
