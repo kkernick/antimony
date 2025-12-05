@@ -1,21 +1,4 @@
 #!/bin/bash
 
-PROFILE=$1
-
-ANTIMONY=$2
-if [[ -z $2 ]]; then
-  ANTIMONY="antimony"
-fi
-
-RUNS=$3
-if [[ -z $3 ]]; then
-  ARGS="--shell=none --time-unit=millisecond"
-else
-  ARGS="--shell=none --time-unit=millisecond -M $RUNS"
-fi
-
-echo "Using: $ANTIMONY"
-
-hyperfine --command-name "Local Refresh" $ARGS "$ANTIMONY refresh $PROFILE --dry --hard"
-
-hyperfine --command-name "Cached" $ARGS --warmup 1 "$ANTIMONY run $PROFILE --dry"
+cargo build --package antimony_utils
+./target/debug/antimony-bench $@

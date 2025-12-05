@@ -7,7 +7,7 @@ profile () {
   echo "Profiling"
   $1 refresh --hard
   for profile in $(ls ~/.local/bin/); do
-      ./bench $profile $1 1
+    ./bench $profile --recipe $1 --runs 1
   done
 }
 

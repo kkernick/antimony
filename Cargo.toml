@@ -9,7 +9,8 @@ members = [
     "crates/seccomp",
     "crates/spawn",
     "crates/user",
-    "crates/antimony_completions"
+    "crates/antimony_completions",
+    "crates/antimony_utils",
 ]
 
 [dependencies]

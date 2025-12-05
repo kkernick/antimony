@@ -14,7 +14,7 @@ echo "Profiling"
 $ANTIMONY refresh --hard
 
 for profile in $(ls ~/.local/bin/); do
-    ./bench $profile $ANTIMONY 1
+    ./bench $profile --recipe $ANTIMONY --runs 1
 done
 
 echo "Building Final PGO"
