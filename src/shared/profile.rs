@@ -322,6 +322,7 @@ impl Profile {
     /// however.
     pub fn from_args(args: &mut cli::run::Args) -> Self {
         let mut profile = Self {
+            path: args.path.take(),
             seccomp: args.seccomp.take(),
             arguments: args.passthrough.take(),
             sandbox_args: args.sandbox_args.take(),
@@ -398,7 +399,7 @@ impl Profile {
 
         // Try and lookup the path. If it doesn't work, then the corresponding application
         // isn't installed. This is fine, as long as the user doesn't try and run the profile.
-        if !name.ends_with(".toml") {
+        if !name.ends_with(".toml") && profile.path.is_none() {
             profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
         }
 
@@ -414,7 +415,6 @@ impl Profile {
     /// the caller.
     pub fn base(mut self, mut source: Self) -> Result<Self, Error> {
         source.id = self.id.take();
-        source.path = self.path.clone();
         source.inherits = self.inherits.take();
 
         source.merge(self)?;
@@ -435,6 +435,10 @@ impl Profile {
     /// Cache status is not inherited, neither is path, name,
     /// or desktop.
     pub fn merge(&mut self, profile: Self) -> Result<(), Error> {
+        if self.path.is_none() {
+            self.path = profile.path;
+        }
+
         if self.seccomp.is_none() {
             self.seccomp = profile.seccomp;
         }
@@ -971,7 +975,7 @@ pub enum HomePolicy {
     /// instance, such as Chromium, will get upset if you launch multiple instances of
     /// the sandbox.
     Enabled,
-    
+
     /// Mount the Home Folder as a Read-Only overlay.
     ReadOnly,
 

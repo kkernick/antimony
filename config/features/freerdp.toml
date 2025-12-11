@@ -5,6 +5,6 @@ requires = ["network"]
 libraries = [
   "libwinpr*",
   "libfreerdp3*",
-  "/usr/lib/freerdp",
-  "/usr/lib/ossl-modules/"
+  "freerdp",
+  "ossl-modules"
 ]

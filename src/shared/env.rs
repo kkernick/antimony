@@ -7,7 +7,7 @@ use std::{
     env::{self, temp_dir},
     fs,
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use which::which;
 
@@ -25,15 +25,6 @@ pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
         Ok(version) => version.contains("0.11"),
         Err(_) => false,
     }
-});
-
-pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
-    let single = match fs::read_link("/usr/lib64") {
-        Ok(dest) => dest == Path::new("/usr/lib") || dest == Path::new("lib"),
-        Err(_) => false,
-    };
-    debug!("Single Library Folder: {single}");
-    single
 });
 
 /// The User's PATH variable, removing ~/.local/bin to prevent

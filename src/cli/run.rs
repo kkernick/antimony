@@ -40,6 +40,10 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     pub refresh: bool,
 
+    /// The path to the binary
+    #[arg(long)]
+    pub path: Option<String>,
+
     /// Use a configuration within the profile.
     #[arg(short, long)]
     pub config: Option<String>,

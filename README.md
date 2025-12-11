@@ -30,6 +30,7 @@ Antimony relies on the following runtime-dependencies:
 
 To compile Antimony, you will need:
 * Rust and Cargo, supporting the 2024 Edition.
+* `gcc`
 * `libseccomp` (`libseccomp-dev` for Debian)
 * `sqlite` (`libsqlite3-dev` for Debian) 
 

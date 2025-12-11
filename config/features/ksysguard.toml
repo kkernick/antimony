@@ -1,6 +1,6 @@
 name = "ksysguard"
 description = "System Monitor for KDE"
-libraries = ["/usr/lib/ksysguard"]
+libraries = ["ksysguard"]
 
 [files.resources]
 ReadOnly = ["/usr/share/ksysguard"]

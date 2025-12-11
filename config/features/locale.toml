@@ -2,8 +2,8 @@ name = "locale"
 description = "Provide localization information"
 
 libraries = [
-  "/usr/lib/locale",
-  "/usr/lib/gconv",
+  "locale",
+  "gconv",
 ]
 
 [files]

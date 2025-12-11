@@ -3,7 +3,7 @@ description = "Gnome General Networking and IO"
 requires = ["gnutls"]
 
 libraries = [
-  "/usr/lib/gio",
+  "gio",
   "libproxy*",
 ]
 

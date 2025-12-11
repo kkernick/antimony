@@ -3,6 +3,6 @@ description = "KDE Frameworks for KDE Applications"
 requires = ["qt6"]
 
 libraries = [
-  "/usr/lib/kf6",
+  "kf6",
   "libkdsingleapplication*"
 ]

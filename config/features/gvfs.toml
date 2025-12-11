@@ -1,6 +1,6 @@
 name = "gvfs"
 description = "Gnome's Virtual File System for Network Shares"
 
-libraries = ["/usr/lib/gvfs"]
+libraries = ["gvfs"]
 
 ipc.talk = ["org.gtk.vfs.*"]

@@ -3,7 +3,7 @@ description = "GStreamer for video/audio playback"
 requires = ["gir", "passwd", "python"]
 
 libraries = [
-  "/usr/lib/gstreamer-1.0",
+  "gstreamer-1.0",
   "libgst*",
 ]
 

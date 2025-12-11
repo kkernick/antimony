@@ -1,4 +1,4 @@
 name = "gjs"
 description = "Gnome JavaScript."
 
-libraries = ["/usr/lib/gjs"]
+libraries = ["gjs"]

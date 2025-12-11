@@ -3,7 +3,7 @@ description = "For GTK4 applications"
 requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
 
 libraries = [
-  "/usr/lib/gtk-4.0", "/usr/lib/tinysparql-3.0",
+  "gtk-4.0", "tinysparql-3.0",
   "libgdk-4*", "libgtk-4*"
 ]
 

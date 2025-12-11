@@ -16,7 +16,7 @@ files.user.ReadOnly = [
 
 libraries = [
   "libpipewire*",
-  "/usr/lib/pipewire-0.3",
-  "/usr/lib/spa-0.2",
-  "/usr/lib/pulseaudio",
+  "pipewire-0.3",
+  "spa-0.2",
+  "pulseaudio",
 ]

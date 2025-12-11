@@ -30,6 +30,7 @@ _antimony() {
         case $line[1] in
             (run)
 _arguments "${_arguments_options[@]}" : \
+'--path=[The path to the binary]:PATH:_default' \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \

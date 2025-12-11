@@ -41,6 +41,7 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "package" -d 'Pack
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "export" -d 'Export user profiles'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "import" -d 'Import user profiles'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d 'Conflicting features' -r

@@ -10,6 +10,12 @@ impl super::Run for Args {
     fn run(self) -> Result<()> {
         let path = {
             let path = Profile::default_profile();
+            if let Some(parent) = path.parent()
+                && !parent.exists()
+            {
+                fs::create_dir_all(parent)?;
+            }
+
             if !path.exists() {
                 fs::copy(AT_HOME.join("config").join("default.toml"), &path)?;
             }

@@ -10,8 +10,8 @@ files.resources.ReadOnly = [
 ]
 
 libraries = [
-  "/usr/lib/glycin-loaders/",
-  "/usr/lib/libglycin*"
+  "glycin-loaders",
+  "libglycin*"
 ]
 
 binaries = ["prlimit"]

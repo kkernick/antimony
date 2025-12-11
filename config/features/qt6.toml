@@ -3,7 +3,7 @@ description = "Provide necessary files for QT6 applications"
 
 requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
 
-libraries = ["/usr/lib/qt6", "libQt6*"]
+libraries = ["qt6", "libQt6*"]
 
 [files]
 user.ReadOnly = [

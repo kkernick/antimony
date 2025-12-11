@@ -1,13 +1,10 @@
 use crate::{
     fab::bin::ELF_MAGIC,
-    shared::{
-        env::{AT_HOME, SINGLE_LIB},
-        profile::Profile,
-    },
+    shared::{env::AT_HOME, profile::Profile},
 };
 use anyhow::{Error, Result, anyhow};
 use dashmap::DashSet;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -25,6 +22,45 @@ static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".lib");
     fs::create_dir_all(&path).unwrap();
     path
+});
+
+/// Whether we have a split-root.
+pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
+    let single = match fs::read_link("/usr/lib64") {
+        Ok(dest) => dest == Path::new("/usr/lib") || dest == Path::new("lib"),
+        Err(_) => false,
+    };
+    debug!("Single Library Folder: {single}");
+    single
+});
+
+// Get the library roots.
+pub static LIB_ROOTS: Lazy<HashSet<PathBuf>> = Lazy::new(|| {
+    let find_roots = || -> Result<HashSet<PathBuf>> {
+        let def = PathBuf::from("/usr/lib");
+        let path = Spawner::new("find")
+            .args(["/usr/lib", "-name", "libsqlite3.so"])?
+            .output(true)
+            .spawn()?
+            .output_all()?;
+        let path = match PathBuf::from(&path[..path.len() - 1]).parent() {
+            Some(path) => PathBuf::from(path),
+            None => def.clone(),
+        };
+
+        debug!("Found library root at {path:?}");
+
+        let mut roots = HashSet::new();
+        roots.insert(path);
+        roots.insert(def);
+
+        if !*SINGLE_LIB {
+            roots.insert(PathBuf::from("/usr/lib64"));
+        }
+        Ok(roots)
+    };
+
+    find_roots().expect("Failed to find library roots!")
 });
 
 /// Get cached definitions.
@@ -79,18 +115,9 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
 
 /// Get all matches for a wildcard.
 pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
-    let run = |dir, base| -> Result<HashSet<String>> {
+    let run = |dir: &str, base: &str| -> Result<HashSet<String>> {
         Ok(Spawner::new("find")
-            .args([
-                dir,
-                "-maxdepth",
-                "1",
-                "-mindepth",
-                "1",
-                "-name",
-                base,
-                "-executable",
-            ])?
+            .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base])?
             .output(true)
             .mode(user::Mode::Real)
             .spawn()?
@@ -107,10 +134,11 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
-        let mut libraries = run("/usr/lib", pattern)?;
-        if !*SINGLE_LIB {
-            libraries.extend(run("/usr/lib64", pattern).unwrap_or_default());
+        let mut libraries = HashSet::new();
+        for root in LIB_ROOTS.iter() {
+            libraries.extend(run(root.to_str().unwrap(), pattern)?);
         }
+
         libraries
     } else {
         run("/usr/bin", pattern)?
@@ -242,13 +270,9 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    let mut lib_roots = vec!["lib"];
-    if !*SINGLE_LIB {
-        lib_roots.push("lib64");
-    }
-
-    for lib_root in lib_roots {
-        let app_lib = Path::new("/usr").join(lib_root).join(name);
+    for lib_root in LIB_ROOTS.iter() {
+        let app_lib = lib_root.join(name);
+        trace!("Testing {app_lib:?}");
         if app_lib.exists() {
             debug!("Adding program lib folder");
             resolved.insert(Cow::Owned(app_lib.to_string_lossy().into_owned()));
@@ -260,7 +284,20 @@ pub fn fabricate(
         let (wildcards, flat): (HashSet<_>, HashSet<_>) =
             libraries.into_par_iter().partition(|e| e.contains('*'));
 
-        resolved.extend(flat.into_iter().map(Cow::Owned));
+        resolved.extend(flat.into_iter().filter_map(|e| {
+            if e.starts_with("/") {
+                Some(Cow::Owned(e))
+            } else {
+                for root in LIB_ROOTS.iter() {
+                    let path = root.join(&e);
+                    if path.exists() {
+                        return Some(Cow::Owned(path.to_string_lossy().into_owned()));
+                    }
+                }
+                warn!("Failed to find library: {e}");
+                None
+            }
+        }));
 
         debug!("Resolving wildcards");
         resolved.extend(

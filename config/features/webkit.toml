@@ -3,7 +3,7 @@ description = "WebKit for rendering web-content"
 requires = ["gir", "gio"]
 
 libraries = [
-  "/usr/lib/webkitgtk-6.0/",
+  "webkitgtk-6.0/",
   "libjavascriptcoregtk*",
   "libwebkitgtk*",
 ]

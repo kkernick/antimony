@@ -23,6 +23,12 @@ impl super::Run for Args {
         } else {
             let path = {
                 let path = Profile::user_profile(&self.profile);
+                if let Some(parent) = path.parent()
+                    && !parent.exists()
+                {
+                    fs::create_dir_all(parent)?;
+                }
+
                 if !path.exists() && !self.blank {
                     fs::copy(AT_HOME.join("config").join("new.toml"), &path)?;
                 }

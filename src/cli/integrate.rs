@@ -213,9 +213,11 @@ fn format_desktop(
             .collect();
 
         // Write it out.
-        let shadow = desktop_file.join(format!("{}.desktop", profile.desktop(name)));
+        let shadow = out_path.join(format!("{}.desktop", profile.desktop(name)));
 
-        if let Some(parent) = shadow.parent() {
+        if let Some(parent) = shadow.parent()
+            && !parent.exists()
+        {
             fs::create_dir_all(parent)?;
         }
 

@@ -2,8 +2,8 @@ name = "dri"
 description = "DRI for accelerated video rendering"
 
 libraries = [
-  "/usr/lib/dri",
-  "/usr/lib/gbm",
+  "dri",
+  "gbm",
   "libMesa*",
   "libGL*",
   "libEGL*"
