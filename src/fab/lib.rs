@@ -1,6 +1,9 @@
 use crate::{
     fab::bin::ELF_MAGIC,
-    shared::{env::AT_HOME, profile::Profile},
+    shared::{
+        env::{AT_HOME, HOME},
+        profile::Profile,
+    },
 };
 use anyhow::{Error, Result, anyhow};
 use dashmap::DashSet;
@@ -35,16 +38,16 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: Lazy<HashSet<PathBuf>> = Lazy::new(|| {
-    let find_roots = || -> Result<HashSet<PathBuf>> {
-        let def = PathBuf::from("/usr/lib");
+pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
+    let find_roots = || -> Result<HashSet<String>> {
+        let def = String::from("/usr/lib");
         let path = Spawner::new("find")
             .args(["/usr/lib", "-name", "libsqlite3.so"])?
             .output(true)
             .spawn()?
             .output_all()?;
         let path = match PathBuf::from(&path[..path.len() - 1]).parent() {
-            Some(path) => PathBuf::from(path),
+            Some(path) => path.to_string_lossy().into_owned(),
             None => def.clone(),
         };
 
@@ -55,7 +58,7 @@ pub static LIB_ROOTS: Lazy<HashSet<PathBuf>> = Lazy::new(|| {
         roots.insert(def);
 
         if !*SINGLE_LIB {
-            roots.insert(PathBuf::from("/usr/lib64"));
+            roots.insert(String::from("/usr/lib64"));
         }
         Ok(roots)
     };
@@ -136,7 +139,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
     } else if lib {
         let mut libraries = HashSet::new();
         for root in LIB_ROOTS.iter() {
-            libraries.extend(run(root.to_str().unwrap(), pattern)?);
+            libraries.extend(run(root, pattern)?);
         }
 
         libraries
@@ -271,11 +274,11 @@ pub fn fabricate(
     let directories = Arc::from(DashSet::new());
 
     for lib_root in LIB_ROOTS.iter() {
-        let app_lib = lib_root.join(name);
+        let app_lib = format!("{lib_root}/{name}");
         trace!("Testing {app_lib:?}");
-        if app_lib.exists() {
+        if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
-            resolved.insert(Cow::Owned(app_lib.to_string_lossy().into_owned()));
+            resolved.insert(Cow::Owned(app_lib));
         }
     }
 
@@ -289,9 +292,9 @@ pub fn fabricate(
                 Some(Cow::Owned(e))
             } else {
                 for root in LIB_ROOTS.iter() {
-                    let path = root.join(&e);
-                    if path.exists() {
-                        return Some(Cow::Owned(path.to_string_lossy().into_owned()));
+                    let path = format!("{root}/{e}");
+                    if Path::new(&path).exists() {
+                        return Some(Cow::Owned(path));
                     }
                 }
                 warn!("Failed to find library: {e}");
@@ -342,7 +345,8 @@ pub fn fabricate(
             binaries
                 .into_par_iter()
                 .filter_map(|b| {
-                    if !b.contains("lib") {
+                    if !LIB_ROOTS.iter().any(|r| b.starts_with(r)) && !b.starts_with(HOME.as_str())
+                    {
                         handle.args_i(["--ro-bind", b, b]).ok();
                     }
                     get_libraries(Cow::Borrowed(b)).ok()
@@ -363,7 +367,7 @@ pub fn fabricate(
                 library.as_str()
             };
 
-            if parent == "/usr/lib" || parent == "/usr/lib64" {
+            if LIB_ROOTS.iter().any(|r| parent == r) {
                 true
             } else {
                 !directories

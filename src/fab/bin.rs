@@ -1,6 +1,6 @@
 use crate::{
     fab::{
-        lib::{get_dir, get_wildcards},
+        lib::{LIB_ROOTS, get_dir, get_wildcards},
         localize_home, localize_path,
     },
     shared::{
@@ -249,7 +249,7 @@ fn parse(path: &str, ret: Arc<ParseReturn>, mut include_self: bool) -> Result<Ty
         return Ok(Type::Link);
     }
 
-    if path.starts_with("/usr/lib") {
+    if LIB_ROOTS.iter().any(|r| path.starts_with(r)) {
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
@@ -383,6 +383,38 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+fn handle_localize(
+    file: &str,
+    home: bool,
+    include_self: bool,
+    parsed: Arc<ParseReturn>,
+) -> Result<()> {
+    trace!("Localizing: {file}");
+    if let (Some(src), dst) = localize_path(file, home) {
+        if src == dst {
+            parse(file, parsed.clone(), include_self)?;
+        } else {
+            match parse(&src, parsed.clone(), false)? {
+                Type::Script | Type::File | Type::Elf => {
+                    parsed.localized.insert(src.into_owned(), dst);
+                }
+
+                Type::Link => {
+                    let link = fs::read_link(src.as_ref())?;
+                    let (_, ldst) = localize_path(&link.to_string_lossy(), home);
+                    handle_localize(&ldst, home, false, parsed.clone())?;
+                    parsed.symlinks.insert(dst, ldst);
+                }
+                e => warn!("Excluding localization of type {e:?} for {file}"),
+            }
+        }
+        Ok(())
+    } else {
+        parse(file, parsed.clone(), true)?;
+        Ok(())
+    }
+}
+
 pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     fs::create_dir_all(CACHE_DIR.as_path())?;
 
@@ -394,7 +426,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
         let (wildcards, flat): (HashSet<_>, HashSet<_>) =
             binaries.into_par_iter().partition(|e| e.contains('*'));
         resolved.extend(flat);
-        debug!("Resolving wildcards");
+        debug!("Resolving wildcards: {wildcards:?}");
         resolved.extend(
             wildcards
                 .into_par_iter()
@@ -408,31 +440,6 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
 
     let parsed = Arc::new(ParseReturn::default());
 
-    let handle_localize = |file: &str, home: bool, include_self: bool| -> Result<()> {
-        if let (Some(src), dst) = localize_path(file, home) {
-            if src == dst {
-                parse(file, parsed.clone(), include_self)?;
-            } else {
-                match parse(&src, parsed.clone(), false)? {
-                    Type::Script | Type::File | Type::Elf => {
-                        parsed.localized.insert(src.into_owned(), dst);
-                    }
-
-                    Type::Link => {
-                        let link = fs::read_link(src.as_ref())?;
-                        let (_, ldst) = localize_path(&link.to_string_lossy(), home);
-                        parsed.symlinks.insert(dst, ldst);
-                    }
-                    e => warn!("Excluding localization of type {e:?} for {file}"),
-                }
-            }
-            Ok(())
-        } else {
-            parse(file, parsed.clone(), true)?;
-            Ok(())
-        }
-    };
-
     // Read direct files so we can determine dependencies.
     debug!("Localizing files");
     if let Some(files) = &mut profile.files {
@@ -440,21 +447,21 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
             && let Some(x) = user.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, true, true)?;
+                handle_localize(&file, true, true, parsed.clone())?;
             }
         }
         if let Some(sys) = &mut files.resources
             && let Some(x) = sys.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, false, true)?;
+                handle_localize(&file, false, true, parsed.clone())?;
             }
         }
         if let Some(sys) = &mut files.platform
             && let Some(x) = sys.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, false, true)?;
+                handle_localize(&file, false, true, parsed.clone())?;
             }
         }
         if let Some(direct) = &mut files.direct
@@ -462,7 +469,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
         {
             x.iter().try_for_each(|(file, _)| {
                 let path = direct_path(file);
-                handle_localize(&path.to_string_lossy(), false, false)
+                handle_localize(&path.to_string_lossy(), false, false, parsed.clone())
             })?;
         }
     }
@@ -471,7 +478,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     debug!("Localizing binaries");
     resolved
         .iter()
-        .try_for_each(|binary| handle_localize(binary, false, true))?;
+        .try_for_each(|binary| handle_localize(binary, false, true, parsed.clone()))?;
 
     Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
 }
@@ -503,7 +510,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     // However, if the ELF is contained in  /usr/lib, we
     // want its parent directory, such as /usr/lib/chromium.
     parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
-        if !elf.contains("/lib/") && !elf.contains("/lib64/") {
+        if !LIB_ROOTS.iter().any(|r| elf.starts_with(r)) {
             handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
         }
         elf_binaries.insert(elf.to_string());
@@ -526,8 +533,12 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     parsed
         .localized
-        .into_par_iter()
-        .try_for_each(|(src, dst)| handle.args_i(["--ro-bind", &src, &dst]))?;
+        .into_iter()
+        .try_for_each(|(src, dst)| -> anyhow::Result<()> {
+            handle.args_i(["--ro-bind", &src, &dst])?;
+            elf_binaries.insert(src);
+            Ok(())
+        })?;
 
     profile
         .libraries
@@ -536,13 +547,13 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     parsed
         .symlinks
-        .into_par_iter()
-        .try_for_each(|(link, dest)| {
-            if !link.contains("/lib") {
-                handle.args_i(["--symlink", &dest, &link])
-            } else {
-                Ok(())
+        .into_iter()
+        .try_for_each(|(link, dest)| -> anyhow::Result<()> {
+            if !LIB_ROOTS.iter().any(|r| link.starts_with(r)) {
+                handle.args_i(["--symlink", &dest, &link])?;
+                elf_binaries.insert(dest);
             }
+            Ok(())
         })?;
 
     if profile.home.is_some() {
@@ -560,6 +571,8 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         "--symlink", "/usr/sbin", "/sbin"
 
     ])?;
+
+    debug!("Handing off binaries: {elf_binaries:?}");
     profile.binaries = Some(elf_binaries);
     Ok(())
 }
