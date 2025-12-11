@@ -1,5 +1,6 @@
 //! Run a profile.
 use crate::{
+    fab::localize_home,
     setup::setup,
     shared::{
         env::RUNTIME_DIR,
@@ -14,7 +15,7 @@ use spawn::Spawner;
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
 use user::Mode;
 
-#[derive(clap::Args, Debug, Default)]
+#[derive(clap::Args, Debug, Default, Clone)]
 pub struct Args {
     /// The name of the profile, or a command to sandbox.
     ///
@@ -204,7 +205,8 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
     };
 
     if add_regular {
-        info.handle.arg_i(info.profile.app_path(&info.name))?;
+        info.handle
+            .arg_i(localize_home(&info.profile.app_path(&info.name)))?;
         info.handle.args_i(info.post)?;
         info.handle.error_i(true);
     }

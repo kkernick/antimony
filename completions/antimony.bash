@@ -493,20 +493,12 @@ _antimony() {
             return 0
             ;;
         antimony__refresh)
-            opts="-d -i -c -h --dry --hard --integrate --config --help [PROFILE]"
+            opts="-d -i -h --dry --hard --integrate --help [PROFILE] [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --config)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                -c)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -653,20 +645,12 @@ _antimony() {
             return 0
             ;;
         antimony__trace)
-            opts="-r -c -h --report --config --trace-args --help <PROFILE> errors all [PASSTHROUGH]..."
+            opts="-r -h --report --trace-args --help <PROFILE> errors all [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
-                --config)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                -c)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
                 --trace-args)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

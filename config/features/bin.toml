@@ -1,0 +1,4 @@
+name = "bin"
+description = "Provide all host binaries to the sandbox"
+caveat = "All host binaries are accessible in the sandbox"
+binaries = ["/usr/bin"]

@@ -66,7 +66,7 @@ pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
         let save = user::save().expect("Failed to save user!");
         user::set(user::Mode::Effective).expect("Failed to change user!");
         if !cache_dir.exists() {
-            fs::create_dir(&cache_dir).unwrap();
+            fs::create_dir_all(&cache_dir).unwrap();
         }
         fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))
             .expect("Failed to set permissions for cache!");

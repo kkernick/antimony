@@ -49,7 +49,7 @@ walkdir = "2.5.0"
 copy_dir = "0.1.3"
 
 [profile.dev]
-debug = false
+debug = true
 
 [profile.release]
 opt-level = 3

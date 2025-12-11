@@ -71,7 +71,6 @@ pub fn localize_path(file: &str, home: bool) -> (Option<Cow<'_, str>>, String) {
         }
         (resolved.clone(), resolved)
     };
-
     let dest = localize_home(&dest);
     if Path::new(source.as_ref()).exists() {
         (Some(source), dest.into_owned())

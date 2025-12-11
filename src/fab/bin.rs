@@ -1,7 +1,7 @@
 use crate::{
     fab::{
         lib::{get_dir, get_wildcards},
-        localize_path,
+        localize_home, localize_path,
     },
     shared::{
         env::DATA_HOME,
@@ -11,7 +11,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -417,7 +417,13 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
                     Type::Script | Type::File | Type::Elf => {
                         parsed.localized.insert(src.into_owned(), dst);
                     }
-                    _ => {}
+
+                    Type::Link => {
+                        let link = fs::read_link(src.as_ref())?;
+                        let (_, ldst) = localize_path(&link.to_string_lossy(), home);
+                        parsed.symlinks.insert(dst, ldst);
+                    }
+                    e => warn!("Excluding localization of type {e:?} for {file}"),
                 }
             }
             Ok(())
@@ -471,6 +477,19 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
 }
 
 pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<()> {
+    if let Some(binaries) = &profile.binaries
+        && binaries.contains("/usr/bin")
+    {
+        #[rustfmt::skip]
+            handle.args_i([
+                "--ro-bind", "/usr/bin", "/usr/bin",
+                "--ro-bind", "/usr/sbin", "/usr/sbin",
+                "--symlink", "/usr/bin", "/bin",
+                "--symlink", "/usr/sbin", "/sbin",
+            ])?;
+        return Ok(());
+    }
+
     if COMPGEN.is_empty() {
         return Err(anyhow!("Could not calculate bash builtins"));
     }
@@ -485,7 +504,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     // want its parent directory, such as /usr/lib/chromium.
     parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
         if !elf.contains("/lib/") && !elf.contains("/lib64/") {
-            handle.args_i(["--ro-bind", &elf, &elf])?;
+            handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
         }
         elf_binaries.insert(elf.to_string());
         Ok(())
@@ -506,6 +525,16 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         .try_for_each(|file| handle.args_i(["--ro-bind", &file, &file]))?;
 
     parsed
+        .localized
+        .into_par_iter()
+        .try_for_each(|(src, dst)| handle.args_i(["--ro-bind", &src, &dst]))?;
+
+    profile
+        .libraries
+        .get_or_insert_default()
+        .extend(parsed.directories);
+
+    parsed
         .symlinks
         .into_par_iter()
         .try_for_each(|(link, dest)| {
@@ -515,16 +544,6 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
                 Ok(())
             }
         })?;
-
-    parsed
-        .localized
-        .into_par_iter()
-        .try_for_each(|(src, dst)| handle.args_i(["--ro-bind", &src, &dst]))?;
-
-    profile
-        .libraries
-        .get_or_insert_default()
-        .extend(parsed.directories);
 
     if profile.home.is_some() {
         let home_dir = Path::new(DATA_HOME.as_path()).join("antimony").join(name);

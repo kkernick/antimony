@@ -17,6 +17,21 @@ pub mod trace;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
+/// Create run arguments from subcommand passthrough.
+pub fn run_vec(profile: &str, mut passthrough: Vec<String>) -> Box<run::Args> {
+    let mut command: Vec<String> = vec!["antimony", "run", profile]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    command.append(&mut passthrough);
+    let cli = Cli::parse_from(command);
+    match cli.command {
+        Command::Run(args) => args,
+        _ => unreachable!(),
+    }
+}
+
 #[derive(Parser, Debug, Default)]
 #[command(name = "Antimony")]
 #[command(version)]

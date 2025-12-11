@@ -1,0 +1,4 @@
+name = "dev"
+description = "Provide all host devices to the sandbox"
+caveat = "All host devices are accessible in the sandbox"
+devices = ["/dev"]

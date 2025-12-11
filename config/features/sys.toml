@@ -1,0 +1,6 @@
+name = "sys"
+description = "Provide /sys to the sandbox"
+caveat = "All of /sys is accessible in the sandbox"
+
+[files.platform]
+ReadOnly = ["/sys"]

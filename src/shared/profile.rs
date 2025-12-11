@@ -5,7 +5,7 @@ use crate::{
     fab::{self, lib::get_wildcards, resolve},
     shared::{
         edit,
-        env::{AT_HOME, PWD, USER_NAME},
+        env::{AT_HOME, HOME, PWD, USER_NAME},
         path::which_exclude,
     },
 };
@@ -395,6 +395,12 @@ impl Profile {
                 &fs::read_to_string(Profile::path(&inherit)?)
                     .map_err(|e| Error::Io("read inherited profile", e))?,
             )?)?;
+        }
+
+        if let Some(path) = &profile.path
+            && path.starts_with("~")
+        {
+            profile.path = Some(path.replace("~", HOME.as_str()))
         }
 
         // Try and lookup the path. If it doesn't work, then the corresponding application

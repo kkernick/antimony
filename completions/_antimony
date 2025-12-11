@@ -116,8 +116,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (refresh)
 _arguments "${_arguments_options[@]}" : \
-'-c+[Use a configuration within the profile]:CONFIG:_default' \
-'--config=[Use a configuration within the profile]:CONFIG:_default' \
 '-d[Just delete the cache, don'\''t repopulate]' \
 '--dry[Just delete the cache, don'\''t repopulate]' \
 '--hard[Delete the entire Cache directory. Will break any instance currently running!]' \
@@ -126,6 +124,7 @@ _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 '::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_default' \
+'*::passthrough -- Run arguments:_default' \
 && ret=0
 ;;
 (integrate)
@@ -153,8 +152,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (trace)
 _arguments "${_arguments_options[@]}" : \
-'-c+[Use a configuration within the profile]:CONFIG:_default' \
-'--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--trace-args=[Arguments to pass to strace directly]:TRACE_ARGS:_default' \
 '-r[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
 '--report[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
@@ -163,7 +160,7 @@ _arguments "${_arguments_options[@]}" : \
 ':profile -- The name of the profile:_default' \
 ':mode -- What to trace:((errors\:"Only trace syscalls that return errors"
 all\:"Trace all syscalls, even those that succeed. Useful to see the context in which an error occurred"))' \
-'*::passthrough -- Arguments to pass to the sandbox application:_default' \
+'*::passthrough -- Run arguments:_default' \
 && ret=0
 ;;
 (info)

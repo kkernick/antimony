@@ -1,5 +1,6 @@
 //! Run the sandbox under strace to locate missing files.
 use crate::{
+    cli::run_vec,
     fab::{lib::get_wildcards, resolve},
     setup::setup,
     shared::{env::AT_HOME, feature::Feature, profile::FileMode},
@@ -42,28 +43,26 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     pub report: bool,
 
-    /// Use a configuration within the profile.
-    #[arg(short, long)]
-    pub config: Option<String>,
-
     /// Arguments to pass to strace directly
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub trace_args: Option<Vec<String>>,
 
-    /// Arguments to pass to the sandbox application.
+    /// Run arguments
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }
 
 impl super::Run for Args {
     fn run(mut self) -> Result<()> {
-        let mut args = super::run::Args {
-            binaries: Some(vec!["strace".to_string()]),
-            config: self.config.clone(),
-            passthrough: self.passthrough.take(),
-            ..Default::default()
+        let mut args = if let Some(passthrough) = self.passthrough.take() {
+            run_vec(&self.profile, passthrough)
+        } else {
+            Box::new(crate::cli::run::Args::default())
         };
 
+        args.binaries
+            .get_or_insert_default()
+            .push("strace".to_string());
         match setup(Cow::Borrowed(&self.profile), &mut args) {
             Ok(info) => trace(info, self),
             Err(e) => Err(anyhow!("Failed to run profile: {e}")),

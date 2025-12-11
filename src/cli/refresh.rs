@@ -1,6 +1,6 @@
 //! Refresh installed profiles.
 use crate::{
-    cli,
+    cli::{self, run_vec},
     setup::{self, cleanup, setup},
     shared::env::{CACHE_DIR, HOME_PATH},
 };
@@ -28,9 +28,9 @@ pub struct Args {
     #[arg(short, long, default_value_t = false)]
     pub integrate: bool,
 
-    /// Use a configuration within the profile.
-    #[arg(short, long)]
-    pub config: Option<String>,
+    /// Run arguments
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub passthrough: Option<Vec<String>>,
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
@@ -51,12 +51,14 @@ impl super::Run for Args {
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {
-            let mut args = cli::run::Args {
-                dry: self.dry,
-                config: self.config,
-                refresh: true,
-                ..Default::default()
+            let mut args = if let Some(passthrough) = self.passthrough {
+                run_vec(&profile, passthrough)
+            } else {
+                Box::new(cli::run::Args::default())
             };
+
+            args.refresh = true;
+            args.dry = self.dry;
             let info = setup::setup(Cow::Borrowed(&profile), &mut args)?;
             cli::run::run(info, &mut args)?;
 
