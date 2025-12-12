@@ -8,7 +8,7 @@ use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::{borrow::Cow, fs, time::Duration};
-use user::run_as;
+use user::try_run_as;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -71,8 +71,7 @@ impl super::Run for Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
-            let profiles: Vec<String> = run_as!(user::Mode::Real, Result<Vec<String>>, {
-                user::set(user::Mode::Real)?;
+            let profiles: Vec<String> = try_run_as!(user::Mode::Real, Result<Vec<String>>, {
                 let bin = HOME_PATH.join(".local").join("bin");
                 debug!("Refreshing local binaries");
 
@@ -116,8 +115,7 @@ impl super::Run for Args {
 
                 if self.integrate {
                     debug!("Integrating {name}");
-                    run_as!(user::Mode::Real, Result<()>, {
-                        user::set(user::Mode::Real)?;
+                    try_run_as!(user::Mode::Real, Result<()>, {
                         pb.set_message(format!("Integrating {name}"));
                         cli::integrate::integrate(cli::integrate::Args {
                             profile: name,

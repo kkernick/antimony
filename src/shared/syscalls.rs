@@ -32,21 +32,20 @@ use user::run_as;
 
 /// Connection to the Database
 pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
-    let saved = user::save().expect("Failed to save user");
-    user::set(user::Mode::Effective).expect("Failed to set user");
-    let dir = AT_HOME.join("seccomp");
-    if !dir.exists() {
-        fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");
-    }
-    let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
-    let pool = Pool::new(manager).expect("Failed to create pool");
+    run_as!(user::Mode::Effective, {
+        let dir = AT_HOME.join("seccomp");
+        if !dir.exists() {
+            fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");
+        }
+        let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
+        let pool = Pool::new(manager).expect("Failed to create pool");
 
-    let conn = pool.get().expect("Failed to get connection");
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .expect("Failed to set mode");
+        let conn = pool.get().expect("Failed to get connection");
+        conn.pragma_update(None, "journal_mode", "WAL")
+            .expect("Failed to set mode");
 
-    conn.execute_batch(
-        "
+        conn.execute_batch(
+            "
         PRAGMA foreign_keys = ON;
         CREATE TABLE IF NOT EXISTS binaries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,10 +78,10 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
             FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
         );
         ",
-    )
-    .expect("Failed to initialize schema");
-    user::restore(saved).expect("Failed to restore user");
-    pool
+        )
+        .expect("Failed to initialize schema");
+        pool
+    })
 });
 
 /// Errors relating to SECCOMP policy generation.
@@ -393,7 +392,6 @@ pub fn new(
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     trace!("Allowing internal syscalls: {}", syscalls.len());
-
     let mut syscalls = syscalls.into_iter().collect::<Vec<_>>();
     syscalls.sort();
     for syscall in &syscalls {
@@ -419,12 +417,12 @@ pub fn new(
         if let Some(parent) = bpf.parent()
             && !parent.exists()
         {
-            run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
+            fs::create_dir_all(parent)?;
         }
 
         Some(if !bpf.exists() {
             debug!("Writing filter...");
-            run_as!(user::Mode::Effective, filter.write(&bpf))?
+            filter.write(&bpf)?
         } else {
             File::open(&bpf)?.into()
         })

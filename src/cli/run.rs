@@ -13,7 +13,7 @@ use log::debug;
 use nix::{errno::Errno, sys::signal::Signal::SIGTERM};
 use spawn::Spawner;
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
-use user::Mode;
+use user::{Mode, try_run_as};
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct Args {
@@ -246,29 +246,32 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             }
         }
 
-        debug!("Spawning");
-        let mut handle = info.handle.spawn()?;
-        let code = handle.wait_for_signal(SIGTERM, Duration::from_millis(100))?;
+        // We need to run this under Real, because handle has to fall out of scope within Real Mode,
+        // that way it can properly cleanup the proxy.
+        try_run_as!(Mode::Real, Result<()>, {
+            let mut handle = info.handle.spawn()?;
+            let code = handle.wait_for_signal(SIGTERM, Duration::from_millis(100))?;
 
-        let log = if code != 0 && args.log {
-            let error = handle.error_all()?;
-            // Write it to a log file.
-            if !error.is_empty() {
-                let log = info.sys_dir.join(&info.instance).with_extension("log");
-                let mut file = fs::File::create(&log)?;
-                file.write_all(error.as_bytes())?;
-                Some(log)
+            let log = if code != 0 && args.log {
+                debug!("Logging...");
+                let error = handle.error_all()?;
+                // Write it to a log file.
+                if !error.is_empty() {
+                    let log = info.sys_dir.join(&info.instance).with_extension("log");
+                    let mut file = fs::File::create(&log)?;
+                    file.write_all(error.as_bytes())?;
+                    Some(log)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
-        if code != 0 {
-            // Alert the user.
-            let error_name = Errno::from_raw(-code);
-            #[rustfmt::skip]
+            if code != 0 {
+                // Alert the user.
+                let error_name = Errno::from_raw(-code);
+                #[rustfmt::skip]
             let handle = Spawner::new("notify-send")
                 .args([
                     &format!("Sandbox Error: {}", info.name.to_title_case()),
@@ -281,51 +284,55 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                     "-t", "5000",
                 ])?;
 
-            // If there are errors, give the user the option to open the log
-            if log.is_some() {
-                handle.args_i(["-A", "Open=Open Error Log"])?;
-            }
+                // If there are errors, give the user the option to open the log
+                if log.is_some() {
+                    handle.args_i(["-A", "Open=Open Error Log"])?;
+                }
 
-            let output = handle
-                .preserve_env(true)
-                .mode(Mode::Real)
-                .output(true)
-                .spawn()?
-                .output_all()?;
-
-            // If we want to open, use xdg-open.
-            if let Some(log) = log
-                && output.starts_with("Open")
-            {
-                Spawner::new("xdg-open")
-                    .arg(log.to_string_lossy())?
+                let output = handle
                     .preserve_env(true)
                     .mode(Mode::Real)
+                    .output(true)
                     .spawn()?
-                    .wait()?;
-            }
-        } else if let Some(log) = log
-            && args.log
-        {
-            log::info!("Log is available at {log:?}")
-        }
+                    .output_all()?;
 
-        if let Some(mut hooks) = info.profile.hooks.take()
-            && let Some(post) = hooks.post.take()
-        {
-            debug!("Processing post-hooks");
-            for hook in post {
-                hook.process(
-                    None,
-                    &info.name,
-                    &info.sys_dir.to_string_lossy(),
-                    &info.home,
-                    false,
-                )?;
+                // If we want to open, use xdg-open.
+                if let Some(log) = log
+                    && output.starts_with("Open")
+                {
+                    Spawner::new("xdg-open")
+                        .arg(log.to_string_lossy())?
+                        .preserve_env(true)
+                        .mode(Mode::Real)
+                        .spawn()?
+                        .wait(None)?;
+                }
+            } else if let Some(log) = log
+                && args.log
+            {
+                log::info!("Log is available at {log:?}")
             }
-        }
+
+            if let Some(mut hooks) = info.profile.hooks.take()
+                && let Some(post) = hooks.post.take()
+            {
+                debug!("Executing post-hooks");
+                for hook in post {
+                    debug!("Processing post-hook: {hook:?}");
+                    hook.process(
+                        None,
+                        &info.name,
+                        &info.sys_dir.to_string_lossy(),
+                        &info.home,
+                        false,
+                    )?;
+                }
+            }
+            Ok(())
+        })?;
     }
 
+    debug!("Cleaning up");
     crate::setup::cleanup(info.instance)?;
     Ok(())
 }

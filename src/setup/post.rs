@@ -3,7 +3,7 @@ use anyhow::Result;
 use log::debug;
 use std::{borrow::Cow, fs, path::Path};
 use url::Url;
-use user::{self, run_as};
+use user::{self, try_run_as};
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
@@ -25,7 +25,7 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
             None => FileMode::ReadOnly,
         };
 
-        run_as!(user::Mode::Real, Result<()>, {
+        try_run_as!(user::Mode::Real, Result<()>, {
             for arg in &mut post_args {
                 if Path::new(arg).exists() || arg.starts_with("file://") {
                     debug!("File passthrough: {arg}");

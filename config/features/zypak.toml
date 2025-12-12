@@ -1,7 +1,0 @@
-name = "zypak"
-description = "Wrapper for electron applications"
-
-conditional = "command -v /usr/bin/zypak-wrapper"
-binaries = ["zypak-*"]
-libraries = ["libzypak*"]
-sandbox_args = ["zypak-wrapper"]

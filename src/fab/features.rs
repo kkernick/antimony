@@ -1,9 +1,9 @@
 use crate::{
+    fab::resolve,
     shared::{
         feature::Feature,
         profile::{FileMode, Profile},
     },
-    fab::resolve,
 };
 use log::{debug, warn};
 use spawn::Spawner;
@@ -187,7 +187,7 @@ fn add_feature(
                 .output(true)
                 .error(true)
                 .spawn()?
-                .wait()?;
+                .wait(None)?;
             Ok(code)
         }();
 

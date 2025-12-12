@@ -19,7 +19,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use user::{self, run_as};
+use user::{self, try_run_as};
 use which::which;
 
 pub fn run(
@@ -35,24 +35,21 @@ pub fn run(
 
     debug!("Creating proxy directory");
     let proxy = user_dir(instance).join("proxy");
-    run_as!(user::Mode::Real, fs::create_dir_all(&proxy))?;
+    try_run_as!(user::Mode::Real, fs::create_dir_all(&proxy))?;
 
     debug!("Creating SOF");
-    run_as!(user::Mode::Effective, Result<()>, {
-        // Create an SOF for the proxy.
-        // It's shared between every application and instance.
-        // Performed before we drop to the user.
-        if !sof.exists() {
-            let libraries = get_libraries(Cow::Borrowed(&resolve))?;
 
-            libraries
-                .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Owned(library)))?;
-        }
-        Ok(())
-    })?;
+    // Create an SOF for the proxy.
+    // It's shared between every application and instance.
+    // Performed before we drop to the user.
+    if !sof.exists() {
+        let libraries = get_libraries(Cow::Borrowed(&resolve))?;
 
-    let sof_str = sof.to_string_lossy();
+        libraries
+            .into_par_iter()
+            .try_for_each(|library| add_sof(&sof, Cow::Owned(library)))?;
+    }
+
     #[rustfmt::skip]
     let mut proxy = Spawner::new("/usr/bin/bwrap")
         .mode(user::Mode::Real).args([
@@ -72,14 +69,25 @@ pub fn run(
         ])?;
 
     let app_dir = RUNTIME_DIR.join("app").join(id);
-    run_as!(user::Mode::Real, fs::create_dir_all(&app_dir))?;
+    try_run_as!(user::Mode::Real, fs::create_dir_all(&app_dir))?;
 
-    #[rustfmt::skip]
+    let sof_str = sof.to_string_lossy();
+    proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
+
+    let path = &format!("{sof_str}/lib64");
+    if Path::new(path).exists() {
+        proxy.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
+    } else {
+        proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
+    }
+
     proxy.args_i([
-        "--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib",
-        "--ro-bind-try", &format!("{sof_str}/lib64"), "/usr/lib64",
-        "--symlink", "/usr/lib", "/lib",
-        "--symlink", "/usr/lib64", "/lib64",
+        "--symlink",
+        "/usr/lib",
+        "/lib",
+        "--symlink",
+        "/usr/lib64",
+        "/lib64",
     ])?;
 
     // Setup SECCOMP.
@@ -107,7 +115,7 @@ pub fn run(
 
     let cache = sys_dir.join("proxy.cache");
     if cache.exists() {
-        run_as!(user::Mode::Effective, proxy.cache_read(&cache))?;
+        proxy.cache_read(&cache)?;
     } else {
         proxy.cache_start()?;
 
@@ -152,7 +160,7 @@ pub fn run(
                 proxy.arg_i(format!("--call={portal}"))?;
             }
         }
-        run_as!(user::Mode::Effective, proxy.cache_write(&cache))?;
+        proxy.cache_write(&cache)?;
     }
     Ok(proxy)
 }
@@ -179,7 +187,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         let info = user_dir(instance).join(".flatpak-info");
 
         // Create the flatpak-info
-        run_as!(user::Mode::Real, Result<()>, {
+        try_run_as!(user::Mode::Real, Result<()>, {
             debug!("Creating flatpak info");
             let out = fs::File::create_new(&info)?;
 
@@ -213,7 +221,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             Ok(())
         })?;
 
-        run_as!(user::Mode::Real, Result<()>, {
+        try_run_as!(user::Mode::Real, Result<()>, {
             debug!("Creating flatpak directory");
             let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
             fs::create_dir_all(&flatpak_dir)?;
@@ -244,7 +252,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             ])?;
 
             if !args.args.dry {
-                run_as!(user::Mode::Real, Result<()>, {
+                try_run_as!(user::Mode::Real, Result<()>, {
                     debug!("Creating proxy watch");
                     args.watches.insert(
                         args.inotify

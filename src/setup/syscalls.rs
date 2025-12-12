@@ -29,6 +29,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                         "--profile", &args.name,
                         "--mode", &format!("{policy:?}").to_lowercase()
                     ])?
+                    .mode(user::Mode::Existing)
                     .preserve_env(true)
                     .spawn()?;
                 args.handle.associate(handle);

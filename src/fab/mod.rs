@@ -7,6 +7,7 @@ pub mod lib;
 pub mod ns;
 
 use crate::shared::env::HOME;
+use log::debug;
 use std::{borrow::Cow, env, path::Path};
 
 pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
@@ -61,7 +62,7 @@ pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
 }
 
 /// Ensure ~ points to /home/antimony
-pub fn localize_path(file: &str, home: bool) -> (Option<Cow<'_, str>>, String) {
+pub fn localize_path(file: &str, home: bool) -> Result<(Option<Cow<'_, str>>, String), nix::Error> {
     let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
         (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
     } else {
@@ -72,9 +73,11 @@ pub fn localize_path(file: &str, home: bool) -> (Option<Cow<'_, str>>, String) {
         (resolved.clone(), resolved)
     };
     let dest = localize_home(&dest);
-    if Path::new(source.as_ref()).exists() {
+    Ok(if Path::new(source.as_ref()).exists() {
+        debug!("{source} => {dest}");
         (Some(source), dest.into_owned())
     } else {
+        debug!("{source} (does not exist) => {dest}");
         (None, dest.into_owned())
-    }
+    })
 }

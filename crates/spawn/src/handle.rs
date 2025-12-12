@@ -26,7 +26,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle, sleep},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// Errors related to a ProcessHandle
@@ -53,6 +53,9 @@ pub enum Error {
 
     /// Error trying to write to standard input.
     Io(io::Error),
+
+    /// Timeout error
+    Timeout,
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -70,6 +73,7 @@ impl fmt::Display for Error {
             Self::Input => write!(f, "Cannot read input, as child has already terminated!"),
             Self::Io(e) => write!(f, "IO Error: {e}"),
             Self::NoAssociate(name) => write!(f, "No such associate: {name}"),
+            Self::Timeout => write!(f, "Timeout"),
         }
     }
 }
@@ -319,10 +323,18 @@ impl Handle {
 
     /// Wait for the child to terminate, then return the exit
     /// code.
-    pub fn wait(&mut self) -> Result<i32, Error> {
+    pub fn wait(&mut self, timeout: Option<Duration>) -> Result<i32, Error> {
         if let Some(pid) = self.child {
+            let start = Instant::now();
             loop {
-                match waitpid(pid, None) {
+                match waitpid(
+                    pid,
+                    if timeout.is_some() {
+                        Some(WaitPidFlag::WNOHANG)
+                    } else {
+                        None
+                    },
+                ) {
                     Ok(status) => {
                         self.child = None;
                         if let WaitStatus::Exited(_, code) = status {
@@ -331,6 +343,11 @@ impl Handle {
                         }
                     }
                     Err(e) => return Err(Error::Comm(e)),
+                }
+                if let Some(duration) = timeout
+                    && start.elapsed() >= duration
+                {
+                    return Err(Error::Timeout);
                 }
             }
         }
@@ -372,7 +389,7 @@ impl Handle {
             }
 
             // Collect the error code and return
-            self.wait()
+            self.wait(None)
         } else {
             Ok(self.exit)
         }

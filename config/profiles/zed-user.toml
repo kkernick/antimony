@@ -1,0 +1,5 @@
+path = "~/.local/zed.app/libexec/zed-editor"
+inherits = ["default", "zed"]
+
+[files.user]
+ReadOnly = ["~/.local/zed.app"]

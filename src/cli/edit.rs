@@ -2,7 +2,6 @@
 use crate::{cli::default, shared::profile::Profile};
 use anyhow::Result;
 use std::fs;
-use user::run_as;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -21,7 +20,7 @@ impl super::Run for Args {
             if new {
                 let source = Profile::path(&self.profile)?;
                 if let Some(parent) = user.parent() {
-                    run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
+                    fs::create_dir_all(parent)?;
                 }
                 fs::copy(source, &user)?;
             }
@@ -30,7 +29,7 @@ impl super::Run for Args {
             if Profile::edit(&user)?.is_none() && new {
                 // If there was no modifications, delete the profile
                 // since it's identical to the system one.
-                run_as!(user::Mode::Effective, fs::remove_file(user))?;
+                fs::remove_file(user)?;
             }
             Ok(())
         }

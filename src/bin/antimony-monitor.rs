@@ -198,7 +198,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
         .spawn()?;
 
     let output = handle.output_all()?;
-    if handle.wait()? != 0 {
+    if handle.wait(None)? != 0 {
         return Err(anyhow!("Failed to get input!"));
     }
 

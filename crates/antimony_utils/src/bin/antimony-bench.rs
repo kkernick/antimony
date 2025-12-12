@@ -72,7 +72,7 @@ fn main() -> Result<()> {
 
     if let Some(checkout) = &cli.checkout {
         // Stash our working edits
-        Spawner::new("git").arg("stash")?.spawn()?.wait()?;
+        Spawner::new("git").arg("stash")?.spawn()?.wait(None)?;
 
         // Checkout the desired state, but only for code and Cargo.
         Spawner::new("git")
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
                 "Cargo.lock",
             ])?
             .spawn()?
-            .wait()?;
+            .wait(None)?;
     }
 
     let mut args: Vec<String> = vec!["--shell=none", "--time-unit=millisecond"]
@@ -107,14 +107,14 @@ fn main() -> Result<()> {
                 Spawner::new(format!("{root}/pgo"))
                     .preserve_env(true)
                     .spawn()?
-                    .wait()?;
+                    .wait(None)?;
                 format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony")
             }
             "bolt" => {
                 Spawner::new(format!("{root}/bolt"))
                     .preserve_env(true)
                     .spawn()?
-                    .wait()?;
+                    .wait(None)?;
                 format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony-bolt-optimized")
             }
             recipe if recipe == "release" || recipe == "dev" => {
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
                     .args(["build", "--profile", recipe])?
                     .preserve_env(true)
                     .spawn()?
-                    .wait()?;
+                    .wait(None)?;
                 format!(
                     "{root}/target/{}/antimony",
                     if recipe == "dev" { "debug" } else { &recipe }
@@ -166,7 +166,7 @@ fn main() -> Result<()> {
             .arg(command.join(" "))?
             .preserve_env(true)
             .spawn()?
-            .wait()?;
+            .wait(None)?;
 
         let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
             .into_iter()
@@ -187,7 +187,7 @@ fn main() -> Result<()> {
             .arg(command.join(" "))?
             .preserve_env(true)
             .spawn()?
-            .wait()?;
+            .wait(None)?;
 
         if cli.profiles.len() > 1 {
             println!("Waiting for system to cool down");
@@ -208,19 +208,19 @@ fn main() -> Result<()> {
                 "Cargo.lock",
             ])?
             .spawn()?
-            .wait()?;
+            .wait(None)?;
 
         // Reset to the original state
         Spawner::new("git")
             .args(["reset", "--hard"])?
             .spawn()?
-            .wait()?;
+            .wait(None)?;
 
         // Return uncommitted edits.
         Spawner::new("git")
             .args(["stash", "pop"])?
             .spawn()?
-            .wait()?;
+            .wait(None)?;
     }
 
     if let Some(mut handle) = privilege_handle {

@@ -833,7 +833,7 @@ mod tests {
             handles.push(Spawner::new("true").input(true).output(true).spawn()?)
         }
         for mut handle in handles {
-            assert!(handle.wait()? == 0);
+            assert!(handle.wait(None)? == 0);
         }
         Ok(())
     }

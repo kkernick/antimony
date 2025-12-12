@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 use nix::unistd::getpid;
 use spawn::Spawner;
-use user::run_as;
+use user::try_run_as;
 
 use crate::shared::{env::AT_HOME, feature::Feature};
 
@@ -21,17 +21,19 @@ pub struct Args {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        user::set(user::Mode::Real)?;
-        let result = Spawner::new("pkcheck")
-            .args([
-                "--action-id",
-                "org.freedesktop.policykit.exec",
-                "--allow-user-interaction",
-                "--process",
-                &format!("{}", getpid().as_raw()),
-            ])?
-            .spawn()?
-            .wait()?;
+        let result = try_run_as!(user::Mode::Real, Result<i32>, {
+            Ok(Spawner::new("pkcheck")
+                .args([
+                    "--action-id",
+                    "org.freedesktop.policykit.exec",
+                    "--allow-user-interaction",
+                    "--process",
+                    &format!("{}", getpid().as_raw()),
+                ])?
+                .spawn()?
+                .wait(None)?)
+        })?;
+
         if result != 0 {
             return Err(anyhow!(
                 "Administrative privilege and Polkit is required to modify the system feature set!"
@@ -49,7 +51,7 @@ impl super::Run for Args {
                     return Err(anyhow!("Requested feature does not exist!"));
                 }
                 if let Some(parent) = feature.parent() {
-                    run_as!(user::Mode::Effective, fs::create_dir_all(parent))?;
+                    fs::create_dir_all(parent)?;
                 }
                 fs::copy(AT_HOME.join("config").join("feature.toml"), &feature)?;
             } else if self.delete {
@@ -58,7 +60,7 @@ impl super::Run for Args {
                     .interact()?;
                 if confirm {
                     println!("Deleting {feature:?}");
-                    run_as!(user::Mode::Effective, fs::remove_file(&feature))?;
+                    fs::remove_file(&feature)?;
                 }
                 return Ok(());
             }
@@ -66,7 +68,7 @@ impl super::Run for Args {
             // Edit it.
             if Feature::edit(&feature)?.is_none() && new {
                 // If there was no modifications, delete the empty feature
-                run_as!(user::Mode::Effective, fs::remove_file(feature))?;
+                fs::remove_file(feature)?;
             }
         }
         Ok(())

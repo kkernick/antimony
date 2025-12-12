@@ -1734,6 +1734,7 @@ dependencies = [
 name = "user"
 version = "0.1.0"
 dependencies = [
+ "log",
  "nix",
  "once_cell",
 ]

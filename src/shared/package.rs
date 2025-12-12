@@ -5,7 +5,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::Path,
 };
-use user::run_as;
+use user::try_run_as;
 use walkdir::WalkDir;
 use zip::write::SimpleFileOptions;
 
@@ -38,7 +38,7 @@ pub fn package(src: &Path, dst: &Path) -> Result<()> {
     }
     zip.finish()?;
 
-    run_as!(
+    try_run_as!(
         user::Mode::Real,
         io::Result<u64>,
         copy(dst, PWD.join(dst.file_name().unwrap()))

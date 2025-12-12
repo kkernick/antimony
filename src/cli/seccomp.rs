@@ -15,6 +15,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
+use user::try_run_as;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -46,17 +47,19 @@ pub enum Operation {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        let result = Spawner::new("pkcheck")
-            .args([
-                "--action-id",
-                "org.freedesktop.policykit.exec",
-                "--allow-user-interaction",
-                "--process",
-                &format!("{}", getpid().as_raw()),
-            ])?
-            .mode(user::Mode::Real)
-            .spawn()?
-            .wait()?;
+        let result = try_run_as!(user::Mode::Real, Result<i32>, {
+            Ok(Spawner::new("pkcheck")
+                .args([
+                    "--action-id",
+                    "org.freedesktop.policykit.exec",
+                    "--allow-user-interaction",
+                    "--process",
+                    &format!("{}", getpid().as_raw()),
+                ])?
+                .spawn()?
+                .wait(None)?)
+        })?;
+
         if result != 0 {
             Err(anyhow!(
                 "Administrative privilege and Polkit is required to modify the SECCOMP database!"
@@ -82,24 +85,24 @@ impl super::Run for Args {
                     Ok(())
                 }
                 Operation::Export => {
-                    user::set(user::Mode::Real)?;
-                    let db = AT_HOME.join("seccomp").join("syscalls.db");
-                    if !db.exists() {
-                        return Err(anyhow!("No database exists!"));
-                    } else {
-                        let dest = match self.path {
-                            Some(path) => PathBuf::from(path),
-                            None => getcwd()?.join("syscalls.db"),
-                        };
+                    try_run_as!(user::Mode::Real, Result<()>, {
+                        let db = AT_HOME.join("seccomp").join("syscalls.db");
+                        if !db.exists() {
+                            return Err(anyhow!("No database exists!"));
+                        } else {
+                            let dest = match self.path {
+                                Some(path) => PathBuf::from(path),
+                                None => getcwd()?.join("syscalls.db"),
+                            };
 
-                        io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
-                        println!("Exported to {dest:?}")
-                    }
-                    Ok(())
+                            io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
+                            println!("Exported to {dest:?}");
+                        }
+                        Ok(())
+                    })
                 }
 
                 Operation::Merge => {
-                    user::set(user::Mode::Effective)?;
                     let db = match self.path {
                         Some(path) => PathBuf::from(path),
                         None => getcwd()?.join("syscalls.db"),

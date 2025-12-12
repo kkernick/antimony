@@ -17,7 +17,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             HomePolicy::None => Ok(None),
             policy => {
                 let home_str = home_dir.to_string_lossy();
-                user::run_as!(user::Mode::Real, Result<()>, {
+                user::try_run_as!(user::Mode::Real, Result<()>, {
                     debug!("Setting up home at {home_dir:?}");
                     fs::create_dir_all(&home_dir)?;
 
@@ -43,10 +43,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 } else {
                                     let work = args.sys_dir.join("work");
                                     let work_str = work.to_string_lossy();
-                                    user::run_as!(
-                                        user::Mode::Effective,
-                                        fs::create_dir_all(&work)
-                                    )?;
+                                    fs::create_dir_all(&work)?;
 
                                     #[rustfmt::skip]
                                 args.handle.args_i([

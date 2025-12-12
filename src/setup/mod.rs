@@ -28,7 +28,7 @@ use std::{
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
-use user::run_as;
+use user::try_run_as;
 use zbus::blocking;
 
 struct Args<'a> {
@@ -129,7 +129,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
             Spawner::new("find")
                 .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
                 .spawn()?
-                .wait()?;
+                .wait(None)?;
         } else {
             debug!("Using refresh directory");
             sys_dir = refresh_dir.clone();
@@ -156,7 +156,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 
     fs::create_dir_all(&instances)?;
 
-    run_as!(user::Mode::Real, Result<()>, {
+    try_run_as!(user::Mode::Real, Result<()>, {
         if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
             let connection = blocking::Connection::session()?;
             let proxy = blocking::Proxy::new(
@@ -200,7 +200,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         .mode(user::Mode::Real);
 
     debug!("Initializing inotify handle");
-    let inotify = run_as!(user::Mode::Real, Inotify::init())?;
+    let inotify = try_run_as!(user::Mode::Real, Inotify::init())?;
     let watches = HashSet::new();
 
     let mut a = Args {
@@ -240,10 +240,11 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 
 pub fn cleanup(instance: PathBuf) -> Result<()> {
     debug!("Cleaning up!");
+
     let user_dir = fs::read_link(&instance)?;
     fs::remove_file(&instance)?;
 
-    run_as!(user::Mode::Real, Result<()>, {
+    try_run_as!(user::Mode::Real, Result<()>, {
         let runtime = RUNTIME_DIR.join(".flatpak").join(&instance);
         if runtime.exists() {
             fs::remove_dir_all(runtime)?;

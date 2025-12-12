@@ -9,6 +9,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use tempfile::NamedTempFile;
 use user::run_as;
 
 use crate::shared::env::EDITOR;
@@ -107,12 +108,15 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
-    user::set(user::Mode::Real).map_err(|e| Error::Errno("Set User", e))?;
-    let temp = tempfile::Builder::new()
-        .suffix(".toml")
-        .tempfile()
-        .map_err(|e| Error::Io("open temporary file", e))?;
-    fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
+    let temp = run_as!(user::Mode::Real, Result<NamedTempFile, Error>, {
+        let temp = tempfile::Builder::new()
+            .suffix(".toml")
+            .tempfile()
+            .map_err(|e| Error::Io("open temporary file", e))?;
+        fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
+        Ok(temp)
+    })?;
+
     let original = fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
 
     // Loop until the user either:
@@ -125,7 +129,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
             .arg(temp.path().to_string_lossy())?
             .mode(user::Mode::Real)
             .spawn()?
-            .wait()?;
+            .wait(None)?;
 
         // Read the contents.
         match fs::read_to_string(&temp) {
@@ -159,11 +163,12 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         }
     };
 
-    run_as!(user::Mode::Effective, Result<(), Error>, {
-        write!(File::create(path).map_err(|e| Error::Io("write", e))?, "{}", toml::to_string(&buffer)?)
-            .map_err(|e| Error::Io("write", e))?;
-        Ok(())
-    })?;
+    write!(
+        File::create(path).map_err(|e| Error::Io("write", e))?,
+        "{}",
+        toml::to_string(&buffer)?
+    )
+    .map_err(|e| Error::Io("write", e))?;
 
     Ok(Some(()))
 }

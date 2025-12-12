@@ -864,7 +864,7 @@ impl Hook {
                     Err(HookError::Attach)
                 }
             } else {
-                let code = handle.wait()?;
+                let code = handle.wait(None)?;
                 if code != 0 && !self.can_fail.unwrap_or(false) {
                     return Err(HookError::Fail(code));
                 }

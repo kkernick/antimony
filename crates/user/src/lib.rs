@@ -151,7 +151,7 @@ pub fn save() -> Result<(ResUid, ResGid), Errno> {
 /// reverting at the end of execution. This function, therefore,
 /// does not change the existing mode after returning.
 #[macro_export]
-macro_rules! run_as {
+macro_rules! try_run_as {
     ($mode:path, $ret:ty, $body:block) => {{
         let __saved = user::save()?;
         user::set($mode)?;
@@ -181,6 +181,41 @@ macro_rules! run_as {
         user::set($mode)?;
         let __result = $expr;
         user::restore(__saved)?;
+        __result
+    }};
+}
+
+#[macro_export]
+macro_rules! run_as {
+    ($mode:path, $ret:ty, $body:block) => {{
+        let __saved = user::save().expect("Failed to save user mode");
+        user::set($mode).expect("Failed to set user mode");
+        let __result: $ret = (|| -> $ret { $body })();
+        user::restore(__saved).expect("Failed to restore user mode");
+        __result
+    }};
+
+    ($mode:path, $ret:ty, $expr:expr) => {{
+        let __saved = user::save().expect("Failed to save user mode");
+        ::user::set($mode).expect("Failed to set user mode");
+        let __result: $ret = (|| -> $ret { $expr })();
+        user::restore(__saved).expect("Failed to restore user mode");
+        __result
+    }};
+
+    ($mode:path, $body:block) => {{
+        let __saved = user::save().expect("Failed to save user mode");
+        user::set($mode).expect("Failed to set user mode");
+        let __result = (|| $body)();
+        user::restore(__saved).expect("Failed to restore user mode");
+        __result
+    }};
+
+    ($mode:path, $expr:expr) => {{
+        let __saved = user::save().expect("Failed to save user mode");
+        user::set($mode).expect("Failed to set user mode");
+        let __result = $expr;
+        user::restore(__saved).expect("Failed to restore user mode");
         __result
     }};
 }
