@@ -1,10 +1,14 @@
 use crate::{
-    fab,
+    fab::{
+        self,
+        lib::{LIB_ROOTS, SINGLE_LIB},
+    },
     shared::env::{OVERLAY, USER_NAME},
 };
 use anyhow::{Result, anyhow};
 use log::debug;
-use std::{fs, time::Instant};
+use spawn::Spawner;
+use std::{collections::HashSet, fs, path::PathBuf, time::Instant};
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached.
@@ -22,6 +26,31 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         }
         debug!("Corrupted cache. Rebuilding.");
     }
+
+    rayon::spawn(|| {
+        let find_roots = || -> Result<HashSet<String>> {
+            let mut roots: HashSet<String> = Spawner::new("find")
+                .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])?
+                .output(true)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .filter_map(|path| {
+                    PathBuf::from(&path[..path.len() - 1])
+                        .parent()
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
+                .collect();
+            debug!("Library root at: {roots:?}");
+
+            roots.insert(String::from("/usr/lib"));
+            if !*SINGLE_LIB {
+                roots.insert(String::from("/usr/lib64"));
+            }
+            Ok(roots)
+        };
+        let _ = LIB_ROOTS.set(find_roots().unwrap_or(HashSet::from(["/usr/lib".to_string()])));
+    });
 
     debug!("Fabricating sandbox");
     let mut timer = Instant::now();
