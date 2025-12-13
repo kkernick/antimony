@@ -8,7 +8,7 @@ use crate::{
 use anyhow::{Error, Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
@@ -38,33 +38,7 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
-    let find_roots = || -> Result<HashSet<String>> {
-        let def = String::from("/usr/lib");
-        let path = Spawner::new("find")
-            .args(["/usr/lib", "-name", "libsqlite3.so"])?
-            .output(true)
-            .spawn()?
-            .output_all()?;
-        let path = match PathBuf::from(&path[..path.len() - 1]).parent() {
-            Some(path) => path.to_string_lossy().into_owned(),
-            None => def.clone(),
-        };
-
-        debug!("Found library root at {path:?}");
-
-        let mut roots = HashSet::new();
-        roots.insert(path);
-        roots.insert(def);
-
-        if !*SINGLE_LIB {
-            roots.insert(String::from("/usr/lib64"));
-        }
-        Ok(roots)
-    };
-
-    find_roots().unwrap_or(HashSet::from(["/usr/lib".to_string()]))
-});
+pub static LIB_ROOTS: OnceCell<HashSet<String>> = OnceCell::new();
 
 /// Get cached definitions.
 pub fn get_cache(name: &str) -> Result<Option<HashSet<String>>> {
@@ -145,7 +119,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
         let mut libraries = HashSet::new();
-        for root in LIB_ROOTS.iter() {
+        for root in LIB_ROOTS.wait().iter() {
             libraries.extend(run(root, pattern)?);
         }
 
@@ -282,7 +256,7 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    for lib_root in LIB_ROOTS.iter() {
+    for lib_root in LIB_ROOTS.wait().iter() {
         let app_lib = format!("{lib_root}/{name}");
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
@@ -301,7 +275,7 @@ pub fn fabricate(
             } else if e.starts_with("~") {
                 Some(Cow::Owned(e.replace("~", HOME.as_str())))
             } else {
-                for root in LIB_ROOTS.iter() {
+                for root in LIB_ROOTS.wait().iter() {
                     let path = format!("{root}/{e}");
                     if Path::new(&path).exists() {
                         return Some(Cow::Owned(path));
@@ -372,7 +346,7 @@ pub fn fabricate(
                 library.as_str()
             };
 
-            if LIB_ROOTS.iter().any(|r| parent == r) {
+            if LIB_ROOTS.wait().iter().any(|r| parent == r) {
                 true
             } else {
                 !directories
@@ -403,8 +377,8 @@ pub fn fabricate(
         "--symlink", "/usr/lib64", "/lib64",
     ])?;
 
-    directories.iter().try_for_each(|dir| -> Result<()> {
-        if LIB_ROOTS.iter().any(|r| dir.starts_with(r)) {
+    directories.par_iter().try_for_each(|dir| -> Result<()> {
+        if LIB_ROOTS.wait().iter().any(|r| dir.starts_with(r)) {
             let sof_path = get_sof_path(&sof, dir.as_str());
             if !sof_path.exists() {
                 fs::create_dir_all(sof_path)?;

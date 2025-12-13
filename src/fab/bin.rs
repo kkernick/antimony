@@ -135,7 +135,7 @@ impl ParseReturn {
             ret.directories.par_extend(next()?);
             ret.symlinks.par_extend(
                 next()?
-                    .into_iter()
+                    .into_par_iter()
                     .filter_map(|e| {
                         if let Some((key, value)) = e.split_once("=") {
                             Some((key.to_string(), value.to_string()))
@@ -284,7 +284,7 @@ fn parse(
         return Ok(Type::Link);
     }
 
-    if LIB_ROOTS.iter().any(|r| path.starts_with(r)) {
+    if LIB_ROOTS.wait().iter().any(|r| path.starts_with(r)) {
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
@@ -460,7 +460,6 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
 
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
-
     if let Some(binaries) = profile.binaries.take() {
         // Separate the wildcards from the files/dirs.
         let (wildcards, flat): (HashSet<_>, HashSet<_>) =
@@ -471,7 +470,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
                 .into_par_iter()
                 .filter_map(|e| get_wildcards(&e, false).ok())
                 .collect::<Vec<_>>()
-                .into_iter()
+                .into_par_iter()
                 .flatten()
                 .collect::<HashSet<_>>(),
         );
@@ -481,7 +480,6 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     let done = Arc::new(DashSet::new());
 
     // Read direct files so we can determine dependencies.
-    debug!("Localizing files");
     if let Some(files) = &mut profile.files {
         if let Some(user) = &mut files.user
             && let Some(x) = user.remove(&FileMode::Executable)
@@ -521,7 +519,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     }
 
     // Parse the binaries
-    debug!("Localizing binaries: {resolved:?}");
+    debug!("Localizing binaries");
     try_run_as!(
         user::Mode::Real,
         resolved.iter().try_for_each(|binary| {
@@ -551,7 +549,6 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     }
 
     let mut elf_binaries = BTreeSet::<String>::new();
-
     let parsed = collect(profile, name)?;
 
     // ELF files need to be processed by the library fabricator,
@@ -559,7 +556,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     // However, if the ELF is contained in  /usr/lib, we
     // want its parent directory, such as /usr/lib/chromium.
     parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
-        if !LIB_ROOTS.iter().any(|r| elf.starts_with(r)) {
+        if !LIB_ROOTS.wait().iter().any(|r| elf.starts_with(r)) {
             handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
         }
         elf_binaries.insert(elf.to_string());
@@ -598,7 +595,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         .symlinks
         .into_par_iter()
         .try_for_each(|(link, dest)| -> anyhow::Result<()> {
-            if !LIB_ROOTS.iter().any(|r| link.starts_with(r))
+            if !LIB_ROOTS.wait().iter().any(|r| link.starts_with(r))
                 && !["/lib", "/lib64"].iter().any(|r| link.starts_with(r))
             {
                 handle.args_i(["--symlink", &dest, &link])?;

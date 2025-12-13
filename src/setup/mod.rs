@@ -9,6 +9,7 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
+    fab::lib::{LIB_ROOTS, SINGLE_LIB},
     shared::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
         package::extract,
@@ -54,6 +55,31 @@ pub struct Info {
 }
 
 pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
+    rayon::spawn(|| {
+        let find_roots = || -> Result<HashSet<String>> {
+            let mut roots: HashSet<String> = Spawner::new("find")
+                .args(["/usr/lib", "--max-depth", "2", "-name", "libsqlite3.so"])?
+                .output(true)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .filter_map(|path| {
+                    PathBuf::from(&path[..path.len() - 1])
+                        .parent()
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
+                .collect();
+            debug!("Library root at: {roots:?}");
+
+            roots.insert(String::from("/usr/lib"));
+            if !*SINGLE_LIB {
+                roots.insert(String::from("/usr/lib64"));
+            }
+            Ok(roots)
+        };
+        let _ = LIB_ROOTS.set(find_roots().unwrap_or(HashSet::from(["/usr/lib".to_string()])));
+    });
+
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
     let mut bytes = [0; 5];
     rand::rng().fill_bytes(&mut bytes);
