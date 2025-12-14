@@ -141,7 +141,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         // Bin must run before lib so that bin can populate libraries
         debug!("Fabricating binaries");
         timer = Instant::now();
-        fab::bin::fabricate(&mut args.profile, &args.name, &args.handle)?;
+        fab::bin::fabricate(&mut args.profile, &args.name, &args.instance, &args.handle)?;
         debug!("Fabricated /bin in: {}ms", timer.elapsed().as_millis());
 
         debug!("Fabricating /lib");

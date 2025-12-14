@@ -6,7 +6,8 @@ use crate::shared::{
 use log::{debug, info, trace, warn};
 use nix::{
     errno,
-    sys::socket::{self, ControlMessage, MsgFlags},
+    poll::{PollFd, PollFlags, PollTimeout},
+    sys::socket::{self, ControlMessage, ControlMessageOwned, MsgFlags, recvmsg},
 };
 use once_cell::sync::Lazy;
 use r2d2::Pool;
@@ -19,16 +20,40 @@ use std::{
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{self, IoSlice},
+    io::{self, IoSlice, IoSliceMut},
     os::{
-        fd::{AsRawFd, IntoRawFd, OwnedFd},
-        unix::net::UnixStream,
+        fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd},
+        unix::net::{UnixListener, UnixStream},
     },
     path::PathBuf,
     thread::sleep,
     time::Duration,
 };
 use user::run_as;
+
+pub static SECCOMP: Lazy<i32> = Lazy::new(|| {
+    Syscall::from_name("seccomp")
+        .expect("Failed to code seccomp code")
+        .get_number()
+});
+
+pub static PRCTL: Lazy<i32> = Lazy::new(|| {
+    Syscall::from_name("prctl")
+        .expect("Failed to code seccomp code")
+        .get_number()
+});
+
+pub static FCHMOD: Lazy<i32> = Lazy::new(|| {
+    Syscall::from_name("fchmod")
+        .expect("Failed to code seccomp code")
+        .get_number()
+});
+
+pub static EXECVE: Lazy<i32> = Lazy::new(|| {
+    Syscall::from_name("execve")
+        .expect("Failed to code seccomp code")
+        .get_number()
+});
 
 /// Connection to the Database
 pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
@@ -165,7 +190,7 @@ impl From<errno::Errno> for Error {
 }
 
 /// The Antimony Monitor Notifier Implementation.
-struct Notifier {
+pub struct Notifier {
     /// The path to the socket.
     path: PathBuf,
 
@@ -434,4 +459,63 @@ pub fn new(
         filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
     }
     Ok((filter, fd))
+}
+
+/// Receive a file descriptor from a Unix socket as an `OwnedFd`.
+pub fn receive_fd(listener: &UnixListener) -> anyhow::Result<Option<(OwnedFd, String)>> {
+    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
+    if let Some(stream) = stream {
+        let mut buf = [0u8; 256];
+        let pair = || -> anyhow::Result<Option<(OwnedFd, usize)>> {
+            let raw_fd = stream.as_raw_fd();
+
+            let mut io = [IoSliceMut::new(&mut buf)];
+            let mut msg_space = nix::cmsg_space!([RawFd; 1]);
+
+            let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
+
+            for cmsg in msg.cmsgs()? {
+                if let ControlMessageOwned::ScmRights(fds) = cmsg
+                    && let Some(fd) = fds.first()
+                {
+                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
+                    return Ok(Some((owned_fd, msg.bytes)));
+                }
+            }
+            Ok(None)
+        }()?;
+
+        if let Some((fd, bytes)) = pair {
+            let name = String::from_utf8_lossy(&buf[..bytes])
+                .trim_end_matches(char::from(0))
+                .to_string();
+            return Ok(Some((fd, name)));
+        }
+    }
+    Ok(None)
+}
+
+/// Poll on Accept, Timing out after timeout.
+fn accept_with_timeout(
+    listener: &UnixListener,
+    timeout: PollTimeout,
+) -> io::Result<Option<UnixStream>> {
+    listener.set_nonblocking(true)?;
+
+    let fd = listener.as_fd();
+    let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
+
+    let res = nix::poll::poll(&mut fds, timeout)?;
+
+    if res == 0 {
+        // Timed out
+        Ok(None)
+    } else {
+        // Ready to accept
+        match listener.accept() {
+            Ok((stream, _addr)) => Ok(Some(stream)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }

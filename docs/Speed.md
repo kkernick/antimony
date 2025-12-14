@@ -31,6 +31,7 @@ select: [Chromium, Zed, Okular, Syncthing, Sh]
 id: ConfigHot
 ```
 
+
 | Profile (Cold)/ Configuration | Chromium | Zed   | Okular | Syncthing | Sh   | New Feature        |
 | ----------------------------- | -------- | ----- | ------ | --------- | ---- | ------------------ |
 | Debug                         | 648.5    | 302.6 | 2166.3 | 55.4      | 11.1 | `--recipe dev`     |

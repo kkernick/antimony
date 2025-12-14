@@ -1,5 +1,6 @@
 name = "xdg-open"
 description = "Allow the program to open files in the default application."
+binaries = ["sh", "grep", "gdbus"]
 
 [ipc]
 portals = ["OpenURI"]

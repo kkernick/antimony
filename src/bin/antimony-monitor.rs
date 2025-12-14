@@ -17,30 +17,26 @@ use inflector::Inflector;
 use log::{debug, error, info, trace, warn};
 use nix::{
     libc::{EPERM, PR_SET_SECCOMP},
-    poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
         signal::{
             Signal::{SIGKILL, SIGTERM},
             kill,
         },
         socket::{
-            AddressFamily, ControlMessageOwned, MsgFlags, NetlinkAddr, SockFlag, SockProtocol,
-            SockType, bind, recv, recvmsg, socket,
+            AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType, bind, recv,
+            socket,
         },
     },
     unistd::Pid,
 };
-use once_cell::sync::Lazy;
 use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::Spawner;
 use std::{
     collections::HashSet,
     fs,
-    io::{self, IoSliceMut},
     os::{
-        self,
-        fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
+        fd::{AsRawFd, OwnedFd},
         unix::net::UnixListener,
     },
     path::Path,
@@ -161,24 +157,6 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, HashSet<i32>
     }
     Ok(())
 }
-
-static SECCOMP: Lazy<i32> = Lazy::new(|| {
-    Syscall::from_name("seccomp")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
-static PRCTL: Lazy<i32> = Lazy::new(|| {
-    Syscall::from_name("prctl")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
-static FCHMOD: Lazy<i32> = Lazy::new(|| {
-    Syscall::from_name("fchmod")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
 
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
@@ -319,15 +297,18 @@ pub fn notify_reader(
                         // anything. Chromium/Electron, for some reason, do not use seccomp_api_get
                         // to determine features, but instead send null pointers to test capabilities.
                         // We handle both cases, and only ignore filters that would have actually worked.
-                        if ((call == *PRCTL && args[0] == PR_SET_SECCOMP as u64)
-                            || call == *SECCOMP)
+                        if ((call == *syscalls::PRCTL && args[0] == PR_SET_SECCOMP as u64)
+                            || call == *syscalls::SECCOMP)
                             && args[2] != 0
                         {
                             trace!("Ignoring SECCOMP request");
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
-                        } else if call == *FCHMOD && args[0] as i32 == -1 && args[1] == 0o7777 {
+                        } else if call == *syscalls::FCHMOD
+                            && args[0] as i32 == -1
+                            && args[1] == 0o7777
+                        {
                             trace!("Injected fchmod => EPERM");
                             resp.error = -EPERM;
                             resp.flags = 0;
@@ -345,65 +326,6 @@ pub fn notify_reader(
         }
     }
     Ok(())
-}
-
-/// Poll on Accept, Timing out after timeout.
-fn accept_with_timeout(
-    listener: &UnixListener,
-    timeout: PollTimeout,
-) -> io::Result<Option<os::unix::net::UnixStream>> {
-    listener.set_nonblocking(true)?;
-
-    let fd = listener.as_fd();
-    let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
-
-    let res = poll(&mut fds, timeout)?;
-
-    if res == 0 {
-        // Timed out
-        Ok(None)
-    } else {
-        // Ready to accept
-        match listener.accept() {
-            Ok((stream, _addr)) => Ok(Some(stream)),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-}
-
-/// Receive a file descriptor from a Unix socket as an `OwnedFd`.
-pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>> {
-    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
-    if let Some(stream) = stream {
-        let mut buf = [0u8; 256];
-        let pair = || -> Result<Option<(OwnedFd, usize)>> {
-            let raw_fd = stream.as_raw_fd();
-
-            let mut io = [IoSliceMut::new(&mut buf)];
-            let mut msg_space = nix::cmsg_space!([RawFd; 1]);
-
-            let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
-
-            for cmsg in msg.cmsgs()? {
-                if let ControlMessageOwned::ScmRights(fds) = cmsg
-                    && let Some(fd) = fds.first()
-                {
-                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
-                    return Ok(Some((owned_fd, msg.bytes)));
-                }
-            }
-            Ok(None)
-        }()?;
-
-        if let Some((fd, bytes)) = pair {
-            let name = String::from_utf8_lossy(&buf[..bytes])
-                .trim_end_matches(char::from(0))
-                .to_string();
-            return Ok(Some((fd, name)));
-        }
-    }
-    Ok(None)
 }
 
 /// Receive and Respond to Notify Requests.
@@ -446,7 +368,7 @@ fn main() -> Result<()> {
     thread::spawn(move || audit_reader(audit_term, audit));
 
     while !term.load(Ordering::Relaxed) {
-        match receive_fd(&listener) {
+        match syscalls::receive_fd(&listener) {
             Ok(Some((fd, name))) => {
                 info!("New connection established with {name}!");
 

@@ -9,6 +9,7 @@ use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs::{self, File},
+    os::unix::fs::PermissionsExt,
 };
 use strum::IntoEnumIterator;
 use user::{self, try_run_as};
@@ -26,6 +27,10 @@ pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) ->
         fs::create_dir_all(path.parent().unwrap())?;
         let contents = resolve_env(Cow::Borrowed(&contents));
         fs::write(&path, contents.as_ref())?;
+
+        if op == FileMode::Executable {
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755))?
+        }
     }
 
     handle.fd_arg_i("--file", File::open(path)?)?;

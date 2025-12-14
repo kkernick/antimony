@@ -6,10 +6,14 @@
 //!
 //!
 
+use log::warn;
 use nix::{
     errno::Errno,
     sys::{
-        signal::{Signal, kill},
+        signal::{
+            Signal::{self, SIGTERM},
+            kill,
+        },
         wait::{WaitPidFlag, WaitStatus, waitpid},
     },
     unistd::Pid,
@@ -344,10 +348,14 @@ impl Handle {
                     }
                     Err(e) => return Err(Error::Comm(e)),
                 }
-                if let Some(duration) = timeout
-                    && start.elapsed() >= duration
-                {
-                    return Err(Error::Timeout);
+
+                if let Some(duration) = timeout {
+                    let now = Instant::now().duration_since(start);
+                    if now >= duration {
+                        warn!("Aborting process early");
+                        kill(pid, SIGTERM).map_err(Error::Comm)?;
+                        return Err(Error::Timeout);
+                    }
                 }
             }
         }

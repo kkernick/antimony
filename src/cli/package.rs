@@ -13,6 +13,7 @@ use crate::{
 use anyhow::Result;
 use copy_dir::copy_dir;
 use log::debug;
+use rand::RngCore;
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
@@ -34,6 +35,10 @@ pub struct Args {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         let name = &self.profile;
+
+        let mut bytes = [0; 5];
+        rand::rng().fill_bytes(&mut bytes);
+        let instance = hex::encode(bytes);
 
         let profile_path = Profile::path(name)?;
         let mut profile = Profile::new(name)?;
@@ -60,7 +65,7 @@ impl super::Run for Args {
             .extend(["sh".to_string(), "strace".to_string()]);
 
         debug!("Finding binaries");
-        let parsed = bin::collect(&mut profile, name)?;
+        let parsed = bin::collect(&mut profile, name, &instance)?;
         profile.binaries = Some(parsed.elf.iter().map(|e| e.clone()).collect());
 
         debug!("Adding binaries: {parsed:?}");

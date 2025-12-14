@@ -17,58 +17,14 @@ use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
 };
 use user::try_run_as;
 use which::which;
-
-/// Characters used for splitting.
-static CHARS: Lazy<HashSet<char>> = Lazy::new(|| {
-    ['"', '\'', ';', '=', '$', '(', ')', '{', '}']
-        .into_iter()
-        .collect()
-});
-
-/// Reserved keywords in bash.
-static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut compgen: HashSet<String> = Spawner::new("/usr/bin/bash")
-        .args(["-c", "compgen -k"])
-        .unwrap()
-        .output(true)
-        .mode(user::Mode::Real)
-        .spawn()
-        .unwrap()
-        .output_all()
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
-
-    // These ones are usually false positives.
-    compgen.insert("true".to_string());
-    compgen.insert("false".to_string());
-
-    compgen
-});
-
-static TIMEOUT: Lazy<Duration> = Lazy::new(|| {
-    let start = Instant::now();
-    Spawner::new("/usr/bin/bash")
-        .args(["-ec", "echo Test"])
-        .unwrap()
-        .output(true)
-        .mode(user::Mode::Real)
-        .spawn()
-        .unwrap()
-        .wait(None)
-        .unwrap();
-    start.elapsed()
-});
 
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
@@ -199,21 +155,8 @@ impl ParseReturn {
     }
 }
 
-/// Tokenize a string
-fn tokenize(line: String) -> HashSet<String> {
-    let mut ret = HashSet::new();
-    for token in line.split_whitespace() {
-        let token: String = token.chars().filter(|e| !CHARS.contains(e)).collect();
-        if COMPGEN.contains(&token) {
-            continue;
-        }
-        ret.insert(token);
-    }
-    ret
-}
-
 /// Resolve the path of a binary, canonicalized to /usr/bin.
-fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
+pub fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     let resolved: Cow<'_, str> = if path.contains("..") {
         Cow::Owned(
             Path::new(path)
@@ -242,19 +185,20 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 /// Parses binaries, specifically for shell scripts.
 fn parse(
     path: &str,
+    instance: &str,
     ret: Arc<ParseReturn>,
     done: Arc<DashSet<String>>,
     mut include_self: bool,
 ) -> Result<Type> {
-    // Avoid duplicate work
-    if !done.insert(path.to_string()) {
-        return Ok(Type::Done);
-    }
-
     let resolved = match resolve_bin(path) {
         Ok(path) => path,
         Err(_) => return Ok(Type::None),
     };
+
+    // Avoid duplicate work
+    if !done.insert(resolved.to_string()) {
+        return Ok(Type::Done);
+    }
 
     trace!("Parsing: {path}");
 
@@ -280,7 +224,7 @@ fn parse(
             };
         }
 
-        parse(&dest, ret.clone(), done.clone(), true)?;
+        parse(&dest, instance, ret.clone(), done.clone(), true)?;
         return Ok(Type::Link);
     }
 
@@ -324,13 +268,11 @@ fn parse(
         if let Some(cache) = ParseReturn::cache(&resolved)? {
             ret.merge(cache);
         } else {
-            // Store environment assignment for later evaluation
-            let mut environment = HashMap::<String, String>::new();
+            let local = Arc::new(ParseReturn::default());
 
             // Rewind.
             file.seek(io::SeekFrom::Start(0))?;
             let reader = BufReader::new(file);
-
             let mut iter = reader.lines();
 
             // Grab the shebang
@@ -341,63 +283,42 @@ fn parse(
                 },
                 None => return Ok(Type::None),
             };
-
-            tokenize(header[2..].to_string())
-                .par_iter()
+            header
+                .split(' ')
+                .par_bridge()
                 .try_for_each(|token| -> Result<()> {
-                    parse(token, ret.clone(), done.clone(), true)?;
+                    parse(
+                        token.strip_prefix("#!").unwrap_or(token),
+                        instance,
+                        ret.clone(),
+                        done.clone(),
+                        true,
+                    )?;
                     Ok(())
                 })?;
 
-            for line in iter {
-                let mut line = line?.trim().to_string();
-                if line.starts_with("#") || line.is_empty() {
-                    continue;
-                }
+            let bin = match header.split(' ').next() {
+                Some(bin) => bin,
+                None => &header[1..],
+            };
+            parse(bin, instance, local.clone(), done.clone(), true)?;
 
-                // Substitute variables.
-                for (key, value) in &environment {
-                    if line.contains(key) {
-                        let syntax = format!("${key}");
-                        line = line.replace(&syntax, value);
-
-                        let syntax = format!("${{{key}}}");
-                        line = line.replace(&syntax, value);
-
-                        let syntax = format!("$({key})");
-                        line = line.replace(&syntax, value);
-                    }
-                }
-
-                if let Some((key, val)) = line.split_once('=')
-                    && !line.starts_with("-")
-                    && !line.is_empty()
-                {
-                    let mut result = Spawner::new("/usr/bin/bash")
-                        .args(["-ec", &format!("{line}; echo ${key}")])?
-                        .output(true)
-                        .error(true)
-                        .mode(user::Mode::Real)
-                        .spawn()?;
-                    match result.wait(Some(*TIMEOUT * 10)) {
-                        Ok(_) => {
-                            let result = result.output_all()?;
-                            environment.insert(key.to_string(), result);
-                            line = val.to_string();
-                        }
-                        Err(spawn::HandleError::Timeout) => warn!("Timeout parsing environment!"),
-                        Err(e) => return Err(e.into()),
-                    }
-                }
-
-                tokenize(line)
-                    .par_iter()
-                    .try_for_each(|token| -> Result<()> {
-                        parse(token, ret.clone(), done.clone(), true)?;
-                        Ok(())
-                    })?;
+            for file in Spawner::new("/usr/bin/antimony-dumper")
+                .args(["run", &resolved, instance])?
+                .output(true)
+                .preserve_env(true)
+                .mode(user::Mode::Real)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .collect::<HashSet<_>>()
+            {
+                parse(file, instance, local.clone(), done.clone(), true)?;
             }
-            ret.write(path)?;
+            local.write(path)?;
+            if let Ok(local) = Arc::try_unwrap(local) {
+                ret.merge(local);
+            }
         }
         Ok(Type::Script)
     } else {
@@ -409,7 +330,7 @@ fn parse(
 }
 
 /// Get the immediate parent within /usr/lib.
-fn resolve_dir(path: &str) -> Result<Option<String>> {
+pub fn resolve_dir(path: &str) -> Result<Option<String>> {
     let lib_root = Path::new("/usr/lib");
     let mut path = Path::new(&path);
     while let Some(parent) = path.parent() {
@@ -423,6 +344,7 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
 
 fn handle_localize(
     file: &str,
+    instance: &str,
     home: bool,
     include_self: bool,
     parsed: Arc<ParseReturn>,
@@ -430,10 +352,10 @@ fn handle_localize(
 ) -> Result<()> {
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            parse(file, parsed.clone(), done.clone(), include_self)?;
+            parse(file, instance, parsed.clone(), done.clone(), include_self)?;
         } else {
             match try_run_as!(user::Mode::Real, {
-                parse(&src, parsed.clone(), done.clone(), false)
+                parse(&src, instance, parsed.clone(), done.clone(), false)
             })? {
                 Type::Script | Type::File | Type::Elf => {
                     parsed.localized.insert(src.into_owned(), dst);
@@ -442,7 +364,7 @@ fn handle_localize(
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    handle_localize(&ldst, home, false, parsed.clone(), done.clone())?;
+                    handle_localize(&ldst, instance, home, false, parsed.clone(), done.clone())?;
                     parsed.symlinks.insert(dst, ldst);
                 }
                 e => warn!("Excluding localization of type {e:?} for {file}"),
@@ -450,12 +372,12 @@ fn handle_localize(
         }
         Ok(())
     } else {
-        parse(file, parsed.clone(), done.clone(), true)?;
+        parse(file, instance, parsed.clone(), done.clone(), true)?;
         Ok(())
     }
 }
 
-pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
+pub fn collect(profile: &mut Profile, name: &str, instance: &str) -> Result<ParseReturn> {
     fs::create_dir_all(CACHE_DIR.as_path())?;
 
     let mut resolved = HashSet::new();
@@ -485,21 +407,21 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
             && let Some(x) = user.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, true, true, parsed.clone(), done.clone())?;
+                handle_localize(&file, instance, true, true, parsed.clone(), done.clone())?;
             }
         }
         if let Some(sys) = &mut files.resources
             && let Some(x) = sys.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, false, true, parsed.clone(), done.clone())?;
+                handle_localize(&file, instance, false, true, parsed.clone(), done.clone())?;
             }
         }
         if let Some(sys) = &mut files.platform
             && let Some(x) = sys.remove(&FileMode::Executable)
         {
             for file in x {
-                handle_localize(&file, false, true, parsed.clone(), done.clone())?;
+                handle_localize(&file, instance, false, true, parsed.clone(), done.clone())?;
             }
         }
         if let Some(direct) = &mut files.direct
@@ -509,6 +431,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
                 let path = direct_path(file);
                 handle_localize(
                     &path.to_string_lossy(),
+                    instance,
                     false,
                     false,
                     parsed.clone(),
@@ -523,14 +446,19 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     try_run_as!(
         user::Mode::Real,
         resolved.iter().try_for_each(|binary| {
-            handle_localize(binary, false, true, parsed.clone(), done.clone())
+            handle_localize(binary, instance, false, true, parsed.clone(), done.clone())
         })
     )?;
 
     Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
 }
 
-pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<()> {
+pub fn fabricate(
+    profile: &mut Profile,
+    name: &str,
+    instance: &str,
+    handle: &Spawner,
+) -> Result<()> {
     if let Some(binaries) = &profile.binaries
         && binaries.contains("/usr/bin")
     {
@@ -544,12 +472,8 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         return Ok(());
     }
 
-    if COMPGEN.is_empty() {
-        return Err(anyhow!("Could not calculate bash builtins"));
-    }
-
     let mut elf_binaries = BTreeSet::<String>::new();
-    let parsed = collect(profile, name)?;
+    let parsed = collect(profile, name, instance)?;
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
