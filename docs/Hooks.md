@@ -103,6 +103,9 @@ Again, we use Antimony to sandbox the browser as well. In this setup, the `yarr`
 
 ### Encrypted Homes
 
+>[!note]
+>This section has been superseded by the `gocryptfs` feature, which does everything documented below for you, including creating the encrypted vault on initial startup. This remains here as a showcase for what Hooks can be used for, but if you actually want to encrypt your home folder, just use `features = ["gocryptfs", ...]` (Hint: Features can be defined on a per-configuration basis, you can still achieve the example outlined below).
+
 With both Pre and Post hooks, its trivial to encrypt a profile’s home folder by simply:
 
 1. Creating a Pre-Hook that decrypts the home and mounts it where Antimony expects.
@@ -118,10 +121,11 @@ name = "HOME_NAME"
 policy = "Enabled"
 
 [[configuration.email.hooks.pre]]  
-content = 'kdialog --password "Enter the password" | gocryptfs PATH_TO_ENC $ANTIMONY_HOME'  
+content = 'kdialog --password "Enter the password" | gocryptfs PATH_TO_ENC $ANTIMONY_HOME'
+env = true  
   
 [[configuration.email.hooks.post]]  
 content = "umount $ANTIMONY_HOME"  
 ```
 
-If your `PATH_TO_ENC` needs to resolve the environment, such as `$HOME`, you’ll need to pass `env = true` to the Pre-Hook. But other than that, these two hooks will get the job done. In fact, you could make the Pre Hook check the existence of the encryption root, and through `kdialog` *initialize* the root via `gocryptfs` as well.
+These two hooks will get the job done. In fact, you could make the Pre Hook check the existence of the encryption root, and through `kdialog` *initialize* the root via `gocryptfs` as well.

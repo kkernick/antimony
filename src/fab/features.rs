@@ -290,6 +290,32 @@ fn add_feature(
     }
 
     if let Some(mut ipc) = feature.ipc.take() {
+        let p_ipc = profile.ipc.get_or_insert_default();
+
+        // Features, as the name implies, *add* functionality. Antimony
+        // operates under a secure-default, so things need to be added.
+        // Because single-values can conflict with each other, this
+        // design choice is reflected in setting behavior.
+
+        // Features can enable the global bus flags if they need it,
+        // but they cannot try and restrict the bus if another feature/profile
+        // has turned it on.
+        p_ipc.system_bus = match p_ipc.system_bus {
+            Some(false) | None => ipc.system_bus,
+            Some(true) => Some(true),
+        };
+        p_ipc.user_bus = match p_ipc.user_bus {
+            Some(false) | None => ipc.user_bus,
+            Some(true) => Some(true),
+        };
+
+        // Conversely, if a feature or profile has explicitly set
+        // disable to false for compatibility, you cannot enable it.
+        p_ipc.disable = match p_ipc.disable {
+            Some(true) | None => ipc.disable,
+            Some(false) => Some(false),
+        };
+
         let format_all = |ipc_list: BTreeSet<String>| -> BTreeSet<String> {
             ipc_list
                 .into_iter()
@@ -298,44 +324,28 @@ fn add_feature(
         };
 
         if !ipc.portals.is_empty() {
-            profile
-                .ipc
-                .get_or_insert_default()
-                .portals
-                .append(&mut ipc.portals);
+            p_ipc.portals.append(&mut ipc.portals);
         }
         if !ipc.see.is_empty() {
             let formatted = format_all(ipc.see);
             if !formatted.is_empty() {
-                profile.ipc.get_or_insert_default().see.extend(formatted);
+                p_ipc.see.extend(formatted);
             }
         }
         if !ipc.talk.is_empty() {
             let mut formatted = format_all(ipc.talk);
             if !formatted.is_empty() {
-                profile
-                    .ipc
-                    .get_or_insert_default()
-                    .talk
-                    .append(&mut formatted);
+                p_ipc.talk.append(&mut formatted);
             }
         }
         if !ipc.own.is_empty() {
             let mut formatted = format_all(ipc.own);
             if !formatted.is_empty() {
-                profile
-                    .ipc
-                    .get_or_insert_default()
-                    .own
-                    .append(&mut formatted);
+                p_ipc.own.append(&mut formatted);
             }
         }
         if !ipc.call.is_empty() {
-            profile
-                .ipc
-                .get_or_insert_default()
-                .call
-                .append(&mut ipc.call);
+            p_ipc.call.append(&mut ipc.call);
         }
     }
 
@@ -347,6 +357,23 @@ fn add_feature(
                 .insert(key, resolve(Cow::Owned(value)).into_owned());
         }
     }
+
+    if let Some(hooks) = feature.hooks.take() {
+        let p_hooks = profile.hooks.get_or_insert_default();
+        if let Some(mut pre) = hooks.pre {
+            p_hooks.pre.get_or_insert_default().append(&mut pre);
+        }
+        if let Some(mut post) = hooks.post {
+            p_hooks.post.get_or_insert_default().append(&mut post)
+        }
+
+        // Yeah, no great answer here. The last feature that sets a parent
+        // hook get it.
+        if p_hooks.parent.is_none() {
+            p_hooks.parent = hooks.parent;
+        }
+    }
+
     Ok(())
 }
 

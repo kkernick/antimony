@@ -1,0 +1,29 @@
+name = "gocryptfs"
+description = "Encrypt your home folder with gocryptfs."
+
+caveat = "You must have a home folder defined in your profile! If you've already run the sandbox and created a home, rename the folder to allow Antimony to create a new one, then copy the contents into the mount."
+conditional = "command -v /usr/bin/dirname && command -v /usr/bin/kdialog && command -v /usr/bin/gocryptfs"
+
+[[hooks.pre]]
+content = """
+set -e
+if [[ -z $ANTIMONY_HOME ]]; then exit 1; fi
+ENCRYPT_ROOT="$(dirname $ANTIMONY_HOME)/.gocryptfs/$(basename $ANTIMONY_HOME)"
+echo "$ENCRYPT_ROOT"
+if [[ ! -d "${ENCRYPT_ROOT}" ]]; then
+  mkdir -p "${ENCRYPT_ROOT}"
+  kdialog --password "Enter an encryption password" | gocryptfs -init "${ENCRYPT_ROOT}"
+fi
+"""
+env = true
+
+[[hooks.pre]]
+content = """
+set -e
+ENCRYPT_ROOT="$(dirname $ANTIMONY_HOME)/.gocryptfs/$(basename $ANTIMONY_HOME)"
+kdialog --password "Enter the password" | gocryptfs "${ENCRYPT_ROOT}" "${ANTIMONY_HOME}"
+"""
+env = true
+
+[[hooks.post]]
+content = 'umount "${ANTIMONY_HOME}"'

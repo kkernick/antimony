@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
-use log::debug;
+use log::{debug, trace};
 use nix::{errno::Errno, sys::signal::Signal::SIGTERM};
 use spawn::Spawner;
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
@@ -216,39 +216,39 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         debug!("Waiting for document portal");
         wait_for_doc();
 
-        if let Some(hooks) = &mut info.profile.hooks {
-            if let Some(pre) = hooks.pre.take() {
-                debug!("Processing pre-hooks");
-                for hook in pre {
-                    info.handle = hook
+        // We need to run this under Real, because handle has to fall out of scope within Real Mode,
+        // that way it can properly cleanup the proxy.
+        try_run_as!(Mode::Real, Result<()>, {
+            if let Some(hooks) = &mut info.profile.hooks {
+                if let Some(pre) = hooks.pre.take() {
+                    debug!("Processing pre-hooks");
+                    for hook in pre {
+                        info.handle = hook
+                            .process(
+                                Some(info.handle),
+                                &info.name,
+                                &info.sys_dir.to_string_lossy(),
+                                &info.home,
+                                false,
+                            )?
+                            .unwrap();
+                    }
+                }
+
+                // Attaching to the parent means info.handle becomes the parent
+                if let Some(parent) = hooks.parent.take() {
+                    info.handle = parent
                         .process(
                             Some(info.handle),
                             &info.name,
                             &info.sys_dir.to_string_lossy(),
                             &info.home,
-                            false,
+                            true,
                         )?
                         .unwrap();
                 }
             }
 
-            // Attaching to the parent means info.handle becomes the parent
-            if let Some(parent) = hooks.parent.take() {
-                info.handle = parent
-                    .process(
-                        Some(info.handle),
-                        &info.name,
-                        &info.sys_dir.to_string_lossy(),
-                        &info.home,
-                        true,
-                    )?
-                    .unwrap();
-            }
-        }
-
-        // We need to run this under Real, because handle has to fall out of scope within Real Mode,
-        // that way it can properly cleanup the proxy.
-        try_run_as!(Mode::Real, Result<()>, {
             let mut handle = info.handle.spawn()?;
             let code = handle.wait_for_signal(SIGTERM, Duration::from_millis(100))?;
 

@@ -4,7 +4,7 @@ use super::profile::{Ipc, Namespace};
 use crate::shared::{
     edit,
     env::{AT_HOME, PWD},
-    profile::Files,
+    profile::{Files, Hooks},
 };
 use console::style;
 use serde::{Deserialize, Serialize};
@@ -103,6 +103,12 @@ pub struct Feature {
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
     pub sandbox_args: Option<Vec<String>>,
+
+    /// Hooks for this feature. Keep in mind that Hooks have no guarantees on order outside
+    /// of the profile/feature they are defined. They'll run within the order defined in
+    /// here, but when they run in relation to other features and profiles you cannot
+    /// count on.
+    pub hooks: Option<Hooks>,
 }
 impl Feature {
     /// Get the path to a feature.

@@ -67,17 +67,26 @@ description = ""
 # IPC. No proxy is run, no access to the User/System bus is provided. This is useful to
 # pass on the command line if you need to temporarily disable Portals--say to open a file
 # exposed in the sandbox itself, and not one from the host.
+#
+# Note that for Features, you can set disable to false and guarantee it will be set to false.
+# Other features and profiles will not interfere with this flag if you've set it to false.
 # disable = false
 #
 # If you need unrestricted access to the user bus, this mounts it directly into the sandbox. However, unless
 # your application explicitly requires this permission (Such as DBus Monitors like Bustle), you should use
 # the more fine-grained controls below. Setting this option disregards those aforementioned settings, as the
 # proxy is not run.
+#
+# In the same fashion as above, you can guarantee that setting this to true will reflect in
+# the end sandbox. Features can only set to true if the value is unset.
 # user_bus = false
 #
 # If you want to expose the system bus to the program, you can do so here; this is likely not necessary. There
 # is not way to filter the system bus. You either pass it entirely, or you don't (And you almost definitely
 # don't need to unless your application talks to privileged busses, like virt-manager).
+#
+# In the same fashion as above, you can guarantee that setting this to true will reflect in
+# the end sandbox. Features can only set to true if the value is unset.
 # system_bus = false
 #
 # Portals are used primarily by Flatpak to provide functionality within a sandbox, use as Background to
@@ -149,3 +158,78 @@ description = ""
 # Keypair environment variables to pass to the sandbox.
 # [environment]
 # KEY = "VAL"
+
+# Hooks are external commands that are run before/during/after the sandbox. They can be
+# used to run dependencies, setup the environment, and perform additional cleanup.
+#
+# A warning for hooks defined in features: While you can guarantee that the hooks defined
+# here will run in the order they are defined, and will run one after the other, you have
+# no guarantee on how they will run in relation to other features. So, if you have hooks A,B,C defined
+# in a feature, and D,E,F defined in another feature, Antimony will either run A,B,C,D,E,F or D,E,F,A,B,C.
+# That is to say: DON'T RELY ON OTHER FEATURE'S HOOK RUNNING BEFORE/AFTER YOURS.
+# Additionally, be incredibly careful about the parent hook. Just as you cannot guarantee when other features
+# are imported in respect to yours, you cannot guarantee whether another feature's parent hook overwrites yours.
+# That is to say: DON'T DEFINE PARENT HOOKS IN FEATURES UNLESS YOU ABSOLUTELY HAVE TO. EVEN THEN, RECONSIDER. IF
+# YOU MUST, YOU MUST SET conflicts TO EVERY FEATURE THAT DOES THE SAME.
+# [hooks]
+#
+# A pre-hook is run before the sandbox starts.
+# [[pre]]
+#
+# An explicit path to a binary to execute. This is run
+# under the regular user.
+# path = "/path/to/script"
+#
+# The contents of a shell script to execute instead of a
+# path. This is interpreted by bash as the regular user.
+# If a hook defines both path and content, the path is
+# used.
+# content = "echo 'Hello, world!'"
+#
+# Arguments for the hook executable
+# args = []
+#
+# Whether to attach the pre-hook to the sandbox.
+# By default, Antimony will wait until all
+# pre-hooks have executed before running the sandbox.
+# If attach is set to true, the sandbox will run
+# alongside the hook.
+# attach = false
+#
+# By default, the hook does not get provided the
+# environment (Such as PATH, HOME, etc). Regardless
+# of this setting, the hook is provided the following:
+#   1. ANTIMONY_NAME: The name of the profile
+#   2. ANTIMONY_CACHE: The directory to the SOF
+#   3. ANTIMONY_HOME: The path to the home, if it exists.
+# env = false
+#
+# By default, a failed hook will abort sandbox startup.
+# can_fail = false
+#
+# Post hooks run after the sandbox has finished, but before
+# Antimony performs its own cleanup. Syntactically, they are
+# identical to pre-hooks, but cannot be attached for obvious
+# reasons.
+# [[post]]
+# path = "/path/to/hook"
+# content = "echo 'Hello, world!'"
+# args = []
+# env = false
+# can_fail = false
+#
+# The parent hook (Notice, this is a single value, not a list),
+# is a specialized Pre-Hook that takes ownership of the sandbox.
+# It operates identically to an attach-pre-hook, but with the change
+# that when the parent dies, the sandbox does. If the sandbox dies,
+# the parent remains alive. Contrast with a regular pre-hook, and
+# when an attached hook dies, the sandbox remains, whereas the sandbox
+# dying tears the hooks down with it.
+#
+# You can only have a single parent hook defined for a profile.
+# [parent]
+# path = "/path/to/hook"
+# content = "echo 'Hello, world'"
+# args = []
+# env = false
+# can_fail

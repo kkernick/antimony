@@ -236,3 +236,68 @@
 # For example, a configuration that doesn't set a home folder.
 # [configuration.clean]
 # home.policy = "None"
+
+# Hooks are external commands that are run before/during/after the sandbox. They can be 
+# used to run dependencies, setup the environment, and perform additional cleanup.
+# [hooks]
+# 
+# A pre-hook is run before the sandbox starts.
+# [[pre]]
+# 
+# An explicit path to a binary to execute. This is run
+# under the regular user.
+# path = "/path/to/script"
+# 
+# The contents of a shell script to execute instead of a
+# path. This is interpreted by bash as the regular user.
+# If a hook defines both path and content, the path is
+# used.
+# content = "echo 'Hello, world!'"
+# 
+# Arguments for the hook executable
+# args = []
+# 
+# Whether to attach the pre-hook to the sandbox. 
+# By default, Antimony will wait until all
+# pre-hooks have executed before running the sandbox.
+# If attach is set to true, the sandbox will run
+# alongside the hook.
+# attach = false
+# 
+# By default, the hook does not get provided the 
+# environment (Such as PATH, HOME, etc). Regardless
+# of this setting, the hook is provided the following:
+#   1. ANTIMONY_NAME: The name of the profile
+#   2. ANTIMONY_CACHE: The directory to the SOF
+#   3. ANTIMONY_HOME: The path to the home, if it exists.
+# env = false
+# 
+# By default, a failed hook will abort sandbox startup.
+# can_fail = false
+# 
+# Post hooks run after the sandbox has finished, but before
+# Antimony performs its own cleanup. Syntactically, they are
+# identical to pre-hooks, but cannot be attached for obvious
+# reasons.
+# [[post]]
+# path = "/path/to/hook"
+# content = "echo 'Hello, world!'"
+# args = []
+# env = false
+# can_fail = false
+# 
+# The parent hook (Notice, this is a single value, not a list),
+# is a specialized Pre-Hook that takes ownership of the sandbox.
+# It operates identically to an attach-pre-hook, but with the change
+# that when the parent dies, the sandbox does. If the sandbox dies,
+# the parent remains alive. Contrast with a regular pre-hook, and
+# when an attached hook dies, the sandbox remains, whereas the sandbox
+# dying tears the hooks down with it.
+# 
+# You can only have a single parent hook defined for a profile.
+# [parent]
+# path = "/path/to/hook"
+# content = "echo 'Hello, world'"
+# args = []
+# env = false
+# can_fail
