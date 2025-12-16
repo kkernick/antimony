@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
-use log::{debug, trace};
+use log::debug;
 use nix::{errno::Errno, sys::signal::Signal::SIGTERM};
 use spawn::Spawner;
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
