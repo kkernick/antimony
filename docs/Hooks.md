@@ -71,11 +71,57 @@ By default, if any hook fails, Antimony will bail execution. For Pre-Hooks, this
 
 If your hook is not essential, this behavior can be relaxed by setting the `no_fail` flag.  Failures in hooks will be ignored.
 
+## Examples
+
+### Managed Dependencies
+
+One use for hooks it to spawn sub-processes in a pre-hook, which profiles can use to ensure such dependencies are gracefully cleaned after it has finished. For example, the `syncthingtray-qt6` profile needs Syncthing to be running. While a user could configure Syncthing to start on login, it can also be tied to the Profile, such that Syncthing only runs while the Tray does, and will cleanup when the Tray exits:
+
+```toml
+[[hooks.pre]]  
+path = "antimony"  
+args = ["run", "syncthing"]  
+attach = true  
+env = true
+```
 
 
+In this case, we’re running Syncthing itself under Antimony (Which requires `env`), and then attach it, such that the Profile won’t hang on Syncthing, and let the Tray start right after. When we close the tray, Syncthing closes with it.
 
+### Parent For Web Services
 
+Another use-case is when a service is sandboxed, to have a web-browser or similar application that interfaces with it launch in accordance. For example, we could invert the above Syncthing example, where the `syncthing` profile has a parent hook for `syncthingtray-qt6`, which would largely have the same behavior. Another example is `yarr`. It’s a simple RSS feeder that binds to port 7070. While we could again have this profile start in the background on user login, and then just open a web browser when we need to, we could instead make the web-browser a Parent hook. In this case, when we run the profile, it will launch the web-browser automatically, and when we close the web-browser, the sandbox will cleanup:
 
+```toml
+[hooks.parent]  
+path = "antimony"  
+args = ["run", "chromium", "http://localhost:7070"]  
+env = true  
+```
 
+Again, we use Antimony to sandbox the browser as well. In this setup, the `yarr` profile automatically launches `chromium`, and when that instance of Chromium closes, the profile goes with it. You can use the `--create-desktop` argument for the `integrate` sub-command to create a `.desktop` entry for `yarr`, that way you can launch both service and browser from your DE.
 
+### Encrypted Homes
 
+With both Pre and Post hooks, its trivial to encrypt a profile’s home folder by simply:
+
+1. Creating a Pre-Hook that decrypts the home and mounts it where Antimony expects.
+2. Creating a Post-Hook that un-mounts the encrypted Root. 
+
+For example, `gocryptfs` can be used to create an encrypted home with only user-permission. You’ll first need to create an encrypted folder via `gocryptfs -init`. This will need to be located somewhere accessible by your user, such as `~/antimony-enc/PROFILE`. If you want to launch the profile from your DE, you’ll also need some sort of dialog program to fetch the password, such as `kdialog`.
+
+One good use for this would be a specialized configuration of your web-browser. The power of [[Configurations]] is that you can silo your various uses for an application, so you could have one configuration of your web-browser for general browsing, another one that’s locked down and ephemeral, and another one that saves your email credentials. For the latter case, you may want to encrypt it. Another power of Configurations is that they get their own Hooks, too!
+
+```toml
+[configuration.email.home]
+name = "HOME_NAME"
+policy = "Enabled"
+
+[[configuration.email.hooks.pre]]  
+content = 'kdialog --password "Enter the password" | gocryptfs PATH_TO_ENC $ANTIMONY_HOME'  
+  
+[[configuration.email.hooks.post]]  
+content = "umount $ANTIMONY_HOME"  
+```
+
+If your `PATH_TO_ENC` needs to resolve the environment, such as `$HOME`, you’ll need to pass `env = true` to the Pre-Hook. But other than that, these two hooks will get the job done. In fact, you could make the Pre Hook check the existence of the encryption root, and through `kdialog` *initialize* the root via `gocryptfs` as well.
