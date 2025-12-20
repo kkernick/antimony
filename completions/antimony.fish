@@ -52,6 +52,8 @@ read-only\t'Mount the Home Folder as a Read-Only overlay'
 overlay\t'Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn\'t typically support multiple instances (Zed, Chromium, etc)'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-name -d 'Override the home name' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-path -d 'Override the home mount' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-lock -d 'Override the home lock' -r -f -a "true\t''
+false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l seccomp -d 'Override the seccomp policy' -r -f -a "disabled\t'Disable SECCOMP'
 permissive\t'Syscalls are logged to construct a policy for the profile'
 enforcing\t'The policy is enforced: unrecognized syscalls return with EPERM'

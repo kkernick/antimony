@@ -129,7 +129,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
             Spawner::new("find")
                 .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
                 .spawn()?
-                .wait(None)?;
+                .wait()?;
         } else {
             debug!("Using refresh directory");
             sys_dir = refresh_dir.clone();

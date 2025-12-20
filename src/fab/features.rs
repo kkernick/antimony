@@ -187,7 +187,7 @@ fn add_feature(
                 .output(true)
                 .error(true)
                 .spawn()?
-                .wait(None)?;
+                .wait()?;
             Ok(code)
         }();
 

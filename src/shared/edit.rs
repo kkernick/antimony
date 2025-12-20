@@ -129,7 +129,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
             .arg(temp.path().to_string_lossy())?
             .mode(user::Mode::Real)
             .spawn()?
-            .wait(None)?;
+            .wait()?;
 
         // Read the contents.
         match fs::read_to_string(&temp) {

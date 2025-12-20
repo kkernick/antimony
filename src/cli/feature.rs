@@ -31,7 +31,7 @@ impl super::Run for Args {
                     &format!("{}", getpid().as_raw()),
                 ])?
                 .spawn()?
-                .wait(None)?)
+                .wait()?)
         })?;
 
         if result != 0 {

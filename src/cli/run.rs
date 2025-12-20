@@ -10,7 +10,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
 use log::debug;
-use nix::{errno::Errno, sys::signal::Signal::SIGTERM};
+use nix::errno::Errno;
 use spawn::Spawner;
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
 use user::{Mode, try_run_as};
@@ -72,6 +72,10 @@ pub struct Args {
     /// Override the home mount
     #[arg(long)]
     pub home_path: Option<String>,
+
+    /// Override the home lock
+    #[arg(long)]
+    pub home_lock: Option<bool>,
 
     /// Override the seccomp policy
     #[arg(long)]
@@ -250,7 +254,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             }
 
             let mut handle = info.handle.spawn()?;
-            let code = handle.wait_for_signal(SIGTERM, Duration::from_millis(100))?;
+            let code = handle.wait()?;
 
             let log = if code != 0 && args.log {
                 debug!("Logging...");
@@ -305,7 +309,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         .preserve_env(true)
                         .mode(Mode::Real)
                         .spawn()?
-                        .wait(None)?;
+                        .wait()?;
                 }
             } else if let Some(log) = log
                 && args.log

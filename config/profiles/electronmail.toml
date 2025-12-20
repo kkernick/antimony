@@ -1,4 +1,5 @@
 home.policy = "Enabled"
+home.lock = true
 
 features = ["electron", "network", "xdg-open", "tray", "secrets"]
 arguments = ["--ozone-platform=wayland"]

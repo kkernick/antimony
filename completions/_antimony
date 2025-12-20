@@ -42,6 +42,7 @@ read-only\:"Mount the Home Folder as a Read-Only overlay"
 overlay\:"Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn'\''t typically support multiple instances (Zed, Chromium, etc)"))' \
 '--home-name=[Override the home name]:HOME_NAME:_default' \
 '--home-path=[Override the home mount]:HOME_PATH:_default' \
+'--home-lock=[Override the home lock]:HOME_LOCK:(true false)' \
 '--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
 permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"

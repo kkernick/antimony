@@ -1,17 +1,24 @@
-use crate::shared::{
-    env::{DATA_HOME, OVERLAY},
-    profile::HomePolicy,
-};
-use anyhow::Result;
-use log::{debug, error};
-use std::{fs, process::exit};
+use crate::shared::{env::OVERLAY, profile::HomePolicy};
+use anyhow::{Result, anyhow};
+use log::debug;
+use std::fs::{self, File};
 
 pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
     if let Some(home) = &args.profile.home {
-        let home_dir = DATA_HOME.join("antimony").join(match &home.name {
-            Some(name) => name,
-            None => args.name.as_ref(),
-        });
+        let home_dir = home.path(&args.name);
+
+        if home.lock.unwrap_or(false) {
+            let lock = File::open(&home_dir)?;
+            match lock.try_lock() {
+                Ok(_) => args.handle.fd_i(lock),
+                Err(fs::TryLockError::WouldBlock) => {
+                    return Err(anyhow!(
+                        "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
+                    ));
+                }
+                Err(e) => return Err(anyhow!("Failed to get lock on home folder: {e}")),
+            }
+        }
 
         match home.policy.unwrap_or_default() {
             HomePolicy::None => Ok(None),
@@ -53,8 +60,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 ])?;
                                 }
                             } else {
-                                error!("Bubblewrap version too old for overlays!");
-                                exit(1);
+                                return Err(anyhow!("Bubblewrap version too old for overlays!"));
                             }
                         }
                     }

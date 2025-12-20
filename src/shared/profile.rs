@@ -5,7 +5,7 @@ use crate::{
     fab::{self, lib::get_wildcards, resolve},
     shared::{
         edit,
-        env::{AT_HOME, HOME, PWD, USER_NAME},
+        env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
         path::which_exclude,
     },
 };
@@ -864,7 +864,7 @@ impl Hook {
                     Err(HookError::Attach)
                 }
             } else {
-                let code = handle.wait(None)?;
+                let code = handle.wait()?;
                 if code != 0 && !self.can_fail.unwrap_or(false) {
                     return Err(HookError::Fail(code));
                 }
@@ -929,6 +929,9 @@ pub struct Home {
     /// Where to mount the home within the sandbox. Defaults to ~/antimony
     /// Changing this feature requires overlays.
     pub path: Option<String>,
+
+    /// Whether to lock the home to a single instance
+    pub lock: Option<bool>,
 }
 impl Home {
     pub fn merge(&mut self, home: Self) {
@@ -941,6 +944,9 @@ impl Home {
         if self.path.is_none() {
             self.path = home.path;
         }
+        if self.lock.is_none() {
+            self.lock = home.lock;
+        }
     }
 
     pub fn from_args(args: &mut cli::run::Args) -> Self {
@@ -948,6 +954,7 @@ impl Home {
             name: args.home_name.take(),
             policy: args.home_policy.take(),
             path: args.home_path.take(),
+            lock: args.home_lock.take(),
         }
     }
 
@@ -966,6 +973,13 @@ impl Home {
         if let Some(policy) = &self.name {
             println!("\t\t- Home Policy: {policy}");
         }
+    }
+
+    pub fn path(&self, name: &str) -> PathBuf {
+        DATA_HOME.join("antimony").join(match &self.name {
+            Some(name) => name,
+            None => name,
+        })
     }
 }
 

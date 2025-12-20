@@ -4,7 +4,6 @@ use crate::{
         localize_home, localize_path,
     },
     shared::{
-        env::DATA_HOME,
         path::direct_path,
         profile::{FileMode, Profile},
     },
@@ -22,7 +21,6 @@ use std::{
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
     sync::Arc,
-    time::{Duration, Instant},
 };
 use user::try_run_as;
 use which::which;
@@ -54,20 +52,6 @@ static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
     compgen.insert("false".to_string());
 
     compgen
-});
-
-static TIMEOUT: Lazy<Duration> = Lazy::new(|| {
-    let start = Instant::now();
-    Spawner::new("/usr/bin/bash")
-        .args(["-ec", "echo Test"])
-        .unwrap()
-        .output(true)
-        .mode(user::Mode::Real)
-        .spawn()
-        .unwrap()
-        .wait(None)
-        .unwrap();
-    start.elapsed()
 });
 
 /// The magic for an ELF file.
@@ -379,7 +363,7 @@ fn parse(
                         .error(true)
                         .mode(user::Mode::Real)
                         .spawn()?;
-                    match result.wait(Some(*TIMEOUT * 10)) {
+                    match result.wait() {
                         Ok(_) => {
                             let result = result.output_all()?;
                             environment.insert(key.to_string(), result);
@@ -603,8 +587,8 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
             Ok(())
         })?;
 
-    if profile.home.is_some() {
-        let home_dir = Path::new(DATA_HOME.as_path()).join("antimony").join(name);
+    if let Some(home) = &profile.home {
+        let home_dir = home.path(name);
         try_run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
 
         debug!("Finding home binaries");

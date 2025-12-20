@@ -15,18 +15,15 @@ use nix::{
     unistd::Pid,
 };
 use parking_lot::{Condvar, Mutex, MutexGuard};
+use signal_hook::{consts::signal, iterator::Signals};
 use std::{
     collections::VecDeque,
     error, fmt,
     fs::File,
     io::{self, Read, Write},
     os::fd::OwnedFd,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread::{self, JoinHandle, sleep},
-    time::{Duration, Instant},
+    sync::Arc,
+    thread::{self, JoinHandle},
 };
 
 /// Errors related to a ProcessHandle
@@ -51,6 +48,9 @@ pub enum Error {
     /// the child no longer exist.
     Input,
 
+    /// The parent received a termination signal
+    Signal,
+
     /// Error trying to write to standard input.
     Io(io::Error),
 
@@ -69,6 +69,7 @@ impl fmt::Display for Error {
                 f,
                 "The requested File Handle does not exist. Ensure --capture and --input are established during spawn()"
             ),
+            Self::Signal => write!(f, "Parent received a termination signal."),
             Self::Child => write!(f, "The child process terminated prematurely"),
             Self::Input => write!(f, "Cannot read input, as child has already terminated!"),
             Self::Io(e) => write!(f, "IO Error: {e}"),
@@ -321,75 +322,30 @@ impl Handle {
         &self.child
     }
 
-    /// Wait for the child to terminate, then return the exit
-    /// code.
-    pub fn wait(&mut self, timeout: Option<Duration>) -> Result<i32, Error> {
+    pub fn wait(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.child {
-            let start = Instant::now();
-            loop {
-                match waitpid(
-                    pid,
-                    if timeout.is_some() {
-                        Some(WaitPidFlag::WNOHANG)
-                    } else {
-                        None
-                    },
-                ) {
-                    Ok(status) => {
-                        self.child = None;
-                        if let WaitStatus::Exited(_, code) = status {
-                            self.exit = code;
-                            break;
-                        }
-                    }
-                    Err(e) => return Err(Error::Comm(e)),
-                }
-                if let Some(duration) = timeout
-                    && start.elapsed() >= duration
-                {
-                    return Err(Error::Timeout);
-                }
-            }
-        }
-        Ok(self.exit)
-    }
-
-    /// Wait for a child to terminate, but while ensuring a signal to the parent
-    /// does not abruptly tear down the child.
-    /// When SIGTERM or SIGINT is sent to the parent, it will send `sig` to the child,
-    /// collect the exit code, and return gracefully.
-    /// Because we are busy waiting, the loop waits 1 seconds between checking the state.
-    pub fn wait_for_signal(&mut self, sig: Signal, timeout: Duration) -> Result<i32, Error> {
-        if let Some(pid) = self.child {
-            // Hook SIGTERM and SIGINT
-            let term = Arc::new(AtomicBool::new(false));
-            signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))
+            let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])
                 .map_err(Error::Io)?;
-            signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))
-                .map_err(Error::Io)?;
-
-            // Wait until either we are hit with a signal, or the child exits.
-            while !term.load(Ordering::Relaxed) {
-                match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
-                    Ok(status) => {
-                        self.child = None;
-                        if let WaitStatus::Exited(_, code) = status {
-                            self.exit = code;
-                            break;
-                        }
+            'outer: loop {
+                for signal in signals.wait() {
+                    match signal {
+                        signal::SIGCHLD => match waitpid(pid, None) {
+                            Ok(status) => {
+                                self.child = None;
+                                if let WaitStatus::Exited(_, code) = status {
+                                    self.exit = code;
+                                    break 'outer;
+                                }
+                            }
+                            Err(e) => return Err(Error::Comm(e)),
+                        },
+                        _ => return Err(Error::Signal),
                     }
-                    Err(e) => return Err(Error::Comm(e)),
                 }
-                sleep(timeout);
-            }
-
-            // If the child is still alive, send it the signal
-            if self.alive()? {
-                self.signal(sig)?;
             }
 
             // Collect the error code and return
-            self.wait(None)
+            self.wait()
         } else {
             Ok(self.exit)
         }
