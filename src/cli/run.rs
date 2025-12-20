@@ -202,7 +202,7 @@ pub fn mounted(path: &str) -> bool {
 pub fn wait_for_doc() {
     let doc_path = format!("{}/doc", RUNTIME_DIR.display());
     while !mounted(&doc_path) {
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(10));
     }
 }
 

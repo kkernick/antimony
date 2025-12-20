@@ -3,6 +3,7 @@ use crate::shared::{
     path::{user_dir, which_exclude},
     profile::SeccompPolicy,
 };
+use inotify::{Inotify, WatchMask};
 use log::{debug, info, trace, warn};
 use nix::{
     errno,
@@ -174,15 +175,27 @@ struct Notifier {
 
     /// The stream to the monitor, established in `prepare()`
     stream: Option<UnixStream>,
+
+    notify: Option<Inotify>,
 }
 impl Notifier {
     /// Construct a new Notifier from the path the monitor should listen,
     /// and the name of the process.
     pub fn new(path: PathBuf, name: String) -> Self {
+        let notify = if let Ok(notify) = Inotify::init()
+            && let Some(parent) = path.parent()
+            && notify.watches().add(parent, WatchMask::ALL_EVENTS).is_ok()
+        {
+            Some(notify)
+        } else {
+            None
+        };
+
         Self {
             path,
             name,
             stream: None,
+            notify,
         }
     }
 }
@@ -197,8 +210,15 @@ impl seccomp::filter::Notifier for Notifier {
 
     /// Setup the UnixStream. We wait for the Monitor to setup the socket.
     fn prepare(&mut self) {
-        while !self.path.exists() {
-            sleep(Duration::from_millis(100));
+        if !self.path.exists() {
+            if let Some(mut notify) = self.notify.take() {
+                let mut buffer = [0; 1024];
+                let _ = notify.read_events_blocking(&mut buffer);
+            } else {
+                while !self.path.exists() {
+                    sleep(Duration::from_millis(10));
+                }
+            }
         }
         self.stream = Some(UnixStream::connect(&self.path).expect("Failed to connect"));
     }

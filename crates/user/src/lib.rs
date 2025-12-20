@@ -8,6 +8,8 @@ use nix::{
 };
 use once_cell::sync::Lazy;
 
+pub mod sync;
+
 /// The Real, Effective, and Saved UID of the application.
 pub static USER: Lazy<ResUid> = Lazy::new(|| getresuid().expect("Failed to get UID!"));
 

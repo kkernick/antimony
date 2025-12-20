@@ -16,6 +16,7 @@ use dashmap::DashMap;
 use inflector::Inflector;
 use log::{debug, error, info, trace, warn};
 use nix::{
+    errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
     poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
@@ -36,12 +37,12 @@ use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::Spawner;
 use std::{
     collections::HashSet,
+    fmt::Display,
     fs,
     io::{self, IoSliceMut},
     os::{
-        self,
         fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
-        unix::net::UnixListener,
+        unix::net::{UnixListener, UnixStream},
     },
     path::Path,
     sync::{
@@ -51,6 +52,38 @@ use std::{
     thread,
 };
 use user::Mode;
+
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    Errno(nix::errno::Errno),
+}
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "I/O Error: {e}"),
+            Self::Errno(e) => write!(f, "{e}"),
+        }
+    }
+}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            Self::Errno(e) => Some(e),
+        }
+    }
+}
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+impl From<nix::errno::Errno> for Error {
+    fn from(value: nix::errno::Errno) -> Self {
+        Self::Errno(value)
+    }
+}
 
 #[derive(Parser, Debug, Default)]
 #[command(name = "Antimony-Monitor")]
@@ -67,7 +100,11 @@ pub struct Cli {
     pub mode: SeccompPolicy,
 }
 
-fn update_binary(tx: &Transaction, binary: &str, syscalls: &HashSet<i32>) -> Result<()> {
+fn update_binary<'a, T: Iterator<Item = &'a i32>>(
+    tx: &Transaction,
+    binary: &str,
+    syscalls: T,
+) -> Result<()> {
     let binary_id = syscalls::insert_binary(tx, binary)?;
 
     let mut insert_syscall = tx.prepare("INSERT OR IGNORE INTO syscalls (name) VALUES (?1)")?;
@@ -188,6 +225,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
             &format!("The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?", path.to_string_lossy()),
             "-a", "Antimony",
             "-t", "30000",
+            "-A", "All=Allow All",
             "-A", "Allow=Allow",
             "-A", "Deny=Deny",
             "-A", "Kill=Kill",
@@ -209,10 +247,11 @@ pub fn notify_reader(
     stats: Arc<DashMap<String, HashSet<i32>>>,
     fd: OwnedFd,
     name: String,
-    ask: bool,
+    ask: AtomicBool,
 ) -> Result<()> {
-    let deny = DashMap::<String, HashSet<i32>>::new();
-    let deny_arc = Arc::new(deny);
+    let deny = Arc::new(DashMap::<String, HashSet<i32>>::new());
+    let allow = Arc::new(DashMap::<String, HashSet<i32>>::new());
+    let ask = Arc::new(ask);
 
     while !term.load(Ordering::Relaxed) {
         // New pair for each loop, since we don't want to mediate access to one.
@@ -222,7 +261,11 @@ pub fn notify_reader(
         match pair.recv(fd.as_raw_fd()) {
             Ok(Some(_)) => {
                 let log = Arc::clone(&stats_clone);
-                let deny_clone = Arc::clone(&deny_arc);
+
+                let deny_clone = Arc::clone(&deny);
+                let allow_clone = Arc::clone(&allow);
+                let ask_clone = Arc::clone(&ask);
+
                 let raw = fd.as_raw_fd();
                 let profile_name = name.clone();
 
@@ -233,7 +276,23 @@ pub fn notify_reader(
                     if let Err(e) = pair.reply(raw, |req, resp| {
                         // Get the binary name
                         let pid = req.pid;
-                        if let Ok(exe_path) = fs::read_link(format!("/proc/{pid}/exe")) {
+                        let exe_path = match fs::read_link(format!("/proc/{pid}/exe")) {
+                            Ok(path) => Some(path),
+                            Err(_) => {
+                                match user::sync::run_as!(
+                                    user::Mode::Effective,
+                                    fs::read_link(format!("/proc/{pid}/exe"))
+                                ) {
+                                    Ok(path) => Some(path),
+                                    Err(_) => {
+                                        warn!("Invalid exe at PID {pid}");
+                                        None
+                                    }
+                                }
+                            }
+                        };
+
+                        if let Some(exe_path) = exe_path {
                             let path = exe_path.to_string_lossy().into_owned();
 
                             // Get the syscall name
@@ -248,9 +307,19 @@ pub fn notify_reader(
                                 return;
                             }
 
+                            if let Some(value) = allow_clone.get(&path)
+                                && value.contains(&call)
+                            {
+                                resp.val = 0;
+                                resp.error = 0;
+                                resp.flags = 1;
+                                return;
+                            }
+
                             // Add new values.
                             if !entry.contains(&call) {
-                                if ask {
+                                let commit = if ask_clone.load(Ordering::Relaxed) {
+                                    let mut commit = false;
                                     match notify(&profile_name, call, &exe_path) {
                                         Ok(result) => {
                                             resp.val = 0;
@@ -259,9 +328,11 @@ pub fn notify_reader(
 
                                             if !result.is_empty() {
                                                 match &result[..result.len() - 1] {
-                                                    "Allow" => {
-                                                        entry.insert(call);
+                                                    "All" => {
+                                                        commit = true;
+                                                        ask_clone.store(false, Ordering::Relaxed);
                                                     }
+                                                    "Allow" => commit = true,
                                                     "Deny" => {
                                                         resp.error = -EPERM;
                                                         resp.flags = 0;
@@ -289,19 +360,33 @@ pub fn notify_reader(
                                                     }
                                                 }
                                             }
-                                            return;
                                         }
                                         Err(e) => {
                                             warn!("Failed to ask user: {e}");
                                         }
-                                    };
+                                    }
+                                    commit
                                 } else {
-                                    entry.insert(call);
+                                    true
+                                };
+
+                                if commit {
+                                    user::sync::run_as!(user::Mode::Effective, {
+                                        if let Ok(mut conn) = syscalls::DB_POOL.get()
+                                            && let Ok(tx) = conn.transaction()
+                                            && update_binary(&tx, &path, [call].iter()).is_ok()
+                                            && tx.commit().is_ok()
+                                        {
+                                            info!("Committed directly");
+                                        } else {
+                                            warn!("Pending commit");
+                                            entry.insert(call);
+                                        }
+                                    });
+                                    allow_clone.entry(path).or_default().insert(call);
                                 }
                             }
-                        } else {
-                            warn!("Invalid exe at PID {pid}");
-                        };
+                        }
 
                         let call = req.data.nr;
                         let args = req.data.args;
@@ -350,7 +435,7 @@ pub fn notify_reader(
 fn accept_with_timeout(
     listener: &UnixListener,
     timeout: PollTimeout,
-) -> io::Result<Option<os::unix::net::UnixStream>> {
+) -> Result<Option<UnixStream>, Error> {
     listener.set_nonblocking(true)?;
 
     let fd = listener.as_fd();
@@ -366,17 +451,17 @@ fn accept_with_timeout(
         match listener.accept() {
             Ok((stream, _addr)) => Ok(Some(stream)),
             Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         }
     }
 }
 
 /// Receive a file descriptor from a Unix socket as an `OwnedFd`.
-pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>> {
+pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, Error> {
     let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
     if let Some(stream) = stream {
         let mut buf = [0u8; 256];
-        let pair = || -> Result<Option<(OwnedFd, usize)>> {
+        let pair = || -> Result<Option<(OwnedFd, usize)>, Errno> {
             let raw_fd = stream.as_raw_fd();
 
             let mut io = [IoSliceMut::new(&mut buf)];
@@ -417,7 +502,6 @@ fn main() -> Result<()> {
         "SECCOMP Monitor Started! ({} at {} using {:?})",
         cli.profile, cli.instance, cli.mode
     );
-    let mut conn = syscalls::DB_POOL.get()?;
 
     // Setup the socket. We run this as the user.
     user::set(Mode::Real)?;
@@ -462,21 +546,25 @@ fn main() -> Result<()> {
                         profile,
                         fd,
                         profile_name.clone(),
-                        cli.mode == SeccompPolicy::Notify,
+                        AtomicBool::new(cli.mode == SeccompPolicy::Notify),
                     )
                 });
             }
-            Ok(None) => continue,
-            Err(_) => break,
+            Ok(None) | Err(Error::Errno(Errno::EINTR)) => continue,
+            Err(e) => {
+                error!("Failed to received fd: {e}");
+                break;
+            }
         }
     }
 
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
-    user::revert()?;
+    user::set(Mode::Effective)?;
 
     if !stats.is_empty() {
+        let mut conn = syscalls::DB_POOL.get()?;
         let tx = conn.transaction()?;
         println!("\n=== Syscall Summary ===");
 
@@ -514,7 +602,7 @@ fn main() -> Result<()> {
                             println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
 
                             // Insert into DB using the transaction
-                            if let Err(e) = update_binary(&tx, &binary, syscalls) {
+                            if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
                                 warn!("DB insert failed for {binary}: {e}");
                                 return None;
                             }

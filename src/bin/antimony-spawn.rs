@@ -27,12 +27,6 @@ use std::{
     env,
     os::fd::{FromRawFd, OwnedFd},
     path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    thread::sleep,
-    time::Duration,
 };
 
 #[derive(Parser, Debug, Default)]
@@ -110,7 +104,7 @@ fn main() -> Result<()> {
         chdir(Path::new(&directory))?;
     }
 
-    let handle = if cli.sandbox {
+    let mut handle = if cli.sandbox {
         // Construct the relevant arguments.
         let mut args = antimony::cli::run::Args {
             passthrough: cli.passthrough,
@@ -163,15 +157,6 @@ fn main() -> Result<()> {
         handle.spawn()?
     };
 
-    // Hook the signals.
-    let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
-
-    // Wait until either the child dies, or we are signaled to terminate.
-    while !term.load(Ordering::Relaxed) && handle.alive()? {
-        sleep(Duration::from_millis(100));
-    }
-
+    handle.wait()?;
     Ok(())
 }

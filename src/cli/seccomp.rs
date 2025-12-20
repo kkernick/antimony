@@ -56,6 +56,8 @@ impl super::Run for Args {
                     "--process",
                     &format!("{}", getpid().as_raw()),
                 ])?
+                .mode(user::Mode::Real, true)
+                .preserve_env(true)
                 .spawn()?
                 .wait()?)
         })?;
