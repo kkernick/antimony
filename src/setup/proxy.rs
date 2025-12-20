@@ -52,7 +52,7 @@ pub fn run(
 
     #[rustfmt::skip]
     let mut proxy = Spawner::new("/usr/bin/bwrap")
-        .mode(user::Mode::Real).args([
+        .mode(user::Mode::Real, true).args([
             "--new-session",
             "--ro-bind", &resolve, &resolve,
             "--clearenv",

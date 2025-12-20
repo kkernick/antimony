@@ -183,7 +183,7 @@ fn add_feature(
             let code = Spawner::new("/usr/bin/bash")
                 .args(["-c", &condition])?
                 .preserve_env(true)
-                .mode(user::Mode::Real)
+                .mode(user::Mode::Real, true)
                 .output(true)
                 .error(true)
                 .spawn()?

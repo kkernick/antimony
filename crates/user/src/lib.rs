@@ -53,7 +53,7 @@ impl error::Error for Error {
 }
 
 /// A SetUID mode.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Mode {
     /// Transition to the Real user, setting both Real and Effective
     /// to `USER.real`, while saving Effective to Saved.

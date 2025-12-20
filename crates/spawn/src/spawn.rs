@@ -178,6 +178,11 @@ pub struct Spawner {
     #[cfg(feature = "user")]
     mode: Option<user::Mode>,
 
+    /// Switch to the correct mode when sending the drop signal.
+    /// This is not thread safe.
+    #[cfg(feature = "user")]
+    drop_with_mode: bool,
+
     /// Use `pkexec` to elevate via *Polkit*.
     #[cfg(feature = "elevate")]
     elevate: bool,
@@ -211,6 +216,9 @@ impl<'a> Spawner {
 
             #[cfg(feature = "user")]
             mode: None,
+
+            #[cfg(feature = "user")]
+            drop_with_mode: false,
 
             #[cfg(feature = "elevate")]
             elevate: false,
@@ -273,9 +281,15 @@ impl<'a> Spawner {
     ///
     /// If the parent is not SetUID, this parameter is a no-op
     /// This function is not thread safe.
+    ///
+    /// If drop is set to true, the handle will switch to this
+    /// mode when tearing down to avoid permission errors.
+    /// Note that drop does not function in a multi-threaded
+    /// environment, as multiple teardowns can change the mode
+    /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode(mut self, mode: user::Mode) -> Self {
-        self.mode_i(mode);
+    pub fn mode(mut self, mode: user::Mode, drop: bool) -> Self {
+        self.mode_i(mode, drop);
         self
     }
 
@@ -442,9 +456,16 @@ impl<'a> Spawner {
 
     /// Set the user mode without consuming the `Spawner`.
     /// This function is not thread safe.
+    ///
+    /// If drop is set to true, the handle will switch to this
+    /// mode when tearing down to avoid permission errors.
+    /// Note that drop does not function in a multi-threaded
+    /// environment, as multiple teardowns can change the mode
+    /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode_i(&mut self, mode: user::Mode) {
-        self.mode = Some(mode)
+    pub fn mode_i(&mut self, mode: user::Mode, drop: bool) {
+        self.mode = Some(mode);
+        self.drop_with_mode = drop;
     }
 
     /// Set a *SECCOMP* filter without consuming the `Spawner`.
@@ -695,7 +716,17 @@ impl<'a> Spawner {
                 };
 
                 // Return.
-                let handle = Handle::new(command, child, stdin, stdout, stderr, self.associated);
+                let handle = Handle::new(
+                    command,
+                    child,
+                    #[cfg(feature = "user")]
+                    if self.drop_with_mode { self.mode } else { None },
+                    
+                    stdin,
+                    stdout,
+                    stderr,
+                    self.associated,
+                );
                 Ok(handle)
             }
 

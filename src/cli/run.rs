@@ -1,5 +1,6 @@
 //! Run a profile.
 use crate::{
+    cli::Run,
     fab::localize_home,
     setup::setup,
     shared::{
@@ -12,8 +13,14 @@ use inflector::Inflector;
 use log::debug;
 use nix::errno::Errno;
 use spawn::Spawner;
-use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
-use user::{Mode, try_run_as};
+use std::{
+    borrow::Cow,
+    env, fs,
+    io::{IsTerminal, Write, stdout},
+    thread,
+    time::Duration,
+};
+use user::Mode;
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct Args {
@@ -155,8 +162,30 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(mut self) -> Result<()> {
-        let info = setup(Cow::Owned(self.profile.clone()), &mut self)?;
-        run(info, &mut self)
+        let result = || -> Result<()> {
+            let info = setup(Cow::Owned(self.profile.clone()), &mut self)?;
+            run(info, &mut self)?;
+            Ok(())
+        }();
+
+        if let Err(e) = result {
+            if stdout().is_terminal() {
+                println!("{e}")
+            } else {
+                Spawner::new("notify-send")
+                    .args([
+                        &format!("Sandbox Error: {}", self.profile.to_title_case()),
+                        &format!("{e}"),
+                        "-a",
+                        "Antimony",
+                    ])?
+                    .preserve_env(true)
+                    .mode(Mode::Real, true)
+                    .spawn()?
+                    .wait()?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -222,60 +251,59 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
         // We need to run this under Real, because handle has to fall out of scope within Real Mode,
         // that way it can properly cleanup the proxy.
-        try_run_as!(Mode::Real, Result<()>, {
-            if let Some(hooks) = &mut info.profile.hooks {
-                if let Some(pre) = hooks.pre.take() {
-                    debug!("Processing pre-hooks");
-                    for hook in pre {
-                        info.handle = hook
-                            .process(
-                                Some(info.handle),
-                                &info.name,
-                                &info.sys_dir.to_string_lossy(),
-                                &info.home,
-                                false,
-                            )?
-                            .unwrap();
-                    }
-                }
-
-                // Attaching to the parent means info.handle becomes the parent
-                if let Some(parent) = hooks.parent.take() {
-                    info.handle = parent
+        if let Some(hooks) = &mut info.profile.hooks {
+            if let Some(pre) = hooks.pre.take() {
+                debug!("Processing pre-hooks");
+                for hook in pre {
+                    info.handle = hook
                         .process(
                             Some(info.handle),
                             &info.name,
                             &info.sys_dir.to_string_lossy(),
                             &info.home,
-                            true,
+                            false,
                         )?
                         .unwrap();
                 }
             }
 
-            let mut handle = info.handle.spawn()?;
-            let code = handle.wait()?;
+            // Attaching to the parent means info.handle becomes the parent
+            if let Some(parent) = hooks.parent.take() {
+                info.handle = parent
+                    .process(
+                        Some(info.handle),
+                        &info.name,
+                        &info.sys_dir.to_string_lossy(),
+                        &info.home,
+                        true,
+                    )?
+                    .unwrap();
+            }
+        }
 
-            let log = if code != 0 && args.log {
-                debug!("Logging...");
-                let error = handle.error_all()?;
-                // Write it to a log file.
-                if !error.is_empty() {
-                    let log = info.sys_dir.join(&info.instance).with_extension("log");
-                    let mut file = fs::File::create(&log)?;
-                    file.write_all(error.as_bytes())?;
-                    Some(log)
-                } else {
-                    None
-                }
+        let mut handle = info.handle.spawn()?;
+        let code = handle.wait()?;
+
+        let log = if code != 0 && args.log {
+            debug!("Logging...");
+            let error = handle.error_all()?;
+            // Write it to a log file.
+            if !error.is_empty() {
+                let log = info.sys_dir.join(&info.instance).with_extension("log");
+                let mut file = fs::File::create(&log)?;
+                file.write_all(error.as_bytes())?;
+                Some(log)
             } else {
                 None
-            };
+            }
+        } else {
+            None
+        };
 
-            if code != 0 {
-                // Alert the user.
-                let error_name = Errno::from_raw(-code);
-                #[rustfmt::skip]
+        if code != 0 {
+            // Alert the user.
+            let error_name = Errno::from_raw(-code);
+            #[rustfmt::skip]
             let handle = Spawner::new("notify-send")
                 .args([
                     &format!("Sandbox Error: {}", info.name.to_title_case()),
@@ -288,52 +316,50 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                     "-t", "5000",
                 ])?;
 
-                // If there are errors, give the user the option to open the log
-                if log.is_some() {
-                    handle.args_i(["-A", "Open=Open Error Log"])?;
-                }
+            // If there are errors, give the user the option to open the log
+            if log.is_some() {
+                handle.args_i(["-A", "Open=Open Error Log"])?;
+            }
 
-                let output = handle
+            let output = handle
+                .preserve_env(true)
+                .mode(Mode::Real, true)
+                .output(true)
+                .spawn()?
+                .output_all()?;
+
+            // If we want to open, use xdg-open.
+            if let Some(log) = log
+                && output.starts_with("Open")
+            {
+                Spawner::new("xdg-open")
+                    .arg(log.to_string_lossy())?
                     .preserve_env(true)
-                    .mode(Mode::Real)
-                    .output(true)
+                    .mode(Mode::Real, true)
                     .spawn()?
-                    .output_all()?;
-
-                // If we want to open, use xdg-open.
-                if let Some(log) = log
-                    && output.starts_with("Open")
-                {
-                    Spawner::new("xdg-open")
-                        .arg(log.to_string_lossy())?
-                        .preserve_env(true)
-                        .mode(Mode::Real)
-                        .spawn()?
-                        .wait()?;
-                }
-            } else if let Some(log) = log
-                && args.log
-            {
-                log::info!("Log is available at {log:?}")
+                    .wait()?;
             }
+        } else if let Some(log) = log
+            && args.log
+        {
+            log::info!("Log is available at {log:?}")
+        }
 
-            if let Some(mut hooks) = info.profile.hooks.take()
-                && let Some(post) = hooks.post.take()
-            {
-                debug!("Executing post-hooks");
-                for hook in post {
-                    debug!("Processing post-hook: {hook:?}");
-                    hook.process(
-                        None,
-                        &info.name,
-                        &info.sys_dir.to_string_lossy(),
-                        &info.home,
-                        false,
-                    )?;
-                }
+        if let Some(mut hooks) = info.profile.hooks.take()
+            && let Some(post) = hooks.post.take()
+        {
+            debug!("Executing post-hooks");
+            for hook in post {
+                debug!("Processing post-hook: {hook:?}");
+                hook.process(
+                    None,
+                    &info.name,
+                    &info.sys_dir.to_string_lossy(),
+                    &info.home,
+                    false,
+                )?;
             }
-            Ok(())
-        })?;
+        }
     }
 
     debug!("Cleaning up");
@@ -361,8 +387,8 @@ pub fn as_symlink() -> Result<()> {
             if env::args().len() > 1 {
                 args.passthrough = Some(env::args().skip(1).collect());
             }
-            let info = crate::cli::run::setup(Cow::Borrowed(base), &mut args)?;
-            crate::cli::run::run(info, &mut args)?;
+            args.profile = base.to_string();
+            args.run()?;
         }
         _ => return Err(anyhow!("Failed to parse arguments")),
     }

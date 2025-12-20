@@ -127,7 +127,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         Spawner::new(EDITOR.as_str())
             .preserve_env(true)
             .arg(temp.path().to_string_lossy())?
-            .mode(user::Mode::Real)
+            .mode(user::Mode::Real, true)
             .spawn()?
             .wait()?;
 

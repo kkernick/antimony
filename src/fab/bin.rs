@@ -38,7 +38,7 @@ static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
         .args(["-c", "compgen -k"])
         .unwrap()
         .output(true)
-        .mode(user::Mode::Real)
+        .mode(user::Mode::Real, false)
         .spawn()
         .unwrap()
         .output_all()
@@ -361,7 +361,7 @@ fn parse(
                         .args(["-ec", &format!("{line}; echo ${key}")])?
                         .output(true)
                         .error(true)
-                        .mode(user::Mode::Real)
+                        .mode(user::Mode::Real, false)
                         .spawn()?;
                     match result.wait() {
                         Ok(_) => {

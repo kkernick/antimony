@@ -197,7 +197,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
             "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
             "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
         ])?
-        .mode(user::Mode::Real);
+        .mode(user::Mode::Real, true);
 
     debug!("Initializing inotify handle");
     let inotify = try_run_as!(user::Mode::Real, Inotify::init())?;
@@ -220,11 +220,8 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     files::setup(&mut a)?;
     env::setup(&mut a);
     fab::setup(&mut a)?;
-
     syscalls::setup(&mut a)?;
-
     let post = post::setup(&mut a)?;
-
     wait::setup(&mut a)?;
 
     Ok(Info {

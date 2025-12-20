@@ -6,6 +6,7 @@
 //!
 //!
 
+use log::warn;
 use nix::{
     errno::Errno,
     sys::{
@@ -290,12 +291,17 @@ pub struct Handle {
 
     /// The child's standard error.
     stderr: Option<Stream>,
+
+    #[cfg(feature = "user")]
+    mode: Option<user::Mode>,
 }
 impl Handle {
     /// Construct a new `Handle` from a Child PID and pipes
     pub fn new(
         name: String,
         pid: Pid,
+
+        #[cfg(feature = "user")] mode: Option<user::Mode>,
 
         stdin: Option<OwnedFd>,
         stdout: Option<OwnedFd>,
@@ -310,6 +316,9 @@ impl Handle {
             stdout: stdout.map(Stream::new),
             stderr: stderr.map(Stream::new),
             associated: associates,
+
+            #[cfg(feature = "user")]
+            mode,
         }
     }
 
@@ -417,8 +426,9 @@ impl Handle {
     }
 
     /// Waits for the child to terminate, then returns its entire standard error.
-    pub fn error_all(&mut self) -> Result<String, Error> {
-        if let Some(error) = &mut self.stderr {
+    pub fn error_all(mut self) -> Result<String, Error> {
+        self.wait()?;
+        if let Some(mut error) = self.stderr.take() {
             error.read_all()
         } else {
             Err(Error::NoFile)
@@ -437,8 +447,10 @@ impl Handle {
     }
 
     /// Waits for the child to terminate, then returns its entire standard output.
-    pub fn output_all(&mut self) -> Result<String, Error> {
-        if let Some(output) = &mut self.stdout {
+    /// If you need the exit code, use wait() first.
+    pub fn output_all(mut self) -> Result<String, Error> {
+        self.wait()?;
+        if let Some(mut output) = self.stdout.take() {
             output.read_all()
         } else {
             Err(Error::NoFile)
@@ -458,9 +470,21 @@ impl Handle {
 impl Drop for Handle {
     fn drop(&mut self) {
         if let Some(pid) = self.child {
-            let _ = kill(pid, Signal::SIGTERM);
-            let _ = waitpid(pid, None);
+            let result = if let Some(mode) = self.mode {
+                user::run_as!(mode, kill(pid, Signal::SIGTERM))
+            } else {
+                kill(pid, Signal::SIGTERM)
+            };
+
+            match result {
+                Ok(_) => {
+                    let _ = waitpid(pid, None);
+                }
+                Err(Errno::ESRCH) => {}
+                Err(e) => warn!("Failed to terminate process {pid}: {e}"),
+            }
         }
+
         self.associated.iter_mut().for_each(|process| {
             let _ = process.signal(Signal::SIGTERM);
         });

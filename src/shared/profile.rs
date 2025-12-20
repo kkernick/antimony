@@ -837,7 +837,7 @@ impl Hook {
         handle.preserve_env_i(self.env.unwrap_or(false));
         handle.env_i(format!("ANTIMONY_NAME={name}"))?;
         handle.env_i(format!("ANTIMONY_CACHE={cache}"))?;
-        handle.mode_i(user::Mode::Real);
+        handle.mode_i(user::Mode::Real, true);
 
         if let Some(args) = self.args {
             handle.args_i(args)?;

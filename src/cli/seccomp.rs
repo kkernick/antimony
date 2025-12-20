@@ -197,7 +197,7 @@ impl super::Run for Args {
                                 Spawner::new("/usr/bin/find")
                                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                                     .args(["-wholename", &wild])?
-                                    .mode(user::Mode::Real)
+                                    .mode(user::Mode::Real, true)
                                     .output(true)
                                     .spawn()?
                                     .output_all()?

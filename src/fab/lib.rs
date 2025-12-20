@@ -69,7 +69,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
     let libraries: HashSet<String> = Spawner::new("/usr/bin/ldd")
         .arg(path.as_ref())?
         .output(true)
-        .mode(user::Mode::Real)
+        .mode(user::Mode::Real, false)
         .spawn()?
         .output_all()?
         .split_whitespace()
@@ -100,15 +100,22 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
 /// Get all matches for a wildcard.
 pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
     let run = |dir: &str, base: &str| -> Result<HashSet<String>> {
-        Ok(Spawner::new("find")
-            .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base])?
+        #[rustfmt::skip]
+        let out = Spawner::new("find")
+            .args([
+                dir, "-maxdepth", "1", "-mindepth", "1",
+                "-name", base,
+                "-not", "-name", "*.prl",
+                "-not", "-name", "*.a",
+            ])?
             .output(true)
-            .mode(user::Mode::Real)
+            .mode(user::Mode::Real, false)
             .spawn()?
             .output_all()?
             .lines()
             .map(|e| e.to_string())
-            .collect())
+            .collect();
+        Ok(out)
     };
 
     if let Some(libraries) = get_cache(pattern)? {
@@ -151,7 +158,7 @@ pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
     let libraries: HashSet<String> = Spawner::new("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(true)
-        .mode(user::Mode::Real)
+        .mode(user::Mode::Real, false)
         .spawn()?
         .output_all()?
         .lines()

@@ -7,7 +7,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
     if let Some(home) = &args.profile.home {
         let home_dir = home.path(&args.name);
 
-        if home.lock.unwrap_or(false) {
+        if home.lock.unwrap_or(false) && !args.args.dry {
             let lock = File::open(&home_dir)?;
             match lock.try_lock() {
                 Ok(_) => args.handle.fd_i(lock),

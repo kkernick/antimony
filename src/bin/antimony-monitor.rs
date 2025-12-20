@@ -193,15 +193,14 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
             "-A", "Kill=Kill",
         ])?
         .preserve_env(true)
-        .mode(Mode::Real)
+        .mode(Mode::Real, true)
         .output(true)
         .spawn()?;
 
-    let output = handle.output_all()?;
     if handle.wait()? != 0 {
         return Err(anyhow!("Failed to get input!"));
     }
-
+    let output = handle.output_all()?;
     Ok(output)
 }
 
@@ -489,7 +488,7 @@ fn main() -> Result<()> {
                 !Spawner::new("/usr/bin/find")
                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                     .args(["-wholename", &path])?
-                    .mode(user::Mode::Real)
+                    .mode(user::Mode::Real, true)
                     .output(true)
                     .spawn()?
                     .output_all()?
