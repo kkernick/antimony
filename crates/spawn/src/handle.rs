@@ -470,11 +470,15 @@ impl Handle {
 impl Drop for Handle {
     fn drop(&mut self) {
         if let Some(pid) = self.child {
+            #[cfg(feature = "user")]
             let result = if let Some(mode) = self.mode {
                 user::run_as!(mode, kill(pid, Signal::SIGTERM))
             } else {
                 kill(pid, Signal::SIGTERM)
             };
+
+            #[cfg(not(feature = "user"))]
+            let result = kill(pid, Signal::SIGTERM);
 
             match result {
                 Ok(_) => {

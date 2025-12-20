@@ -103,10 +103,10 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
         #[rustfmt::skip]
         let out = Spawner::new("find")
             .args([
-                dir, "-maxdepth", "1", "-mindepth", "1",
+                dir,
+                "-maxdepth", "1",
+                "-mindepth", "1",
                 "-name", base,
-                "-not", "-name", "*.prl",
-                "-not", "-name", "*.a",
             ])?
             .output(true)
             .mode(user::Mode::Real, false)
