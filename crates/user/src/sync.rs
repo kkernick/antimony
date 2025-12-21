@@ -1,4 +1,4 @@
-//! This namespace includes a thread-safe `run_as!` implementation.
+//! This namespace includes a thread-safe run_as! implementation.
 //! If multiple threads are running, and they change the operating mode,
 //! it is possible (and in fact, likely) that one thread will change
 //! the operating mode from underneath another thread within a typical
@@ -6,37 +6,35 @@
 //! provide no guarantee that the mode will remain the same between set and
 //! restore if multiple threads are running.
 //!
-//! The functionality in this file provides that guarantee. `sync_run_as`
+//! The functionality in this file provides that guarantee. sync_run_as
 //! will obtain exclusive control over the operating mode, which guarantees
 //! that all code within the block will be executing under the provided
 //! mode.
 //!
 //! There are caveats to using this implementation, which should be heeded,
 //! as improper usage can void this guarantee, or cause deadlocks.
-//!
 //!     1.  The guarantee is only valid for other threads using the sync implementation.
 //!         If another thread uses the standard user::* functions directly, they will
 //!         void thread-safety. This doesn't mean the two modes cannot be mixed, just
 //!         ensure that the standard functions are only used when no other thread using
 //!         sync function is also running, and relying on its guarantee.
-//!     2. `sync::run_as`cannot be nested. If it is run within an existing `sync::run_as`
+//!     2. sync::run_ascannot be nested. If it is run within an existing sync::run_as
 //!         block, the program will deadlock.
 //!
-//! A crucial thing to understand is that `sync_run_as` does not need to be used in any
-//! program that is multi-threaded. In fact, naively switching from `run_as` to the
+//! A crucial thing to understand is that sync_run_as does not need to be used in any
+//! program that is multi-threaded. In fact, naively switching from run_as to the
 //! synchronized variant will invariably deadlock the program. It is *ONLY* useful in
 //! situations where multiple threads will be changing the mode at once, and thus
 //! the program need a guarantee that the mode will not change between set and restore. For
 //! example:
-//!
-//!     *   `spawn::Handle` uses a synchronized `run_as` when a mode has been set on its drop
+//!     *   spawn::Handle uses a synchronized run_as when a mode has been set on its drop
 //!         function. This is because multiple handles may be dropped at once, and it must
 //!         ensure that the signal can be sent before another changes the mode.
-//!     *   `antimony-monitor` uses a synchronized `run_as` when committing to the database
+//!     *   antimony-monitor uses a synchronized run_as when committing to the database
 //!         from a worker thread, as multiple such workers may be running and committing
 //!         at the same time.
 //!
-//! Remember that regular `run_as` will still restore the user environment after its completed.
+//! Remember that regular run_as will still restore the user environment after its completed.
 //! This implementation only protects the interior of the macro.
 #![cfg(feature = "sync")]
 
@@ -57,10 +55,11 @@ static SEMAPHORE: Lazy<Arc<(Mutex<bool>, Condvar)>> =
 /// that requires something along the following:
 ///
 /// ```rust
-/// let lock = Sync::new();
+/// let lock = user::sync::Sync::new();
 /// // Do things
 /// drop(lock);
 /// ```
+///
 ///
 /// Note that the lock automatically relinquishes control on drop, or when
 /// falling out of scope.
@@ -98,8 +97,8 @@ impl Drop for Sync {
     }
 }
 
-/// Synchronized `run_as`.
-/// See the doc comment in `user::sync.rs`
+/// Synchronized run_as.
+/// See the doc comment in user::sync.rs
 #[macro_export]
 macro_rules! sync_run_as {
     ($mode:path, $ret:ty, $body:block) => {{
@@ -125,8 +124,8 @@ macro_rules! sync_run_as {
 }
 pub use sync_run_as as run_as;
 
-/// Synchronized `try_run_as`.
-/// See the doc comment in `user::sync.rs`
+/// Synchronized try_run_as.
+/// See the doc comment in user::sync.rs
 #[macro_export]
 macro_rules! sync_try_run_as {
     ($mode:path, $ret:ty, $body:block) => {{

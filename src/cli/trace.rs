@@ -9,6 +9,7 @@ use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use dashmap::DashMap;
 use rayon::prelude::*;
+use spawn::StreamMode;
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -54,6 +55,8 @@ pub struct Args {
 
 impl super::Run for Args {
     fn run(mut self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
+
         let mut args = if let Some(passthrough) = self.passthrough.take() {
             run_vec(&self.profile, passthrough)
         } else {
@@ -95,7 +98,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
     let mut handle = handle
         .arg(localize_home(&info.profile.app_path(&info.name)))?
         .args(info.post)?
-        .error(true)
+        .error(StreamMode::Pipe)
         .spawn()?;
 
     let error = handle.error()?;

@@ -41,10 +41,8 @@ rusqlite = "0.37.0"
 r2d2_sqlite = "0.31.0"
 r2d2 = "0.8.10"
 dialoguer = { version = "0.11.0", default-features = false }
-zip = { version = "6.0.0", features = ["deflate"], default-features = false }
-walkdir = "2.5.0"
-copy_dir = "0.1.3"
 dbus = "0.9.10"
+parking_lot = "0.12.5"
 
 [profile.release]
 opt-level = 3

@@ -21,6 +21,8 @@ impl super::Run for Args {
             let args = default::Args::default();
             args.run()
         } else {
+            user::set(user::Mode::Effective)?;
+
             let path = {
                 let path = Profile::user_profile(&self.profile);
                 if let Some(parent) = path.parent()

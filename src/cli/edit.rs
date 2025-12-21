@@ -14,6 +14,8 @@ impl super::Run for Args {
             let args = default::Args::default();
             args.run()
         } else {
+            user::set(user::Mode::Effective)?;
+
             // Edit the profile
             let user = Profile::user_profile(&self.profile);
             let new = !user.exists();

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use spawn::{Handle, Spawner};
+use spawn::{Handle, Spawner, StreamMode};
 use std::path::Path;
 
 pub fn set_capabilities(root: &str, path: &Path) -> Result<Handle> {
@@ -33,7 +33,7 @@ pub fn set_capabilities(root: &str, path: &Path) -> Result<Handle> {
         .elevate(true)
         .arg("-c")?
         .arg(command)?
-        .input(true)
+        .input(StreamMode::Pipe)
         .spawn()?;
     Ok(handle)
 }

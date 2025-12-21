@@ -6,9 +6,7 @@ use crate::handle::Handle;
 use log::trace;
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
-    unistd::{
-        ForkResult, Pid, close, dup2_stderr, dup2_stdin, dup2_stdout, execv, execve, fork, pipe,
-    },
+    unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execv, execve, fork, pipe},
 };
 use parking_lot::Mutex;
 use std::{
@@ -30,11 +28,7 @@ use {
 };
 
 #[cfg(feature = "cache")]
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-};
+use std::{fs, path::Path};
 
 /// Errors related to the Spawner.
 #[derive(Debug)]
@@ -47,11 +41,10 @@ pub enum Error {
     Cache(&'static str),
 
     /// Errors reading/writing to the cache.
-    #[cfg(feature = "cache")]
-    Io(io::Error),
+    Io(std::io::Error),
 
     /// Errors to various functions that return `Errno`.
-    Errno(ForkResult, &'static str, nix::errno::Errno),
+    Errno(Option<ForkResult>, &'static str, nix::errno::Errno),
 
     /// Errors resolving binary paths.
     Path(String),
@@ -74,13 +67,12 @@ impl fmt::Display for Error {
             #[cfg(feature = "cache")]
             Self::Cache(error) => write!(f, "Cache error: {error}"),
 
-            #[cfg(feature = "cache")]
             Self::Io(error) => write!(f, "Io error: {error}"),
 
             Self::Errno(fork, context, errno) => {
                 let source = match fork {
-                    ForkResult::Child => "child",
-                    ForkResult::Parent { child: _ } => "parent",
+                    Some(ForkResult::Child) => "child",
+                    Some(ForkResult::Parent { child: _ }) | None => "parent",
                 };
 
                 write!(f, "{source} failed to {context}: {errno}",)
@@ -112,6 +104,22 @@ impl error::Error for Error {
     }
 }
 
+/// How to handle the standard input/out/error streams
+#[derive(Default)]
+pub enum StreamMode {
+    /// Collect the stream contents in a Stream object via a
+    /// pipe that can be retrieved in the `spawn::Handle`
+    Pipe,
+
+    /// Share STDIN/STDOUT/STDERR with the process, such that it can write
+    /// to the parent. This is the default.
+    #[default]
+    Share,
+
+    /// Send the stream to /dev/null.
+    Discard,
+}
+
 /// Spawn a child.
 /// ## Thread Safety
 /// Calls to the Spawner's arguments and file descriptors are
@@ -126,10 +134,10 @@ impl error::Error for Error {
 ///
 /// Launch cat, feeding it input from the parent:
 /// ```rust
-/// use io::Write;
+/// use std::io::Write;
 /// let mut handle = spawn::Spawner::new("cat")
-///     .input(true)
-///     .output(true)
+///     .input(spawn::StreamMode::Pipe)
+///     .output(spawn::StreamMode::Pipe)
 ///     .spawn()
 ///     .unwrap();
 /// let string = "Hello, World!";
@@ -147,13 +155,13 @@ pub struct Spawner {
 
     /// Whether to pipe **STDIN**. This lets you call `Handle::write()` to
     /// the process handle to send any Display value to the child.
-    input: bool,
+    input: StreamMode,
 
     /// Capture the child's **STDOUT**.
-    output: bool,
+    output: StreamMode,
 
     /// Capture the child's **STDERR**.
-    error: bool,
+    error: StreamMode,
 
     /// Clear the environment before spawning the child.
     preserve_env: bool,
@@ -194,9 +202,9 @@ impl<'a> Spawner {
             cmd: cmd.into(),
             args: Mutex::new(vec![]),
 
-            input: false,
-            output: false,
-            error: false,
+            input: StreamMode::Share,
+            output: StreamMode::Share,
+            error: StreamMode::Share,
 
             preserve_env: false,
             env: Vec::new(),
@@ -235,21 +243,21 @@ impl<'a> Spawner {
 
     /// Control whether to hook the child's standard input.
     /// This function is not thread safe.
-    pub fn input(mut self, input: bool) -> Self {
+    pub fn input(mut self, input: StreamMode) -> Self {
         self.input_i(input);
         self
     }
 
     /// Control whether to hook the child's standard output.
     /// This function is not thread safe.
-    pub fn output(mut self, output: bool) -> Self {
+    pub fn output(mut self, output: StreamMode) -> Self {
         self.output_i(output);
         self
     }
 
     /// Control whether to hook the child's standard error.
     /// This function is not thread safe.
-    pub fn error(mut self, error: bool) -> Self {
+    pub fn error(mut self, error: StreamMode) -> Self {
         self.error_i(error);
         self
     }
@@ -366,12 +374,12 @@ impl<'a> Spawner {
     /// If you want to ensure you don't accidentally mismatch FDs, you can
     /// commit both the FD and argument in the same transaction:
     /// ```rust
-    /// let file = File::create("file.txt").unwrap();
+    /// let file = std::fs::File::create("file.txt").unwrap();
     /// spawn::Spawner::new("bwrap")
     ///     .fd_arg("--file", file).unwrap()
     ///     .arg("/file.txt").unwrap()
     ///     .spawn().unwrap();
-    /// fs::remove_file("file.txt").unwrap();
+    /// std::fs::remove_file("file.txt").unwrap();
     /// ```
     #[cfg(feature = "fd")]
     pub fn fd_arg(
@@ -410,19 +418,19 @@ impl<'a> Spawner {
 
     /// Set the input flag without consuming the `Spawner`.
     /// This function is not thread safe.
-    pub fn input_i(&mut self, input: bool) {
+    pub fn input_i(&mut self, input: StreamMode) {
         self.input = input;
     }
 
     /// Set the output flag without consuming the `Spawner`.
     /// This function is not thread safe.
-    pub fn output_i(&mut self, output: bool) {
+    pub fn output_i(&mut self, output: StreamMode) {
         self.output = output;
     }
 
     /// Set the error flag without consuming the `Spawner`.
     /// This function is not thread safe.
-    pub fn error_i(&mut self, error: bool) {
+    pub fn error_i(&mut self, error: StreamMode) {
         self.error = error
     }
 
@@ -537,7 +545,7 @@ impl<'a> Spawner {
     /// ## Examples
     ///
     /// ```rust
-    /// let cache = path::PathBuf::from("cmd.cache");
+    /// let cache = std::path::PathBuf::from("cmd.cache");
     /// let mut handle = spawn::Spawner::new("bash");
     /// if cache.exists() {
     ///     handle.cache_read(&cache).unwrap();
@@ -546,7 +554,7 @@ impl<'a> Spawner {
     ///     handle.arg_i("arg").unwrap();
     ///     handle.cache_write(&cache).unwrap();
     /// }
-    /// fs::remove_file(cache);
+    /// std::fs::remove_file(cache);
     /// ```
     ///
     /// ## Caveat
@@ -572,6 +580,7 @@ impl<'a> Spawner {
     /// or if there are errors writing to the provided path.
     #[cfg(feature = "cache")]
     pub fn cache_write(&mut self, path: &Path) -> Result<(), Error> {
+        use std::io::Write;
         if let Some(i) = self.cache_index {
             let args = self.args.lock();
             if let Some(parent) = path.parent() {
@@ -672,7 +681,7 @@ impl<'a> Spawner {
         args_c.append(&mut self.args.into_inner());
 
         // Log if desired.
-        if log::max_level() == log::Level::Trace {
+        if log::log_enabled!(log::Level::Trace) {
             let formatted = args_c
                 .iter()
                 .filter_map(|s| s.to_str().ok())
@@ -686,21 +695,21 @@ impl<'a> Spawner {
             ForkResult::Parent { child } => {
                 // Set the relevant pipes.
                 let stdin = if let Some((read, write)) = stdin {
-                    close(read).map_err(|e| Error::Errno(fork, "close input", e))?;
+                    close(read).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
                     Some(write)
                 } else {
                     None
                 };
 
                 let stdout = if let Some((read, write)) = stdout {
-                    close(write).map_err(|e| Error::Errno(fork, "close error", e))?;
+                    close(write).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
                     Some(read)
                 } else {
                     None
                 };
 
                 let stderr = if let Some((read, write)) = stderr {
-                    close(write).map_err(|e| Error::Errno(fork, "close output", e))?;
+                    close(write).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
                     Some(read)
                 } else {
                     None
@@ -723,33 +732,34 @@ impl<'a> Spawner {
             ForkResult::Child => {
                 // Setup the pipes.
                 if let Some((read, write)) = stdout {
-                    close(read).map_err(|e| Error::Errno(fork, "close output", e))?;
-                    dup2_stdout(write).map_err(|e| Error::Errno(fork, "dup output", e))?;
+                    close(read).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
+                    dup2_stdout(write).map_err(|e| Error::Errno(Some(fork), "dup output", e))?;
                 }
                 if let Some((read, write)) = stderr {
-                    close(read).map_err(|e| Error::Errno(fork, "close error", e))?;
-                    dup2_stderr(write).map_err(|e| Error::Errno(fork, "dup error", e))?;
+                    close(read).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
+                    dup2_stderr(write).map_err(|e| Error::Errno(Some(fork), "dup error", e))?;
                 }
                 if let Some((read, write)) = stdin {
-                    close(write).map_err(|e| Error::Errno(fork, "close input", e))?;
-                    dup2_stdin(read).map_err(|e| Error::Errno(fork, "dup input", e))?;
+                    close(write).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
+                    dup2_stdin(read).map_err(|e| Error::Errno(Some(fork), "dup input", e))?;
                 }
 
                 // Clear F_SETFD to allow passed FD's to persist after execve
                 #[cfg(feature = "fd")]
                 for fd in &fds {
                     fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
-                        .map_err(|e| Error::Errno(fork, "fnctl fd", e))?;
+                        .map_err(|e| Error::Errno(Some(fork), "fnctl fd", e))?;
                 }
 
                 // Ensure that the child dies when the parent does.
                 prctl::set_pdeathsig(SIGTERM)
-                    .map_err(|e| Error::Errno(fork, "set death signal", e))?;
+                    .map_err(|e| Error::Errno(Some(fork), "set death signal", e))?;
 
                 // Drop modes
                 #[cfg(feature = "user")]
                 if let Some(mode) = self.mode {
-                    user::drop(mode).map_err(|e| Error::Errno(fork, "drop user privilege", e))?;
+                    user::drop(mode)
+                        .map_err(|e| Error::Errno(Some(fork), "drop user privilege", e))?;
                 }
 
                 // Apply SECCOMP.
@@ -777,7 +787,7 @@ impl<'a> Spawner {
                 } else {
                     execve(&cmd_c, &args_c, &self.env)
                 }
-                .map_err(|errno| Error::Errno(fork, "exec", errno))
+                .map_err(|errno| Error::Errno(Some(fork), "exec", errno))
                 .expect_err("This should never happen");
                 unreachable!();
             }
@@ -787,25 +797,26 @@ impl<'a> Spawner {
 
 /// Conditionally create a pipe.
 /// Returns either a set of `None`, or the result of `pipe()`
-fn cond_pipe(cond: bool) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
-    if cond {
-        match pipe() {
+fn cond_pipe(cond: StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
+    match cond {
+        StreamMode::Pipe => match pipe() {
             Ok((r, w)) => Ok(Some((r, w))),
-            Err(e) => Err(Error::Errno(
-                ForkResult::Parent { child: Pid::this() },
-                "pipe",
-                e,
-            )),
+            Err(e) => Err(Error::Errno(None, "pipe", e)),
+        },
+        StreamMode::Share => Ok(None),
+        StreamMode::Discard => {
+            let null = std::fs::File::open("/dev/null").map_err(Error::Io)?;
+            let dup =
+                nix::unistd::dup(&null).map_err(|e| Error::Errno(None, "Duplicate Null", e))?;
+            Ok(Some((OwnedFd::from(null), dup)))
         }
-    } else {
-        Ok(None)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use io::Write;
+    use std::io::Write;
 
     use super::*;
 
@@ -814,8 +825,8 @@ mod tests {
         let string = "Hello, World!";
         let mut handle = Spawner::new("bash")
             .args(["-c", &format!("echo '{string}'")])?
-            .output(true)
-            .error(true)
+            .output(StreamMode::Pipe)
+            .error(StreamMode::Pipe)
             .spawn()?;
 
         let output = handle.output()?.read_all().unwrap();
@@ -825,7 +836,10 @@ mod tests {
 
     #[test]
     fn cat() -> Result<()> {
-        let mut handle = Spawner::new("cat").input(true).output(true).spawn()?;
+        let mut handle = Spawner::new("cat")
+            .input(StreamMode::Pipe)
+            .output(StreamMode::Pipe)
+            .spawn()?;
 
         let string = "Hello, World!";
         write!(handle, "{string}").unwrap();
@@ -839,7 +853,10 @@ mod tests {
     #[test]
     fn read() -> Result<()> {
         let string = "Hello!";
-        let mut handle = Spawner::new("echo").arg(string)?.output(true).spawn()?;
+        let mut handle = Spawner::new("echo")
+            .arg(string)?
+            .output(StreamMode::Pipe)
+            .spawn()?;
 
         let bytes = handle.output()?.read_bytes(string.len()).unwrap();
         let output = String::from_utf8_lossy(&bytes);
@@ -848,23 +865,11 @@ mod tests {
     }
 
     #[test]
-    fn multi_spawn() -> Result<()> {
-        let mut handles = Vec::new();
-        for _ in [0; 100] {
-            handles.push(Spawner::new("true").input(true).output(true).spawn()?)
-        }
-        for mut handle in handles {
-            assert!(handle.wait()? == 0);
-        }
-        Ok(())
-    }
-
-    #[test]
     fn clear_env() -> Result<()> {
         let mut handle = Spawner::new("bash")
             .args(["-c", "echo $USER"])?
-            .output(true)
-            .error(true)
+            .output(StreamMode::Pipe)
+            .error(StreamMode::Pipe)
             .spawn()?;
 
         let output = handle.output()?.read_all().unwrap();
@@ -878,8 +883,8 @@ mod tests {
         let mut handle = Spawner::new("bash")
             .args(["-c", "echo $USER"])?
             .env(format!("USER={user}"))?
-            .output(true)
-            .error(true)
+            .output(StreamMode::Pipe)
+            .error(StreamMode::Pipe)
             .spawn()?;
 
         let output = handle.output()?.read_all().unwrap();

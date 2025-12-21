@@ -5,7 +5,7 @@
 # cargo install cargo-pgo
 
 RUSTFLAGS="-Ctarget-cpu=native"
-ARGS="--bin antimony"
+ARGS="--bin antimony -no-default-features"
 
 echo "Building Profiling Binary"
 ANTIMONY=$(cargo pgo build -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')

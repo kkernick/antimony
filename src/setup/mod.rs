@@ -9,9 +9,9 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
+    debug_timer,
     shared::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
-        package::extract,
         path::{user_dir, which_exclude},
         profile::Profile,
     },
@@ -44,7 +44,6 @@ struct Args<'a> {
     pub watches: HashSet<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: String,
-    pub package: Option<PathBuf>,
     pub args: &'a mut super::cli::run::Args,
 }
 
@@ -58,7 +57,7 @@ pub struct Info {
     pub sys_dir: PathBuf,
 }
 
-pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
+pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
     let mut bytes = [0; 5];
     rand::rng().fill_bytes(&mut bytes);
@@ -68,35 +67,15 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         .collect::<Vec<String>>()
         .join("");
 
-    let (mut profile, package) = if name.ends_with(".sb") {
-        let src = PathBuf::from(name.clone().into_owned());
-        let file_name = src.file_stem().unwrap().to_string_lossy();
-
-        let package_path = CACHE_DIR.join(format!("package-{file_name}"));
-
-        if !package_path.exists() {
-            debug!("Extracting package");
-            extract(&src, &package_path)?;
-        }
-
-        let file_name = src.file_stem().unwrap().to_string_lossy();
-        name = Cow::Owned(file_name.into_owned());
-
-        let profile = package_path.join("profile.toml");
-        let profile = Profile::new(&profile.to_string_lossy())?;
-        (profile, Some(package_path))
-    } else {
-        let profile = match Profile::new(&name) {
-            Ok(profile) => profile,
-            Err(e) => {
-                debug!("No profile: {name}: {e}, assuming binary");
-                Profile {
-                    path: Some(which_exclude(&name)?),
-                    ..Default::default()
-                }
+    let mut profile = match Profile::new(&name) {
+        Ok(profile) => profile,
+        Err(e) => {
+            debug!("No profile: {name}: {e}, assuming binary");
+            Profile {
+                path: Some(which_exclude(&name)?),
+                ..Default::default()
             }
-        };
-        (profile, None)
+        }
     };
 
     if let Some(config) = args.config.take() {
@@ -166,7 +145,10 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     fs::create_dir_all(&instances)?;
 
     try_run_as!(user::Mode::Real, Result<()>, {
-        if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
+        if let Some(ipc) = &profile.ipc
+            && !ipc.disable.unwrap_or(false)
+            && !mounted(&format!("{runtime}/doc"))
+        {
             let connection = LocalConnection::new_session()?;
             let msg = Message::new_method_call(
                 BusName::from("org.freedesktop.portal.Documents\0"),
@@ -225,18 +207,20 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
         watches,
         sys_dir: sys_dir.clone(),
         instance,
-        package,
         args,
     };
 
-    proxy::setup(&mut a)?;
-    let home = home::setup(&mut a)?;
-    files::setup(&mut a)?;
-    env::setup(&mut a);
-    fab::setup(&mut a)?;
-    syscalls::setup(&mut a)?;
-    let post = post::setup(&mut a)?;
-    wait::setup(&mut a)?;
+    debug_timer!("Proxy setup", proxy::setup(&mut a))?;
+
+    let home = debug_timer!("Home setup", home::setup(&mut a))?;
+
+    debug_timer!("File setup", files::setup(&mut a))?;
+    debug_timer!("Environment setup", env::setup(&mut a));
+    debug_timer!("Fabrication setup", fab::setup(&mut a))?;
+    debug_timer!("Syscall setup", syscalls::setup(&mut a))?;
+
+    let post = debug_timer!("Post setup", post::setup(&mut a))?;
+    debug_timer!("Waiting for setup to complete", wait::setup(&mut a))?;
 
     Ok(Info {
         name: name.into_owned(),

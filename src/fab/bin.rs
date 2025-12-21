@@ -13,7 +13,7 @@ use dashmap::{DashMap, DashSet};
 use log::{debug, trace, warn};
 use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
@@ -37,7 +37,7 @@ static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
     let mut compgen: HashSet<String> = Spawner::new("/usr/bin/bash")
         .args(["-c", "compgen -k"])
         .unwrap()
-        .output(true)
+        .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
         .spawn()
         .unwrap()
@@ -198,29 +198,31 @@ fn tokenize(line: String) -> HashSet<String> {
 
 /// Resolve the path of a binary, canonicalized to /usr/bin.
 fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
-    let resolved: Cow<'_, str> = if path.contains("..") {
-        Cow::Owned(
-            Path::new(path)
-                .canonicalize()?
-                .to_string_lossy()
-                .into_owned(),
-        )
-    } else if path.starts_with('/') {
-        Cow::Borrowed(path)
-    } else {
-        Cow::Owned(
-            which(path)
-                .with_context(|| path.to_string())?
-                .to_string_lossy()
-                .into_owned(),
-        )
-    };
+    user::sync::try_run_as!(user::Mode::Real, {
+        let resolved: Cow<'_, str> = if path.contains("..") {
+            Cow::Owned(
+                Path::new(path)
+                    .canonicalize()?
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        } else if path.starts_with('/') {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(
+                which(path)
+                    .with_context(|| path.to_string())?
+                    .to_string_lossy()
+                    .into_owned(),
+            )
+        };
 
-    if resolved.starts_with("/bin") {
-        Ok(Cow::Owned(format!("/usr{resolved}")))
-    } else {
-        Ok(resolved)
-    }
+        if resolved.starts_with("/bin") {
+            Ok(Cow::Owned(format!("/usr{resolved}")))
+        } else {
+            Ok(resolved)
+        }
+    })
 }
 
 /// Parses binaries, specifically for shell scripts.
@@ -242,15 +244,18 @@ fn parse(
 
     trace!("Parsing: {path}");
 
-    // Ensure it's a valid binary.
-    if let Ok(dest) = fs::read_link(resolved.as_ref()) {
+    let dest = user::sync::try_run_as!(user::Mode::Real, Result<String>, {
+        let dest = fs::read_link(resolved.as_ref())?;
         let canon = Path::new(resolved.as_ref())
             .parent()
             .ok_or(anyhow!("Binary does not have parent!"))?
             .join(&dest)
             .canonicalize()?;
+        Ok(canon.to_string_lossy().into_owned())
+    });
 
-        let dest = canon.to_string_lossy();
+    // Ensure it's a valid binary.
+    if let Ok(dest) = dest {
         if include_self {
             match resolve_bin(dest.as_ref()) {
                 Ok(dest) => ret
@@ -263,12 +268,11 @@ fn parse(
                 }
             };
         }
-
         parse(&dest, ret.clone(), done.clone(), true)?;
         return Ok(Type::Link);
     }
 
-    if LIB_ROOTS.wait().iter().any(|r| path.starts_with(r)) {
+    if LIB_ROOTS.iter().any(|r| path.starts_with(r)) {
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
@@ -279,10 +283,11 @@ fn parse(
     }
 
     // Open it.
-    let mut file = match File::open(resolved.as_ref()) {
-        Ok(file) => file,
-        Err(_) => return Ok(Type::None),
-    };
+    let mut file =
+        match user::sync::try_run_as!(user::Mode::Real, { File::open(resolved.as_ref()) }) {
+            Ok(file) => file,
+            Err(_) => return Ok(Type::None),
+        };
 
     // Get the magic.
     let mut magic = [0u8; 5];
@@ -359,8 +364,8 @@ fn parse(
                 {
                     let mut result = Spawner::new("/usr/bin/bash")
                         .args(["-ec", &format!("{line}; echo ${key}")])?
-                        .output(true)
-                        .error(true)
+                        .output(StreamMode::Pipe)
+                        .error(StreamMode::Discard)
                         .mode(user::Mode::Real)
                         .spawn()?;
                     match result.wait() {
@@ -439,7 +444,6 @@ fn handle_localize(
 
 pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     fs::create_dir_all(CACHE_DIR.as_path())?;
-
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
     if let Some(binaries) = profile.binaries.take() {
@@ -535,7 +539,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     // However, if the ELF is contained in  /usr/lib, we
     // want its parent directory, such as /usr/lib/chromium.
     parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
-        if !LIB_ROOTS.wait().iter().any(|r| elf.starts_with(r)) {
+        if !LIB_ROOTS.iter().any(|r| elf.starts_with(r)) {
             handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
         }
         elf_binaries.insert(elf.to_string());
@@ -574,7 +578,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         .symlinks
         .into_par_iter()
         .try_for_each(|(link, dest)| -> anyhow::Result<()> {
-            if !LIB_ROOTS.wait().iter().any(|r| link.starts_with(r))
+            if !LIB_ROOTS.iter().any(|r| link.starts_with(r))
                 && !["/lib", "/lib64"].iter().any(|r| link.starts_with(r))
             {
                 handle.args_i(["--symlink", &dest, &link])?;
@@ -584,11 +588,14 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     if let Some(home) = &profile.home {
         let home_dir = home.path(name);
-        try_run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
-
-        debug!("Finding home binaries");
-        let home_str = home_dir.to_string_lossy();
-        elf_binaries.extend(get_dir(&home_str)?);
+        try_run_as!(user::Mode::Real, Result<()>, {
+            fs::create_dir_all(&home_dir)?;
+            debug!("Finding home binaries");
+            let home_str = home_dir.to_string_lossy();
+            let home_binaries = get_dir(&home_str)?;
+            elf_binaries.extend(home_binaries);
+            Ok(())
+        })?;
     }
 
     #[rustfmt::skip]

@@ -2,28 +2,28 @@
 use anyhow::Result;
 use log::{debug, warn};
 use once_cell::sync::Lazy;
-use spawn::Spawner;
-use user::run_as;
+use spawn::{Spawner, StreamMode};
 use std::{
     env::{self, temp_dir},
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
 };
+use user::run_as;
 use which::which;
 
 pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
-    let version = || -> Result<String> {
+    let args = || -> Result<String> {
         let out = Spawner::new("/usr/bin/bwrap")
-            .arg("--version")?
-            .output(true)
+            .arg("--help")?
+            .output(StreamMode::Pipe)
             .spawn()?
             .output_all()?;
         Ok(out)
     }();
 
-    match version {
-        Ok(version) => version.contains("0.11"),
+    match args {
+        Ok(args) => args.contains("--overlay"),
         Err(_) => false,
     }
 });

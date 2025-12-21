@@ -116,14 +116,14 @@ struct SharedBuffer {
 ///
 /// Synchronous.
 /// ```rust
-/// use os::fd::{OwnedFd, FromRawFd};
+/// use std::os::fd::{OwnedFd, FromRawFd};
 /// let mut handle = spawn::Stream::new(unsafe {OwnedFd::from_raw_fd(1)});
 /// handle.read_all().unwrap();
 /// ```
 ///
 /// Asynchronous.
 /// ```rust
-/// use os::fd::{OwnedFd, FromRawFd};
+/// use std::os::fd::{OwnedFd, FromRawFd};
 /// let mut handle = spawn::Stream::new(unsafe {OwnedFd::from_raw_fd(1)});
 /// while let Some(line) = handle.read_line() {
 ///     println!("{line}");

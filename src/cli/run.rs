@@ -12,7 +12,7 @@ use anyhow::{Result, anyhow};
 use inflector::Inflector;
 use log::debug;
 use nix::errno::Errno;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env, fs,
@@ -162,6 +162,8 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(mut self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
+
         let result = || -> Result<()> {
             let info = setup(Cow::Owned(self.profile.clone()), &mut self)?;
             run(info, &mut self)?;
@@ -241,16 +243,18 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         info.handle
             .arg_i(localize_home(&info.profile.app_path(&info.name)))?;
         info.handle.args_i(info.post)?;
-        info.handle.error_i(true);
+        info.handle.error_i(StreamMode::Pipe);
     }
 
     // Run it
     if !args.dry {
-        debug!("Waiting for document portal");
-        wait_for_doc();
+        if let Some(ipc) = info.profile.ipc.take()
+            && !ipc.disable.unwrap_or(false)
+        {
+            debug!("Waiting for document portal");
+            wait_for_doc();
+        }
 
-        // We need to run this under Real, because handle has to fall out of scope within Real Mode,
-        // that way it can properly cleanup the proxy.
         if let Some(hooks) = &mut info.profile.hooks {
             if let Some(pre) = hooks.pre.take() {
                 debug!("Processing pre-hooks");
@@ -324,7 +328,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             let output = handle
                 .preserve_env(true)
                 .mode(Mode::Real)
-                .output(true)
+                .output(StreamMode::Pipe)
                 .spawn()?
                 .output_all()?;
 

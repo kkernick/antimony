@@ -7,7 +7,6 @@ pub mod feature;
 pub mod import;
 pub mod info;
 pub mod integrate;
-pub mod package;
 pub mod refresh;
 pub mod reset;
 pub mod run;
@@ -89,9 +88,6 @@ pub enum Command {
     /// Perform operations on the SECCOMP Database.
     Seccomp(seccomp::Args),
 
-    /// Package a Profile into a self-contained package.
-    Package(package::Args),
-
     /// Export user profiles.
     Export(export::Args),
 
@@ -112,7 +108,6 @@ impl Run for Command {
             Command::Trace(args) => args.run(),
             Command::Info(args) => args.run(),
             Command::Seccomp(args) => args.run(),
-            Command::Package(args) => args.run(),
             Command::Export(args) => args.run(),
             Command::Import(args) => args.run(),
         }

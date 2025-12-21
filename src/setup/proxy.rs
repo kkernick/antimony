@@ -11,7 +11,7 @@ use anyhow::Result;
 use inotify::WatchMask;
 use log::debug;
 use rayon::prelude::*;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
@@ -29,6 +29,7 @@ pub fn run(
     instance: &str,
     info: &Path,
     id: &str,
+    dry: bool,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let resolve = which("xdg-dbus-proxy")?.to_string_lossy().into_owned();
@@ -92,7 +93,7 @@ pub fn run(
     ])?;
 
     // Setup SECCOMP.
-    if let Some(policy) = profile.seccomp {
+    if !dry && let Some(policy) = profile.seccomp {
         let (filter, fd) = syscalls::new("xdg-dbus-proxy", instance, policy, &None)?;
         proxy.seccomp_i(filter);
         if let Some(fd) = fd {
@@ -108,10 +109,11 @@ pub fn run(
         "--filter",
     ])?;
 
-    if let Ok(log) = env::var("RUST_LOG")
-        && log == "debug"
-    {
+    if log::log_enabled!(log::Level::Debug) {
         proxy.arg_i("--log")?;
+    } else {
+        proxy.output_i(StreamMode::Discard);
+        proxy.error_i(StreamMode::Discard);
     }
 
     let cache = sys_dir.join("proxy.cache");
@@ -125,7 +127,7 @@ pub fn run(
             format!("--call={portal}=org.freedesktop.DBus.Properties.*@{path}")
         };
 
-        if let Some(ipc) = profile.ipc.take() {
+        if let Some(ipc) = &profile.ipc {
             if !ipc.portals.is_empty() {
                 let desktop = "org.freedesktop.portal.Desktop";
                 let path = "/org/freedesktop/portal/desktop";
@@ -165,11 +167,15 @@ pub fn run(
 }
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
-    debug!("Setting up proxy");
-    let runtime = RUNTIME_STR.as_str();
-
     // Run the proxy
     if let Some(ipc) = &args.profile.ipc {
+        if ipc.disable.unwrap_or(false) {
+            return Ok(());
+        }
+
+        debug!("Setting up proxy");
+        let runtime = RUNTIME_STR.as_str();
+
         // Add the system bus.
         let system_bus = ipc.system_bus.unwrap_or(false);
         if system_bus {
@@ -242,8 +248,15 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             ])?;
 
         // Or mediate via the proxy.
-        } else if !ipc.disable.unwrap_or(false) {
-            let proxy = run(&args.sys_dir, &mut args.profile, &args.instance, &info, &id)?;
+        } else {
+            let proxy = run(
+                &args.sys_dir,
+                &mut args.profile,
+                &args.instance,
+                &info,
+                &id,
+                args.args.dry,
+            )?;
             args.handle.args_i([
                 "--ro-bind",
                 &format!("{user_dir_str}/proxy/bus"),

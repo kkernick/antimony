@@ -39,6 +39,8 @@ impl super::Run for Args {
                 "Administrative privilege and Polkit is required to modify the system feature set!"
             ));
         } else {
+            user::set(user::Mode::Effective)?;
+
             // Edit the feature
             let feature = AT_HOME
                 .join("features")

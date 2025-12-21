@@ -8,6 +8,7 @@ pub struct Args {}
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
         let path = {
             let path = Profile::default_profile();
             if let Some(parent) = path.parent()

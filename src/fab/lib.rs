@@ -8,9 +8,9 @@ use crate::{
 use anyhow::{Error, Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 use rayon::prelude::*;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -23,7 +23,7 @@ use std::{
 /// Where to store cache data.
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".lib");
-    fs::create_dir_all(&path).unwrap();
+    user::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
     path
 });
 
@@ -38,7 +38,30 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: OnceCell<HashSet<String>> = OnceCell::new();
+pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
+    let mut roots: HashSet<String> = Spawner::new("find")
+        .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])
+        .expect("Failed to setup process")
+        .output(StreamMode::Pipe)
+        .spawn()
+        .expect("Failed to spawn process")
+        .output_all()
+        .expect("Failed to get sqlite path")
+        .lines()
+        .filter_map(|path| {
+            PathBuf::from(&path[..path.len() - 1])
+                .parent()
+                .map(|path| path.to_string_lossy().into_owned())
+        })
+        .collect();
+    debug!("Library root at: {roots:?}");
+
+    roots.insert(String::from("/usr/lib"));
+    if !*SINGLE_LIB {
+        roots.insert(String::from("/usr/lib64"));
+    }
+    roots
+});
 
 /// Get cached definitions.
 pub fn get_cache(name: &str) -> Result<Option<HashSet<String>>> {
@@ -52,12 +75,14 @@ pub fn get_cache(name: &str) -> Result<Option<HashSet<String>>> {
 
 /// Write the cache file.
 pub fn write_cache(name: &str, libraries: HashSet<String>) -> Result<HashSet<String>> {
-    let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
-    let mut file = File::create(&cache_file)?;
-    for library in &libraries {
-        writeln!(file, "{library}")?;
-    }
-    Ok(libraries)
+    user::sync::try_run_as!(user::Mode::Effective, {
+        let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
+        let mut file = File::create(&cache_file)?;
+        for library in &libraries {
+            writeln!(file, "{library}")?;
+        }
+        Ok(libraries)
+    })
 }
 
 /// LDD a path.
@@ -68,7 +93,8 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
 
     let libraries: HashSet<String> = Spawner::new("/usr/bin/ldd")
         .arg(path.as_ref())?
-        .output(true)
+        .output(StreamMode::Pipe)
+        .error(StreamMode::Discard)
         .mode(user::Mode::Real)
         .spawn()?
         .output_all()?
@@ -108,7 +134,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
                 "-mindepth", "1",
                 "-name", base,
             ])?
-            .output(true)
+            .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?
             .output_all()?
@@ -126,7 +152,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
         let mut libraries = HashSet::new();
-        for root in LIB_ROOTS.wait().iter() {
+        for root in LIB_ROOTS.iter() {
             libraries.extend(run(root, pattern)?);
         }
 
@@ -157,7 +183,7 @@ pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
 
     let libraries: HashSet<String> = Spawner::new("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
-        .output(true)
+        .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
         .spawn()?
         .output_all()?
@@ -263,7 +289,7 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    for lib_root in LIB_ROOTS.wait().iter() {
+    for lib_root in LIB_ROOTS.iter() {
         let app_lib = format!("{lib_root}/{name}");
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
@@ -282,7 +308,7 @@ pub fn fabricate(
             } else if e.starts_with("~") {
                 Some(Cow::Owned(e.replace("~", HOME.as_str())))
             } else {
-                for root in LIB_ROOTS.wait().iter() {
+                for root in LIB_ROOTS.iter() {
                     let path = format!("{root}/{e}");
                     if Path::new(&path).exists() {
                         return Some(Cow::Owned(path));
@@ -353,7 +379,7 @@ pub fn fabricate(
                 library.as_str()
             };
 
-            if LIB_ROOTS.wait().iter().any(|r| parent == r) {
+            if LIB_ROOTS.iter().any(|r| parent == r) {
                 true
             } else {
                 !directories
@@ -385,7 +411,7 @@ pub fn fabricate(
     ])?;
 
     directories.par_iter().try_for_each(|dir| -> Result<()> {
-        if LIB_ROOTS.wait().iter().any(|r| dir.starts_with(r)) {
+        if LIB_ROOTS.iter().any(|r| dir.starts_with(r)) {
             let sof_path = get_sof_path(&sof, dir.as_str());
             if !sof_path.exists() {
                 fs::create_dir_all(sof_path)?;

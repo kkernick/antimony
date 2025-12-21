@@ -10,3 +10,4 @@ pub use handle::Handle;
 pub use handle::Stream;
 pub use spawn::Error as SpawnError;
 pub use spawn::Spawner;
+pub use spawn::StreamMode;

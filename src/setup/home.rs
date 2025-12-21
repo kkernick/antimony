@@ -8,7 +8,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         let home_dir = home.path(&args.name);
 
         if home.lock.unwrap_or(false) && !args.args.dry {
-            let lock = File::open(&home_dir)?;
+            let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
             match lock.try_lock() {
                 Ok(_) => args.handle.fd_i(lock),
                 Err(fs::TryLockError::WouldBlock) => {

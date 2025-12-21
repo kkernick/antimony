@@ -73,11 +73,14 @@ pub fn localize_path(file: &str, home: bool) -> Result<(Option<Cow<'_, str>>, St
         (resolved.clone(), resolved)
     };
     let dest = localize_home(&dest);
-    Ok(if Path::new(source.as_ref()).exists() {
-        debug!("{source} => {dest}");
-        (Some(source), dest.into_owned())
-    } else {
-        debug!("{source} (does not exist) => {dest}");
-        (None, dest.into_owned())
-    })
+
+    Ok(
+        if user::run_as!(user::Mode::Real, { Path::new(source.as_ref()).exists() }) {
+            debug!("{source} => {dest}");
+            (Some(source), dest.into_owned())
+        } else {
+            debug!("{source} (does not exist) => {dest}");
+            (None, dest.into_owned())
+        },
+    )
 }

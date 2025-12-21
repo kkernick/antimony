@@ -34,7 +34,7 @@ use nix::{
 use once_cell::sync::Lazy;
 use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     collections::HashSet,
     fmt::Display,
@@ -233,7 +233,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
         ])?
         .preserve_env(true)
         .mode(Mode::Real)
-        .output(true)
+        .output(StreamMode::Pipe)
         .spawn()?;
 
     if handle.wait()? != 0 {
@@ -582,7 +582,7 @@ fn main() -> Result<()> {
                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                     .args(["-wholename", &path])?
                     .mode(user::Mode::Real)
-                    .output(true)
+                    .output(StreamMode::Pipe)
                     .spawn()?
                     .output_all()?
                     .is_empty()

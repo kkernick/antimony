@@ -6,7 +6,7 @@ use crate::{
     },
 };
 use log::{debug, warn};
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     collections::{BTreeSet, HashMap, HashSet},
@@ -184,8 +184,8 @@ fn add_feature(
                 .args(["-c", &condition])?
                 .preserve_env(true)
                 .mode(user::Mode::Real)
-                .output(true)
-                .error(true)
+                .output(StreamMode::Discard)
+                .error(StreamMode::Discard)
                 .spawn()?
                 .wait()?;
             Ok(code)
@@ -312,8 +312,15 @@ fn add_feature(
         // Conversely, if a feature or profile has explicitly set
         // disable to false for compatibility, you cannot enable it.
         p_ipc.disable = match p_ipc.disable {
-            Some(true) | None => ipc.disable,
+            Some(true) => {
+                if ipc.disable.is_some() {
+                    ipc.disable
+                } else {
+                    Some(true)
+                }
+            }
             Some(false) => Some(false),
+            None => ipc.disable,
         };
 
         let format_all = |ipc_list: BTreeSet<String>| -> BTreeSet<String> {

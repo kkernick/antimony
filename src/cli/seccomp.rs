@@ -8,7 +8,7 @@ use clap::ValueEnum;
 use dialoguer::Confirm;
 use nix::unistd::{getcwd, getpid};
 use rusqlite::params;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     fs::{self, File},
     io,
@@ -67,6 +67,8 @@ impl super::Run for Args {
                 "Administrative privilege and Polkit is required to modify the SECCOMP database!"
             ))
         } else {
+            user::set(user::Mode::Effective)?;
+
             match self.operation {
                 Operation::Optimize => {
                     let conn = DB_POOL.get()?;
@@ -200,7 +202,7 @@ impl super::Run for Args {
                                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                                     .args(["-wholename", &wild])?
                                     .mode(user::Mode::Real)
-                                    .output(true)
+                                    .output(StreamMode::Pipe)
                                     .spawn()?
                                     .output_all()?
                                     .is_empty()

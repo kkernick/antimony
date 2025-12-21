@@ -24,6 +24,8 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
+
         let profile = PathBuf::from(self.profile);
         let dest = AT_HOME
             .join("config")

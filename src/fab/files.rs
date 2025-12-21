@@ -22,7 +22,7 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
     }
 }
 
-pub fn fabricate(profile: &mut Profile, handle: &Spawner, packaged: bool) -> Result<()> {
+pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
     user::try_run_as!(user::Mode::Real, {
         if let Some(files) = &mut profile.files {
             if let Some(mut user_files) = files.user.take() {
@@ -55,7 +55,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner, packaged: bool) -> Res
                 }
             }
 
-            if !packaged && let Some(mut system) = files.resources.take() {
+            if let Some(mut system) = files.resources.take() {
                 for mode in FileMode::iter() {
                     if let Some(files) = system.remove(&mode) {
                         files

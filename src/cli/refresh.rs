@@ -34,6 +34,8 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
+
         if self.hard {
             let _ = fs::remove_dir_all(CACHE_DIR.as_path());
         } else {

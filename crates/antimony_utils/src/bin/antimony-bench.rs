@@ -57,18 +57,18 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let root = Spawner::new("git")
         .args(["rev-parse", "--show-toplevel"])?
-        .output(true)
+        .output(spawn::StreamMode::Pipe)
         .spawn()?
         .output_all()?;
     let root = &root[..root.len() - 1];
     chdir(root)?;
 
-    // Hook SIGTERM and SIGINT
     let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
     if let Some(checkout) = &cli.checkout {
+        signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+
         // Stash our working edits
         Spawner::new("git").arg("stash")?.spawn()?.wait()?;
 
