@@ -385,6 +385,9 @@ impl Handle {
                 kill(pid, sig)
             };
 
+            #[cfg(not(feature = "user"))]
+            let result = kill(pid, sig);
+
             match result {
                 Ok(_) => Ok(()),
                 Err(Errno::ESRCH) => {
