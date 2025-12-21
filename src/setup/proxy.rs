@@ -12,7 +12,6 @@ use inotify::WatchMask;
 use log::debug;
 use rayon::prelude::*;
 use spawn::Spawner;
-use user::try_run_as;
 use std::{
     borrow::Cow,
     env,
@@ -20,6 +19,7 @@ use std::{
     io::Write,
     path::Path,
 };
+use user::try_run_as;
 
 use which::which;
 
@@ -143,8 +143,6 @@ pub fn run(
                     proxy.args_i([
                         format!("--call={desktop}=org.freedesktop.portal.{portal:?}.*@{path}"),
                         format!("--talk=org.freedesktop.portal.{portal:?}"),
-                        format!("--call={desktop}=org.freedesktop.{portal:?}.*@{path}"),
-                        format!("--talk=org.freedesktop.{portal:?}"),
                     ])?;
                 }
             }
