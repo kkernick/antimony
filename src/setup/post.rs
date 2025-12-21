@@ -1,9 +1,8 @@
 use crate::shared::{env::HOME, profile::FileMode};
 use anyhow::Result;
 use log::debug;
+use std::{fs, path::Path};
 use user::try_run_as;
-use std::{borrow::Cow, fs, path::Path};
-use url::Url;
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
@@ -29,27 +28,16 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
             for arg in &mut post_args {
                 if Path::new(arg).exists() || arg.starts_with("file://") {
                     debug!("File passthrough: {arg}");
-                    let file = if arg.starts_with("file://") {
-                        Cow::Owned(
-                            Url::parse(arg)?
-                                .to_file_path()
-                                .map_err(|_| anyhow::Error::msg("Malformed URI"))?
-                                .to_string_lossy()
-                                .into_owned(),
-                        )
-                    } else {
-                        Cow::Borrowed(arg.as_str())
-                    };
-
-                    let dest = arg.replace(HOME.as_str(), "/home/antimony");
+                    let file = arg.strip_prefix("file://").unwrap_or(arg);
+                    let dest = file.replace(HOME.as_str(), "/home/antimony");
                     match operation {
-                        FileMode::ReadOnly => args.handle.args_i(["--ro-bind", &file, &dest])?,
-                        FileMode::ReadWrite => args.handle.args_i(["--bind", &file, &dest])?,
+                        FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest])?,
+                        FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest])?,
                         FileMode::Executable => {
-                            let contents = fs::read_to_string(file.as_ref())?;
+                            let contents = fs::read_to_string(file)?;
                             super::files::add_file(
                                 &args.handle,
-                                &file,
+                                file,
                                 contents,
                                 FileMode::Executable,
                             )?

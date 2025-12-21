@@ -38,9 +38,11 @@
 //!
 //! Remember that regular `run_as` will still restore the user environment after its completed.
 //! This implementation only protects the interior of the macro.
+#![cfg(feature = "sync")]
 
 use once_cell::sync::Lazy;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use parking_lot::{Condvar, Mutex, MutexGuard};
+use std::sync::Arc;
 
 /// The global semaphore controls which thread is allowed to change users.
 static SEMAPHORE: Lazy<Arc<(Mutex<bool>, Condvar)>> =
@@ -72,13 +74,12 @@ impl Sync {
     pub fn new() -> Self {
         let sem = Arc::clone(&SEMAPHORE);
         let (mutex, cvar) = &*sem;
-        let guard: MutexGuard<'static, bool> = unsafe {
-            let tmp_guard = mutex.lock().expect("Poisoned mutex");
+        let mut guard: MutexGuard<'static, bool> = unsafe {
+            let tmp_guard = mutex.lock();
             std::mem::transmute::<MutexGuard<'_, bool>, MutexGuard<'static, bool>>(tmp_guard)
         };
-        let mut guard = guard;
         while *guard {
-            guard = cvar.wait(guard).expect("Waiting failed");
+            cvar.wait(&mut guard);
         }
         *guard = true;
         Self { sem, guard }

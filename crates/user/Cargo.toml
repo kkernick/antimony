@@ -3,7 +3,10 @@ name = "user"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+sync = ["dep:parking_lot"]
+
 [dependencies]
-log = "0.4.29"
 nix = { version = "0.30.1", features = ["user"] }
 once_cell = "1.21.3"
+parking_lot = { version = "0.12.5", optional = true }

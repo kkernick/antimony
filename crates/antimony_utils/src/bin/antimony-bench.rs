@@ -55,8 +55,6 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    env_logger::init();
-
     let root = Spawner::new("git")
         .args(["rev-parse", "--show-toplevel"])?
         .output(true)

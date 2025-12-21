@@ -4,6 +4,6 @@ VERSION="${1}"
 cargo build --release --workspace
 ./target/release/antimony_completions
 
-fpm -t pacman --depends libseccomp --depends sqlite --depends libnotify --version $VERSION
-fpm -t deb --depends libseccomp2 --depends sqlite3 --depends libnotify-bin --version $VERSION
-fpm -t rpm --depends libseccomp --depends sqlite --depends libnotify --version $VERSION
+fpm -t pacman --depends libseccomp --depends sqlite --depends libnotify --depends dbus --version $VERSION
+fpm -t deb --depends libseccomp2 --depends sqlite3 --depends libnotify-bin --depends libdbus-1-dev --version $VERSION
+fpm -t rpm --depends libseccomp --depends sqlite --depends libnotify --depends dbus-devel --version $VERSION

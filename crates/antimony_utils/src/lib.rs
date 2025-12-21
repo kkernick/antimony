@@ -1,5 +1,4 @@
 use anyhow::Result;
-use log::debug;
 use spawn::{Handle, Spawner};
 use std::path::Path;
 
@@ -30,9 +29,11 @@ pub fn set_capabilities(root: &str, path: &Path) -> Result<Handle> {
     "#,
     );
 
-    debug!("Running {command}");
-
-    #[rustfmt::skip]
-    let handle = Spawner::new("sh").elevate(true).arg("-c")?.arg(command)?.input(true).spawn()?;
+    let handle = Spawner::new("sh")
+        .elevate(true)
+        .arg("-c")?
+        .arg(command)?
+        .input(true)
+        .spawn()?;
     Ok(handle)
 }

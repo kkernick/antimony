@@ -17,19 +17,24 @@ use crate::{
     },
 };
 use anyhow::{Result, anyhow};
+use dbus::{
+    Message,
+    blocking::{BlockingSender, LocalConnection},
+    strings::{BusName, Interface, Member},
+};
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
 use rand::RngCore;
 use spawn::Spawner;
-use user::try_run_as;
 use std::{
     borrow::Cow,
     collections::HashSet,
     fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
+    time::Duration,
 };
-use zbus::blocking;
+use user::try_run_as;
 
 struct Args<'a> {
     pub profile: Profile,
@@ -57,7 +62,11 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
     let mut bytes = [0; 5];
     rand::rng().fill_bytes(&mut bytes);
-    let instance = hex::encode(bytes);
+    let instance = bytes
+        .iter()
+        .map(|byte| format!("{byte:02x?}"))
+        .collect::<Vec<String>>()
+        .join("");
 
     let (mut profile, package) = if name.ends_with(".sb") {
         let src = PathBuf::from(name.clone().into_owned());
@@ -158,14 +167,19 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
 
     try_run_as!(user::Mode::Real, Result<()>, {
         if profile.ipc.is_some() && !mounted(&format!("{runtime}/doc")) {
-            let connection = blocking::Connection::session()?;
-            let proxy = blocking::Proxy::new(
-                &connection,
-                "org.freedesktop.portal.Documents",
-                "/org/freedesktop/portal/documents",
-                "org.freedesktop.DBus.Peer",
-            )?;
-            proxy.call_method("Ping", &())?;
+            let connection = LocalConnection::new_session()?;
+            let msg = Message::new_method_call(
+                BusName::from("org.freedesktop.portal.Documents\0"),
+                dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                Interface::from("org.freedesktop.DBus.Peer\0"),
+                Member::from("Ping\0"),
+            );
+
+            if let Ok(msg) = msg {
+                connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+            } else {
+                return Err(anyhow!("Failed to send ping to Document Portal"));
+            }
         }
 
         // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
