@@ -38,7 +38,7 @@ static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
         .args(["-c", "compgen -k"])
         .unwrap()
         .output(true)
-        .mode(user::Mode::Real, false)
+        .mode(user::Mode::Real)
         .spawn()
         .unwrap()
         .output_all()
@@ -137,7 +137,7 @@ impl ParseReturn {
 
     /// Write a cache file.
     fn write(&self, name: &str) -> Result<()> {
-        try_run_as!(user::Mode::Effective, Result<()>, {
+        user::sync::try_run_as!(user::Mode::Effective, Result<()>, {
             let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
             let mut file = File::create(&cache_file)?;
 
@@ -361,7 +361,7 @@ fn parse(
                         .args(["-ec", &format!("{line}; echo ${key}")])?
                         .output(true)
                         .error(true)
-                        .mode(user::Mode::Real, false)
+                        .mode(user::Mode::Real)
                         .spawn()?;
                     match result.wait() {
                         Ok(_) => {
@@ -416,9 +416,7 @@ fn handle_localize(
         if src == dst {
             parse(file, parsed.clone(), done.clone(), include_self)?;
         } else {
-            match try_run_as!(user::Mode::Real, {
-                parse(&src, parsed.clone(), done.clone(), false)
-            })? {
+            match parse(&src, parsed.clone(), done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
                     parsed.localized.insert(src.into_owned(), dst);
                 }
@@ -504,12 +502,9 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
 
     // Parse the binaries
     debug!("Localizing binaries");
-    try_run_as!(
-        user::Mode::Real,
-        resolved.iter().try_for_each(|binary| {
-            handle_localize(binary, false, true, parsed.clone(), done.clone())
-        })
-    )?;
+    resolved.iter().try_for_each(|binary| {
+        handle_localize(binary, false, true, parsed.clone(), done.clone())
+    })?;
 
     Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
 }

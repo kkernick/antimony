@@ -1,9 +1,9 @@
 use crate::shared::{env::HOME, profile::FileMode};
 use anyhow::Result;
 use log::debug;
+use user::try_run_as;
 use std::{borrow::Cow, fs, path::Path};
 use url::Url;
-use user::{self, try_run_as};
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");

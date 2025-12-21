@@ -1,8 +1,7 @@
 //! A wrapper on SCMP_FLTATR.
-use std::fmt;
-
 use super::raw::scmp_filter_attr::{self, *};
 use crate::action::Action;
+use std::fmt;
 
 /// How to organize the filter rules.
 pub enum OptimizeStrategy {

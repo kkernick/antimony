@@ -56,7 +56,7 @@ impl super::Run for Args {
                     "--process",
                     &format!("{}", getpid().as_raw()),
                 ])?
-                .mode(user::Mode::Real, true)
+                .mode(user::Mode::Real)
                 .preserve_env(true)
                 .spawn()?
                 .wait()?)
@@ -199,7 +199,7 @@ impl super::Run for Args {
                                 Spawner::new("/usr/bin/find")
                                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                                     .args(["-wholename", &wild])?
-                                    .mode(user::Mode::Real, true)
+                                    .mode(user::Mode::Real)
                                     .output(true)
                                     .spawn()?
                                     .output_all()?

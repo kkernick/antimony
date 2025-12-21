@@ -38,11 +38,9 @@ pub fn package(src: &Path, dst: &Path) -> Result<()> {
     }
     zip.finish()?;
 
-    try_run_as!(
-        user::Mode::Real,
-        io::Result<u64>,
+    try_run_as!(user::Mode::Real, {
         copy(dst, PWD.join(dst.file_name().unwrap()))
-    )?;
+    })?;
     remove_file(dst)?;
     Ok(())
 }

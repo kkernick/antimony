@@ -12,6 +12,7 @@ use inotify::WatchMask;
 use log::debug;
 use rayon::prelude::*;
 use spawn::Spawner;
+use user::try_run_as;
 use std::{
     borrow::Cow,
     env,
@@ -19,7 +20,7 @@ use std::{
     io::Write,
     path::Path,
 };
-use user::{self, try_run_as};
+
 use which::which;
 
 pub fn run(
@@ -52,7 +53,7 @@ pub fn run(
 
     #[rustfmt::skip]
     let mut proxy = Spawner::new("/usr/bin/bwrap")
-        .mode(user::Mode::Real, true).args([
+        .mode(user::Mode::Real).args([
             "--new-session",
             "--ro-bind", &resolve, &resolve,
             "--clearenv",
@@ -187,7 +188,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         let info = user_dir(instance).join(".flatpak-info");
 
         // Create the flatpak-info
-        try_run_as!(user::Mode::Real, Result<()>, {
+        user::run_as!(user::Mode::Real, Result<()>, {
             debug!("Creating flatpak info");
             let out = fs::File::create_new(&info)?;
 

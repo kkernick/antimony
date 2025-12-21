@@ -377,12 +377,25 @@ impl Handle {
     /// Send a signal to the child.
     /// If the child no longer exists, this returns an `Err`.
     pub fn signal(&mut self, sig: Signal) -> Result<(), Error> {
-        if let Some(pid) = self.child
-            && let Err(e) = kill(pid, sig)
-        {
-            return Err(Error::Comm(e));
+        if let Some(pid) = self.child {
+            #[cfg(feature = "user")]
+            let result = if let Some(mode) = self.mode {
+                user::sync::run_as!(mode, kill(pid, sig))
+            } else {
+                kill(pid, sig)
+            };
+
+            match result {
+                Ok(_) => Ok(()),
+                Err(Errno::ESRCH) => {
+                    self.child = None;
+                    Ok(())
+                }
+                Err(e) => Err(Error::Comm(e)),
+            }
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     /// Detach the thread from manual cleanup.
@@ -470,21 +483,10 @@ impl Handle {
 impl Drop for Handle {
     fn drop(&mut self) {
         if let Some(pid) = self.child {
-            #[cfg(feature = "user")]
-            let result = if let Some(mode) = self.mode {
-                user::run_as!(mode, kill(pid, Signal::SIGTERM))
-            } else {
-                kill(pid, Signal::SIGTERM)
-            };
-
-            #[cfg(not(feature = "user"))]
-            let result = kill(pid, Signal::SIGTERM);
-
-            match result {
+            match self.signal(Signal::SIGTERM) {
                 Ok(_) => {
                     let _ = waitpid(pid, None);
                 }
-                Err(Errno::ESRCH) => {}
                 Err(e) => warn!("Failed to terminate process {pid}: {e}"),
             }
         }

@@ -141,8 +141,6 @@ pub struct Filter {
 }
 impl Filter {
     /// Construct a new filter with a default action.
-    ///
-    /// If you plan to use Notify, use `new_notify` instead
     pub fn new(def_action: Action) -> Result<Self, Error> {
         let ctx = unsafe { raw::seccomp_init(def_action.into()) };
         if ctx.is_null() {
@@ -181,7 +179,7 @@ impl Filter {
         }
     }
 
-    /// Consumes and Write the filter to a new file with the BPF format of the filter.
+    /// Write the filter to a new file with the BPF format of the filter.
     pub fn write(&self, path: &Path) -> Result<OwnedFd, Error> {
         let file = File::create(path).map_err(|e| Error::Io(path.to_path_buf(), e))?;
         match unsafe { raw::seccomp_export_bpf(self.ctx, file.into_raw_fd()) } {

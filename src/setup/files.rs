@@ -11,7 +11,6 @@ use std::{
     fs::{self, File},
 };
 use strum::IntoEnumIterator;
-use user::{self, try_run_as};
 
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
     handle.fd_arg_i("--file", File::open(file)?)?;
@@ -41,13 +40,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         if let Some(user) = &mut files.user
             && let Some(exe) = user.remove(&FileMode::Executable)
         {
-            try_run_as!(
-                user::Mode::Real,
-                exe.into_par_iter().try_for_each(|file| {
-                    let (_, dest) = localize_path(&file, true)?;
-                    get_x(&dest, &args.handle)
-                })
-            )?;
+            exe.into_par_iter().try_for_each(|file| {
+                let (_, dest) = localize_path(&file, true)?;
+                get_x(&dest, &args.handle)
+            })?;
         }
         if let Some(system) = &mut files.platform
             && let Some(exe) = system.remove(&FileMode::Executable)

@@ -178,11 +178,6 @@ pub struct Spawner {
     #[cfg(feature = "user")]
     mode: Option<user::Mode>,
 
-    /// Switch to the correct mode when sending the drop signal.
-    /// This is not thread safe.
-    #[cfg(feature = "user")]
-    drop_with_mode: bool,
-
     /// Use `pkexec` to elevate via *Polkit*.
     #[cfg(feature = "elevate")]
     elevate: bool,
@@ -216,9 +211,6 @@ impl<'a> Spawner {
 
             #[cfg(feature = "user")]
             mode: None,
-
-            #[cfg(feature = "user")]
-            drop_with_mode: false,
 
             #[cfg(feature = "elevate")]
             elevate: false,
@@ -288,8 +280,8 @@ impl<'a> Spawner {
     /// environment, as multiple teardowns can change the mode
     /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode(mut self, mode: user::Mode, drop: bool) -> Self {
-        self.mode_i(mode, drop);
+    pub fn mode(mut self, mode: user::Mode) -> Self {
+        self.mode_i(mode);
         self
     }
 
@@ -463,9 +455,8 @@ impl<'a> Spawner {
     /// environment, as multiple teardowns can change the mode
     /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode_i(&mut self, mode: user::Mode, drop: bool) {
+    pub fn mode_i(&mut self, mode: user::Mode) {
         self.mode = Some(mode);
-        self.drop_with_mode = drop;
     }
 
     /// Set a *SECCOMP* filter without consuming the `Spawner`.
@@ -720,8 +711,7 @@ impl<'a> Spawner {
                     command,
                     child,
                     #[cfg(feature = "user")]
-                    if self.drop_with_mode { self.mode } else { None },
-                    
+                    self.mode,
                     stdin,
                     stdout,
                     stderr,

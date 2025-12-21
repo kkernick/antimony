@@ -21,6 +21,7 @@ use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
 use rand::RngCore;
 use spawn::Spawner;
+use user::try_run_as;
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -28,7 +29,6 @@ use std::{
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
-use user::try_run_as;
 use zbus::blocking;
 
 struct Args<'a> {
@@ -197,7 +197,7 @@ pub fn setup<'a>(mut name: Cow<'a, str>, args: &'a mut super::cli::run::Args) ->
             "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
             "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
         ])?
-        .mode(user::Mode::Real, true);
+        .mode(user::Mode::Real);
 
     debug!("Initializing inotify handle");
     let inotify = try_run_as!(user::Mode::Real, Inotify::init())?;

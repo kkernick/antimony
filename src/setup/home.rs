@@ -24,48 +24,46 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             HomePolicy::None => Ok(None),
             policy => {
                 let home_str = home_dir.to_string_lossy();
-                user::try_run_as!(user::Mode::Real, Result<()>, {
-                    debug!("Setting up home at {home_dir:?}");
-                    fs::create_dir_all(&home_dir)?;
+                debug!("Setting up home at {home_dir:?}");
+                user::run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
 
-                    debug!("Adding args");
+                debug!("Adding args");
 
-                    let dest = match &home.path {
-                        Some(path) => path,
-                        None => "/home/antimony",
-                    };
+                let dest = match &home.path {
+                    Some(path) => path,
+                    None => "/home/antimony",
+                };
 
-                    match policy {
-                        HomePolicy::Enabled => {
-                            args.handle.args_i(["--bind", &home_str, dest])?;
-                        }
-                        _ => {
-                            if *OVERLAY {
-                                if policy == HomePolicy::Overlay {
-                                    #[rustfmt::skip]
+                match policy {
+                    HomePolicy::Enabled => {
+                        args.handle.args_i(["--bind", &home_str, dest])?;
+                    }
+                    _ => {
+                        if *OVERLAY {
+                            if policy == HomePolicy::Overlay {
+                                #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &home_str,
                                     "--tmp-overlay", dest,
                                 ])?;
-                                } else {
-                                    let work = args.sys_dir.join("work");
-                                    let work_str = work.to_string_lossy();
-                                    fs::create_dir_all(&work)?;
+                            } else {
+                                let work = args.sys_dir.join("work");
+                                let work_str = work.to_string_lossy();
+                                fs::create_dir_all(&work)?;
 
-                                    #[rustfmt::skip]
+                                #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &work_str,
                                     "--overlay-src", &home_str,
                                     "--ro-overlay", dest,
                                 ])?;
-                                }
-                            } else {
-                                return Err(anyhow!("Bubblewrap version too old for overlays!"));
                             }
+                        } else {
+                            return Err(anyhow!("Bubblewrap version too old for overlays!"));
                         }
                     }
-                    Ok(())
-                })?;
+                }
+
                 Ok(Some(home_str.into_owned()))
             }
         }

@@ -180,7 +180,7 @@ impl super::Run for Args {
                         "Antimony",
                     ])?
                     .preserve_env(true)
-                    .mode(Mode::Real, true)
+                    .mode(Mode::Real)
                     .spawn()?
                     .wait()?;
             }
@@ -323,7 +323,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
             let output = handle
                 .preserve_env(true)
-                .mode(Mode::Real, true)
+                .mode(Mode::Real)
                 .output(true)
                 .spawn()?
                 .output_all()?;
@@ -335,7 +335,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 Spawner::new("xdg-open")
                     .arg(log.to_string_lossy())?
                     .preserve_env(true)
-                    .mode(Mode::Real, true)
+                    .mode(Mode::Real)
                     .spawn()?
                     .wait()?;
             }

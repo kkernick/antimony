@@ -3,13 +3,13 @@ use anyhow::Result;
 use log::{debug, warn};
 use once_cell::sync::Lazy;
 use spawn::Spawner;
+use user::run_as;
 use std::{
     env::{self, temp_dir},
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
 };
-use user::run_as;
 use which::which;
 
 pub static OVERLAY: Lazy<bool> = Lazy::new(|| {

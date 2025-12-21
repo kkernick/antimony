@@ -29,11 +29,10 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-use user::run_as;
 
 /// Connection to the Database
 pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
-    run_as!(user::Mode::Effective, {
+    user::run_as!(user::Mode::Effective, {
         let dir = AT_HOME.join("seccomp");
         if !dir.exists() {
             fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");

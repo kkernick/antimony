@@ -1,7 +1,6 @@
 //! Wrapper for SCMP_ACT.
-use std::fmt;
-
 use super::raw;
+use std::fmt;
 
 /// An Action.
 #[derive(Clone, Copy, PartialEq, Debug)]

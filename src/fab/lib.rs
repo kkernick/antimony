@@ -69,7 +69,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
     let libraries: HashSet<String> = Spawner::new("/usr/bin/ldd")
         .arg(path.as_ref())?
         .output(true)
-        .mode(user::Mode::Real, false)
+        .mode(user::Mode::Real)
         .spawn()?
         .output_all()?
         .split_whitespace()
@@ -109,7 +109,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
                 "-name", base,
             ])?
             .output(true)
-            .mode(user::Mode::Real, false)
+            .mode(user::Mode::Real)
             .spawn()?
             .output_all()?
             .lines()
@@ -158,7 +158,7 @@ pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
     let libraries: HashSet<String> = Spawner::new("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(true)
-        .mode(user::Mode::Real, false)
+        .mode(user::Mode::Real)
         .spawn()?
         .output_all()?
         .lines()

@@ -1,12 +1,11 @@
 //! Helper utilities for switching modes in SetUID applications.
 
-use std::{error, fmt};
-
 use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
 };
 use once_cell::sync::Lazy;
+use std::{error, fmt};
 
 pub mod sync;
 
@@ -74,24 +73,30 @@ pub enum Mode {
 /// This function can never be misused to lock out the process
 /// from returning to the original, or any other mode.
 /// This function returns an error if the mode could not be
-/// changed.
+/// changed. Otherwise, it returns the old mode for use in
+/// `restore()`
 ///
 /// ## Examples
 /// ```rust
 /// user::set(user::Mode::Real).unwrap();
 /// ```
-pub fn set(mode: Mode) -> Result<(), Errno> {
+pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
+    let uid = getresuid()?;
+    let gid = getresgid()?;
+
     match mode {
         Mode::Real => {
             setresuid(USER.real, USER.real, USER.effective)?;
-            setresgid(GROUP.real, GROUP.real, GROUP.effective)
+            setresgid(GROUP.real, GROUP.real, GROUP.effective)?;
         }
         Mode::Effective => {
             setresuid(USER.effective, USER.effective, USER.real)?;
-            setresgid(GROUP.effective, GROUP.effective, GROUP.real)
+            setresgid(GROUP.effective, GROUP.effective, GROUP.real)?;
         }
-        Mode::Existing => revert(),
+        Mode::Existing => revert()?,
     }
+
+    Ok((uid, gid))
 }
 
 /// Revert the Mode to the original.
@@ -132,7 +137,7 @@ pub fn drop(mode: Mode) -> Result<(), Errno> {
 /// This function fails if the syscall does.
 /// ## Examples
 /// ```rust
-/// let saved = user::save().unwrap();
+/// let saved = user::set(user::Mode::Real).unwrap();
 /// // Do work.
 /// user::restore(saved).unwrap()
 /// ```
@@ -141,81 +146,64 @@ pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
     setresgid(gid.real, gid.effective, gid.saved)
 }
 
-/// Save the current Uid/Gids to be restored later.
-pub fn save() -> Result<(ResUid, ResGid), Errno> {
-    let uid = getresuid()?;
-    let gid = getresgid()?;
-    Ok((uid, gid))
-}
-
 /// Run a particular function/lamdba under a user.
 /// Accepts a Mode to switch to, then saves the current mode,
 /// reverting at the end of execution. This function, therefore,
 /// does not change the existing mode after returning.
+///
+/// This macro can only be used in the context of a function returning
+/// a Result, as errors in saving/setting/restoring are propagated. If
+/// you can't return a Result, use `run_as`
 #[macro_export]
 macro_rules! try_run_as {
     ($mode:path, $ret:ty, $body:block) => {{
-        let __saved = user::save()?;
-        user::set($mode)?;
+        let __saved = user::set($mode)?;
         let __result: $ret = (|| -> $ret { $body })();
         user::restore(__saved)?;
         __result
     }};
 
-    ($mode:path, $ret:ty, $expr:expr) => {{
-        let __saved = user::save()?;
-        ::user::set($mode)?;
-        let __result: $ret = (|| -> $ret { $expr })();
-        user::restore(__saved)?;
-        __result
-    }};
-
     ($mode:path, $body:block) => {{
-        let __saved = user::save()?;
-        user::set($mode)?;
+        let __saved = user::set($mode)?;
         let __result = (|| $body)();
         user::restore(__saved)?;
         __result
     }};
 
     ($mode:path, $expr:expr) => {{
-        let __saved = user::save()?;
-        user::set($mode)?;
+        let __saved = user::set($mode)?;
         let __result = $expr;
         user::restore(__saved)?;
         __result
     }};
 }
 
+/// This macro is functionally equivalent to `try_run_as`, but will panic
+/// the program with `expect()` rather than returning an Err on failure
+/// to save/set/restore the user mode.
+///
+/// Note that due to how these functions work (Relying on the original
+/// Real/Effective/Saved values), there is no situation in which
+/// these modes will actually fail save the kernel being unable
+/// to allocate (Or, in other words, never).
 #[macro_export]
 macro_rules! run_as {
     ($mode:path, $ret:ty, $body:block) => {{
-        let __saved = user::save().expect("Failed to save user mode");
-        user::set($mode).expect("Failed to set user mode");
+        let __saved = user::set($mode).expect("Failed to set user mode");
         let __result: $ret = (|| -> $ret { $body })();
         user::restore(__saved).expect("Failed to restore user mode");
         __result
     }};
 
-    ($mode:path, $ret:ty, $expr:expr) => {{
-        let __saved = user::save().expect("Failed to save user mode");
-        ::user::set($mode).expect("Failed to set user mode");
-        let __result: $ret = (|| -> $ret { $expr })();
-        user::restore(__saved).expect("Failed to restore user mode");
-        __result
-    }};
-
     ($mode:path, $body:block) => {{
-        let __saved = user::save().expect("Failed to save user mode");
-        user::set($mode).expect("Failed to set user mode");
+        let __saved = user::set($mode).expect("Failed to set user mode");
         let __result = (|| $body)();
         user::restore(__saved).expect("Failed to restore user mode");
         __result
     }};
 
     ($mode:path, $expr:expr) => {{
-        let __saved = user::save().expect("Failed to save user mode");
-        user::set($mode).expect("Failed to set user mode");
+        let __saved = user::set($mode).expect("Failed to set user mode");
         let __result = $expr;
         user::restore(__saved).expect("Failed to restore user mode");
         __result

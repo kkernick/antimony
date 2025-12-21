@@ -3,6 +3,7 @@ use log::error;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use spawn::Spawner;
+use user::run_as;
 use std::{
     error, fmt,
     fs::{self, File},
@@ -10,7 +11,6 @@ use std::{
     path::Path,
 };
 use tempfile::NamedTempFile;
-use user::run_as;
 
 use crate::shared::env::EDITOR;
 
@@ -127,7 +127,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         Spawner::new(EDITOR.as_str())
             .preserve_env(true)
             .arg(temp.path().to_string_lossy())?
-            .mode(user::Mode::Real, true)
+            .mode(user::Mode::Real)
             .spawn()?
             .wait()?;
 

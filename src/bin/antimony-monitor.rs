@@ -225,13 +225,14 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
             &format!("The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?", path.to_string_lossy()),
             "-a", "Antimony",
             "-t", "30000",
-            "-A", "All=Allow All",
+            "-A", "All=Save All",
+            "-A", "Save=Save",
             "-A", "Allow=Allow",
             "-A", "Deny=Deny",
             "-A", "Kill=Kill",
         ])?
         .preserve_env(true)
-        .mode(Mode::Real, true)
+        .mode(Mode::Real)
         .output(true)
         .spawn()?;
 
@@ -279,16 +280,8 @@ pub fn notify_reader(
                         let exe_path = match fs::read_link(format!("/proc/{pid}/exe")) {
                             Ok(path) => Some(path),
                             Err(_) => {
-                                match user::sync::run_as!(
-                                    user::Mode::Effective,
-                                    fs::read_link(format!("/proc/{pid}/exe"))
-                                ) {
-                                    Ok(path) => Some(path),
-                                    Err(_) => {
-                                        warn!("Invalid exe at PID {pid}");
-                                        None
-                                    }
-                                }
+                                warn!("Invalid exe at PID {pid}");
+                                None
                             }
                         };
 
@@ -332,7 +325,15 @@ pub fn notify_reader(
                                                         commit = true;
                                                         ask_clone.store(false, Ordering::Relaxed);
                                                     }
-                                                    "Allow" => commit = true,
+                                                    "Save" => {
+                                                        commit = true;
+                                                    }
+                                                    "Allow" => {
+                                                        allow_clone
+                                                            .entry(path.to_string())
+                                                            .or_default()
+                                                            .insert(call);
+                                                    }
                                                     "Deny" => {
                                                         resp.error = -EPERM;
                                                         resp.flags = 0;
@@ -377,7 +378,11 @@ pub fn notify_reader(
                                             && update_binary(&tx, &path, [call].iter()).is_ok()
                                             && tx.commit().is_ok()
                                         {
-                                            info!("Committed directly");
+                                            info!(
+                                                "{path} => {}",
+                                                Syscall::get_name(call)
+                                                    .unwrap_or(format!("{call}"))
+                                            );
                                         } else {
                                             warn!("Pending commit");
                                             entry.insert(call);
@@ -576,7 +581,7 @@ fn main() -> Result<()> {
                 !Spawner::new("/usr/bin/find")
                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                     .args(["-wholename", &path])?
-                    .mode(user::Mode::Real, true)
+                    .mode(user::Mode::Real)
                     .output(true)
                     .spawn()?
                     .output_all()?
