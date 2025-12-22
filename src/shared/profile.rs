@@ -12,6 +12,7 @@ use crate::{
 use clap::ValueEnum;
 use console::style;
 use log::debug;
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner};
 use std::{
@@ -25,6 +26,12 @@ use std::{
 };
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+
+static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let path = crate::shared::env::CACHE_DIR.join(".profile");
+    user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    path
+});
 
 /// An error for issues around Profiles.
 #[derive(Debug)]
@@ -388,42 +395,60 @@ impl Profile {
     /// Load a new profile from all supported locations.
     pub fn new(name: &str) -> Result<Profile, Error> {
         debug!("Loading {name}");
-        let profile =
-            fs::read_to_string(Profile::path(name)?).map_err(|e| Error::Io("read profile", e))?;
+        let path = Profile::path(name)?;
 
-        let mut profile: Profile = toml::from_str(profile.as_str())?;
+        let cache = CACHE_DIR.join(path.to_string_lossy().replace("/", "."));
+        if cache.exists() {
+            Ok(toml::from_str(
+                &fs::read_to_string(cache).map_err(|e| Error::Io("read profile", e))?,
+            )?)
+        } else {
+            let profile = fs::read_to_string(Profile::path(name)?)
+                .map_err(|e| Error::Io("read profile", e))?;
 
-        let to_inherit: BTreeSet<String> = match &profile.inherits {
-            Some(i) => i.clone(),
-            None => {
-                if Profile::default_profile().exists() {
-                    BTreeSet::from_iter(["default".to_string()])
-                } else {
-                    BTreeSet::new()
+            let mut profile: Profile = toml::from_str(profile.as_str())?;
+
+            let to_inherit: BTreeSet<String> = match &profile.inherits {
+                Some(i) => i.clone(),
+                None => {
+                    if Profile::default_profile().exists() {
+                        BTreeSet::from_iter(["default".to_string()])
+                    } else {
+                        BTreeSet::new()
+                    }
                 }
+            };
+
+            for inherit in to_inherit {
+                profile.merge(toml::from_str(
+                    &fs::read_to_string(Profile::path(&inherit)?)
+                        .map_err(|e| Error::Io("read inherited profile", e))?,
+                )?)?;
             }
-        };
 
-        for inherit in to_inherit {
-            profile.merge(toml::from_str(
-                &fs::read_to_string(Profile::path(&inherit)?)
-                    .map_err(|e| Error::Io("read inherited profile", e))?,
-            )?)?;
+            if let Some(path) = &profile.path
+                && path.starts_with("~")
+            {
+                profile.path = Some(path.replace("~", HOME.as_str()))
+            }
+
+            // Try and lookup the path. If it doesn't work, then the corresponding application
+            // isn't installed. This is fine, as long as the user doesn't try and run the profile.
+            if !name.ends_with(".toml") && profile.path.is_none() {
+                profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
+            }
+
+            debug!("Fabrication features");
+            fab::features::fabricate(&mut profile, name)?;
+
+            write!(
+                File::create(cache).map_err(|e| Error::Io("write feature cache", e))?,
+                "{}",
+                toml::to_string(&profile)?
+            )
+            .map_err(|e| Error::Io("write feature cache", e))?;
+            Ok(profile)
         }
-
-        if let Some(path) = &profile.path
-            && path.starts_with("~")
-        {
-            profile.path = Some(path.replace("~", HOME.as_str()))
-        }
-
-        // Try and lookup the path. If it doesn't work, then the corresponding application
-        // isn't installed. This is fine, as long as the user doesn't try and run the profile.
-        if !name.ends_with(".toml") && profile.path.is_none() {
-            profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
-        }
-
-        Ok(profile)
     }
 
     /// Use another profile as the base for the caller.
@@ -678,29 +703,6 @@ impl Profile {
                 hooks.info();
             }
         }
-    }
-
-    /// Integrate features into the profile, populating all fields with information
-    /// from all dependencies.
-    pub fn integrate(mut self, name: &str, user_cache: &Path) -> Result<Profile, Error> {
-        let feature_cache = user_cache.join("profile.cache");
-        if feature_cache.exists() {
-            self = toml::from_str(
-                &fs::read_to_string(feature_cache)
-                    .map_err(|e| Error::Io("read feature cache", e))?,
-            )?;
-        } else {
-            fab::features::fabricate(&mut self, name)?;
-            fs::create_dir_all(user_cache).map_err(|e| Error::Io("write user cache", e))?;
-
-            write!(
-                File::create(feature_cache).map_err(|e| Error::Io("write feature cache", e))?,
-                "{}",
-                toml::to_string(&self)?
-            )
-            .map_err(|e| Error::Io("write feature cache", e))?;
-        }
-        Ok(self)
     }
 
     /// Edit a profile.

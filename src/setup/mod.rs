@@ -11,7 +11,7 @@ use crate::{
     cli::run::mounted,
     debug_timer,
     shared::{
-        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, USER_NAME},
+        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::{user_dir, which_exclude},
         profile::Profile,
     },
@@ -90,17 +90,10 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     };
 
-    log::trace!("{profile:?}");
-
     let cmd_profile = Profile::from_args(args);
-
-    log::trace!("CMD: {cmd_profile:?}");
-
     profile = profile.base(cmd_profile)?;
-
-    log::trace!("{profile:?}");
-
     let runtime = RUNTIME_STR.as_str();
+
     let busy = |path: &Path| -> bool {
         match path.read_dir() {
             Ok(mut iter) => iter.next().is_some(),
@@ -177,12 +170,6 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     })?;
 
     symlink(user_dir(&instance), instances.join(&instance))?;
-
-    debug!("Creating system cache");
-    let user_cache = sys_dir.join(USER_NAME.as_str());
-
-    let profile = debug_timer!("setup::integration", profile.integrate(&name, &user_cache))?;
-    log::trace!("{profile:?}");
 
     // Start the command.
     #[rustfmt::skip]

@@ -1,11 +1,12 @@
 use crate::{
+    debug_timer,
     fab::{bin::ELF_MAGIC, localize_home},
     shared::{
         env::{AT_HOME, HOME},
         profile::Profile,
     },
 };
-use anyhow::{Error, Result, anyhow};
+use anyhow::{Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
 use once_cell::sync::Lazy;
@@ -23,7 +24,7 @@ use std::{
 /// Where to store cache data.
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".lib");
-    user::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
     path
 });
 
@@ -39,21 +40,23 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 
 // Get the library roots.
 pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut roots: HashSet<String> = Spawner::new("find")
-        .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])
-        .expect("Failed to setup process")
-        .output(StreamMode::Pipe)
-        .spawn()
-        .expect("Failed to spawn process")
-        .output_all()
-        .expect("Failed to get sqlite path")
-        .lines()
-        .filter_map(|path| {
-            PathBuf::from(&path[..path.len() - 1])
-                .parent()
-                .map(|path| path.to_string_lossy().into_owned())
-        })
-        .collect();
+    let mut roots: HashSet<String> = debug_timer!("::lib_roots", {
+        Spawner::new("find")
+            .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])
+            .expect("Failed to setup process")
+            .output(StreamMode::Pipe)
+            .spawn()
+            .expect("Failed to spawn process")
+            .output_all()
+            .expect("Failed to get sqlite path")
+            .lines()
+            .filter_map(|path| {
+                PathBuf::from(&path[..path.len() - 1])
+                    .parent()
+                    .map(|path| path.to_string_lossy().into_owned())
+            })
+            .collect()
+    });
     debug!("Library root at: {roots:?}");
 
     roots.insert(String::from("/usr/lib"));
@@ -64,7 +67,7 @@ pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
 });
 
 /// Get cached definitions.
-pub fn get_cache(name: &str) -> Result<Option<HashSet<String>>> {
+pub fn get_cache(name: &str) -> Result<Option<Vec<String>>> {
     let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
     if let Ok(file) = File::open(&cache_file) {
         let reader = BufReader::new(file);
@@ -74,7 +77,7 @@ pub fn get_cache(name: &str) -> Result<Option<HashSet<String>>> {
 }
 
 /// Write the cache file.
-pub fn write_cache(name: &str, libraries: HashSet<String>) -> Result<HashSet<String>> {
+pub fn write_cache(name: &str, libraries: Vec<String>) -> Result<Vec<String>> {
     user::sync::try_run_as!(user::Mode::Effective, {
         let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
         let mut file = File::create(&cache_file)?;
@@ -86,45 +89,35 @@ pub fn write_cache(name: &str, libraries: HashSet<String>) -> Result<HashSet<Str
 }
 
 /// LDD a path.
-pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
+pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
     if let Some(libraries) = get_cache(&path)? {
         return Ok(libraries);
     }
 
-    let libraries: HashSet<String> = Spawner::new("/usr/bin/ldd")
+    let libraries: Vec<String> = Spawner::new("/usr/bin/ldd")
         .arg(path.as_ref())?
         .output(StreamMode::Pipe)
         .error(StreamMode::Discard)
         .spawn()?
         .output_all()?
-        .split_whitespace()
-        .filter(|s| s.contains('/'))
+        .lines()
+        .par_bridge()
         .filter_map(|e| {
-            let mut resolved = e.to_string();
-            if e.contains("..") {
-                resolved = fs::canonicalize(e)
-                    .map_err(Error::from)
-                    .ok()?
-                    .to_string_lossy()
-                    .into_owned()
+            if let Some(start) = e.find("=> /")
+                && let Some(end) = e.rfind(' ')
+            {
+                Some(String::from(&e[start + 3..end]))
+            } else {
+                None
             }
-            if resolved.starts_with("/lib") {
-                resolved.insert_str(0, "/usr");
-            }
-
-            if *SINGLE_LIB {
-                resolved = resolved.replace("/usr/lib64/", "/usr/lib/");
-            }
-
-            Some(resolved)
         })
         .collect();
     write_cache(&path, libraries)
 }
 
 /// Get all matches for a wildcard.
-pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
-    let run = |dir: &str, base: &str| -> Result<HashSet<String>> {
+pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Vec<String>> {
+    let run = |dir: &str, base: &str| -> Result<Vec<String>> {
         #[rustfmt::skip]
         let out = Spawner::new("find")
             .args([
@@ -150,7 +143,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<HashSet<String>> {
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
-        let mut libraries = HashSet::new();
+        let mut libraries = Vec::new();
         for root in LIB_ROOTS.iter() {
             libraries.extend(run(root, pattern)?);
         }
@@ -175,12 +168,12 @@ fn elf_filter(path: &str) -> Option<String> {
 }
 
 /// Get all executable files in a directory.
-pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
+pub fn get_dir(dir: &str) -> Result<Vec<String>> {
     if let Some(libraries) = get_cache(dir)? {
         return Ok(libraries);
     }
 
-    let libraries: HashSet<String> = Spawner::new("/usr/bin/find")
+    let libraries: Vec<String> = Spawner::new("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
@@ -193,11 +186,8 @@ pub fn get_dir(dir: &str) -> Result<HashSet<String>> {
 }
 
 /// Determine dependencies for directories.
-fn dir_resolve(
-    library: Cow<'_, str>,
-    directories: Arc<DashSet<String>>,
-) -> Result<HashSet<String>> {
-    let mut dependencies = HashSet::new();
+fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Result<Vec<String>> {
+    let mut dependencies = Vec::new();
     let path = Path::new(library.as_ref());
 
     // Resolve directories.
@@ -205,7 +195,7 @@ fn dir_resolve(
         dependencies.extend(get_dir(&library)?);
         directories.insert(library.to_string());
     } else if let Some(library) = elf_filter(&library) {
-        dependencies.insert(library);
+        dependencies.push(library);
     }
     Ok(dependencies)
 }
@@ -294,102 +284,115 @@ pub fn fabricate(
         }
     }
 
-    if let Some(libraries) = profile.libraries.take() {
-        // Separate the wildcards from the files/dirs.
-        let (wildcards, flat): (HashSet<_>, HashSet<_>) =
-            libraries.into_par_iter().partition(|e| e.contains('*'));
+    debug_timer!("::wildcards", {
+        if let Some(libraries) = profile.libraries.take() {
+            // Separate the wildcards from the files/dirs.
+            let (wildcards, flat): (HashSet<_>, HashSet<_>) =
+                libraries.into_par_iter().partition(|e| e.contains('*'));
 
-        resolved.extend(flat.into_iter().filter_map(|e| {
-            if e.starts_with("/") {
-                Some(Cow::Owned(e))
-            } else if e.starts_with("~") {
-                Some(Cow::Owned(e.replace("~", HOME.as_str())))
-            } else {
-                for root in LIB_ROOTS.iter() {
-                    let path = format!("{root}/{e}");
-                    if Path::new(&path).exists() {
-                        return Some(Cow::Owned(path));
+            resolved.extend(flat.into_iter().filter_map(|e| {
+                if e.starts_with("/") {
+                    Some(Cow::Owned(e))
+                } else if e.starts_with("~") {
+                    Some(Cow::Owned(e.replace("~", HOME.as_str())))
+                } else {
+                    for root in LIB_ROOTS.iter() {
+                        let path = format!("{root}/{e}");
+                        if Path::new(&path).exists() {
+                            return Some(Cow::Owned(path));
+                        }
                     }
+                    warn!("Failed to find library: {e}");
+                    None
                 }
-                warn!("Failed to find library: {e}");
-                None
-            }
-        }));
+            }));
+            resolved.extend(
+                wildcards
+                    .into_par_iter()
+                    .filter_map(|e| get_wildcards(&e, true).ok())
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .flatten()
+                    .map(Cow::Owned)
+                    .collect::<HashSet<_>>(),
+            );
+        }
+    });
 
-        debug!("Resolving wildcards");
-        resolved.extend(
-            wildcards
-                .into_par_iter()
-                .filter_map(|e| get_wildcards(&e, true).ok())
-                .collect::<Vec<_>>()
-                .into_iter()
-                .flatten()
-                .map(Cow::Owned)
-                .collect::<HashSet<_>>(),
-        );
-    }
-
-    debug!("Resolving directories");
-    let files = resolved
-        .into_par_iter()
-        .filter_map(|e| dir_resolve(e, directories.clone()).ok())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .flatten()
-        .collect::<HashSet<_>>();
+    let files = debug_timer!("::directories", {
+        resolved
+            .into_par_iter()
+            .filter_map(|e| dir_resolve(e, directories.clone()).ok())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .flatten()
+            .collect::<HashSet<_>>()
+    });
 
     // The files themselves are direct dependencies.
     dependencies.extend(files.clone());
 
-    debug!("Resolving libraries");
-    dependencies.extend(
-        files
-            .into_par_iter()
-            .filter_map(|e| get_libraries(Cow::Owned(e)).ok())
-            .collect::<Vec<_>>()
-            .into_iter()
-            .flatten()
-            .collect::<HashSet<_>>(),
-    );
+    debug_timer!("::resolve", {
+        dependencies.extend(
+            files
+                .into_par_iter()
+                .filter_map(|e| get_libraries(Cow::Owned(e)).ok())
+                .collect::<Vec<_>>()
+                .into_iter()
+                .flatten()
+                .collect::<HashSet<_>>(),
+        )
+    });
 
     // Grab the binaries; they are still needed for SECCOMP, however.
     if let Some(binaries) = &profile.binaries {
-        debug!("Resolving binaries");
-        dependencies.extend(
-            binaries
-                .into_par_iter()
-                .filter_map(|b| get_libraries(Cow::Borrowed(b)).ok())
-                .flatten()
-                .collect::<HashSet<_>>(),
-        );
+        debug_timer!("::binaries", {
+            dependencies.extend(
+                binaries
+                    .into_par_iter()
+                    .filter_map(|b| get_libraries(Cow::Borrowed(b)).ok())
+                    .flatten()
+                    .collect::<HashSet<_>>(),
+            )
+        });
     }
 
-    debug!("Writing libraries");
+    debug_timer!("::writing", {
+        dependencies
+            .into_par_iter()
+            .map(|library| {
+                let mut resolved = library;
+                if resolved.starts_with("/lib") {
+                    resolved = format!("/usr{resolved}");
+                }
+                if *SINGLE_LIB {
+                    resolved = resolved.replace("/lib64/", "/lib/");
+                }
+                resolved
+            })
+            // Filter things that aren't in /usr/lib
+            .filter(|library| {
+                let parent = if let Some(i) = library.rfind('/') {
+                    &library[..i]
+                } else {
+                    library.as_str()
+                };
 
-    dependencies
-        .into_par_iter()
-        // Filter things that aren't in /usr/lib
-        .filter(|library| {
-            let parent = if let Some(i) = library.rfind('/') {
-                &library[..i]
-            } else {
-                library.as_str()
-            };
-
-            if LIB_ROOTS.iter().any(|r| parent == r) {
-                true
-            } else {
-                !directories
-                    .iter()
-                    .any(|dir| parent.starts_with(dir.as_str()))
-            }
-        })
-        // Write the SOF version, as a hard link preferably.
-        .for_each(|lib| {
-            if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib)) {
-                error!("Failed to add {lib} to SOF: {e}")
-            }
-        });
+                if parent.contains("lib") && LIB_ROOTS.iter().any(|r| parent == r) {
+                    true
+                } else {
+                    !directories
+                        .iter()
+                        .any(|dir| parent.starts_with(dir.as_str()))
+                }
+            })
+            // Write the SOF version, as a hard link preferably.
+            .for_each(|lib| {
+                if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib)) {
+                    error!("Failed to add {lib} to SOF: {e}")
+                }
+            });
+    });
 
     let sof_str = sof.to_string_lossy();
     handle.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
@@ -407,20 +410,22 @@ pub fn fabricate(
         "--symlink", "/usr/lib64", "/lib64",
     ])?;
 
-    directories.par_iter().try_for_each(|dir| -> Result<()> {
-        if LIB_ROOTS.iter().any(|r| dir.starts_with(r)) {
-            let sof_path = get_sof_path(&sof, dir.as_str());
-            if !sof_path.exists() {
-                fs::create_dir_all(sof_path)?;
+    debug_timer!("::mount_directories", {
+        directories.par_iter().try_for_each(|dir| -> Result<()> {
+            if LIB_ROOTS.iter().any(|r| dir.starts_with(r)) {
+                let sof_path = get_sof_path(&sof, dir.as_str());
+                if !sof_path.exists() {
+                    fs::create_dir_all(sof_path)?;
+                }
             }
-        }
-        handle.args_i([
-            "--ro-bind",
-            dir.as_str(),
-            localize_home(dir.as_str()).as_ref(),
-        ])?;
-        Ok(())
-    })?;
+            handle.args_i([
+                "--ro-bind",
+                dir.as_str(),
+                localize_home(dir.as_str()).as_ref(),
+            ])?;
+            Ok(())
+        })?;
+    });
 
     profile.libraries = Some(
         Arc::try_unwrap(directories)

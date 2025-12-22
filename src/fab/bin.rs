@@ -474,29 +474,29 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
             if let Some(user) = &mut files.user
                 && let Some(x) = user.remove(&FileMode::Executable)
             {
-                for file in x {
-                    handle_localize(&file, true, true, parsed.clone(), done.clone())?;
-                }
+                x.into_par_iter().try_for_each(|file| {
+                    handle_localize(&file, true, true, parsed.clone(), done.clone())
+                })?;
             }
             if let Some(sys) = &mut files.resources
                 && let Some(x) = sys.remove(&FileMode::Executable)
             {
-                for file in x {
-                    handle_localize(&file, false, true, parsed.clone(), done.clone())?;
-                }
+                x.into_par_iter().try_for_each(|file| {
+                    handle_localize(&file, false, true, parsed.clone(), done.clone())
+                })?;
             }
             if let Some(sys) = &mut files.platform
                 && let Some(x) = sys.remove(&FileMode::Executable)
             {
-                for file in x {
-                    handle_localize(&file, false, true, parsed.clone(), done.clone())?;
-                }
+                x.into_par_iter().try_for_each(|file| {
+                    handle_localize(&file, false, true, parsed.clone(), done.clone())
+                })?;
             }
             if let Some(direct) = &mut files.direct
                 && let Some(x) = direct.remove(&FileMode::Executable)
             {
-                x.iter().try_for_each(|(file, _)| {
-                    let path = direct_path(file);
+                x.into_par_iter().try_for_each(|(file, _)| {
+                    let path = direct_path(&file);
                     handle_localize(
                         &path.to_string_lossy(),
                         false,
@@ -511,8 +511,8 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
 
     // Parse the binaries
     debug_timer!("::collect::localization", {
-        resolved.iter().try_for_each(|binary| {
-            handle_localize(binary, false, true, parsed.clone(), done.clone())
+        resolved.into_par_iter().try_for_each(|binary| {
+            handle_localize(binary.as_str(), false, true, parsed.clone(), done.clone())
         })?;
     });
 
@@ -538,7 +538,10 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     }
 
     let mut elf_binaries = BTreeSet::<String>::new();
-    let parsed = debug_timer!("::collect", collect(profile, name))?;
+    let parsed = debug_timer!(
+        "::collect",
+        try_run_as!(user::Mode::Effective, collect(profile, name))
+    )?;
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.

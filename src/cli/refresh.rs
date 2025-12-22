@@ -49,6 +49,7 @@ impl super::Run for Args {
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join(".profile"));
         }
 
         // If a single profile exist, refresh it and it alone.
