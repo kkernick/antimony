@@ -2,6 +2,7 @@
 use antimony::cli::{Run, run::as_symlink};
 use anyhow::Result;
 use clap::Parser;
+use log::trace;
 
 fn main() -> Result<()> {
     rayon::ThreadPoolBuilder::new().build_global()?;
@@ -22,6 +23,7 @@ fn main() -> Result<()> {
 
     if as_symlink().is_err() {
         let cli = antimony::cli::Cli::parse();
+        trace!("{cli:?}");
         cli.command.run()
     } else {
         Ok(())

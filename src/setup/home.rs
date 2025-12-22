@@ -7,6 +7,14 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
     if let Some(home) = &args.profile.home {
         let home_dir = home.path(&args.name);
 
+        // If we explicitly disable the lock, unlock the home.
+        if let Some(lock) = home.lock
+            && !lock
+        {
+            let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
+            lock.unlock()?;
+        }
+
         if home.lock.unwrap_or(false) && !args.args.dry {
             let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
             match lock.try_lock() {

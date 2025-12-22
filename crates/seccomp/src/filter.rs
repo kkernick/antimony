@@ -229,3 +229,4 @@ impl Drop for Filter {
 // The filter can be shared across threads, but it
 // cannot be modified simultaneously
 unsafe impl Sync for Filter {}
+unsafe impl Send for Filter {}

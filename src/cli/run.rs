@@ -163,7 +163,6 @@ pub struct Args {
 impl super::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
-
         let result = || -> Result<()> {
             let info = setup(Cow::Owned(self.profile.clone()), &mut self)?;
             run(info, &mut self)?;

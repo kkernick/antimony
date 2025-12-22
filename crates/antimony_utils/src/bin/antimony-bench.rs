@@ -187,6 +187,27 @@ fn main() -> Result<()> {
             .spawn()?
             .wait()?;
 
+        let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        if let Some(add) = &cli.antimony_args {
+            command.extend(add.clone());
+        }
+
+        Spawner::new("hyperfine")
+            .args([
+                "--command-name",
+                &format!("Cached (Real) {profile}"),
+                "--warmup",
+                "1",
+            ])?
+            .args(args.clone())?
+            .arg(command.join(" "))?
+            .preserve_env(true)
+            .spawn()?
+            .wait()?;
+
         if cli.profiles.len() > 1 {
             println!("Waiting for system to cool down");
             sleep(Duration::from_secs(cli.cool.unwrap_or(5)));

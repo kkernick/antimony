@@ -90,8 +90,15 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     };
 
+    log::trace!("{profile:?}");
+
     let cmd_profile = Profile::from_args(args);
+
+    log::trace!("CMD: {cmd_profile:?}");
+
     profile = profile.base(cmd_profile)?;
+
+    log::trace!("{profile:?}");
 
     let runtime = RUNTIME_STR.as_str();
     let busy = |path: &Path| -> bool {
@@ -174,8 +181,8 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     debug!("Creating system cache");
     let user_cache = sys_dir.join(USER_NAME.as_str());
 
-    debug!("Integrating features");
-    let profile = profile.integrate(&name, &user_cache)?;
+    let profile = debug_timer!("setup::integration", profile.integrate(&name, &user_cache))?;
+    log::trace!("{profile:?}");
 
     // Start the command.
     #[rustfmt::skip]
@@ -210,17 +217,16 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         args,
     };
 
-    debug_timer!("Proxy setup", proxy::setup(&mut a))?;
+    debug_timer!("::proxy", proxy::setup(&mut a))?;
+    let home = debug_timer!("::home", home::setup(&mut a))?;
 
-    let home = debug_timer!("Home setup", home::setup(&mut a))?;
+    debug_timer!("::file", files::setup(&mut a))?;
+    debug_timer!("::env", env::setup(&mut a));
+    debug_timer!("::fab", fab::setup(&mut a))?;
+    debug_timer!("::syscalls", syscalls::setup(&mut a))?;
 
-    debug_timer!("File setup", files::setup(&mut a))?;
-    debug_timer!("Environment setup", env::setup(&mut a));
-    debug_timer!("Fabrication setup", fab::setup(&mut a))?;
-    debug_timer!("Syscall setup", syscalls::setup(&mut a))?;
-
-    let post = debug_timer!("Post setup", post::setup(&mut a))?;
-    debug_timer!("Waiting for setup to complete", wait::setup(&mut a))?;
+    let post = debug_timer!("::post", post::setup(&mut a))?;
+    debug_timer!("::wait", wait::setup(&mut a))?;
 
     Ok(Info {
         name: name.into_owned(),

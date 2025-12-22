@@ -10,8 +10,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         SeccompPolicy::Disabled => {}
         policy => {
             if !args.args.dry {
-                let (filter, fd) =
-                    syscalls::new(&args.name, &args.instance, policy, &args.profile.binaries)?;
+                let (filter, fd) = syscalls::new(
+                    &args.name,
+                    &args.instance,
+                    policy,
+                    &args.profile.binaries,
+                    args.args.refresh,
+                )?;
 
                 args.handle.seccomp_i(filter);
 

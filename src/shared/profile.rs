@@ -368,6 +368,20 @@ impl Profile {
                 }
             });
         }
+
+        if let Some(lock) = args.home_lock.take() {
+            profile.home.get_or_insert_default().lock = Some(lock);
+        }
+        if let Some(name) = args.home_name.take() {
+            profile.home.get_or_insert_default().name = Some(name);
+        }
+        if let Some(path) = args.home_path.take() {
+            profile.home.get_or_insert_default().path = Some(path);
+        }
+        if let Some(policy) = args.home_policy.take() {
+            profile.home.get_or_insert_default().policy = Some(policy);
+        }
+
         profile
     }
 

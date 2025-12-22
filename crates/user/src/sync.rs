@@ -97,27 +97,35 @@ impl Drop for Sync {
     }
 }
 
+pub fn obtain_lock() -> Option<Sync> {
+    if *crate::SETUID {
+        Some(Sync::new())
+    } else {
+        None
+    }
+}
+
 /// Synchronized run_as.
 /// See the doc comment in user::sync.rs
 #[macro_export]
 macro_rules! sync_run_as {
     ($mode:path, $ret:ty, $body:block) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::run_as!($mode, || -> $ret { $body }())
         }
     }};
 
     ($mode:path, $body:block) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::run_as!($mode, $body)
         }
     }};
 
     ($mode:path, $expr:expr) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::run_as!($mode, { $expr })
         }
     }};
@@ -130,21 +138,21 @@ pub use sync_run_as as run_as;
 macro_rules! sync_try_run_as {
     ($mode:path, $ret:ty, $body:block) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::try_run_as!($mode, || -> $ret { $body }())
         }
     }};
 
     ($mode:path, $body:block) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::try_run_as!($mode, $body)
         }
     }};
 
     ($mode:path, $expr:expr) => {{
         {
-            let lock = user::sync::Sync::new();
+            let lock = user::sync::obtain_lock();
             user::try_run_as!($mode, { $expr })
         }
     }};

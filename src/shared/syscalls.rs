@@ -1,7 +1,10 @@
-use crate::shared::{
-    env::AT_HOME,
-    path::{user_dir, which_exclude},
-    profile::SeccompPolicy,
+use crate::{
+    debug_timer,
+    shared::{
+        env::AT_HOME,
+        path::{user_dir, which_exclude},
+        profile::SeccompPolicy,
+    },
 };
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, trace, warn};
@@ -20,7 +23,7 @@ use std::{
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{self, IoSlice},
+    io::{self, BufRead, BufReader, IoSlice, Write},
     os::{
         fd::{AsRawFd, IntoRawFd, OwnedFd},
         unix::net::UnixStream,
@@ -83,6 +86,9 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
         pool
     })
 });
+
+/// The location to store cache files.
+static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug)]
@@ -337,7 +343,30 @@ fn extend(binary: &str, syscalls: &mut HashSet<i32>) -> Result<(), Error> {
 pub fn get_calls(
     name: &str,
     p_binaries: &Option<BTreeSet<String>>,
+    refresh: bool,
 ) -> Result<(HashSet<i32>, HashSet<i32>), Error> {
+    let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
+    if cache_file.exists() && !refresh {
+        debug!("Using SECCOMP cache for {name}");
+        let file = File::open(&cache_file)?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+
+        if let Some(syscalls) = lines.next() {
+            let syscalls: HashSet<i32> = syscalls?
+                .split(" ")
+                .filter_map(|e| e.parse().ok())
+                .collect();
+
+            if let Some(bwrap) = lines.next() {
+                let bwrap: HashSet<i32> =
+                    bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
+
+                return Ok((syscalls, bwrap));
+            }
+        }
+    };
+
     let mut conn = DB_POOL.get()?;
     let binaries = || -> Result<HashSet<String>, Error> {
         let tx = conn.transaction()?;
@@ -370,6 +399,7 @@ pub fn get_calls(
 
     let mut syscalls = HashSet::new();
     let mut bwrap = HashSet::new();
+
     binaries.iter().for_each(|bin| {
         if let Err(e) = extend(
             bin,
@@ -382,6 +412,19 @@ pub fn get_calls(
             warn!("Failed to extend syscalls for binary {bin}: {e}");
         }
     });
+
+    user::sync::try_run_as!(user::Mode::Effective, Result<(), Error>, {
+        if let Some(parent) = cache_file.parent() && !parent.exists() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut file = std::fs::File::create(&cache_file)?;
+        syscalls.iter().try_for_each(|call| write!(file, "{call} "))?;
+        writeln!(file)?;
+        bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
+        Ok(())
+    })?;
+
     Ok((syscalls, bwrap))
 }
 
@@ -391,8 +434,12 @@ pub fn new(
     instance: &str,
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
+    refresh: bool,
 ) -> Result<(Filter, Option<OwnedFd>), Error> {
-    let (syscalls, bwrap) = get_calls(name, binaries).unwrap_or_default();
+    let (syscalls, bwrap) = debug_timer!(
+        "::get_calls",
+        get_calls(name, binaries, refresh).unwrap_or_default()
+    );
 
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
         let mut filter = Filter::new(Action::Notify)?;
@@ -411,11 +458,12 @@ pub fn new(
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     trace!("Allowing internal syscalls: {}", syscalls.len());
-    let mut syscalls = syscalls.into_iter().collect::<Vec<_>>();
-    syscalls.sort();
-    for syscall in &syscalls {
-        filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
-    }
+    let syscalls = syscalls.into_iter().collect::<Vec<_>>();
+    debug_timer!("::add_rules", {
+        for syscall in &syscalls {
+            filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
+        }
+    });
 
     let required = ["execve", "wait4"];
     for call in required {

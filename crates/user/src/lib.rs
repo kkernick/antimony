@@ -15,6 +15,10 @@ pub static USER: Lazy<ResUid> = Lazy::new(|| getresuid().expect("Failed to get U
 /// The Real, Effective, and Saved GID of the application.
 pub static GROUP: Lazy<ResGid> = Lazy::new(|| getresgid().expect("Failed to get GID!"));
 
+/// Whether the system is actually running under SetUid. If false, all functions here
+/// are no-ops.
+pub static SETUID: Lazy<bool> = Lazy::new(|| USER.effective != USER.real);
+
 /// An error when trying to change UID/GID.
 #[derive(Debug)]
 pub struct Error {
@@ -81,6 +85,10 @@ pub enum Mode {
 /// user::set(user::Mode::Real).unwrap();
 /// ```
 pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
+    if !*SETUID {
+        return Ok((*USER, *GROUP));
+    }
+
     let uid = getresuid()?;
     let gid = getresgid()?;
 
@@ -103,6 +111,10 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
 /// This function returns to the values of `USER` and `GROUP`.
 /// This function can fail if the underlying syscall does.
 pub fn revert() -> Result<(), Errno> {
+    if !*SETUID {
+        return Ok(());
+    }
+
     setresuid(USER.real, USER.effective, USER.saved)?;
     setresgid(GROUP.real, GROUP.effective, GROUP.saved)
 }
@@ -119,6 +131,10 @@ pub fn revert() -> Result<(), Errno> {
 /// }
 /// ```
 pub fn drop(mode: Mode) -> Result<(), Errno> {
+    if !*SETUID {
+        return Ok(());
+    }
+
     match mode {
         Mode::Real => {
             setresuid(USER.real, USER.real, USER.real)?;
@@ -142,6 +158,10 @@ pub fn drop(mode: Mode) -> Result<(), Errno> {
 /// user::restore(saved).unwrap()
 /// ```
 pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
+    if !*SETUID {
+        return Ok(());
+    }
+
     setresuid(uid.real, uid.effective, uid.saved)?;
     setresgid(gid.real, gid.effective, gid.saved)
 }

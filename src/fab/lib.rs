@@ -207,8 +207,6 @@ fn dir_resolve(
         directories.insert(library.to_string());
     } else if let Some(library) = elf_filter(&library) {
         dependencies.insert(library);
-    } else {
-        warn!("Invalid file: {path:?}");
     }
     Ok(dependencies)
 }

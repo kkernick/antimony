@@ -113,7 +113,7 @@ impl super::Run for Args {
                         tx.commit()?;
                         calls
                     } else {
-                        let (syscalls, _) = syscalls::get_calls(&name, &None)?;
+                        let (syscalls, _) = syscalls::get_calls(&name, &None, false)?;
                         syscalls.into_iter().collect()
                     };
 
