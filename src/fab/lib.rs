@@ -40,23 +40,22 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 
 // Get the library roots.
 pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut roots: HashSet<String> = debug_timer!("::lib_roots", {
-        Spawner::new("find")
-            .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])
-            .expect("Failed to setup process")
+    let mut roots = || -> Result<HashSet<String>> {
+        Ok(Spawner::new("find")
+            .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])?
             .output(StreamMode::Pipe)
-            .spawn()
-            .expect("Failed to spawn process")
-            .output_all()
-            .expect("Failed to get sqlite path")
+            .spawn()?
+            .output_all()?
             .lines()
             .filter_map(|path| {
                 PathBuf::from(&path[..path.len() - 1])
                     .parent()
                     .map(|path| path.to_string_lossy().into_owned())
             })
-            .collect()
-    });
+            .collect())
+    }()
+    .unwrap_or_default();
+
     debug!("Library root at: {roots:?}");
 
     roots.insert(String::from("/usr/lib"));
