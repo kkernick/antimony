@@ -81,6 +81,7 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 
 For Versions < 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG`
 For Versions ≥ 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard'`
+For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard' --antimony-args='--home-lock=false'`
 
 | Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
 | --------------------- | -------- | --- | ------ | --------- | --- |
@@ -103,6 +104,7 @@ For Versions ≥ 2.1.0: `./bench $PROFILES --recipe release --privileged --check
 | 2.4.3                 | 2.8      | 2.8 | 2.8    | 2.1       | 1.9 |
 | 2.5.0                 | 2.9      | 2.5 | 2.9    | 2.1       | 1.7 |
 | 2.6.0                 | 3.2      | 2.8 | 3.1    | 2.7       | 1.9 |
+| 3.0.0                 |          |     |        |           |     |
 ^HistoryHot
 
 ```chart
@@ -134,6 +136,7 @@ spanGaps: true
 | 2.4.3                  | 1.02     | 0.84 | 1.08   | 1.09      | 1.79 |
 | 2.5.0                  | 0.97     | 0.85 | 1.07   | 1.11      | 1.82 |
 | 2.6.0                  | 1.00     | 0.86 | 1.13   | 1.17      | 1.82 |
+| 3.0.0                  |          |      |        |           |      |
 ^HistoryCold
 
 | Profile Cold/Release | Chromium | Zed  | Okular | Syncthing | Sh    |
@@ -147,6 +150,12 @@ id: HistoryCold
 tension: 0.5
 spanGaps: true
 ```
+
+
+| Profile Real / Release | Chromium | Zed | Okular | Syncthing | Sh  |
+| ---------------------- | -------- | --- | ------ | --------- | --- |
+| 3.0.0                  |          |     |        |           |     |
+
 
 ## Techniques
 

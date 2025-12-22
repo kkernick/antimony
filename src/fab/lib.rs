@@ -95,7 +95,6 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<HashSet<String>> {
         .arg(path.as_ref())?
         .output(StreamMode::Pipe)
         .error(StreamMode::Discard)
-        .mode(user::Mode::Real)
         .spawn()?
         .output_all()?
         .split_whitespace()

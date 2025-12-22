@@ -148,7 +148,6 @@ fn main() -> Result<()> {
     };
 
     println!("Using: {antimony}");
-
     for profile in &cli.profiles {
         let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
             .into_iter()
@@ -159,7 +158,12 @@ fn main() -> Result<()> {
         }
 
         Spawner::new("hyperfine")
-            .args(["--command-name", &format!("Local Refresh {profile}")])?
+            .args([
+                "--command-name",
+                &format!("Local Refresh {profile}"),
+                "--warmup",
+                "1",
+            ])?
             .args(args.clone())?
             .arg(command.join(" "))?
             .preserve_env(true)

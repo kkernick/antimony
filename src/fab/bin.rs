@@ -1,4 +1,5 @@
 use crate::{
+    debug_timer,
     fab::{
         lib::{LIB_ROOTS, get_dir, get_wildcards},
         localize_home, localize_path,
@@ -33,7 +34,7 @@ static CHARS: Lazy<HashSet<char>> = Lazy::new(|| {
 });
 
 /// Reserved keywords in bash.
-static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
+pub static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
     let mut compgen: HashSet<String> = Spawner::new("/usr/bin/bash")
         .args(["-c", "compgen -k"])
         .unwrap()
@@ -243,7 +244,6 @@ fn parse(
     };
 
     trace!("Parsing: {path}");
-
     let dest = user::sync::try_run_as!(user::Mode::Real, Result<String>, {
         let dest = fs::read_link(resolved.as_ref())?;
         let canon = Path::new(resolved.as_ref())
@@ -272,7 +272,7 @@ fn parse(
         return Ok(Type::Link);
     }
 
-    if LIB_ROOTS.iter().any(|r| path.starts_with(r)) {
+    if path.contains("lib") && LIB_ROOTS.par_iter().any(|r| path.starts_with(r)) {
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
@@ -446,69 +446,75 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     fs::create_dir_all(CACHE_DIR.as_path())?;
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
+
     if let Some(binaries) = profile.binaries.take() {
-        // Separate the wildcards from the files/dirs.
-        let (wildcards, flat): (HashSet<_>, HashSet<_>) =
-            binaries.into_par_iter().partition(|e| e.contains('*'));
-        resolved.extend(flat);
-        resolved.extend(
-            wildcards
-                .into_par_iter()
-                .filter_map(|e| get_wildcards(&e, false).ok())
-                .collect::<Vec<_>>()
-                .into_par_iter()
-                .flatten()
-                .collect::<HashSet<_>>(),
-        );
+        debug_timer!("::collect::wildcard", {
+            // Separate the wildcards from the files/dirs.
+            let (wildcards, flat): (HashSet<_>, HashSet<_>) =
+                binaries.into_par_iter().partition(|e| e.contains('*'));
+            resolved.extend(flat);
+            resolved.extend(
+                wildcards
+                    .into_par_iter()
+                    .filter_map(|e| get_wildcards(&e, false).ok())
+                    .collect::<Vec<_>>()
+                    .into_par_iter()
+                    .flatten()
+                    .collect::<HashSet<_>>(),
+            )
+        })
     };
 
     let parsed = Arc::new(ParseReturn::default());
     let done = Arc::new(DashSet::new());
 
     // Read direct files so we can determine dependencies.
-    if let Some(files) = &mut profile.files {
-        if let Some(user) = &mut files.user
-            && let Some(x) = user.remove(&FileMode::Executable)
-        {
-            for file in x {
-                handle_localize(&file, true, true, parsed.clone(), done.clone())?;
+    debug_timer!("::collect::files", {
+        if let Some(files) = &mut profile.files {
+            if let Some(user) = &mut files.user
+                && let Some(x) = user.remove(&FileMode::Executable)
+            {
+                for file in x {
+                    handle_localize(&file, true, true, parsed.clone(), done.clone())?;
+                }
+            }
+            if let Some(sys) = &mut files.resources
+                && let Some(x) = sys.remove(&FileMode::Executable)
+            {
+                for file in x {
+                    handle_localize(&file, false, true, parsed.clone(), done.clone())?;
+                }
+            }
+            if let Some(sys) = &mut files.platform
+                && let Some(x) = sys.remove(&FileMode::Executable)
+            {
+                for file in x {
+                    handle_localize(&file, false, true, parsed.clone(), done.clone())?;
+                }
+            }
+            if let Some(direct) = &mut files.direct
+                && let Some(x) = direct.remove(&FileMode::Executable)
+            {
+                x.iter().try_for_each(|(file, _)| {
+                    let path = direct_path(file);
+                    handle_localize(
+                        &path.to_string_lossy(),
+                        false,
+                        false,
+                        parsed.clone(),
+                        done.clone(),
+                    )
+                })?;
             }
         }
-        if let Some(sys) = &mut files.resources
-            && let Some(x) = sys.remove(&FileMode::Executable)
-        {
-            for file in x {
-                handle_localize(&file, false, true, parsed.clone(), done.clone())?;
-            }
-        }
-        if let Some(sys) = &mut files.platform
-            && let Some(x) = sys.remove(&FileMode::Executable)
-        {
-            for file in x {
-                handle_localize(&file, false, true, parsed.clone(), done.clone())?;
-            }
-        }
-        if let Some(direct) = &mut files.direct
-            && let Some(x) = direct.remove(&FileMode::Executable)
-        {
-            x.iter().try_for_each(|(file, _)| {
-                let path = direct_path(file);
-                handle_localize(
-                    &path.to_string_lossy(),
-                    false,
-                    false,
-                    parsed.clone(),
-                    done.clone(),
-                )
-            })?;
-        }
-    }
+    });
 
     // Parse the binaries
-    debug!("Localizing binaries");
-    resolved.iter().try_for_each(|binary| {
-        handle_localize(binary, false, true, parsed.clone(), done.clone())
-    })?;
+    debug_timer!("::collect::localization", {
+        resolved.iter().try_for_each(|binary| {
+            handle_localize(binary, false, true, parsed.clone(), done.clone())
+        })?;
+    });
 
     Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
 }
@@ -532,7 +538,7 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     }
 
     let mut elf_binaries = BTreeSet::<String>::new();
-    let parsed = collect(profile, name)?;
+    let parsed = debug_timer!("::collect", collect(profile, name))?;
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
@@ -587,15 +593,16 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         })?;
 
     if let Some(home) = &profile.home {
-        let home_dir = home.path(name);
-        try_run_as!(user::Mode::Real, Result<()>, {
-            fs::create_dir_all(&home_dir)?;
-            debug!("Finding home binaries");
-            let home_str = home_dir.to_string_lossy();
-            let home_binaries = get_dir(&home_str)?;
-            elf_binaries.extend(home_binaries);
-            Ok(())
-        })?;
+        debug_timer!("::home_binaries", {
+            let home_dir = home.path(name);
+            try_run_as!(user::Mode::Real, Result<()>, {
+                fs::create_dir_all(&home_dir)?;
+                let home_str = home_dir.to_string_lossy();
+                let home_binaries = get_dir(&home_str)?;
+                elf_binaries.extend(home_binaries);
+                Ok(())
+            })?;
+        })
     }
 
     #[rustfmt::skip]

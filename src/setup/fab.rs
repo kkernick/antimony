@@ -1,11 +1,12 @@
 use crate::{
-    fab::{self, lib::LIB_ROOTS},
+    debug_timer,
+    fab::{self, bin::COMPGEN, lib::LIB_ROOTS},
     shared::env::USER_NAME,
 };
 use anyhow::Result;
 use log::debug;
 use once_cell::sync::Lazy;
-use std::{fs, time::Instant};
+use std::fs;
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached.
@@ -29,48 +30,42 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         Lazy::force(&LIB_ROOTS);
     });
 
+    rayon::spawn(|| {
+        Lazy::force(&COMPGEN);
+    });
+
     debug!("Fabricating sandbox");
-    let mut timer = Instant::now();
     fs::create_dir_all(&args.sys_dir)?;
 
     // Start caching.
     args.handle.cache_start()?;
 
     // Home must run before bin so that bin can populate files.
-    debug!("Fabricating Files");
-    fab::files::fabricate(&mut args.profile, &args.handle)?;
-    debug!("Fabricated Files in: {}ms", timer.elapsed().as_millis());
+    debug_timer!(
+        "::files",
+        fab::files::fabricate(&mut args.profile, &args.handle)
+    )?;
 
-    debug!("Fabricating /etc");
-    timer = Instant::now();
-    fab::etc::fabricate(&mut args.profile, &args.name);
-    debug!("Fabricated /etc in: {}ms", timer.elapsed().as_millis());
+    debug_timer!("::etc", fab::etc::fabricate(&mut args.profile, &args.name));
 
     // Bin must run before lib so that bin can populate libraries
-    debug!("Fabricating binaries");
-    timer = Instant::now();
-    fab::bin::fabricate(&mut args.profile, &args.name, &args.handle)?;
-    debug!("Fabricated /bin in: {}ms", timer.elapsed().as_millis());
+    debug_timer!(
+        "::bin",
+        fab::bin::fabricate(&mut args.profile, &args.name, &args.handle)
+    )?;
 
-    debug!("Fabricating /lib");
-    timer = Instant::now();
-    fab::lib::fabricate(&mut args.profile, &args.name, &args.sys_dir, &args.handle)?;
-    debug!("Fabricated /lib in: {}ms", timer.elapsed().as_millis());
+    debug_timer!(
+        "::lib",
+        fab::lib::fabricate(&mut args.profile, &args.name, &args.sys_dir, &args.handle)
+    )?;
 
-    debug!("Fabricating namespaces");
-    timer = Instant::now();
-    fab::ns::fabricate(&mut args.profile, &args.handle)?;
-    debug!(
-        "Fabricated namespaces in: {}ms",
-        timer.elapsed().as_millis()
-    );
+    debug_timer!("::ns", fab::ns::fabricate(&mut args.profile, &args.handle))?;
 
-    debug!("Fabricating /dev");
-    timer = Instant::now();
-    fab::dev::fabricate(&mut args.profile, &args.handle)?;
-    debug!("Fabricated /dev in: {}ms", timer.elapsed().as_millis());
+    debug_timer!(
+        "::dev",
+        fab::dev::fabricate(&mut args.profile, &args.handle)
+    )?;
 
-    debug!("Writing fabricator cache: {}", cmd_cache.display());
-    args.handle.cache_write(&cmd_cache)?;
+    debug_timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
     Ok(())
 }
