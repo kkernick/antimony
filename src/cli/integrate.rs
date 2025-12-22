@@ -69,7 +69,7 @@ impl super::Run for Args {
 
 /// Undo integration.
 pub fn remove(cmd: Args) -> Result<()> {
-    let profile = Profile::new(&cmd.profile)?;
+    let profile = Profile::new(&cmd.profile, None)?;
 
     let name = &cmd.profile;
 
@@ -299,7 +299,7 @@ fn format_desktop(
 
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
 pub fn integrate(cmd: Args) -> Result<()> {
-    let profile = Profile::new(&cmd.profile)?;
+    let profile = Profile::new(&cmd.profile, None)?;
 
     // Collect environment.
     let antimony = which::which("antimony")?;

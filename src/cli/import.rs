@@ -37,7 +37,7 @@ impl super::Run for Args {
         }
 
         let import = |src: &Path, dst: &Path| -> Result<()> {
-            if Profile::new(&src.to_string_lossy()).is_ok() {
+            if Profile::new(&src.to_string_lossy(), None).is_ok() {
                 let dest = dst.join(src.file_name().unwrap());
                 if dest.exists()
                     && !self.overwrite

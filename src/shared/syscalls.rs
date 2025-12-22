@@ -88,7 +88,7 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
 });
 
 /// The location to store cache files.
-static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
+pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug)]
@@ -361,7 +361,6 @@ pub fn get_calls(
             if let Some(bwrap) = lines.next() {
                 let bwrap: HashSet<i32> =
                     bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
-
                 return Ok((syscalls, bwrap));
             }
         }
@@ -424,7 +423,7 @@ pub fn get_calls(
         bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
         Ok(())
     })?;
-
+    let bwrap = bwrap.difference(&syscalls).cloned().collect();
     Ok((syscalls, bwrap))
 }
 
@@ -436,10 +435,24 @@ pub fn new(
     binaries: &Option<BTreeSet<String>>,
     refresh: bool,
 ) -> Result<(Filter, Option<OwnedFd>), Error> {
-    let (syscalls, bwrap) = debug_timer!(
+    let (mut syscalls, bwrap) = debug_timer!(
         "::get_calls",
         get_calls(name, binaries, refresh).unwrap_or_default()
     );
+
+    if log::log_enabled!(log::Level::Trace) {
+        trace!(
+            "{:?}\n{:?}",
+            syscalls
+                .iter()
+                .filter_map(|e| Syscall::get_name(*e).ok())
+                .collect::<Vec<String>>(),
+            bwrap
+                .iter()
+                .filter_map(|e| Syscall::get_name(*e).ok())
+                .collect::<Vec<String>>(),
+        );
+    }
 
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
         let mut filter = Filter::new(Action::Notify)?;
@@ -457,18 +470,16 @@ pub fn new(
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-    trace!("Allowing internal syscalls: {}", syscalls.len());
+    for required in ["execve", "wait4"] {
+        syscalls.insert(Syscall::from_name(required)?.get_number());
+    }
+
     let syscalls = syscalls.into_iter().collect::<Vec<_>>();
     debug_timer!("::add_rules", {
         for syscall in &syscalls {
             filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
         }
     });
-
-    let required = ["execve", "wait4"];
-    for call in required {
-        filter.add_rule(Action::Allow, Syscall::from_name(call)?)?;
-    }
 
     let fd = if policy == SeccompPolicy::Enforcing {
         let mut s = DefaultHasher::new();

@@ -8,7 +8,7 @@
 use antimony::shared::{
     env::{DATA_HOME, RUNTIME_DIR},
     profile::SeccompPolicy,
-    syscalls,
+    syscalls::{self, CACHE_DIR},
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -386,6 +386,11 @@ pub fn notify_reader(
                                         } else {
                                             warn!("Pending commit");
                                             entry.insert(call);
+                                        }
+                                        let cache = CACHE_DIR.join(&profile_name);
+                                        if cache.exists() {
+                                            fs::remove_file(cache)
+                                                .expect("Failed to invalidate cache");
                                         }
                                     });
                                     allow_clone.entry(path).or_default().insert(call);

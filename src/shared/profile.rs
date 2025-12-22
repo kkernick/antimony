@@ -37,7 +37,7 @@ static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
 #[derive(Debug)]
 pub enum Error {
     /// When a profile doesn't exist.
-    NotFound(String, &'static str),
+    NotFound(String, Cow<'static, str>),
 
     /// When the profile cannot be Deserialized.
     Deserialize(toml::de::Error),
@@ -316,7 +316,10 @@ impl Profile {
             return Ok(local);
         }
 
-        Err(Error::NotFound(name.to_string(), "No such profile"))
+        Err(Error::NotFound(
+            name.to_string(),
+            Cow::Borrowed("No such profile"),
+        ))
     }
 
     /// Construct a profile from the command line.
@@ -327,7 +330,7 @@ impl Profile {
     ///
     /// You probably shouldn't use this as the default way of running stuff,
     /// however.
-    pub fn from_args(args: &mut cli::run::Args) -> Self {
+    pub fn from_args(args: &mut cli::run::Args) -> Result<Self, Error> {
         let mut profile = Self {
             path: args.path.take(),
             seccomp: args.seccomp.take(),
@@ -389,23 +392,42 @@ impl Profile {
             profile.home.get_or_insert_default().policy = Some(policy);
         }
 
-        profile
+        fab::features::fabricate(&mut profile, "cmdline")?;
+        Ok(profile)
     }
 
     /// Load a new profile from all supported locations.
-    pub fn new(name: &str) -> Result<Profile, Error> {
+    pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
         debug!("Loading {name}");
+        if name == "default" {
+            let path = Self::default_profile();
+            if !path.exists() {
+                fs::copy(AT_HOME.join("config").join("default.toml"), &path)
+                    .map_err(|e| Error::Io("Failed to create default profile", e))?;
+            }
+            return Ok(toml::from_str(
+                &fs::read_to_string(path).map_err(|e| Error::Io("Reading default", e))?,
+            )?);
+        }
+
         let path = Profile::path(name)?;
 
-        let cache = CACHE_DIR.join(path.to_string_lossy().replace("/", "."));
+        let file = path.to_string_lossy().replace("/", ".");
+        let cache = if let Some(config) = &config {
+            CACHE_DIR.join(format!("{file}-{config}"))
+        } else {
+            CACHE_DIR.join(&file)
+        };
+
         if cache.exists() {
+            debug!("Using direct cache");
             Ok(toml::from_str(
-                &fs::read_to_string(cache).map_err(|e| Error::Io("read profile", e))?,
+                &fs::read_to_string(&cache).map_err(|e| Error::Io("read profile", e))?,
             )?)
         } else {
+            debug!("No cache available");
             let profile = fs::read_to_string(Profile::path(name)?)
                 .map_err(|e| Error::Io("read profile", e))?;
-
             let mut profile: Profile = toml::from_str(profile.as_str())?;
 
             let to_inherit: BTreeSet<String> = match &profile.inherits {
@@ -420,11 +442,31 @@ impl Profile {
             };
 
             for inherit in to_inherit {
-                profile.merge(toml::from_str(
-                    &fs::read_to_string(Profile::path(&inherit)?)
-                        .map_err(|e| Error::Io("read inherited profile", e))?,
-                )?)?;
+                profile.merge(Profile::new(&inherit, None)?)?;
             }
+
+            if let Some(config) = config {
+                debug!("Loading configuration");
+                match profile.configuration.take() {
+                    Some(mut configs) => match configs.remove(&config) {
+                        Some(conf) => {
+                            profile = profile.base(conf)?;
+                        }
+                        None => {
+                            return Err(Error::NotFound(
+                                name.to_string(),
+                                Cow::Owned(format!("Configuration {config} does not exist")),
+                            ));
+                        }
+                    },
+                    None => {
+                        return Err(Error::NotFound(
+                            name.to_string(),
+                            Cow::Borrowed("Profile does not have any configurations"),
+                        ));
+                    }
+                }
+            };
 
             if let Some(path) = &profile.path
                 && path.starts_with("~")
@@ -438,7 +480,7 @@ impl Profile {
                 profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
             }
 
-            debug!("Fabrication features");
+            debug!("Fabricating features");
             fab::features::fabricate(&mut profile, name)?;
 
             write!(

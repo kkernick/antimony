@@ -114,7 +114,7 @@ tension: 0.5
 spanGaps: true
 ```
 
-*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.2 has been recorded in a separate chart below as to now skew the visualization.*
+*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.2 has been recorded in a separate chart below as to not skew the visualization.*
 
 | Profile Cold / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
 | ---------------------- | -------- | ---- | ------ | --------- | ---- |

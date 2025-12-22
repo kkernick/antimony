@@ -1,0 +1,9 @@
+name = "kde-inhibit"
+description = "Drop into a debug shell"
+
+conditional = "command -v /usr/bin/kde-inhibit"
+binaries = ["kde-inhibit"]
+sandbox_args = ["kde-inhibit", "--power"]
+
+[ipc]
+talk = ["org.freedesktop.PowerManagement.*"]

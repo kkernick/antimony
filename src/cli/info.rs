@@ -49,7 +49,7 @@ impl super::Run for Args {
                         path
                     };
 
-                    match Profile::new(path) {
+                    match Profile::new(path, None) {
                         Ok(profile) => {
                             profile.info(name, verbosity);
                         }

@@ -67,7 +67,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         .collect::<Vec<String>>()
         .join("");
 
-    let mut profile = match Profile::new(&name) {
+    let mut profile = match Profile::new(&name, args.config.take()) {
         Ok(profile) => profile,
         Err(e) => {
             debug!("No profile: {name}: {e}, assuming binary");
@@ -78,19 +78,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     };
 
-    if let Some(config) = args.config.take() {
-        match profile.configuration.take() {
-            Some(mut configs) => match configs.remove(&config) {
-                Some(conf) => {
-                    profile = profile.base(conf)?;
-                }
-                None => return Err(anyhow!("Specified configuration does not exist!")),
-            },
-            None => return Err(anyhow!("No configurations defined!")),
-        }
-    };
-
-    let cmd_profile = Profile::from_args(args);
+    let cmd_profile = Profile::from_args(args)?;
     profile = profile.base(cmd_profile)?;
     let runtime = RUNTIME_STR.as_str();
 
