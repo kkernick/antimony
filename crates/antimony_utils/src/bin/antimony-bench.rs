@@ -1,15 +1,13 @@
 use std::{
-    io::Write,
+    env,
     path::PathBuf,
     sync::{Arc, atomic::AtomicBool},
     thread::sleep,
     time::Duration,
 };
 
-use antimony_utils::set_capabilities;
 use anyhow::Result;
 use clap::Parser;
-use inotify::{Inotify, WatchMask};
 use nix::unistd::chdir;
 use spawn::Spawner;
 
@@ -39,11 +37,6 @@ pub struct Cli {
     #[arg(long)]
     pub checkout: Option<String>,
 
-    /// Use sudo to give the built executable (If any) the capabilities needed to
-    /// run in /usr/share/antimony, and make hard-links.
-    #[arg(long, default_value_t = false)]
-    pub privileged: bool,
-
     /// Additional commands to pass to antimony
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub antimony_args: Option<Vec<String>>,
@@ -63,20 +56,22 @@ fn main() -> Result<()> {
     let root = &root[..root.len() - 1];
     chdir(root)?;
 
+    // Set AT_HOME to our current config.
+    unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
+
     let term = Arc::new(AtomicBool::new(false));
 
-    if let Some(checkout) = &cli.checkout {
-        signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
-        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
-        // Stash our working edits
-        Spawner::new("git").arg("stash")?.spawn()?.wait()?;
+    // Stash our working edits
+    Spawner::new("git").arg("stash")?.spawn()?.wait()?;
 
+    if let Some(checkout) = cli.checkout {
         // Checkout the desired state, but only for code and Cargo.
         Spawner::new("git")
             .args([
                 "checkout",
-                checkout,
+                &checkout,
                 "src",
                 "config",
                 "crates",
@@ -130,21 +125,6 @@ fn main() -> Result<()> {
         }
     } else {
         "antimony".to_string()
-    };
-
-    let path = PathBuf::from(&antimony);
-    let privilege_handle = if cli.privileged && path.exists() {
-        let mut inotify = Inotify::init()?;
-        inotify
-            .watches()
-            .add(path.parent().unwrap(), WatchMask::CREATE)?;
-
-        let handle = set_capabilities(root, &path)?;
-        let mut buffer = [0; 1024];
-        let _ = inotify.read_events_blocking(&mut buffer)?;
-        Some(handle)
-    } else {
-        None
     };
 
     println!("Using: {antimony}");
@@ -218,37 +198,35 @@ fn main() -> Result<()> {
         }
     }
 
-    if cli.checkout.is_some() {
-        // Undo the checkout
-        Spawner::new("git")
-            .args([
-                "checkout",
-                "-",
-                "src",
-                "config",
-                "crates",
-                "Cargo.toml",
-                "Cargo.lock",
-            ])?
-            .spawn()?
-            .wait()?;
-
-        // Reset to the original state
-        Spawner::new("git")
-            .args(["reset", "--hard"])?
-            .spawn()?
-            .wait()?;
-
-        // Return uncommitted edits.
-        Spawner::new("git")
-            .args(["stash", "pop"])?
-            .spawn()?
-            .wait()?;
+    let cache = PathBuf::from(format!("{root}/config/cache"));
+    if cache.exists() {
+        std::fs::remove_dir_all(&cache)?;
     }
 
-    if let Some(mut handle) = privilege_handle {
-        writeln!(handle)?;
-    }
+    // Undo the checkout
+    Spawner::new("git")
+        .args([
+            "checkout",
+            "-",
+            "src",
+            "config",
+            "crates",
+            "Cargo.toml",
+            "Cargo.lock",
+        ])?
+        .spawn()?
+        .wait()?;
 
+    // Reset to the original state
+    Spawner::new("git")
+        .args(["reset", "--hard"])?
+        .spawn()?
+        .wait()?;
+
+    // Return uncommitted edits.
+    Spawner::new("git")
+        .args(["stash", "pop"])?
+        .spawn()?
+        .wait()?;
     Ok(())
 }
