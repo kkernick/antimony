@@ -94,7 +94,7 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 
 For Versions < 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG`
 For Versions ≥ 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard'`
-For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard' --antimony-args='--home-lock=false'`
+For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --checkout tags/$TAG --antimony-args='--hard' --antimony-args='--home-lock=false'`
 
 | Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
 | --------------------- | -------- | --- | ------ | --------- | --- |
@@ -169,7 +169,6 @@ spanGaps: true
 | Profile Real / Release | Chromium | Zed | Okular | Syncthing | Sh  |
 | ---------------------- | -------- | --- | ------ | --------- | --- |
 | 3.0.0                  |          |     |        |           |     |
-
 
 ## Techniques
 

@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
-use log::{debug, error, trace, warn};
+use log::{debug, error, warn};
 use once_cell::sync::{Lazy, OnceCell};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
@@ -94,8 +94,6 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
             .collect();
         write_cache(&path, libraries)?
     };
-
-    trace!("{path} -> {libraries:?}");
 
     if LIB_ROOTS.get().is_none() {
         debug_timer!("::lib_roots", {
@@ -221,7 +219,6 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>) -> Result<()> {
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
 
-        trace!("Creating SOF file: {canon:?} => {sof_path:?}");
         if let Err(e) = fs::hard_link(&canon, &sof_path)
             && e.kind() != io::ErrorKind::AlreadyExists
         {
@@ -236,8 +233,6 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>) -> Result<()> {
                 if !parent.exists() {
                     fs::create_dir_all(parent)?;
                 }
-
-                trace!("Creating shared copy via {canon:?} => {shared_path:?} => {sof_path:?}");
                 fs::copy(&canon, &shared_path)?;
                 fs::hard_link(&shared_path, &sof_path)?;
             }

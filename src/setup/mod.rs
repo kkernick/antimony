@@ -58,17 +58,6 @@ pub struct Info {
 }
 
 pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
-    // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let instance = debug_timer!("::instance", {
-        let mut bytes = [0; 5];
-        rand::rng().fill_bytes(&mut bytes);
-        bytes
-            .iter()
-            .map(|byte| format!("{byte:02x?}"))
-            .collect::<Vec<String>>()
-            .join("")
-    });
-
     let profile = debug_timer!("::profile", {
         let profile = match Profile::new(&name, args.config.take()) {
             Ok(profile) => profile,
@@ -87,6 +76,23 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     let hash = profile.hash_str();
     let mut sys_dir = CACHE_DIR.join(&hash);
+
+    // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
+    let instance = debug_timer!("::instance", {
+        loop {
+            let mut bytes = [0; 8];
+            rand::rng().fill_bytes(&mut bytes);
+            let instance = bytes
+                .iter()
+                .map(|byte| format!("{byte:02x?}"))
+                .collect::<Vec<String>>()
+                .join("");
+
+            if !sys_dir.join("instances").join(&instance).exists() {
+                break instance;
+            }
+        }
+    });
 
     debug_timer!("::cache", {
         let busy = |path: &Path| -> bool {

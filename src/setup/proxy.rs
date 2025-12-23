@@ -64,6 +64,7 @@ pub fn run(
     let mut proxy = debug_timer!("::spawner", {
         #[rustfmt::skip]
         let proxy = Spawner::new("/usr/bin/bwrap")
+        .name("proxy")
         .mode(user::Mode::Real).args([
             "--new-session",
             "--ro-bind", "/usr/bin/xdg-dbus-proxy", "/usr/bin/xdg-dbus-proxy",

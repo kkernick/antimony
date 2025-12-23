@@ -150,6 +150,9 @@ pub struct Spawner {
     /// The binary to run
     cmd: String,
 
+    /// A unique name for the process, to be used to reference it by the Handle.
+    unique_name: Option<String>,
+
     /// Arguments
     args: Mutex<Vec<CString>>,
 
@@ -200,6 +203,7 @@ impl<'a> Spawner {
     pub fn new(cmd: impl Into<String>) -> Self {
         Self {
             cmd: cmd.into(),
+            unique_name: None,
             args: Mutex::new(vec![]),
 
             input: StreamMode::Share,
@@ -262,10 +266,25 @@ impl<'a> Spawner {
         self
     }
 
+    /// Give a unique name to the process, so you can refer to the Handle.
+    /// If no name is set, the string passed to Spawn::new() will be used
+    pub fn name(mut self, name: &str) -> Self {
+        self.unique_name = Some(name.to_string());
+        self
+    }
+
     /// Attach another process that is attached to the main child, and should be killed
     /// when the eventual Handle goes out of scope.
     pub fn associate(&mut self, process: Handle) {
         self.associated.push(process);
+    }
+
+    /// Returns a mutable reference to an associate within the Handle, if it exists.
+    /// The associate is another Handle instance.
+    pub fn get_associate(&mut self, name: &str) -> Option<&mut Handle> {
+        self.associated
+            .iter_mut()
+            .find(|handle| handle.name == name)
     }
 
     /// Drop privilege to the provided user mode on the child,
@@ -671,7 +690,11 @@ impl<'a> Spawner {
 
                 // Return.
                 let handle = Handle::new(
-                    self.cmd,
+                    if let Some(name) = self.unique_name {
+                        name
+                    } else {
+                        self.cmd
+                    },
                     child,
                     #[cfg(feature = "user")]
                     self.mode,
