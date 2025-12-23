@@ -1,7 +1,7 @@
 use crate::{
     debug_timer,
     fab::{
-        lib::{LIB_ROOTS, get_dir, get_wildcards},
+        lib::{get_dir, get_wildcards, in_lib},
         localize_home, localize_path,
     },
     shared::{
@@ -272,7 +272,7 @@ fn parse(
         return Ok(Type::Link);
     }
 
-    if path.contains("lib") && LIB_ROOTS.par_iter().any(|r| path.starts_with(r)) {
+    if in_lib(path) {
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
@@ -443,7 +443,9 @@ fn handle_localize(
 }
 
 pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
-    fs::create_dir_all(CACHE_DIR.as_path())?;
+    if !CACHE_DIR.exists() {
+        fs::create_dir_all(CACHE_DIR.as_path())?;
+    }
     let mut resolved = HashSet::new();
     resolved.insert(profile.app_path(name).to_string());
 
@@ -533,10 +535,6 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         return Ok(());
     }
 
-    if COMPGEN.is_empty() {
-        return Err(anyhow!("Could not calculate bash builtins"));
-    }
-
     let mut elf_binaries = BTreeSet::<String>::new();
     let parsed = debug_timer!(
         "::collect",
@@ -545,61 +543,71 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
-    // However, if the ELF is contained in  /usr/lib, we
-    // want its parent directory, such as /usr/lib/chromium.
-    parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
-        if !LIB_ROOTS.iter().any(|r| elf.starts_with(r)) {
-            handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
-        }
-        elf_binaries.insert(elf.to_string());
-        Ok(())
+    debug_timer!("::elf", {
+        parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
+            if !in_lib(&elf) {
+                handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
+            }
+            elf_binaries.insert(elf.to_string());
+            Ok(())
+        })
     })?;
 
     // Scripts are consumed here, and are only bound to the sandbox.
-    parsed
-        .scripts
-        .into_par_iter()
-        .try_for_each(|script| handle.args_i(["--ro-bind", &script, &script]))?;
+    debug_timer!("::scripts", {
+        parsed
+            .scripts
+            .into_par_iter()
+            .try_for_each(|script| handle.args_i(["--ro-bind", &script, &script]))
+    })?;
 
     // Files are treated similarly to ELF file in terms of being
     // heuristics for library folders, but are not LDD searched
     // because they are not ELF binaries.
-    parsed
-        .files
-        .into_par_iter()
-        .try_for_each(|file| handle.args_i(["--ro-bind", &file, &file]))?;
+    debug_timer!("::files", {
+        parsed
+            .files
+            .into_par_iter()
+            .try_for_each(|file| handle.args_i(["--ro-bind", &file, &file]))
+    })?;
 
-    parsed
-        .localized
-        .into_iter()
-        .try_for_each(|(src, dst)| -> anyhow::Result<()> {
-            handle.args_i(["--ro-bind", &src, &dst])?;
-            elf_binaries.insert(src);
-            Ok(())
-        })?;
+    debug_timer!("::localized", {
+        parsed
+            .localized
+            .into_iter()
+            .try_for_each(|(src, dst)| -> anyhow::Result<()> {
+                handle.args_i(["--ro-bind", &src, &dst])?;
+                elf_binaries.insert(src);
+                Ok(())
+            })
+    })?;
 
-    profile
-        .libraries
-        .get_or_insert_default()
-        .extend(parsed.directories);
+    debug_timer!("::libraries", {
+        profile
+            .libraries
+            .get_or_insert_default()
+            .extend(parsed.directories)
+    });
 
-    parsed
-        .symlinks
-        .into_par_iter()
-        .try_for_each(|(link, dest)| -> anyhow::Result<()> {
-            if !LIB_ROOTS.iter().any(|r| link.starts_with(r))
-                && !["/lib", "/lib64"].iter().any(|r| link.starts_with(r))
-            {
-                handle.args_i(["--symlink", &dest, &link])?;
-            }
-            Ok(())
-        })?;
+    debug_timer!("::symlinks", {
+        parsed
+            .symlinks
+            .into_par_iter()
+            .try_for_each(|(link, dest)| -> anyhow::Result<()> {
+                if !in_lib(&link) {
+                    handle.args_i(["--symlink", &dest, &link])?;
+                }
+                Ok(())
+            })
+    })?;
 
     if let Some(home) = &profile.home {
         debug_timer!("::home_binaries", {
             let home_dir = home.path(name);
             try_run_as!(user::Mode::Real, Result<()>, {
-                fs::create_dir_all(&home_dir)?;
+                if !home_dir.exists() {
+                    fs::create_dir_all(&home_dir)?;
+                }
                 let home_str = home_dir.to_string_lossy();
                 let home_binaries = get_dir(&home_str)?;
                 elf_binaries.extend(home_binaries);

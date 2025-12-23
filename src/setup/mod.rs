@@ -59,103 +59,115 @@ pub struct Info {
 
 pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let mut bytes = [0; 5];
-    rand::rng().fill_bytes(&mut bytes);
-    let instance = bytes
-        .iter()
-        .map(|byte| format!("{byte:02x?}"))
-        .collect::<Vec<String>>()
-        .join("");
+    let instance = debug_timer!("::instance", {
+        let mut bytes = [0; 5];
+        rand::rng().fill_bytes(&mut bytes);
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x?}"))
+            .collect::<Vec<String>>()
+            .join("")
+    });
 
-    let mut profile = match Profile::new(&name, args.config.take()) {
-        Ok(profile) => profile,
-        Err(e) => {
-            debug!("No profile: {name}: {e}, assuming binary");
-            Profile {
-                path: Some(which_exclude(&name)?),
-                ..Default::default()
+    let profile = debug_timer!("::profile", {
+        let profile = match Profile::new(&name, args.config.take()) {
+            Ok(profile) => profile,
+            Err(e) => {
+                debug!("No profile: {name}: {e}, assuming binary");
+                Profile {
+                    path: Some(which_exclude(&name)?),
+                    ..Default::default()
+                }
+            }
+        };
+
+        let cmd_profile = Profile::from_args(args)?;
+        profile.base(cmd_profile)
+    })?;
+
+    let hash = profile.hash_str();
+    let mut sys_dir = CACHE_DIR.join(&hash);
+
+    debug_timer!("::cache", {
+        let busy = |path: &Path| -> bool {
+            match path.read_dir() {
+                Ok(mut iter) => iter.next().is_some(),
+                Err(_) => false,
+            }
+        };
+
+        let refresh_dir = CACHE_DIR.join(format!("{hash}-refresh"));
+
+        if refresh_dir.exists() {
+            if !busy(&sys_dir.join("instances")) && !busy(&refresh_dir.join("instances")) {
+                debug!("Updating to refreshed definitions");
+                fs::remove_dir_all(&sys_dir)?;
+                fs::rename(&refresh_dir, &sys_dir)?;
+
+                debug!("Removing stale command caches.");
+                Spawner::new("find")
+                    .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
+                    .spawn()?
+                    .wait()?;
+            } else {
+                debug!("Using refresh directory");
+                sys_dir = refresh_dir.clone();
             }
         }
-    };
 
-    let cmd_profile = Profile::from_args(args)?;
-    profile = profile.base(cmd_profile)?;
+        // If we're told to refresh an existing cache
+        if args.refresh && sys_dir.exists() {
+            // If it's not busy, just remove the directory outright.
+            if !busy(&sys_dir.join("instances")) {
+                fs::remove_dir_all(&sys_dir)?;
+            } else if sys_dir == refresh_dir {
+                return Err(anyhow!(
+                    "Already refreshed! Please close all active instances to commit changes!"
+                ));
+            } else {
+                info!("Instance is busy. Refreshing in a new location");
+                sys_dir = refresh_dir;
+            }
+        }
+    });
+
+    if !sys_dir.exists() {
+        fs::create_dir_all(&sys_dir)?;
+    }
+
+    let instances = sys_dir.join("instances");
+    if !instances.exists() {
+        fs::create_dir(&instances)?;
+    }
+
     let runtime = RUNTIME_STR.as_str();
 
-    let busy = |path: &Path| -> bool {
-        match path.read_dir() {
-            Ok(mut iter) => iter.next().is_some(),
-            Err(_) => false,
-        }
-    };
+    debug_timer!("::document_wakeup", {
+        try_run_as!(user::Mode::Real, Result<()>, {
+            if let Some(ipc) = &profile.ipc
+                && !ipc.disable.unwrap_or(false)
+                && !mounted(&format!("{runtime}/doc"))
+            {
+                let connection = LocalConnection::new_session()?;
+                let msg = Message::new_method_call(
+                    BusName::from("org.freedesktop.portal.Documents\0"),
+                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                    Interface::from("org.freedesktop.DBus.Peer\0"),
+                    Member::from("Ping\0"),
+                );
 
-    // Get the system directory, which contains the SOF.
-    let hash = profile.hash_str();
-
-    let mut sys_dir = CACHE_DIR.join(&hash);
-    let refresh_dir = CACHE_DIR.join(format!("{hash}-refresh"));
-
-    if refresh_dir.exists() {
-        if !busy(&sys_dir.join("instances")) && !busy(&refresh_dir.join("instances")) {
-            debug!("Updating to refreshed definitions");
-            fs::remove_dir_all(&sys_dir)?;
-            fs::rename(&refresh_dir, &sys_dir)?;
-
-            debug!("Removing stale command caches.");
-            Spawner::new("find")
-                .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
-                .spawn()?
-                .wait()?;
-        } else {
-            debug!("Using refresh directory");
-            sys_dir = refresh_dir.clone();
-        }
-    }
-
-    // If we're told to refresh an existing cache
-    if args.refresh && sys_dir.exists() {
-        // If it's not busy, just remove the directory outright.
-        if !busy(&sys_dir.join("instances")) {
-            fs::remove_dir_all(&sys_dir)?;
-        } else if sys_dir == refresh_dir {
-            return Err(anyhow!(
-                "Already refreshed! Please close all active instances to commit changes!"
-            ));
-        } else {
-            info!("Instance is busy. Refreshing in a new location");
-            sys_dir = refresh_dir;
-        }
-    }
-
-    fs::create_dir_all(&sys_dir)?;
-    let instances = sys_dir.join("instances");
-
-    fs::create_dir_all(&instances)?;
-
-    try_run_as!(user::Mode::Real, Result<()>, {
-        if let Some(ipc) = &profile.ipc
-            && !ipc.disable.unwrap_or(false)
-            && !mounted(&format!("{runtime}/doc"))
-        {
-            let connection = LocalConnection::new_session()?;
-            let msg = Message::new_method_call(
-                BusName::from("org.freedesktop.portal.Documents\0"),
-                dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                Interface::from("org.freedesktop.DBus.Peer\0"),
-                Member::from("Ping\0"),
-            );
-
-            if let Ok(msg) = msg {
-                connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-            } else {
-                return Err(anyhow!("Failed to send ping to Document Portal"));
+                if let Ok(msg) = msg {
+                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+                } else {
+                    return Err(anyhow!("Failed to send ping to Document Portal"));
+                }
             }
-        }
 
-        // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
-        fs::create_dir_all(user_dir(&instance).as_path())?;
-        Ok(())
-    })?;
+            // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
+            fs::create_dir_all(user_dir(&instance).as_path())?;
+            Ok(())
+        })?;
+    });
 
     symlink(user_dir(&instance), instances.join(&instance))?;
 

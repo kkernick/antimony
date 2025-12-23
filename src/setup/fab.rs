@@ -1,11 +1,6 @@
-use crate::{
-    debug_timer,
-    fab::{self, bin::COMPGEN, lib::LIB_ROOTS},
-    shared::env::USER_NAME,
-};
+use crate::{debug_timer, fab, shared::env::USER_NAME};
 use anyhow::Result;
 use log::debug;
-use once_cell::sync::Lazy;
 use std::fs;
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
@@ -25,17 +20,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         debug!("Corrupted cache. Rebuilding.");
     }
 
-    // Get the lib roots as soon as possible.
-    rayon::spawn(|| {
-        Lazy::force(&LIB_ROOTS);
-    });
-
-    rayon::spawn(|| {
-        Lazy::force(&COMPGEN);
-    });
-
     debug!("Fabricating sandbox");
-    fs::create_dir_all(&args.sys_dir)?;
 
     // Start caching.
     args.handle.cache_start()?;

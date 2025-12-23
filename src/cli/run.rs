@@ -1,6 +1,7 @@
 //! Run a profile.
 use crate::{
     cli::Run,
+    debug_timer,
     fab::localize_home,
     setup::setup,
     shared::{
@@ -164,8 +165,11 @@ impl super::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {
-            let info = setup(Cow::Owned(self.profile.clone()), &mut self)?;
-            run(info, &mut self)?;
+            let info = debug_timer!(
+                "::setup",
+                setup(Cow::Owned(self.profile.clone()), &mut self)
+            )?;
+            debug_timer!("::run", run(info, &mut self))?;
             Ok(())
         }();
 

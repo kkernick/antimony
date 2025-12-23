@@ -367,7 +367,9 @@ pub fn integrate(cmd: Args) -> Result<()> {
             .join("applications")
             .join(name)
             .with_extension("desktop");
-        if let Some(parent) = out.parent() {
+        if let Some(parent) = out.parent()
+            && !parent.exists()
+        {
             fs::create_dir_all(parent)?;
         }
         manage_configurations(&mut contents, &cmd, &profile, name, &local)?;

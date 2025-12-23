@@ -16,8 +16,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             lock.unlock()?;
         }
 
-        if home.lock.unwrap_or(false) && !args.args.dry {
-            user::run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
+        if home.lock.unwrap_or(false) && !args.args.dry && home_dir.exists() {
             let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
             match lock.try_lock() {
                 Ok(_) => args.handle.fd_i(lock),
@@ -35,9 +34,9 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             policy => {
                 let home_str = home_dir.to_string_lossy();
                 debug!("Setting up home at {home_dir:?}");
-                user::run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
-
-                debug!("Adding args");
+                if !home_dir.exists() {
+                    user::run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
+                }
 
                 let dest = match &home.path {
                     Some(path) => path,

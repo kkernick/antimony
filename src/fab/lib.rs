@@ -9,7 +9,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -24,7 +24,9 @@ use std::{
 /// Where to store cache data.
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".lib");
-    user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    if !path.exists() {
+        user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    }
     path
 });
 
@@ -39,31 +41,11 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut roots = || -> Result<HashSet<String>> {
-        Ok(Spawner::new("find")
-            .args(["/usr/lib", "-maxdepth", "2", "-name", "libsqlite3.so"])?
-            .output(StreamMode::Pipe)
-            .spawn()?
-            .output_all()?
-            .lines()
-            .filter_map(|path| {
-                PathBuf::from(&path[..path.len() - 1])
-                    .parent()
-                    .map(|path| path.to_string_lossy().into_owned())
-            })
-            .collect())
-    }()
-    .unwrap_or_default();
+pub static LIB_ROOTS: OnceCell<HashSet<String>> = OnceCell::new();
 
-    debug!("Library root at: {roots:?}");
-
-    roots.insert(String::from("/usr/lib"));
-    if !*SINGLE_LIB {
-        roots.insert(String::from("/usr/lib64"));
-    }
-    roots
-});
+pub fn in_lib(path: &str) -> bool {
+    path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
+}
 
 /// Get cached definitions.
 pub fn get_cache(name: &str) -> Result<Option<Vec<String>>> {
@@ -111,6 +93,30 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
             }
         })
         .collect();
+
+    if LIB_ROOTS.get().is_none() {
+        debug_timer!("::lib_roots", {
+            let mut roots: HashSet<String> = libraries
+                .iter()
+                .filter_map(|lib| Path::new(&lib).parent().map(|p| p.to_owned()))
+                .map(|path| path.to_string_lossy().into_owned())
+                .filter(|e| {
+                    if *SINGLE_LIB {
+                        !e.contains("lib64")
+                    } else {
+                        true
+                    }
+                })
+                .collect();
+            roots.insert(String::from("/usr/lib"));
+            if !*SINGLE_LIB {
+                roots.insert(String::from("/usr/lib64"));
+            }
+            debug!("Library root at: {roots:?}");
+            LIB_ROOTS.set(roots).expect("Failed to set roots");
+        })
+    }
+
     write_cache(&path, libraries)
 }
 
@@ -143,7 +149,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Vec<String>> {
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
         let mut libraries = Vec::new();
-        for root in LIB_ROOTS.iter() {
+        for root in LIB_ROOTS.wait().iter() {
             libraries.extend(run(root, pattern)?);
         }
 
@@ -207,7 +213,9 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>) -> Result<()> {
     let sof_path = get_sof_path(sof, &library);
 
     if let Some(parent) = sof_path.parent() {
-        fs::create_dir_all(parent)?;
+        if !parent.exists() {
+            fs::create_dir_all(parent)?;
+        }
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
 
@@ -223,7 +231,9 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>) -> Result<()> {
 
             let shared_path = get_sof_path(&CACHE_DIR.join("shared"), &library);
             if let Some(parent) = shared_path.parent() {
-                fs::create_dir_all(parent)?;
+                if !parent.exists() {
+                    fs::create_dir_all(parent)?;
+                }
 
                 trace!("Creating shared copy via {canon:?} => {shared_path:?} => {sof_path:?}");
                 fs::copy(&canon, &shared_path)?;
@@ -256,18 +266,34 @@ pub fn fabricate(
 
     debug!("Creating SOF");
     let sof = sys_dir.join("sof");
-    fs::create_dir_all(&sof)?;
+    if !sof.exists() {
+        fs::create_dir(&sof)?;
+    }
+
+    // Libraries needed by the program. No Binaries.
+    let mut dependencies = HashSet::new();
+
+    // We use get_libraries to initialize the library roots, but need to pull one of the binaries
+    // off to do it before the roots are needed.
+    //
+    // I cannot think of any situation in which profile.binaries will be None, or empty. Profiles are
+    // either elf binaries themselves, or they use an interpreter that is. We fallback to the current
+    // program in emergencies.
+    if let Some(binaries) = &mut profile.binaries
+        && let Some(last) = binaries.pop_last()
+    {
+        dependencies.extend(get_libraries(Cow::Owned(last))?);
+    } else {
+        get_libraries(Cow::Borrowed("/proc/self/exe"))?;
+    }
 
     if !CACHE_DIR.starts_with(AT_HOME.as_path()) {
         let shared = CACHE_DIR.join("shared");
         if !shared.exists() {
             debug!("Creating shared directory at {shared:?}");
-            fs::create_dir_all(&shared)?;
+            fs::create_dir(&shared)?;
         }
     }
-
-    // Libraries needed by the program. No Binaries.
-    let mut dependencies = HashSet::new();
 
     // Libraries and Binaries, Wildcard and Directories Resolved
     let mut resolved = HashSet::new();
@@ -275,7 +301,7 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    for lib_root in LIB_ROOTS.iter() {
+    for lib_root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
         let app_lib = format!("{lib_root}/{name}");
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
@@ -295,7 +321,7 @@ pub fn fabricate(
                 } else if e.starts_with("~") {
                     Some(Cow::Owned(e.replace("~", HOME.as_str())))
                 } else {
-                    for root in LIB_ROOTS.iter() {
+                    for root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
                         let path = format!("{root}/{e}");
                         if Path::new(&path).exists() {
                             return Some(Cow::Owned(path));
@@ -377,7 +403,9 @@ pub fn fabricate(
                     library.as_str()
                 };
 
-                if parent.contains("lib") && LIB_ROOTS.iter().any(|r| parent == r) {
+                if parent.contains("lib")
+                    && unsafe { LIB_ROOTS.get_unchecked().iter() }.any(|r| parent == r)
+                {
                     true
                 } else {
                     !directories
@@ -411,7 +439,7 @@ pub fn fabricate(
 
     debug_timer!("::mount_directories", {
         directories.par_iter().try_for_each(|dir| -> Result<()> {
-            if LIB_ROOTS.iter().any(|r| dir.starts_with(r)) {
+            if unsafe { LIB_ROOTS.get_unchecked().iter() }.any(|r| dir.starts_with(r)) {
                 let sof_path = get_sof_path(&sof, dir.as_str());
                 if !sof_path.exists() {
                     fs::create_dir_all(sof_path)?;

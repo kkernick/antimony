@@ -38,8 +38,13 @@ pub fn run(
 
     debug_timer!("::directory_setup", {
         try_run_as!(user::Mode::Real, Result<()>, {
-            fs::create_dir_all(&proxy)?;
-            fs::create_dir_all(&app_dir)?;
+            if !proxy.exists() {
+                fs::create_dir_all(&proxy)?;
+            }
+
+            if !app_dir.exists() {
+                fs::create_dir_all(&app_dir)?;
+            }
             Ok(())
         })?
     });
@@ -239,7 +244,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 try_run_as!(user::Mode::Real, Result<()>, {
                     debug!("Creating flatpak directory");
                     let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
-                    fs::create_dir_all(&flatpak_dir)?;
+
+                    if !flatpak_dir.exists() {
+                        fs::create_dir_all(&flatpak_dir)?;
+                    }
                     args.handle.fd_arg_i(
                         "--json-status-fd",
                         File::create(flatpak_dir.join("bwrapinfo.json"))?,

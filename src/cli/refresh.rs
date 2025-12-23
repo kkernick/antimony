@@ -1,6 +1,7 @@
 //! Refresh installed profiles.
 use crate::{
     cli::{self, run_vec},
+    debug_timer,
     setup::{self, cleanup, setup},
     shared::env::{CACHE_DIR, HOME_PATH},
 };
@@ -62,8 +63,11 @@ impl super::Run for Args {
 
             args.refresh = true;
             args.dry = self.dry;
-            let info = setup::setup(Cow::Borrowed(&profile), &mut args)?;
-            cli::run::run(info, &mut args)?;
+            let info = debug_timer!("::setup", setup::setup(Cow::Borrowed(&profile), &mut args))?;
+
+            if !args.dry {
+                debug_timer!("::run", cli::run::run(info, &mut args))?;
+            }
 
             if self.integrate {
                 cli::integrate::integrate(cli::integrate::Args {

@@ -29,7 +29,9 @@ use strum_macros::EnumIter;
 
 static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".profile");
-    user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    if !path.exists() {
+        user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+    }
     path
 });
 
