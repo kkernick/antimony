@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, warn};
 use once_cell::sync::{Lazy, OnceCell};
+use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -42,6 +43,8 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 
 // Get the library roots.
 pub static LIB_ROOTS: OnceCell<HashSet<String>> = OnceCell::new();
+
+static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
 pub fn in_lib(path: &str) -> bool {
     path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
@@ -95,7 +98,9 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
         write_cache(&path, libraries)?
     };
 
-    if LIB_ROOTS.get().is_none() {
+    if LIB_ROOTS.get().is_none()
+        && let Some(_lock) = LOCK.try_lock()
+    {
         debug_timer!("::lib_roots", {
             let mut roots: HashSet<String> = libraries
                 .iter()
@@ -114,7 +119,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
                 roots.insert(String::from("/usr/lib64"));
             }
             debug!("Library root at: {roots:?}");
-            LIB_ROOTS.set(roots).expect("Failed to set roots");
+            LIB_ROOTS.set(roots).expect("Failed to set lib roots");
         })
     }
     Ok(libraries)
