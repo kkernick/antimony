@@ -117,7 +117,7 @@ For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --checkout tags/$TAG
 | 2.4.3                 | 2.8      | 2.8 | 2.8    | 2.1       | 1.9 |
 | 2.5.0                 | 2.9      | 2.5 | 2.9    | 2.1       | 1.7 |
 | 2.6.0                 | 3.2      | 2.8 | 3.1    | 2.7       | 1.9 |
-| 3.0.0                 |          |     |        |           |     |
+| 3.0.0                 | 2.0      | 1.7 | 1.5    | 2.1       | 1.5 |
 ^HistoryHot
 
 ```chart
@@ -127,9 +127,8 @@ tension: 0.5
 spanGaps: true
 ```
 
-*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.2 has been recorded in a separate chart below as to not skew the visualization.*
+*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.0 to 2.6.0 have been recorded in the table underneath to now skew the visualization.* 
 
-  
 | Profile Cold / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
 | ---------------------- | -------- | ---- | ------ | --------- | ---- |
 | 1.0.0                  | 1.00     | 1.00 | 1.00   | 1.00      | 1.00 |
@@ -146,29 +145,36 @@ spanGaps: true
 | 2.2.1                  | 1.02     | 0.99 | 1.02   | 1.01      | 1.04 |
 | 2.2.2                  | 1.00     | 0.99 | 1.02   | 1.02      | 1.04 |
 | 2.3.0                  | 1.08     | 0.99 | 1.04   | 1.02      | 1.03 |
-| 2.4.0                  | 1.10     | 1.02 | 1.08   | 1.22      | 1.04 |
-| 2.4.3                  | 1.02     | 0.84 | 1.08   | 1.09      | 1.79 |
-| 2.5.0                  | 0.97     | 0.85 | 1.07   | 1.11      | 1.82 |
-| 2.6.0                  | 1.00     | 0.86 | 1.13   | 1.17      | 1.82 |
-| 3.0.0                  |          |      |        |           |      |
+| 3.0.0                  | 0.85     | 0.84 | 1.04   | 0.90      | 0.91 |
 ^HistoryCold
 
 | Profile Cold/Release | Chromium | Zed  | Okular | Syncthing | Sh    |
 | -------------------- | -------- | ---- | ------ | --------- | ----- |
+| 2.4.0                | 1.10     | 1.02 | 1.08   | 1.22      | 1.04  |
 | 2.4.2                | 1.02     | 2.63 | 1.10   | 4.23      | 12.08 |
+| 2.4.3                | 1.02     | 0.84 | 1.08   | 1.09      | 1.79  |
+| 2.5.0                | 0.97     | 0.85 | 1.07   | 1.11      | 1.82  |
+| 2.6.0                | 1.00     | 0.86 | 1.13   | 1.17      | 1.82  |
 
 ```chart
 type: line
-select: [Chromium, Zed, Okular, Syncthing, Sh]
 id: HistoryCold
 tension: 0.5
 spanGaps: true
 ```
 
 
-| Profile Real / Release | Chromium | Zed | Okular | Syncthing | Sh  |
-| ---------------------- | -------- | --- | ------ | --------- | --- |
-| 3.0.0                  |          |     |        |           |     |
+| Profile Real / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
+| ---------------------- | -------- | ---- | ------ | --------- | --- |
+| 3.0.0                  | 30.6     | 18.9 | 23.3   | 10.4      | 9.0 |
+^HistoryReal
+
+```chart
+type: line
+id: HistoryReal
+tension: 0.5
+spanGaps: true
+```
 
 ## Techniques
 
