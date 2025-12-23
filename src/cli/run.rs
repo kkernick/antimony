@@ -246,8 +246,9 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         info.handle
             .arg_i(localize_home(&info.profile.app_path(&info.name)))?;
         info.handle.args_i(info.post)?;
-        info.handle.error_i(StreamMode::Pipe);
     }
+
+    info.handle.error_i(StreamMode::Pipe);
 
     // Run it
     if !args.dry {
@@ -291,7 +292,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let mut handle = info.handle.spawn()?;
         let code = handle.wait()?;
 
-        let log = if code != 0 && args.log {
+        let log = if code != 0 || args.log {
             debug!("Logging...");
             let error = handle.error_all()?;
             // Write it to a log file.

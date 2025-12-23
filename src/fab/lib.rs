@@ -149,7 +149,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Vec<String>> {
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
         let mut libraries = Vec::new();
-        for root in LIB_ROOTS.wait().iter() {
+        for root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
             libraries.extend(run(root, pattern)?);
         }
 
@@ -279,11 +279,19 @@ pub fn fabricate(
     // I cannot think of any situation in which profile.binaries will be None, or empty. Profiles are
     // either elf binaries themselves, or they use an interpreter that is. We fallback to the current
     // program in emergencies.
-    if let Some(binaries) = &mut profile.binaries
-        && let Some(last) = binaries.pop_last()
-    {
-        dependencies.extend(get_libraries(Cow::Owned(last))?);
-    } else {
+    if let Some(binaries) = &profile.binaries {
+        debug_timer!("::binaries", {
+            dependencies.extend(
+                binaries
+                    .into_par_iter()
+                    .filter_map(|b| get_libraries(Cow::Borrowed(b)).ok())
+                    .flatten()
+                    .collect::<HashSet<_>>(),
+            )
+        });
+    };
+
+    if LIB_ROOTS.get().is_none() {
         get_libraries(Cow::Borrowed("/proc/self/exe"))?;
     }
 
@@ -368,19 +376,6 @@ pub fn fabricate(
                 .collect::<HashSet<_>>(),
         )
     });
-
-    // Grab the binaries; they are still needed for SECCOMP, however.
-    if let Some(binaries) = &profile.binaries {
-        debug_timer!("::binaries", {
-            dependencies.extend(
-                binaries
-                    .into_par_iter()
-                    .filter_map(|b| get_libraries(Cow::Borrowed(b)).ok())
-                    .flatten()
-                    .collect::<HashSet<_>>(),
-            )
-        });
-    }
 
     debug_timer!("::writing", {
         dependencies
