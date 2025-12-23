@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     env,
     fs::read_to_string,
+    os::unix::fs::symlink,
     path::{Path, PathBuf},
     sync::{Arc, atomic::AtomicBool},
     thread::sleep,
@@ -9,9 +10,28 @@ use std::{
 };
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use nix::unistd::chdir;
 use spawn::Spawner;
+
+#[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
+pub enum Benchmark {
+    /// Run the profile with no cache
+    Cold,
+
+    /// Run the profile with a cache.
+    Hot,
+
+    /// Run the profile with a cache, but with the real execution pipeline.
+    /// --dry disables some parts of sandbox setup, as its primary purpose is just to populate caches.
+    /// This means things like creating the proxy and waiting for it, creating and applying SECCOMP filters, and
+    /// others parts are skipped over. This is important for ensuring refresh is fast, but means that the Hot
+    /// benchmark does not reflect the time it takes for end users to get their application from startup.
+    ///
+    /// This benchmark runs the sandbox as usual, but passes the dry feature, which simply spawns a shell in the
+    /// environment, then immediately exits.
+    Real,
+}
 
 #[derive(Parser, Debug, Default)]
 #[command(name = "Antimony-Bench")]
@@ -45,6 +65,10 @@ pub struct Cli {
     /// An optional temperature to wait for cooldown. Usually, this has a precision of a thousandth, so 65000 = 65.0
     #[arg(long)]
     pub temp: Option<u64>,
+
+    /// What benchmarks to run. By default, all
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub bench: Option<Vec<Benchmark>>,
 
     /// Additional commands to pass to antimony
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
@@ -92,19 +116,23 @@ fn main() -> Result<()> {
     // Set AT_HOME to our current config.
     unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
 
+    let temp = "/tmp/antimony";
+    std::fs::create_dir_all(temp)?;
+    symlink(temp, format!("{root}/config/cache"))?;
+
     let term = Arc::new(AtomicBool::new(false));
 
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
-    // Stash our working edits
-    Spawner::new("git").arg("stash")?.spawn()?.wait()?;
+    if let Some(checkout) = &cli.checkout {
+        // Stash our working edits
+        Spawner::new("git").arg("stash")?.spawn()?.wait()?;
 
-    if let Some(checkout) = cli.checkout {
         // Checkout the desired state, but only for code and Cargo.
         Spawner::new("git")
             .args([
                 "checkout",
-                &checkout,
+                checkout,
                 "src",
                 "config",
                 "crates",
@@ -116,15 +144,17 @@ fn main() -> Result<()> {
     }
 
     let result = || -> Result<()> {
+        let benchmarks =
+            cli.bench
+                .unwrap_or(vec![Benchmark::Cold, Benchmark::Hot, Benchmark::Real]);
+
         let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
             .into_iter()
             .map(Cow::Borrowed)
             .collect();
-
         if cli.output {
             args.push(Cow::Borrowed("--show-output"));
         }
-
         if let Some(h_args) = cli.hyperfine_args {
             args.extend(h_args.into_iter().map(Cow::Owned))
         }
@@ -171,69 +201,70 @@ fn main() -> Result<()> {
         for profile in &cli.profiles {
             cooldown(&cli.temp_sensor, &cli.temp)?;
 
-            let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
-                .into_iter()
-                .map(String::from)
-                .collect();
-            if let Some(add) = &cli.antimony_args {
-                command.extend(add.clone());
+            if benchmarks.contains(&Benchmark::Cold) {
+                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                if let Some(add) = &cli.antimony_args {
+                    command.extend(add.clone());
+                }
+                Spawner::new("hyperfine")
+                    .args([
+                        "--command-name",
+                        &format!("Cold {profile}"),
+                        "--warmup",
+                        "1",
+                    ])?
+                    .args(args.clone())?
+                    .arg(command.join(" "))?
+                    .preserve_env(true)
+                    .spawn()?
+                    .wait()?;
+
+                cooldown(&cli.temp_sensor, &cli.temp)?;
             }
-            Spawner::new("hyperfine")
-                .args([
-                    "--command-name",
-                    &format!("Local Refresh {profile}"),
-                    "--warmup",
-                    "1",
-                ])?
-                .args(args.clone())?
-                .arg(command.join(" "))?
-                .preserve_env(true)
-                .spawn()?
-                .wait()?;
 
-            cooldown(&cli.temp_sensor, &cli.temp)?;
+            if benchmarks.contains(&Benchmark::Hot) {
+                let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                if let Some(add) = &cli.antimony_args {
+                    command.extend(add.clone());
+                }
+                Spawner::new("hyperfine")
+                    .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])?
+                    .args(args.clone())?
+                    .arg(command.join(" "))?
+                    .preserve_env(true)
+                    .spawn()?
+                    .wait()?;
 
-            let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
-                .into_iter()
-                .map(String::from)
-                .collect();
-            if let Some(add) = &cli.antimony_args {
-                command.extend(add.clone());
+                cooldown(&cli.temp_sensor, &cli.temp)?;
             }
-            Spawner::new("hyperfine")
-                .args([
-                    "--command-name",
-                    &format!("Cached {profile}"),
-                    "--warmup",
-                    "1",
-                ])?
-                .args(args.clone())?
-                .arg(command.join(" "))?
-                .preserve_env(true)
-                .spawn()?
-                .wait()?;
 
-            cooldown(&cli.temp_sensor, &cli.temp)?;
-
-            let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
-                .into_iter()
-                .map(String::from)
-                .collect();
-            if let Some(add) = &cli.antimony_args {
-                command.extend(add.clone());
+            if benchmarks.contains(&Benchmark::Real) {
+                let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                if let Some(add) = &cli.antimony_args {
+                    command.extend(add.clone());
+                }
+                Spawner::new("hyperfine")
+                    .args([
+                        "--command-name",
+                        &format!("Real {profile}"),
+                        "--warmup",
+                        "1",
+                    ])?
+                    .args(args.clone())?
+                    .arg(command.join(" "))?
+                    .preserve_env(true)
+                    .spawn()?
+                    .wait()?;
             }
-            Spawner::new("hyperfine")
-                .args([
-                    "--command-name",
-                    &format!("Cached (Real) {profile}"),
-                    "--warmup",
-                    "1",
-                ])?
-                .args(args.clone())?
-                .arg(command.join(" "))?
-                .preserve_env(true)
-                .spawn()?
-                .wait()?;
         }
         Ok(())
     }();
@@ -242,32 +273,35 @@ fn main() -> Result<()> {
     if cache.exists() {
         std::fs::remove_dir_all(&cache)?;
     }
+    std::fs::remove_dir_all(temp)?;
 
-    // Undo the checkout
-    Spawner::new("git")
-        .args([
-            "checkout",
-            "-",
-            "src",
-            "config",
-            "crates",
-            "Cargo.toml",
-            "Cargo.lock",
-        ])?
-        .spawn()?
-        .wait()?;
+    if cli.checkout.is_some() {
+        // Undo the checkout
+        Spawner::new("git")
+            .args([
+                "checkout",
+                "-",
+                "src",
+                "config",
+                "crates",
+                "Cargo.toml",
+                "Cargo.lock",
+            ])?
+            .spawn()?
+            .wait()?;
 
-    // Reset to the original state
-    Spawner::new("git")
-        .args(["reset", "--hard"])?
-        .spawn()?
-        .wait()?;
+        // Reset to the original state
+        Spawner::new("git")
+            .args(["reset", "--hard"])?
+            .spawn()?
+            .wait()?;
 
-    // Return uncommitted edits.
-    Spawner::new("git")
-        .args(["stash", "pop"])?
-        .spawn()?
-        .wait()?;
+        // Return uncommitted edits.
+        Spawner::new("git")
+            .args(["stash", "pop"])?
+            .spawn()?
+            .wait()?;
+    }
 
     result
 }

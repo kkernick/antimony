@@ -71,28 +71,31 @@ pub fn write_cache(name: &str, libraries: Vec<String>) -> Result<Vec<String>> {
 
 /// LDD a path.
 pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
-    if let Some(libraries) = get_cache(&path)? {
-        return Ok(libraries);
-    }
+    let libraries = if let Some(libraries) = get_cache(&path)? {
+        libraries
+    } else {
+        let libraries = Spawner::new("/usr/bin/ldd")
+            .arg(path.as_ref())?
+            .output(StreamMode::Pipe)
+            .error(StreamMode::Discard)
+            .spawn()?
+            .output_all()?
+            .lines()
+            .par_bridge()
+            .filter_map(|e| {
+                if let Some(start) = e.find("=> /")
+                    && let Some(end) = e.rfind(' ')
+                {
+                    Some(String::from(&e[start + 3..end]))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        write_cache(&path, libraries)?
+    };
 
-    let libraries: Vec<String> = Spawner::new("/usr/bin/ldd")
-        .arg(path.as_ref())?
-        .output(StreamMode::Pipe)
-        .error(StreamMode::Discard)
-        .spawn()?
-        .output_all()?
-        .lines()
-        .par_bridge()
-        .filter_map(|e| {
-            if let Some(start) = e.find("=> /")
-                && let Some(end) = e.rfind(' ')
-            {
-                Some(String::from(&e[start + 3..end]))
-            } else {
-                None
-            }
-        })
-        .collect();
+    trace!("{path} -> {libraries:?}");
 
     if LIB_ROOTS.get().is_none() {
         debug_timer!("::lib_roots", {
@@ -116,8 +119,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
             LIB_ROOTS.set(roots).expect("Failed to set roots");
         })
     }
-
-    write_cache(&path, libraries)
+    Ok(libraries)
 }
 
 /// Get all matches for a wildcard.
@@ -292,6 +294,7 @@ pub fn fabricate(
     };
 
     if LIB_ROOTS.get().is_none() {
+        debug!("Lib Roots wasn't initialized...");
         get_libraries(Cow::Borrowed("/proc/self/exe"))?;
     }
 
