@@ -8,7 +8,7 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
-use log::{debug, error, warn};
+use log::{debug, error, warn, trace};
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::Mutex;
 use rayon::prelude::*;
@@ -33,10 +33,7 @@ static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
 
 /// Whether we have a split-root.
 pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
-    let single = match fs::read_link("/usr/lib64") {
-        Ok(dest) => dest == Path::new("/usr/lib") || dest == Path::new("lib"),
-        Err(_) => false,
-    };
+    let single = fs::read_link("/usr/lib64").is_ok();
     debug!("Single Library Folder: {single}");
     single
 });
@@ -86,15 +83,28 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
             .lines()
             .par_bridge()
             .filter_map(|e| {
-                if let Some(start) = e.find("=> /")
-                    && let Some(end) = e.rfind(' ')
-                {
+                if let Some(start) = e.find("=> /") && let Some(end) = e.rfind(' ') {
                     Some(String::from(&e[start + 3..end]))
+                } else if let Some(start) = e.find("/") && let Some(end) = e.rfind(' ') {
+                    let path = String::from(&e[start..end]);
+                    if path.contains(" ") {
+                        None
+                    } else {
+                        Some(path)
+                    }
                 } else {
                     None
                 }
             })
+            .map(|e| {
+                if !e.starts_with("/usr") {
+                    format!("/usr{e}")
+                } else {
+                    e
+                }
+            })
             .collect();
+        trace!("{path} => {libraries:?}");
         write_cache(&path, libraries)?
     };
 

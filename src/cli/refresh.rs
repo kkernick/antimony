@@ -62,6 +62,7 @@ impl super::Run for Args {
 
             args.refresh = true;
             args.dry = self.dry;
+            args.profile = profile.clone();
             args.run()?;
 
             if self.integrate {

@@ -9,7 +9,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::PathBuf,
 };
-use user::run_as;
+use user::try_run_as;
 use which::which;
 
 pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
@@ -64,13 +64,24 @@ pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
     if !writeable {
         debug!("Cache dir not-writable. Pivoting to /tmp");
         cache_dir = temp_dir().join("antimony");
-        run_as!(user::Mode::Effective, {
+        let result = || -> Result<()> {
+            try_run_as!(user::Mode::Effective, {
+                if !cache_dir.exists() {
+                    fs::create_dir_all(&cache_dir).unwrap();
+                }
+                fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))?;
+                Ok(())
+            })
+        }();
+
+        if result.is_err() {
+            warn!("Cannot create the cache directory safely! This is a security hole!");
             if !cache_dir.exists() {
                 fs::create_dir_all(&cache_dir).unwrap();
             }
             fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))
                 .expect("Failed to set permissions for cache!");
-        })
+        }
     }
     cache_dir
 });
