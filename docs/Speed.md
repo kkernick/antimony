@@ -53,22 +53,35 @@ Antimony breaks off from SB (Only sharing a name and general goal), allowing a s
 
 All test are run on an identical, Arch Virtual Machine. The raw numbers are not important—the difference between them are.
 
-| Profile Hot | SB*   | SB++** | Antimony*** | Improvement |
-| ----------- | ----- | ------ | ----------- | ----------- |
-| Chromium    | 104.0 | 7.8    | 3.7         | 2.1X        |
-| Zed         | 102.2 | 7.1    | 3.0         | 2.4X        |
-| Okular      | 100.8 | 7.5    | 2.8         | 2.7X        |
-| Syncthing   | 98.2  | 6.2    | 2.2         | 2.8X        |
+| Profile Hot | SB    | SB++ | Antimony | Improvement |
+| ----------- | ----- | ---- | -------- | ----------- |
+| Chromium    | 104.0 | 7.8  | 3.7      | 2.1X        |
+| Zed         | 102.2 | 7.1  | 3.0      | 2.4X        |
+| Okular      | 100.8 | 7.5  | 2.8      | 2.7X        |
+| Syncthing   | 98.2  | 6.2  | 2.2      | 2.8X        |
+^SBHot
+
+```chart
+type: bar
+select: [SB, SB++, Antimony]
+id: SBHot
+```
 
 *Comparison between Hot Startup, in Milliseconds. Each application has cached definitions, and this benchmark largely shows how quickly the program can read its caches and launch bubblewrap.*
 
-| Profile Cold | SB*    | SB++** | Antimony*** | Improvement |
-| ------------ | ------ | ------ | ----------- | ----------- |
-| Chromium     | 862.5  | 633.8  | 521.1       | 1.2X        |
-| Zed          | 418.2  | 177.8  | 45.6        | 3.9X        |
-| Okular       | 3792.9 | 2107.6 | 1604.8      | 1.3X        |
-| Syncthing    | 170.4  | 37.0   | 25.9        | 1.4X        |
+| Profile Cold | SB     | SB++   | Antimony | Improvement |
+| ------------ | ------ | ------ | -------- | ----------- |
+| Chromium     | 862.5  | 633.8  | 521.1    | 1.2X        |
+| Zed          | 418.2  | 177.8  | 45.6     | 3.9X        |
+| Okular       | 3792.9 | 2107.6 | 1604.8   | 1.3X        |
+| Syncthing    | 170.4  | 37.0   | 25.9     | 1.4X        |
+^SBCold
 
+```chart
+type: bar
+select: [SB, SB++, Antimony]
+id: SBCold
+```
 *Comparison between Cold Startup, in Milliseconds. Each application has its cache removed prior to execution.*
 
 \* SB is run via `benchmark.sh python main $PROFILE` from the [SB](https://github.com/kkernick/sb) repository.
@@ -116,27 +129,29 @@ spanGaps: true
 
 *Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.2 has been recorded in a separate chart below as to not skew the visualization.*
 
-| Profile Cold / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
-| ---------------------- | -------- | ---- | ------ | --------- | ---- |
-| 1.0.0                  | 1.00     | 1.00 | 1.00   | 1.00      | 1.00 |
-| 1.0.1                  | 0.99     | 0.98 | 1.05   | 1.08      | 1.00 |
-| 1.1.0                  | 0.98     | 1.01 | 1.09   | 0.98      | 0.99 |
-| 1.1.1                  | 1.03     | 1.01 | 1.00   | 1.02      | 1.00 |
-| 1.1.2                  | 0.99     | 0.98 | 1.00   | 0.98      | 1.00 |
-| 1.2.0                  | 0.99     | 0.98 | 0.99   | 0.98      | 1.00 |
-| 1.3.0                  | 0.98     | 0.98 | 1.00   | 0.99      | 1.00 |
-| 2.0.0                  | 0.98     | 0.98 | 1.01   | 1.00      | 1.00 |
-| 2.0.1                  | 0.98     | 0.99 | 1.00   | 0.98      | 1.00 |
-| 2.1.0                  | 1.00     | 1.00 | 1.04   | 1.00      | 1.03 |
-| 2.2.0                  | 1.01     | 0.99 | 1.00   | 1.02      | 1.03 |
-| 2.2.1                  | 1.02     | 0.99 | 1.02   | 1.01      | 1.04 |
-| 2.2.2                  | 1.00     | 0.99 | 1.02   | 1.02      | 1.04 |
-| 2.3.0                  | 1.08     | 0.99 | 1.04   | 1.02      | 1.03 |
-| 2.4.0                  | 1.10     | 1.02 | 1.08   | 1.22      | 1.04 |
-| 2.4.3                  | 1.02     | 0.84 | 1.08   | 1.09      | 1.79 |
-| 2.5.0                  | 0.97     | 0.85 | 1.07   | 1.11      | 1.82 |
-| 2.6.0                  | 1.00     | 0.86 | 1.13   | 1.17      | 1.82 |
-| 3.0.0                  |          |      |        |           |      |
+  
+| Profile Hot / Release  | Chromium  | Zed    | Okular | Syncthing  | Sh    |
+| ---------------------- | --------- | ------ | ------ | ---------- | ----- |
+| 1.0.0                  | 343.7     | 48.7   | 1281.9 | 24.7       | 7.2   |
+| 1.0.1                  | 340.5     | 47.5   | 1340.0 | 26.6       | 7.2   |
+| 1.1.0                  | 337.1     | 49.2   | 1393.4 | 24.1       | 7.1   |
+| 1.1.1                  | 353.5     | 49.3   | 1276.2 | 25.2       | 7.2   |
+| 1.1.2                  | 341.1     | 47.5   | 1277.8 | 24.2       | 7.2   |
+| 1.2.0                  | 341.6     | 47.7   | 1275.1 | 24.1       | 7.2   |
+| 1.3.0                  | 338.0     | 47.6   | 1279.5 | 24.5       | 7.2   |
+| 2.0.0                  | 338.1     | 47.6   | 1292.0 | 24.8       | 7.2   |
+| 2.0.1                  | 338.4     | 48.3   | 1279.8 | 24.3       | 7.2   |
+| 2.1.0                  | 345.3     | 48.5   | 1330.9 | 24.6       | 7.4   |
+| 2.2.0                  | 348.1     | 48.2   | 1284.7 | 25.2       | 7.4   |
+| 2.2.1                  | 351.6     | 48.1   | 1306.8 | 24.9       | 7.5   |
+| 2.2.2                  | 344.4     | 48.3   | 1308.2 | 25.1       | 7.5   |
+| 2.3.0                  | 372.6     | 48.1   | 1328.5 | 25.2       | 7.4   |
+| 2.4.0                  | 376.9     | 49.9   | 1379.2 | 30.2       | 7.5   |
+| 2.4.2                  | 447.1     | 128.2  | 1409.8 | 105.4      | 87.0  |
+| 2.4.3                  | 352.1     | 40.8   | 1381.2 | 27.0       | 12.9  |
+| 2.5.0                  |           |        |        |            |       |
+| 2.6.0                  |           |        |        |            |       |
+| 3.0.0                  |           |        |        |            |       |
 ^HistoryCold
 
 | Profile Cold/Release | Chromium | Zed  | Okular | Syncthing | Sh    |

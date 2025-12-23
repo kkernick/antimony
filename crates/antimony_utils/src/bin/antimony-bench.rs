@@ -1,6 +1,8 @@
 use std::{
+    borrow::Cow,
     env,
-    path::PathBuf,
+    fs::read_to_string,
+    path::{Path, PathBuf},
     sync::{Arc, atomic::AtomicBool},
     thread::sleep,
     time::Duration,
@@ -20,10 +22,6 @@ pub struct Cli {
     #[arg(value_delimiter = ' ', num_args = 1..)]
     pub profiles: Vec<String>,
 
-    /// How long to wait between each profile.
-    #[arg(long)]
-    pub cool: Option<u64>,
-
     /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
     /// wherever `antimony` resolves to, and doesn't build.
     #[arg(long)]
@@ -37,6 +35,17 @@ pub struct Cli {
     #[arg(long)]
     pub checkout: Option<String>,
 
+    #[arg(long, default_value_t = false)]
+    pub output: bool,
+
+    /// An optional temperature sensor to monitor.
+    #[arg(long)]
+    pub temp_sensor: Option<String>,
+
+    /// An optional temperature to wait for cooldown. Usually, this has a precision of a thousandth, so 65000 = 65.0
+    #[arg(long)]
+    pub temp: Option<u64>,
+
     /// Additional commands to pass to antimony
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub antimony_args: Option<Vec<String>>,
@@ -44,6 +53,30 @@ pub struct Cli {
     /// Additional commands to pass to hyperfine
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub hyperfine_args: Option<Vec<String>>,
+}
+
+fn cooldown(sensor: &Option<String>, target: &Option<u64>) -> Result<()> {
+    if let Some(sensor) = &sensor
+        && Path::new(sensor).exists()
+        && let Some(target) = target
+    {
+        println!("Waiting for system to cool down");
+
+        loop {
+            let temp = read_to_string(sensor)?;
+            if let Some(first) = temp.lines().next()
+                && let Ok(degrees) = first.parse::<u64>()
+            {
+                if degrees <= *target {
+                    break;
+                }
+                sleep(Duration::from_secs(1));
+            } else {
+                eprintln!("Could not parse sensor'");
+            }
+        }
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -82,121 +115,128 @@ fn main() -> Result<()> {
             .wait()?;
     }
 
-    let mut args: Vec<String> = vec!["--shell=none", "--time-unit=millisecond"]
-        .into_iter()
-        .map(String::from)
-        .collect();
-
-    if let Some(h_args) = cli.hyperfine_args {
-        args.extend(h_args)
-    }
-    if let Some(runs) = cli.runs {
-        args.extend(["-M".to_string(), runs.to_string()])
-    }
-
-    let antimony = if let Some(recipe) = cli.recipe {
-        match recipe.as_str() {
-            "pgo" => {
-                Spawner::new(format!("{root}/pgo"))
-                    .preserve_env(true)
-                    .spawn()?
-                    .wait()?;
-                format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony")
-            }
-            "bolt" => {
-                Spawner::new(format!("{root}/bolt"))
-                    .preserve_env(true)
-                    .spawn()?
-                    .wait()?;
-                format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony-bolt-optimized")
-            }
-            recipe if recipe == "release" || recipe == "dev" => {
-                Spawner::new("cargo")
-                    .args(["build", "--profile", recipe])?
-                    .preserve_env(true)
-                    .spawn()?
-                    .wait()?;
-                format!(
-                    "{root}/target/{}/antimony",
-                    if recipe == "dev" { "debug" } else { &recipe }
-                )
-            }
-            path => path.to_string(),
-        }
-    } else {
-        "antimony".to_string()
-    };
-
-    println!("Using: {antimony}");
-    for profile in &cli.profiles {
-        let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+    let result = || -> Result<()> {
+        let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
             .into_iter()
-            .map(String::from)
+            .map(Cow::Borrowed)
             .collect();
-        if let Some(add) = &cli.antimony_args {
-            command.extend(add.clone());
+
+        if cli.output {
+            args.push(Cow::Borrowed("--show-output"));
         }
 
-        Spawner::new("hyperfine")
-            .args([
-                "--command-name",
-                &format!("Local Refresh {profile}"),
-                "--warmup",
-                "1",
-            ])?
-            .args(args.clone())?
-            .arg(command.join(" "))?
-            .preserve_env(true)
-            .spawn()?
-            .wait()?;
-
-        let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        if let Some(add) = &cli.antimony_args {
-            command.extend(add.clone());
+        if let Some(h_args) = cli.hyperfine_args {
+            args.extend(h_args.into_iter().map(Cow::Owned))
+        }
+        if let Some(runs) = cli.runs {
+            args.extend([Cow::Borrowed("-M"), Cow::Owned(runs.to_string())])
         }
 
-        Spawner::new("hyperfine")
-            .args([
-                "--command-name",
-                &format!("Cached {profile}"),
-                "--warmup",
-                "1",
-            ])?
-            .args(args.clone())?
-            .arg(command.join(" "))?
-            .preserve_env(true)
-            .spawn()?
-            .wait()?;
+        let antimony = if let Some(recipe) = cli.recipe {
+            match recipe.as_str() {
+                "pgo" => {
+                    Spawner::new(format!("{root}/pgo"))
+                        .preserve_env(true)
+                        .spawn()?
+                        .wait()?;
+                    format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony")
+                }
+                "bolt" => {
+                    Spawner::new(format!("{root}/bolt"))
+                        .preserve_env(true)
+                        .spawn()?
+                        .wait()?;
+                    format!(
+                        "{root}/target/x86_64-unknown-linux-gnu/release/antimony-bolt-optimized"
+                    )
+                }
+                recipe if recipe == "release" || recipe == "dev" => {
+                    Spawner::new("cargo")
+                        .args(["build", "--profile", recipe])?
+                        .preserve_env(true)
+                        .spawn()?
+                        .wait()?;
+                    format!(
+                        "{root}/target/{}/antimony",
+                        if recipe == "dev" { "debug" } else { &recipe }
+                    )
+                }
+                path => path.to_string(),
+            }
+        } else {
+            "antimony".to_string()
+        };
 
-        let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
-            .into_iter()
-            .map(String::from)
-            .collect();
-        if let Some(add) = &cli.antimony_args {
-            command.extend(add.clone());
+        println!("Using: {antimony}");
+        for profile in &cli.profiles {
+            cooldown(&cli.temp_sensor, &cli.temp)?;
+
+            let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            if let Some(add) = &cli.antimony_args {
+                command.extend(add.clone());
+            }
+            Spawner::new("hyperfine")
+                .args([
+                    "--command-name",
+                    &format!("Local Refresh {profile}"),
+                    "--warmup",
+                    "1",
+                ])?
+                .args(args.clone())?
+                .arg(command.join(" "))?
+                .preserve_env(true)
+                .spawn()?
+                .wait()?;
+
+            cooldown(&cli.temp_sensor, &cli.temp)?;
+
+            let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            if let Some(add) = &cli.antimony_args {
+                command.extend(add.clone());
+            }
+            Spawner::new("hyperfine")
+                .args([
+                    "--command-name",
+                    &format!("Cached {profile}"),
+                    "--warmup",
+                    "1",
+                ])?
+                .args(args.clone())?
+                .arg(command.join(" "))?
+                .preserve_env(true)
+                .spawn()?
+                .wait()?;
+
+            cooldown(&cli.temp_sensor, &cli.temp)?;
+
+            let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            if let Some(add) = &cli.antimony_args {
+                command.extend(add.clone());
+            }
+            Spawner::new("hyperfine")
+                .args([
+                    "--command-name",
+                    &format!("Cached (Real) {profile}"),
+                    "--warmup",
+                    "1",
+                ])?
+                .args(args.clone())?
+                .arg(command.join(" "))?
+                .preserve_env(true)
+                .spawn()?
+                .wait()?;
         }
-
-        Spawner::new("hyperfine")
-            .args([
-                "--command-name",
-                &format!("Cached (Real) {profile}"),
-                "--warmup",
-                "1",
-            ])?
-            .args(args.clone())?
-            .arg(command.join(" "))?
-            .preserve_env(true)
-            .spawn()?
-            .wait()?;
-
-        if cli.profiles.len() > 1 {
-            println!("Waiting for system to cool down");
-            sleep(Duration::from_secs(cli.cool.unwrap_or(5)));
-        }
-    }
+        Ok(())
+    }();
 
     let cache = PathBuf::from(format!("{root}/config/cache"));
     if cache.exists() {
@@ -228,5 +268,6 @@ fn main() -> Result<()> {
         .args(["stash", "pop"])?
         .spawn()?
         .wait()?;
-    Ok(())
+
+    result
 }
