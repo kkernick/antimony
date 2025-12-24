@@ -1,6 +1,9 @@
 use crate::{
     fab::{localize_path, resolve_env},
-    shared::{path::direct_path, profile::FileMode},
+    shared::{
+        path::direct_path,
+        profile::{FILE_MODES, FileMode},
+    },
 };
 use anyhow::Result;
 use log::debug;
@@ -11,7 +14,6 @@ use std::{
     fs::{self, File},
     os::fd::{AsRawFd, OwnedFd},
 };
-use strum::IntoEnumIterator;
 
 #[inline]
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
@@ -65,7 +67,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
         if let Some(direct) = &files.direct {
             debug!("Creating direct files");
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(files) = direct.get(&mode) {
                     files.into_par_iter().try_for_each(|(file, contents)| {
                         add_file(&args.handle, file, contents.clone(), mode)

@@ -2,7 +2,7 @@ use crate::{
     fab::localize_path,
     shared::{
         env::HOME,
-        profile::{FileMode, Profile},
+        profile::{FILE_MODES, FileMode, Profile},
     },
 };
 use anyhow::Result;
@@ -10,7 +10,6 @@ use log::warn;
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::borrow::Cow;
-use strum::IntoEnumIterator;
 
 /// Localize and bind
 #[inline]
@@ -27,7 +26,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
     user::try_run_as!(user::Mode::Real, {
         if let Some(files) = &mut profile.files {
             if let Some(mut user_files) = files.user.take() {
-                for mode in FileMode::iter() {
+                for mode in FILE_MODES {
                     if let Some(files) = user_files.remove(&mode) {
                         files
                             .into_par_iter()
@@ -46,7 +45,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
             }
 
             if let Some(mut system) = files.platform.take() {
-                for mode in FileMode::iter() {
+                for mode in FILE_MODES {
                     if let Some(files) = system.remove(&mode) {
                         files
                             .into_par_iter()
@@ -57,7 +56,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
             }
 
             if let Some(mut system) = files.resources.take() {
-                for mode in FileMode::iter() {
+                for mode in FILE_MODES {
                     if let Some(files) = system.remove(&mode) {
                         files
                             .into_par_iter()

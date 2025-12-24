@@ -1,13 +1,12 @@
 //! Refresh installed profiles.
 use crate::{
     cli::{self, run_vec},
-    setup::{cleanup, setup},
     shared::env::{CACHE_DIR, HOME_PATH},
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::debug;
-use std::{borrow::Cow, fs, time::Duration};
+use log::{debug, warn};
+use std::{fs, time::Duration};
 use user::try_run_as;
 
 #[derive(clap::Args, Debug, Default)]
@@ -107,14 +106,16 @@ impl super::Run for Args {
 
             pb.wrap_iter(profiles.into_iter()).try_for_each(|name| {
                 pb.set_message(format!("Refreshing {name}"));
-                let mut args = cli::run::Args {
+                let args = cli::run::Args {
+                    profile: name.clone(),
                     dry: true,
                     refresh: true,
                     ..Default::default()
                 };
 
-                let info = setup(Cow::Borrowed(&name), &mut args)?;
-                cleanup(info.instance)?;
+                if let Err(e) = args.run() {
+                    warn!("Failed to refresh {name}: {e}");
+                }
 
                 if self.integrate {
                     debug!("Integrating {name}");

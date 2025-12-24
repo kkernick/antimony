@@ -14,7 +14,6 @@ use nix::{
     errno,
     sys::socket::{self, ControlMessage, MsgFlags},
 };
-use once_cell::sync::Lazy;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Transaction;
@@ -31,12 +30,13 @@ use std::{
         unix::net::UnixStream,
     },
     path::PathBuf,
+    sync::LazyLock,
     thread::sleep,
     time::Duration,
 };
 
 /// Connection to the Database
-pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
+pub static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
     user::run_as!(user::Mode::Effective, {
         let dir = AT_HOME.join("seccomp");
         if !dir.exists() {
@@ -90,7 +90,8 @@ pub static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
 });
 
 /// The location to store cache files.
-pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
+pub static CACHE_DIR: LazyLock<PathBuf> =
+    LazyLock::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug)]
@@ -183,6 +184,7 @@ struct Notifier {
     /// The stream to the monitor, established in `prepare()`
     stream: Option<UnixStream>,
 
+    /// An optional inotify instance to use instead of busy-waiting for the monitor.
     notify: Option<Inotify>,
 }
 impl Notifier {

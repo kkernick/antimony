@@ -15,7 +15,6 @@ use nix::{
     },
     unistd::Pid,
 };
-use parking_lot::{Condvar, Mutex, MutexGuard};
 use signal_hook::{consts::signal, iterator::Signals};
 use std::{
     collections::VecDeque,
@@ -23,7 +22,7 @@ use std::{
     fs::File,
     io::{self, Read, Write},
     os::fd::OwnedFd,
-    sync::Arc,
+    sync::{Arc, Condvar, Mutex, MutexGuard},
     thread::{self, JoinHandle},
 };
 
@@ -159,14 +158,14 @@ impl Stream {
                     if n == 0 {
                         break;
                     }
-                    let mut state = thread_shared.state.lock();
+                    let mut state = thread_shared.state.lock().expect("Stream poisoned!");
                     state.buffer.extend(&buf[..n]);
                     thread_shared.condvar.notify_all();
                 }
                 Ok(())
             })();
 
-            let mut state = thread_shared.state.lock();
+            let mut state = thread_shared.state.lock().expect("Stream poisoned!");
             state.finished = true;
             thread_shared.condvar.notify_all();
         });
@@ -195,7 +194,7 @@ impl Stream {
     /// This function is blocking, and will wait until a full line has been
     /// written to the stream. The line will then be removed from the Handle.
     pub fn read_line(&self) -> Option<String> {
-        let mut state = self.shared.state.lock();
+        let mut state = self.shared.state.lock().expect("Lock poisoned");
         loop {
             if let Some(pos) = state.buffer.iter().position(|&b| b == b'\n') {
                 let line = String::from_utf8_lossy(&self.drain(&mut state, Some(pos))).into_owned();
@@ -210,20 +209,20 @@ impl Stream {
                     return None;
                 }
             }
-            self.shared.condvar.wait(&mut state);
+            state = self.shared.condvar.wait(state).expect("Lock poisoned");
         }
     }
 
     /// Read the exact amount of bytes specified, or else throw an error.
     /// This function is blocking.
     pub fn read_bytes(&self, bytes: usize) -> Result<Vec<u8>, Error> {
-        let mut state = self.shared.state.lock();
+        let mut state = self.shared.state.lock().expect("Lock poisoned!");
         if state.finished {
             return Err(Error::NoFile);
         }
         let mut res = self.drain(&mut state, Some(bytes));
         while res.is_empty() {
-            self.shared.condvar.wait(&mut state);
+            state = self.shared.condvar.wait(state).expect("Lock poisoned!");
             res = self.drain(&mut state, Some(bytes));
         }
         Ok(res)
@@ -236,7 +235,7 @@ impl Stream {
     pub fn read_all(&mut self) -> Result<String, Error> {
         self.wait()?;
 
-        let mut state = self.shared.state.lock();
+        let mut state = self.shared.state.lock().expect("Lock poisoned!");
         Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
     }
 

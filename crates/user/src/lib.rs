@@ -4,20 +4,20 @@ use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
 };
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::{error, fmt};
 
 pub mod sync;
 
 /// The Real, Effective, and Saved UID of the application.
-pub static USER: Lazy<ResUid> = Lazy::new(|| getresuid().expect("Failed to get UID!"));
+pub static USER: LazyLock<ResUid> = LazyLock::new(|| getresuid().expect("Failed to get UID!"));
 
 /// The Real, Effective, and Saved GID of the application.
-pub static GROUP: Lazy<ResGid> = Lazy::new(|| getresgid().expect("Failed to get GID!"));
+pub static GROUP: LazyLock<ResGid> = LazyLock::new(|| getresgid().expect("Failed to get GID!"));
 
 /// Whether the system is actually running under SetUid. If false, all functions here
 /// are no-ops.
-pub static SETUID: Lazy<bool> = Lazy::new(|| USER.effective != USER.real);
+pub static SETUID: LazyLock<bool> = LazyLock::new(|| USER.effective != USER.real);
 
 /// An error when trying to change UID/GID.
 #[derive(Debug)]

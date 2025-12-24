@@ -9,11 +9,10 @@ use crate::{
         path::which_exclude,
     },
 };
-use ahash::HashSetExt;
+use ahash::{HashSetExt, RandomState};
 use clap::ValueEnum;
 use console::style;
 use log::debug;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner};
 use std::{
@@ -21,14 +20,19 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     error, fmt,
     fs::{self, File},
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::Hash,
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
-use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
 
-static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
+pub static FILE_MODES: [FileMode; 3] = [
+    FileMode::Executable,
+    FileMode::ReadOnly,
+    FileMode::ReadWrite,
+];
+
+static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".profile");
     if !path.exists() {
         user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
@@ -639,9 +643,8 @@ impl Profile {
 
     /// Get the Profile's hash.
     pub fn hash_str(&self) -> String {
-        let mut s = DefaultHasher::new();
-        self.hash(&mut s);
-        format!("{}", s.finish())
+        let s = RandomState::with_seed(0);
+        format!("{}", s.hash_one(self))
     }
 
     /// Get information about a profile.
@@ -1097,7 +1100,7 @@ impl Files {
 
         if let Some(mut user) = files.user.take() {
             let s_user = self.user.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(map) = user.remove(&mode) {
                     s_user
                         .get_mut(&mode)
@@ -1109,7 +1112,7 @@ impl Files {
 
         if let Some(mut sys) = files.platform.take() {
             let s_user = self.platform.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(map) = sys.remove(&mode) {
                     s_user
                         .get_mut(&mode)
@@ -1121,7 +1124,7 @@ impl Files {
 
         if let Some(mut sys) = files.resources.take() {
             let s_user = self.resources.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(map) = sys.remove(&mode) {
                     s_user
                         .get_mut(&mode)
@@ -1133,7 +1136,7 @@ impl Files {
 
         if let Some(mut direct) = files.direct.take() {
             let s_user = self.direct.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(map) = direct.remove(&mode) {
                     s_user
                         .get_mut(&mode)
@@ -1192,7 +1195,7 @@ impl Files {
             ret
         };
 
-        for mode in FileMode::iter() {
+        for mode in FILE_MODES {
             let mut files = Set::new();
             if let Some(system) = &self.platform {
                 files.extend(get_files(system, mode));
@@ -1237,7 +1240,6 @@ pub type FileList = BTreeMap<FileMode, BTreeSet<String>>;
     PartialEq,
     PartialOrd,
     Ord,
-    EnumIter,
     Clone,
     Copy,
     ValueEnum,
@@ -1402,9 +1404,7 @@ impl Ipc {
 /// implemented for certain Desktop Environments.
 /// Not all applications use portals, even if they
 /// are provided to the sandbox.
-#[derive(
-    Debug, Eq, Hash, PartialEq, Deserialize, Serialize, EnumIter, ValueEnum, Clone, PartialOrd, Ord,
-)]
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, PartialOrd, Ord)]
 #[serde(deny_unknown_fields)]
 pub enum Portal {
     Background,

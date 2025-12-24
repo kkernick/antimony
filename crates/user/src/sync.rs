@@ -38,13 +38,11 @@
 //! This implementation only protects the interior of the macro.
 #![cfg(feature = "sync")]
 
-use once_cell::sync::Lazy;
-use parking_lot::{Condvar, Mutex, MutexGuard};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard};
 
 /// The global semaphore controls which thread is allowed to change users.
-static SEMAPHORE: Lazy<Arc<(Mutex<bool>, Condvar)>> =
-    Lazy::new(|| Arc::new((Mutex::new(false), Condvar::new())));
+static SEMAPHORE: LazyLock<Arc<(Mutex<bool>, Condvar)>> =
+    LazyLock::new(|| Arc::new((Mutex::new(false), Condvar::new())));
 
 /// A synchronization primitive.
 /// Only one thread will ever have a Sync object. When the Sync object
@@ -74,11 +72,11 @@ impl Sync {
         let sem = Arc::clone(&SEMAPHORE);
         let (mutex, cvar) = &*sem;
         let mut guard: MutexGuard<'static, bool> = unsafe {
-            let tmp_guard = mutex.lock();
+            let tmp_guard = mutex.lock().expect("Sync poisoned!");
             std::mem::transmute::<MutexGuard<'_, bool>, MutexGuard<'static, bool>>(tmp_guard)
         };
         while *guard {
-            cvar.wait(&mut guard);
+            guard = cvar.wait(guard).expect("Sync poisoned!");
         }
         *guard = true;
         Self { sem, guard }

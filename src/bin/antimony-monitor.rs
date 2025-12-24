@@ -6,7 +6,10 @@
 //! `Filter` is loaded immediately.
 
 use antimony::shared::{
-    Set, env::{DATA_HOME, RUNTIME_DIR}, profile::SeccompPolicy, syscalls::{self, CACHE_DIR}
+    Set,
+    env::{DATA_HOME, RUNTIME_DIR},
+    profile::SeccompPolicy,
+    syscalls::{self, CACHE_DIR},
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -29,7 +32,7 @@ use nix::{
     },
     unistd::Pid,
 };
-use once_cell::sync::Lazy;
+
 use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::{Spawner, StreamMode};
@@ -43,7 +46,7 @@ use std::{
     },
     path::Path,
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -196,19 +199,19 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) 
     Ok(())
 }
 
-static SECCOMP: Lazy<i32> = Lazy::new(|| {
+static SECCOMP: LazyLock<i32> = LazyLock::new(|| {
     Syscall::from_name("seccomp")
         .expect("Failed to code seccomp code")
         .get_number()
 });
 
-static PRCTL: Lazy<i32> = Lazy::new(|| {
+static PRCTL: LazyLock<i32> = LazyLock::new(|| {
     Syscall::from_name("prctl")
         .expect("Failed to code seccomp code")
         .get_number()
 });
 
-static FCHMOD: Lazy<i32> = Lazy::new(|| {
+static FCHMOD: LazyLock<i32> = LazyLock::new(|| {
     Syscall::from_name("fchmod")
         .expect("Failed to code seccomp code")
         .get_number()

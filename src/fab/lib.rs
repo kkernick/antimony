@@ -11,8 +11,6 @@ use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
-use once_cell::sync::{Lazy, OnceCell};
-use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -20,11 +18,11 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, LazyLock, Mutex, OnceLock},
 };
 
 /// Where to store cache data.
-static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
+static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".lib");
     if !path.exists() {
         user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
@@ -33,16 +31,16 @@ static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// Whether we have a split-root.
-pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
+pub static SINGLE_LIB: LazyLock<bool> = LazyLock::new(|| {
     let single = fs::read_link("/usr/lib64").is_ok();
     debug!("Single Library Folder: {single}");
     single
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: OnceCell<Set<String>> = OnceCell::new();
+pub static LIB_ROOTS: OnceLock<Set<String>> = OnceLock::new();
 
-static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 pub fn in_lib(path: &str) -> bool {
     path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
@@ -112,7 +110,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
     };
 
     if LIB_ROOTS.get().is_none()
-        && let Some(_lock) = LOCK.try_lock()
+        && let Ok(_lock) = LOCK.try_lock()
     {
         debug_timer!("::lib_roots", {
             let mut roots: Set<String> = libraries
@@ -167,7 +165,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Vec<String>> {
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
         let mut libraries = Vec::new();
-        for root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
+        for root in LIB_ROOTS.get().unwrap() {
             libraries.extend(run(root, pattern)?);
         }
 
@@ -325,7 +323,7 @@ pub fn fabricate(
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    for lib_root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
+    for lib_root in LIB_ROOTS.get().unwrap().iter() {
         let app_lib = format!("{lib_root}/{name}");
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
@@ -345,7 +343,7 @@ pub fn fabricate(
                 } else if e.starts_with("~") {
                     Some(Cow::Owned(e.replace("~", HOME.as_str())))
                 } else {
-                    for root in unsafe { LIB_ROOTS.get_unchecked().iter() } {
+                    for root in LIB_ROOTS.get().unwrap().iter() {
                         let path = format!("{root}/{e}");
                         if Path::new(&path).exists() {
                             return Some(Cow::Owned(path));
@@ -414,9 +412,7 @@ pub fn fabricate(
                     library.as_str()
                 };
 
-                if parent.contains("lib")
-                    && unsafe { LIB_ROOTS.get_unchecked().iter() }.any(|r| parent == r)
-                {
+                if parent.contains("lib") && LIB_ROOTS.get().unwrap().iter().any(|r| parent == r) {
                     true
                 } else {
                     !directories
@@ -450,7 +446,7 @@ pub fn fabricate(
 
     debug_timer!("::mount_directories", {
         directories.par_iter().try_for_each(|dir| -> Result<()> {
-            if unsafe { LIB_ROOTS.get_unchecked().iter() }.any(|r| dir.starts_with(r)) {
+            if LIB_ROOTS.get().unwrap().iter().any(|r| dir.starts_with(r)) {
                 let sof_path = get_sof_path(&sof, dir.as_str());
                 if !sof_path.exists() {
                     fs::create_dir_all(sof_path)?;

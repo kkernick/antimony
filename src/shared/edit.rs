@@ -3,7 +3,6 @@ use log::error;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use spawn::Spawner;
-use user::run_as;
 use std::{
     error, fmt,
     fs::{self, File},
@@ -11,6 +10,8 @@ use std::{
     path::Path,
 };
 use tempfile::NamedTempFile;
+
+use user::run_as;
 
 use crate::shared::env::EDITOR;
 

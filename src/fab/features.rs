@@ -3,7 +3,7 @@ use crate::{
     shared::{
         Map, Set,
         feature::Feature,
-        profile::{FileMode, Profile},
+        profile::{FILE_MODES, Profile},
     },
 };
 use ahash::{HashMapExt, HashSetExt};
@@ -14,7 +14,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     error, fmt,
 };
-use strum::IntoEnumIterator;
 
 /// Errors related to feature integration
 #[derive(Debug)]
@@ -225,7 +224,7 @@ fn add_feature(
 
         if let Some(mut direct) = files.direct.take() {
             let p_direct = p_files.direct.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(d_files) = direct.remove(&mode) {
                     p_direct.entry(mode).or_default().extend(d_files);
                 };
@@ -234,7 +233,7 @@ fn add_feature(
 
         if let Some(mut system) = files.platform.take() {
             let p_sys = p_files.platform.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(sys_files) = system.remove(&mode) {
                     p_sys.entry(mode).or_default().extend(
                         sys_files
@@ -247,7 +246,7 @@ fn add_feature(
 
         if let Some(mut system) = files.resources.take() {
             let p_sys = p_files.resources.get_or_insert_default();
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(sys_files) = system.remove(&mode) {
                     p_sys.entry(mode).or_default().extend(
                         sys_files
@@ -261,7 +260,7 @@ fn add_feature(
         if let Some(mut user) = files.user.take() {
             let p_user = p_files.user.get_or_insert_default();
 
-            for mode in FileMode::iter() {
+            for mode in FILE_MODES {
                 if let Some(user_files) = user.remove(&mode) {
                     p_user.entry(mode).or_default().extend(
                         user_files

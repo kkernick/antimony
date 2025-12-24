@@ -8,13 +8,13 @@ use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
     unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execv, execve, fork, pipe},
 };
-use parking_lot::Mutex;
 use std::{
     borrow::Cow,
     env, error,
     ffi::{CString, NulError},
     fmt,
     os::fd::OwnedFd,
+    sync::Mutex,
 };
 use which::which;
 
@@ -499,6 +499,7 @@ impl<'a> Spawner {
     pub fn arg_i(&self, arg: impl Into<Cow<'a, str>>) -> Result<(), Error> {
         self.args
             .lock()
+            .expect("Args poisoned!")
             .push(CString::new(arg.into().as_ref()).map_err(Error::Null)?);
         Ok(())
     }
@@ -507,7 +508,7 @@ impl<'a> Spawner {
     /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fd_i(&self, fd: impl Into<OwnedFd>) {
-        self.fds.lock().push(fd.into());
+        self.fds.lock().expect("FDs poisoned!").push(fd.into());
     }
 
     /// Move FDs to the `Spawner` in-place, passing it as an argument.
@@ -532,7 +533,10 @@ impl<'a> Spawner {
         I: IntoIterator<Item = S>,
         S: Into<OwnedFd>,
     {
-        self.fds.lock().extend(fds.into_iter().map(Into::into));
+        self.fds
+            .lock()
+            .expect("FDs poisoned!")
+            .extend(fds.into_iter().map(Into::into));
     }
 
     /// Move an iterator of arguments to the `Spawner` in-place.
@@ -544,7 +548,7 @@ impl<'a> Spawner {
         I: IntoIterator<Item = S>,
         S: Into<Cow<'a, str>>,
     {
-        let mut a = self.args.lock();
+        let mut a = self.args.lock().expect("Lock poisoned!");
         for s in args {
             let cow: Cow<'a, str> = s.into();
             a.push(CString::new(cow.as_ref()).map_err(Error::Null)?);
@@ -587,7 +591,7 @@ impl<'a> Spawner {
         if self.cache_index.is_some() {
             Err(Error::Cache("Caching already started!"))
         } else {
-            self.cache_index = Some(self.args.lock().len());
+            self.cache_index = Some(self.args.lock().expect("Arguments poisoned!").len());
             Ok(())
         }
     }
@@ -601,7 +605,7 @@ impl<'a> Spawner {
     pub fn cache_write(&mut self, path: &Path) -> Result<(), Error> {
         use std::io::Write;
         if let Some(i) = self.cache_index {
-            let args = self.args.lock();
+            let args = self.args.lock().expect("Arguments poisoned!");
             if let Some(parent) = path.parent()
                 && !parent.exists()
             {
@@ -626,7 +630,7 @@ impl<'a> Spawner {
     /// or if the contents contain strings will NULL bytes.
     #[cfg(feature = "cache")]
     pub fn cache_read(&mut self, path: &Path) -> Result<(), Error> {
-        let mut args = self.args.lock();
+        let mut args = self.args.lock().expect("Args poisoned!");
         for arg in fs::read_to_string(path).map_err(Error::Io)?.lines() {
             args.push(CString::new(arg).map_err(Error::Null)?);
         }
@@ -711,7 +715,7 @@ impl<'a> Spawner {
                 let resolved = resolved.to_string_lossy();
 
                 #[cfg(feature = "fd")]
-                let fds = self.fds.into_inner();
+                let fds = self.fds.into_inner().expect("FDs poisoned!");
 
                 let mut cmd_c: Option<CString> = None;
                 let mut args_c = Vec::<CString>::new();
@@ -741,7 +745,7 @@ impl<'a> Spawner {
                 };
 
                 args_c.push(resolved);
-                args_c.append(&mut self.args.into_inner());
+                args_c.append(&mut self.args.into_inner().expect("Args poisoned!"));
 
                 // Log if desired.
                 if log::log_enabled!(log::Level::Trace) {

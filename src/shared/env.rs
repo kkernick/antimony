@@ -1,18 +1,18 @@
 //! Environment Variables Antimony needs defined.
 use anyhow::Result;
 use log::{debug, warn};
-use once_cell::sync::Lazy;
 use spawn::{Spawner, StreamMode};
 use std::{
     env::{self, temp_dir},
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
+    sync::LazyLock,
 };
 use user::try_run_as;
 use which::which;
 
-pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
+pub static OVERLAY: LazyLock<bool> = LazyLock::new(|| {
     let args = || -> Result<String> {
         let out = Spawner::new("/usr/bin/bwrap")
             .arg("--help")?
@@ -30,7 +30,7 @@ pub static OVERLAY: Lazy<bool> = Lazy::new(|| {
 
 /// The User's PATH variable, removing ~/.local/bin to prevent
 /// Antimony from using itself when a profile has been integrated.
-pub static PATH: Lazy<String> = Lazy::new(|| {
+pub static PATH: LazyLock<String> = LazyLock::new(|| {
     let path = env::var("PATH").unwrap_or("/usr/bin".to_string());
     path.split(':')
         .filter(|e| !e.contains("/.local/bin"))
@@ -39,7 +39,7 @@ pub static PATH: Lazy<String> = Lazy::new(|| {
 });
 
 /// Antimony's home folder is where configuration is stored
-pub static AT_HOME: Lazy<PathBuf> = Lazy::new(|| {
+pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = PathBuf::from(env::var("AT_HOME").unwrap_or("/usr/share/antimony".to_string()));
     if !path.starts_with("/usr/") {
         warn!(
@@ -53,7 +53,7 @@ pub static AT_HOME: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// THe Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
-pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
+pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
     let writeable = if !cache_dir.exists() {
         fs::create_dir(&cache_dir).is_ok()
@@ -87,7 +87,7 @@ pub static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// The user's home folder.
-pub static HOME: Lazy<String> = Lazy::new(|| {
+pub static HOME: LazyLock<String> = LazyLock::new(|| {
     // This will almost always be defined, it's a bug if it isn't.
     if let Ok(home) = env::var("HOME") {
         home
@@ -99,14 +99,14 @@ pub static HOME: Lazy<String> = Lazy::new(|| {
 });
 
 /// The present working directory--used to try and resolve profiles/features
-pub static PWD: Lazy<PathBuf> =
-    Lazy::new(|| PathBuf::from(env::var("PWD").unwrap_or(HOME.to_string())));
+pub static PWD: LazyLock<PathBuf> =
+    LazyLock::new(|| PathBuf::from(env::var("PWD").unwrap_or(HOME.to_string())));
 
 /// The User's home folder, as a PathBuf.
-pub static HOME_PATH: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(HOME.as_str()));
+pub static HOME_PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(HOME.as_str()));
 
 /// The runtime directory, as a String.
-pub static RUNTIME_STR: Lazy<String> = Lazy::new(|| {
+pub static RUNTIME_STR: LazyLock<String> = LazyLock::new(|| {
     if let Ok(runtime) = env::var("XDG_RUNTIME_DIR") {
         runtime
     } else {
@@ -115,12 +115,13 @@ pub static RUNTIME_STR: Lazy<String> = Lazy::new(|| {
 });
 
 /// The runtime directory is where portals and docs are located.
-pub static RUNTIME_DIR: Lazy<PathBuf> = Lazy::new(|| PathBuf::from(RUNTIME_STR.as_str()));
+pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(RUNTIME_STR.as_str()));
 
-pub static USER_NAME: Lazy<String> = Lazy::new(|| env::var("USER").expect("USER is not defined"));
+pub static USER_NAME: LazyLock<String> =
+    LazyLock::new(|| env::var("USER").expect("USER is not defined"));
 
 /// The user's data directory is where desktop files are stored, and the home folder is located
-pub static DATA_HOME: Lazy<PathBuf> = Lazy::new(|| {
+pub static DATA_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     if let Ok(data) = env::var("XDG_DATA_HOME") {
         PathBuf::from(data)
     } else {
@@ -129,7 +130,7 @@ pub static DATA_HOME: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// The user's config directory.
-pub static CONFIG_HOME: Lazy<PathBuf> = Lazy::new(|| {
+pub static CONFIG_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     if let Ok(data) = env::var("XDG_CONFIG_HOME") {
         PathBuf::from(data)
     } else {
@@ -138,7 +139,7 @@ pub static CONFIG_HOME: Lazy<PathBuf> = Lazy::new(|| {
 });
 
 /// The text editor to use when editing files.
-pub static EDITOR: Lazy<String> = Lazy::new(|| {
+pub static EDITOR: LazyLock<String> = LazyLock::new(|| {
     let editor = {
         if let Ok(editor) = env::var("EDITOR") {
             which(editor).expect("Could not get path for editor!")

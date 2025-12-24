@@ -4,9 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-sync = ["dep:parking_lot"]
+sync = []
 
 [dependencies]
 nix = { version = "0.30.1", features = ["user"] }
-once_cell = "1.21.3"
-parking_lot = { version = "0.12.5", optional = true}

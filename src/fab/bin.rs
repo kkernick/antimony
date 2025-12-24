@@ -14,7 +14,7 @@ use ahash::{HashMapExt, HashSetExt};
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
 use log::{debug, trace, warn};
-use once_cell::sync::Lazy;
+
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -23,20 +23,20 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 use user::try_run_as;
 use which::which;
 
 /// Characters used for splitting.
-static CHARS: Lazy<Set<char>> = Lazy::new(|| {
+static CHARS: LazyLock<Set<char>> = LazyLock::new(|| {
     ['"', '\'', ';', '=', '$', '(', ')', '{', '}']
         .into_iter()
         .collect()
 });
 
 /// Reserved keywords in bash.
-pub static COMPGEN: Lazy<Set<String>> = Lazy::new(|| {
+pub static COMPGEN: LazyLock<Set<String>> = LazyLock::new(|| {
     let mut compgen: Set<String> = Spawner::new("/usr/bin/bash")
         .args(["-c", "compgen -k"])
         .unwrap()
@@ -61,7 +61,7 @@ pub static COMPGEN: Lazy<Set<String>> = Lazy::new(|| {
 pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
 
 /// The location to store cache files.
-static CACHE_DIR: Lazy<PathBuf> = Lazy::new(|| crate::shared::env::CACHE_DIR.join(".bin"));
+static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| crate::shared::env::CACHE_DIR.join(".bin"));
 
 #[derive(Debug)]
 pub enum Type {
