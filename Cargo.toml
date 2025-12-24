@@ -43,9 +43,22 @@ r2d2 = "0.8.10"
 dialoguer = { version = "0.11.0", default-features = false }
 dbus = "0.9.10"
 parking_lot = "0.12.5"
+ahash = "0.8.12"
+
+[profile.dev]
+debug = false
 
 [profile.release]
 opt-level = 3
 codegen-units = 1
 lto = "fat"
 panic = "abort"
+strip = "symbols"
+
+[profile.gdb]
+inherits = "dev"
+debug = true
+
+[profile.symbols]
+inherits = "release"
+strip = "none"

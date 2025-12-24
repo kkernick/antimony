@@ -3,8 +3,9 @@ use crate::{
     cli::run_vec,
     fab::{lib::get_wildcards, localize_home, resolve},
     setup::setup,
-    shared::{env::AT_HOME, feature::Feature, profile::FileMode},
+    shared::{Set, env::AT_HOME, feature::Feature, profile::FileMode},
 };
+use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use dashmap::DashMap;
@@ -12,7 +13,6 @@ use rayon::prelude::*;
 use spawn::StreamMode;
 use std::{
     borrow::Cow,
-    collections::HashSet,
     fs,
     io::{self, Write},
     path::Path,
@@ -113,7 +113,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
     // and offers features that can provide them.
     if args.report {
         // Get the files.
-        let not_found: HashSet<String> = err
+        let not_found: Set<String> = err
             .par_iter()
             .filter(|e| e.contains("ENOENT"))
             .map(|e| {
@@ -141,7 +141,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
             not_found.into_par_iter().try_for_each(|file| {
                 let database = arc.clone();
 
-                let mut features = HashSet::<(String, String, FileMode)>::new();
+                let mut features = Set::<(String, String, FileMode)>::new();
 
                 // For each file, try and see if any part of the file path
                 // is provided:

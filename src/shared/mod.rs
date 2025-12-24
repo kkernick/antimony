@@ -5,6 +5,9 @@ pub mod path;
 pub mod profile;
 pub mod syscalls;
 
+pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
+pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
+
 #[macro_export]
 macro_rules! debug_timer {
     ($name:literal, $body:block) => {{

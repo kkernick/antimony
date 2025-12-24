@@ -5,10 +5,12 @@ use crate::{
         localize_home, localize_path,
     },
     shared::{
+        Map, Set,
         path::direct_path,
         profile::{FileMode, Profile},
     },
 };
+use ahash::{HashMapExt, HashSetExt};
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
 use log::{debug, trace, warn};
@@ -17,7 +19,7 @@ use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::BTreeSet,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -27,15 +29,15 @@ use user::try_run_as;
 use which::which;
 
 /// Characters used for splitting.
-static CHARS: Lazy<HashSet<char>> = Lazy::new(|| {
+static CHARS: Lazy<Set<char>> = Lazy::new(|| {
     ['"', '\'', ';', '=', '$', '(', ')', '{', '}']
         .into_iter()
         .collect()
 });
 
 /// Reserved keywords in bash.
-pub static COMPGEN: Lazy<HashSet<String>> = Lazy::new(|| {
-    let mut compgen: HashSet<String> = Spawner::new("/usr/bin/bash")
+pub static COMPGEN: Lazy<Set<String>> = Lazy::new(|| {
+    let mut compgen: Set<String> = Spawner::new("/usr/bin/bash")
         .args(["-c", "compgen -k"])
         .unwrap()
         .output(StreamMode::Pipe)
@@ -185,8 +187,8 @@ impl ParseReturn {
 }
 
 /// Tokenize a string
-fn tokenize(line: String) -> HashSet<String> {
-    let mut ret = HashSet::new();
+fn tokenize(line: String) -> Set<String> {
+    let mut ret = Set::new();
     for token in line.split_whitespace() {
         let token: String = token.chars().filter(|e| !CHARS.contains(e)).collect();
         if COMPGEN.contains(&token) {
@@ -314,7 +316,7 @@ fn parse(
             ret.merge(cache);
         } else {
             // Store environment assignment for later evaluation
-            let mut environment = HashMap::<String, String>::new();
+            let mut environment = Map::<String, String>::new();
 
             // Rewind.
             file.seek(io::SeekFrom::Start(0))?;
@@ -446,13 +448,13 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     if !CACHE_DIR.exists() {
         fs::create_dir_all(CACHE_DIR.as_path())?;
     }
-    let mut resolved = HashSet::new();
+    let mut resolved = Set::new();
     resolved.insert(profile.app_path(name).to_string());
 
     if let Some(binaries) = profile.binaries.take() {
         debug_timer!("::collect::wildcard", {
             // Separate the wildcards from the files/dirs.
-            let (wildcards, flat): (HashSet<_>, HashSet<_>) =
+            let (wildcards, flat): (Set<_>, Set<_>) =
                 binaries.into_par_iter().partition(|e| e.contains('*'));
             resolved.extend(flat);
             resolved.extend(
@@ -462,7 +464,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
                     .collect::<Vec<_>>()
                     .into_par_iter()
                     .flatten()
-                    .collect::<HashSet<_>>(),
+                    .collect::<Set<_>>(),
             )
         })
     };

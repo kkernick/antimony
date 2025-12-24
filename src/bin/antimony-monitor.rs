@@ -6,9 +6,7 @@
 //! `Filter` is loaded immediately.
 
 use antimony::shared::{
-    env::{DATA_HOME, RUNTIME_DIR},
-    profile::SeccompPolicy,
-    syscalls::{self, CACHE_DIR},
+    Set, env::{DATA_HOME, RUNTIME_DIR}, profile::SeccompPolicy, syscalls::{self, CACHE_DIR}
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -36,7 +34,6 @@ use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::{Spawner, StreamMode};
 use std::{
-    collections::HashSet,
     fmt::Display,
     fs,
     io::{self, IoSliceMut},
@@ -121,7 +118,7 @@ fn update_binary<'a, T: Iterator<Item = &'a i32>>(
     Ok(())
 }
 
-fn update_profile(tx: &Transaction, profile: &str, binaries: &HashSet<String>) -> Result<()> {
+fn update_profile(tx: &Transaction, profile: &str, binaries: &Set<String>) -> Result<()> {
     let profile_id = syscalls::insert_profile(tx, profile)?;
     for binary_name in binaries {
         let binary_id = syscalls::binary_id(tx, binary_name)?;
@@ -139,7 +136,7 @@ fn update_profile(tx: &Transaction, profile: &str, binaries: &HashSet<String>) -
 ///
 /// Because we cannot Notify for the syscalls used to send the SECCOMP FD to
 /// the monitor, we LOG them instead.
-pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, HashSet<i32>>>) -> Result<()> {
+pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) -> Result<()> {
     const BUFFER_SIZE: usize = 4096;
 
     // Open netlink socket for audit
@@ -245,13 +242,13 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
 
 pub fn notify_reader(
     term: Arc<AtomicBool>,
-    stats: Arc<DashMap<String, HashSet<i32>>>,
+    stats: Arc<DashMap<String, Set<i32>>>,
     fd: OwnedFd,
     name: String,
     ask: AtomicBool,
 ) -> Result<()> {
-    let deny = Arc::new(DashMap::<String, HashSet<i32>>::new());
-    let allow = Arc::new(DashMap::<String, HashSet<i32>>::new());
+    let deny = Arc::new(DashMap::<String, Set<i32>>::new());
+    let allow = Arc::new(DashMap::<String, Set<i32>>::new());
     let ask = Arc::new(ask);
 
     while !term.load(Ordering::Relaxed) {
@@ -527,7 +524,7 @@ fn main() -> Result<()> {
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
     // Shared DashSet for stats.
-    let stats = DashMap::<String, Arc<DashMap<String, HashSet<i32>>>>::new();
+    let stats = DashMap::<String, Arc<DashMap<String, Set<i32>>>>::new();
 
     let audit = stats
         .entry("audit".to_string())
@@ -601,7 +598,7 @@ fn main() -> Result<()> {
         for (name, stats) in stats {
             debug!("Updating {name}");
             // Collect and insert syscall sets
-            let binaries: HashSet<String> = stats
+            let binaries: Set<String> = stats
                 .iter_mut()
                 .filter_map(|mut entry| {
                     let binary = entry.key().clone();

@@ -13,6 +13,7 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
+#[inline]
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
     let fd = OwnedFd::from(File::open(file)?);
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file])?;

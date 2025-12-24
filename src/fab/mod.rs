@@ -46,6 +46,7 @@ pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
 }
 
 /// Resolve environment variables in paths.
+#[inline]
 pub fn resolve(mut path: Cow<'_, str>) -> Cow<'_, str> {
     if path.starts_with('~') {
         path = Cow::Owned(path.replace("~", "/home/antimony"));
@@ -53,6 +54,8 @@ pub fn resolve(mut path: Cow<'_, str>) -> Cow<'_, str> {
     resolve_env(path)
 }
 
+/// Localize a home path to /home/antimony
+#[inline]
 pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
     if path.starts_with("/home") {
         Cow::Owned(path.replace(HOME.as_str(), "/home/antimony"))

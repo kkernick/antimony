@@ -11,11 +11,13 @@ use crate::{
     cli::run::mounted,
     debug_timer,
     shared::{
+        Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::{user_dir, which_exclude},
         profile::Profile,
     },
 };
+use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
 use dbus::{
     Message,
@@ -28,7 +30,6 @@ use rand::RngCore;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
-    collections::HashSet,
     fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -41,7 +42,7 @@ struct Args<'a> {
     pub name: Cow<'a, str>,
     pub handle: Spawner,
     pub inotify: Inotify,
-    pub watches: HashSet<WatchDescriptor>,
+    pub watches: Set<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: String,
     pub args: &'a mut super::cli::run::Args,
@@ -197,7 +198,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     debug!("Initializing inotify handle");
     let inotify = try_run_as!(user::Mode::Real, Inotify::init())?;
-    let watches = HashSet::new();
+    let watches = Set::new();
 
     let mut a = Args {
         profile,

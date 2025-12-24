@@ -7,7 +7,7 @@ profile () {
   echo "Profiling"
   $1 refresh --hard
   for profile in $(ls ~/.local/bin/); do
-    ./bench $profile --recipe $1 --runs 1
+    ./bench $profile --recipe $1 --runs 1 --antimony-args='--hard' --antimony-args='--home-lock=false'
   done
 }
 
@@ -15,10 +15,10 @@ RUSTFLAGS="-Ctarget-cpu=native"
 ARGS="--bin antimony --no-default-features"
 
 echo "Building Profiling Binary"
-ANTIMONY=$(cargo pgo build -- $ARGS 2>&1 | grep "Now run" | awk '{print $6}')
+ANTIMONY=$(cargo pgo build -- $ARGS --profile symbols 2>&1 | grep "Now run" | awk '{print $6}')
 profile $ANTIMONY
 
-ANTIMONY=$(cargo pgo bolt build --with-pgo -- $ARGS 2>&1 | grep "Now run" | awk '{print $10}')
+ANTIMONY=$(cargo pgo bolt build --with-pgo -- $ARGS --profile symbols 2>&1 | grep "Now run" | awk '{print $10}')
 profile $ANTIMONY
 
 echo "Building Final Bolt+PGO"

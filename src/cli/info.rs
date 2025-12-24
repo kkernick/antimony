@@ -1,5 +1,6 @@
 //! Get info about the installed configuration.
 use crate::shared::{
+    Set,
     env::AT_HOME,
     feature::Feature,
     profile::{self, Profile},
@@ -10,7 +11,7 @@ use clap::ValueEnum;
 use console::style;
 use log::error;
 use seccomp::syscall::Syscall;
-use std::{collections::HashSet, fs, path::Path};
+use std::{fs, path::Path};
 
 /// What to get information on.
 #[derive(ValueEnum, Clone, Debug)]
@@ -101,7 +102,7 @@ impl super::Run for Args {
                 // Get Profile/Binary information depending on a path.
                 Some(name) => {
                     print!("{name}: ");
-                    let calls: HashSet<i32> = if name.contains('/') {
+                    let calls: Set<i32> = if name.contains('/') {
                         let mut conn = syscalls::DB_POOL.get()?;
                         let tx = conn.transaction()?;
                         let calls = syscalls::get_binary_syscalls(&tx, &name)?;

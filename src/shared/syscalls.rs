@@ -1,11 +1,13 @@
 use crate::{
     debug_timer,
     shared::{
+        Set,
         env::AT_HOME,
         path::{user_dir, which_exclude},
         profile::SeccompPolicy,
     },
 };
+use ahash::HashSetExt;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, trace, warn};
 use nix::{
@@ -19,7 +21,7 @@ use rusqlite::Transaction;
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashSet},
+    collections::BTreeSet,
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
@@ -279,7 +281,7 @@ pub fn insert_binary(tx: &Transaction, path: &str) -> Result<i64, Error> {
 }
 
 /// Map syscall names.
-pub fn get_names(syscalls: HashSet<i32>) -> Vec<String> {
+pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
     syscalls
         .into_iter()
         .filter_map(|i| Syscall::get_name(i).ok())
@@ -290,7 +292,7 @@ pub fn id_syscalls(
     tx: &Transaction,
     binary: &str,
     id: i64,
-    syscalls: &mut HashSet<i32>,
+    syscalls: &mut Set<i32>,
 ) -> Result<(), Error> {
     let mut stmt = tx
     .prepare("SELECT s.name FROM syscalls s JOIN binary_syscalls bs ON s.id = bs.syscall_id WHERE bs.binary_id = ?1")?;
@@ -304,8 +306,8 @@ pub fn id_syscalls(
 }
 
 /// Get the syscalls used by a binary.
-pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<HashSet<i32>, Error> {
-    let mut syscalls = HashSet::new();
+pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, Error> {
+    let mut syscalls = Set::new();
     if let Ok(id) = binary_id(tx, binary) {
         id_syscalls(tx, binary, id, &mut syscalls)?;
     } else if let Ok(link) = fs::read_link(PathBuf::from(binary)) {
@@ -319,7 +321,7 @@ pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<HashSet<i32
 }
 
 /// Add the syscalls from a binary to the working set.
-fn extend(binary: &str, syscalls: &mut HashSet<i32>) -> Result<(), Error> {
+fn extend(binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
     let mut conn = DB_POOL.get()?;
     let tx = conn.transaction()?;
 
@@ -344,7 +346,7 @@ pub fn get_calls(
     name: &str,
     p_binaries: &Option<BTreeSet<String>>,
     refresh: bool,
-) -> Result<(HashSet<i32>, HashSet<i32>), Error> {
+) -> Result<(Set<i32>, Set<i32>), Error> {
     let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
     if cache_file.exists() && !refresh {
         debug!("Using SECCOMP cache for {name}");
@@ -353,21 +355,20 @@ pub fn get_calls(
         let mut lines = reader.lines();
 
         if let Some(syscalls) = lines.next() {
-            let syscalls: HashSet<i32> = syscalls?
+            let syscalls: Set<i32> = syscalls?
                 .split(" ")
                 .filter_map(|e| e.parse().ok())
                 .collect();
 
             if let Some(bwrap) = lines.next() {
-                let bwrap: HashSet<i32> =
-                    bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
+                let bwrap: Set<i32> = bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
                 return Ok((syscalls, bwrap));
             }
         }
     };
 
     let mut conn = DB_POOL.get()?;
-    let binaries = || -> Result<HashSet<String>, Error> {
+    let binaries = || -> Result<Set<String>, Error> {
         let tx = conn.transaction()?;
 
         // Get profile_id, insert profile if missing
@@ -380,7 +381,7 @@ pub fn get_calls(
             WHERE pb.profile_id = ?1",
         )?;
 
-        let mut binaries = HashSet::new();
+        let mut binaries = Set::new();
         if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
             for bin_res in binaries_iter {
                 binaries.insert(bin_res?);
@@ -396,8 +397,8 @@ pub fn get_calls(
         Ok(binaries)
     }()?;
 
-    let mut syscalls = HashSet::new();
-    let mut bwrap = HashSet::new();
+    let mut syscalls = Set::new();
+    let mut bwrap = Set::new();
 
     binaries.iter().for_each(|bin| {
         if let Err(e) = extend(

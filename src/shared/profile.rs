@@ -4,11 +4,12 @@ use crate::{
     cli,
     fab::{self, lib::get_wildcards, resolve},
     shared::{
-        edit,
+        Set, edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
         path::which_exclude,
     },
 };
+use ahash::HashSetExt;
 use clap::ValueEnum;
 use console::style;
 use log::debug;
@@ -17,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet},
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
@@ -1178,8 +1179,8 @@ impl Files {
 
     /// Get info about the installed files.
     pub fn info(&self) {
-        let get_files = |list: &FileList, mode| -> HashSet<String> {
-            let mut ret = HashSet::new();
+        let get_files = |list: &FileList, mode| -> Set<String> {
+            let mut ret = Set::new();
             if let Some(files) = list.get(&mode) {
                 for file in files {
                     ret.insert(format!(
@@ -1192,7 +1193,7 @@ impl Files {
         };
 
         for mode in FileMode::iter() {
-            let mut files = HashSet::new();
+            let mut files = Set::new();
             if let Some(system) = &self.platform {
                 files.extend(get_files(system, mode));
             }

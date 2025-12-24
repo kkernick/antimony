@@ -3,3 +3,9 @@ description = "Provide /usr/bin/sh"
 
 requires = ["passwd"]
 binaries = ["/usr/bin/sh"]
+
+[files.resources]
+ReadOnly = ["/usr/share/terminfo"]
+
+[environment]
+TERM = "$TERM"

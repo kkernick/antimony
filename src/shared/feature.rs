@@ -2,7 +2,7 @@
 
 use super::profile::{Ipc, Namespace};
 use crate::shared::{
-    edit,
+    Set, edit,
     env::{AT_HOME, PWD},
     profile::{Files, Hooks},
 };
@@ -74,28 +74,28 @@ pub struct Feature {
     pub caveat: Option<String>,
 
     /// A list of other features this feature depends on.
-    pub requires: Option<BTreeSet<String>>,
+    pub requires: Option<Set<String>>,
 
     /// A list of other features this feature conflicts with.
-    pub conflicts: Option<BTreeSet<String>>,
+    pub conflicts: Option<Set<String>>,
 
     /// Any IPC busses needed.
     pub ipc: Option<Ipc>,
 
     /// Namespaces required.
-    pub namespaces: Option<BTreeSet<Namespace>>,
+    pub namespaces: Option<Set<Namespace>>,
 
     /// Required files
     pub files: Option<Files>,
 
     /// Required binaries
-    pub binaries: Option<BTreeSet<String>>,
+    pub binaries: Option<Set<String>>,
 
     /// Required libraries
     pub libraries: Option<BTreeSet<String>>,
 
     /// Required devices.
-    pub devices: Option<BTreeSet<String>>,
+    pub devices: Option<Set<String>>,
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
     pub environment: Option<BTreeMap<String, String>>,

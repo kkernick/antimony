@@ -2,20 +2,21 @@ use crate::{
     debug_timer,
     fab::{bin::ELF_MAGIC, localize_home},
     shared::{
+        Set,
         env::{AT_HOME, HOME},
         profile::Profile,
     },
 };
+use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
-use log::{debug, error, warn, trace};
+use log::{debug, error, trace, warn};
 use once_cell::sync::{Lazy, OnceCell};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    collections::HashSet,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -39,7 +40,7 @@ pub static SINGLE_LIB: Lazy<bool> = Lazy::new(|| {
 });
 
 // Get the library roots.
-pub static LIB_ROOTS: OnceCell<HashSet<String>> = OnceCell::new();
+pub static LIB_ROOTS: OnceCell<Set<String>> = OnceCell::new();
 
 static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -48,6 +49,7 @@ pub fn in_lib(path: &str) -> bool {
 }
 
 /// Get cached definitions.
+#[inline]
 pub fn get_cache(name: &str) -> Result<Option<Vec<String>>> {
     let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
     if let Ok(file) = File::open(&cache_file) {
@@ -58,6 +60,7 @@ pub fn get_cache(name: &str) -> Result<Option<Vec<String>>> {
 }
 
 /// Write the cache file.
+#[inline]
 pub fn write_cache(name: &str, libraries: Vec<String>) -> Result<Vec<String>> {
     user::sync::try_run_as!(user::Mode::Effective, {
         let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
@@ -83,15 +86,15 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
             .lines()
             .par_bridge()
             .filter_map(|e| {
-                if let Some(start) = e.find("=> /") && let Some(end) = e.rfind(' ') {
+                if let Some(start) = e.find("=> /")
+                    && let Some(end) = e.rfind(' ')
+                {
                     Some(String::from(&e[start + 3..end]))
-                } else if let Some(start) = e.find("/") && let Some(end) = e.rfind(' ') {
+                } else if let Some(start) = e.find("/")
+                    && let Some(end) = e.rfind(' ')
+                {
                     let path = String::from(&e[start..end]);
-                    if path.contains(" ") {
-                        None
-                    } else {
-                        Some(path)
-                    }
+                    if path.contains(" ") { None } else { Some(path) }
                 } else {
                     None
                 }
@@ -112,7 +115,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Vec<String>> {
         && let Some(_lock) = LOCK.try_lock()
     {
         debug_timer!("::lib_roots", {
-            let mut roots: HashSet<String> = libraries
+            let mut roots: Set<String> = libraries
                 .iter()
                 .filter_map(|lib| Path::new(&lib).parent().map(|p| p.to_owned()))
                 .map(|path| path.to_string_lossy().into_owned())
@@ -283,7 +286,7 @@ pub fn fabricate(
     }
 
     // Libraries needed by the program. No Binaries.
-    let mut dependencies = HashSet::new();
+    let mut dependencies = Set::new();
 
     // We use get_libraries to initialize the library roots, but need to pull one of the binaries
     // off to do it before the roots are needed.
@@ -298,7 +301,7 @@ pub fn fabricate(
                     .into_par_iter()
                     .filter_map(|b| get_libraries(Cow::Borrowed(b)).ok())
                     .flatten()
-                    .collect::<HashSet<_>>(),
+                    .collect::<Set<_>>(),
             )
         });
     };
@@ -317,7 +320,7 @@ pub fn fabricate(
     }
 
     // Libraries and Binaries, Wildcard and Directories Resolved
-    let mut resolved = HashSet::new();
+    let mut resolved = Set::new();
 
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
@@ -333,7 +336,7 @@ pub fn fabricate(
     debug_timer!("::wildcards", {
         if let Some(libraries) = profile.libraries.take() {
             // Separate the wildcards from the files/dirs.
-            let (wildcards, flat): (HashSet<_>, HashSet<_>) =
+            let (wildcards, flat): (Set<_>, Set<_>) =
                 libraries.into_par_iter().partition(|e| e.contains('*'));
 
             resolved.extend(flat.into_iter().filter_map(|e| {
@@ -360,7 +363,7 @@ pub fn fabricate(
                     .into_iter()
                     .flatten()
                     .map(Cow::Owned)
-                    .collect::<HashSet<_>>(),
+                    .collect::<Set<_>>(),
             );
         }
     });
@@ -372,7 +375,7 @@ pub fn fabricate(
             .collect::<Vec<_>>()
             .into_iter()
             .flatten()
-            .collect::<HashSet<_>>()
+            .collect::<Set<_>>()
     });
 
     // The files themselves are direct dependencies.
@@ -386,7 +389,7 @@ pub fn fabricate(
                 .collect::<Vec<_>>()
                 .into_iter()
                 .flatten()
-                .collect::<HashSet<_>>(),
+                .collect::<Set<_>>(),
         )
     });
 

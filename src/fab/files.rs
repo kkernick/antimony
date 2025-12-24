@@ -13,6 +13,7 @@ use std::borrow::Cow;
 use strum::IntoEnumIterator;
 
 /// Localize and bind
+#[inline]
 fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: bool) -> Result<()> {
     if let (Some(source), dest) = localize_path(file, home)? {
         Ok(handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])?)

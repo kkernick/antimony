@@ -1,15 +1,17 @@
 use crate::{
     fab::resolve,
     shared::{
+        Map, Set,
         feature::Feature,
         profile::{FileMode, Profile},
     },
 };
+use ahash::{HashMapExt, HashSetExt};
 use log::{debug, warn};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet},
     error, fmt,
 };
 use strum::IntoEnumIterator;
@@ -41,7 +43,7 @@ impl error::Error for Error {
 }
 
 /// Replace {} names with the real values in the profile.
-fn format(mut str: String, map: &HashMap<&str, String>) -> Result<String, Error> {
+fn format(mut str: String, map: &BTreeMap<&str, String>) -> Result<String, Error> {
     for (key, val) in map {
         str = str.replace(key, val);
     }
@@ -54,9 +56,10 @@ fn format(mut str: String, map: &HashMap<&str, String>) -> Result<String, Error>
 }
 
 /// Load a feature from the cache database. This prevents loading the same Feature multiple times.
+#[inline]
 fn load_feature<'a>(
     name: &str,
-    db: &'a mut HashMap<String, Feature>,
+    db: &'a mut Map<String, Feature>,
 ) -> Result<&'a mut Feature, Error> {
     Ok(db
         .entry(name.to_string())
@@ -78,8 +81,8 @@ fn load_feature<'a>(
 /// other features rely on, etc.
 fn strike_feature(
     feature: &str,
-    db: &mut HashMap<String, Feature>,
-    features: &mut HashMap<String, u32>,
+    db: &mut Map<String, Feature>,
+    features: &mut Map<String, u32>,
 ) -> Result<(), Error> {
     // If we required this feature
     if features.contains_key(feature) {
@@ -110,10 +113,10 @@ fn strike_feature(
 /// it needs. It also excludes any conflicts, with intelligent dependency sorting.
 fn resolve_feature(
     feature: &str,
-    db: &mut HashMap<String, Feature>,
-    features: &mut HashMap<String, u32>,
+    db: &mut Map<String, Feature>,
+    features: &mut Map<String, u32>,
     blacklist: &mut BTreeSet<String>,
-    searched: &mut HashSet<String>,
+    searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
     if !searched.contains(feature) && !blacklist.contains(feature) {
@@ -153,10 +156,10 @@ fn resolve_feature(
 
 fn resolve_features(
     profile: &mut Profile,
-    db: &mut HashMap<String, Feature>,
-) -> Result<HashSet<String>, Error> {
-    let mut features = HashMap::new();
-    let mut searched = HashSet::new();
+    db: &mut Map<String, Feature>,
+) -> Result<Set<String>, Error> {
+    let mut features = Map::new();
+    let mut searched = Set::new();
     let mut blacklist = profile.conflicts.take().unwrap_or_default();
 
     if let Some(feats) = &profile.features {
@@ -175,7 +178,7 @@ fn resolve_features(
 
 fn add_feature(
     profile: &mut Profile,
-    map: &HashMap<&str, String>,
+    map: &BTreeMap<&str, String>,
     feature: &mut Feature,
 ) -> Result<(), Error> {
     if let Some(condition) = feature.conditional.take() {
@@ -386,12 +389,12 @@ fn add_feature(
 
 pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
     #[rustfmt::skip]
-    let map = HashMap::from([
+    let map = BTreeMap::from([
         ("{name}", name.to_string()),
         ("{desktop}", profile.desktop(name).to_string())
     ]);
 
-    let mut db = HashMap::new();
+    let mut db = Map::new();
     for feature in resolve_features(profile, &mut db)? {
         add_feature(profile, &map, load_feature(&feature, &mut db)?)?;
     }
