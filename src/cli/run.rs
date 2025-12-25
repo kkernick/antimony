@@ -11,16 +11,11 @@ use crate::{
 };
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
-use log::debug;
+use log::{debug, error};
 use nix::errno::Errno;
+use notify::Urgency;
 use spawn::{Spawner, StreamMode};
-use std::{
-    borrow::Cow,
-    env, fs,
-    io::{IsTerminal, Write, stdout},
-    thread,
-    time::Duration,
-};
+use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
 use user::Mode;
 
 #[derive(clap::Args, Debug, Default, Clone)]
@@ -174,21 +169,7 @@ impl super::Run for Args {
         }();
 
         if let Err(e) = result {
-            if stdout().is_terminal() {
-                println!("{e}")
-            } else {
-                Spawner::new("notify-send")
-                    .args([
-                        &format!("Sandbox Error: {}", self.profile.to_title_case()),
-                        &format!("{e}"),
-                        "-a",
-                        "Antimony",
-                    ])?
-                    .preserve_env(true)
-                    .mode(Mode::Real)
-                    .spawn()?
-                    .wait()?;
-            }
+            error!("{e}");
         }
         Ok(())
     }
@@ -248,7 +229,9 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         info.handle.args_i(info.post)?;
     }
 
-    info.handle.error_i(StreamMode::Pipe);
+    if args.log {
+        info.handle.error_i(StreamMode::Pipe);
+    }
 
     // Run it
     if !args.dry {
@@ -292,7 +275,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let mut handle = info.handle.spawn()?;
         let code = handle.wait()?;
 
-        let log = if code != 0 || args.log {
+        let log = if code != 0 && args.log {
             debug!("Logging...");
             let error = handle.error_all()?;
             // Write it to a log file.
@@ -311,34 +294,29 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         if code != 0 {
             // Alert the user.
             let error_name = Errno::from_raw(-code);
-            #[rustfmt::skip]
-            let handle = Spawner::new("notify-send")
-                .args([
-                    &format!("Sandbox Error: {}", info.name.to_title_case()),
-                    &format!(
-                        "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
-                        if error_name != Errno::UnknownErrno {format!("{error_name}")} else {format!("exit code: {code}")},
-                    ),
-                    "-u", "critical",
-                    "-a", "Antimony",
-                    "-t", "5000",
-                ])?;
+            let actions = match &log {
+                Some(_) => vec![("Open", "Open Error Log")],
+                None => Vec::new(),
+            };
 
-            // If there are errors, give the user the option to open the log
-            if log.is_some() {
-                handle.args_i(["-A", "Open=Open Error Log"])?;
-            }
-
-            let output = handle
-                .preserve_env(true)
-                .mode(Mode::Real)
-                .output(StreamMode::Pipe)
-                .spawn()?
-                .output_all()?;
+            let action = notify::action(
+                format!("Sandbox Error: {}", info.name.to_title_case()),
+                format!(
+                    "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
+                    if error_name != Errno::UnknownErrno {
+                        format!("{error_name}")
+                    } else {
+                        format!("exit code: {code}")
+                    }
+                ),
+                Some(Duration::from_secs(5)),
+                Some(Urgency::Critical),
+                actions,
+            )?;
 
             // If we want to open, use xdg-open.
             if let Some(log) = log
-                && output.starts_with("Open")
+                && action.starts_with("Open")
             {
                 Spawner::new("xdg-open")
                     .arg(log.to_string_lossy())?

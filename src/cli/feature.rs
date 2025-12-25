@@ -7,7 +7,7 @@ use nix::unistd::getpid;
 use spawn::Spawner;
 use user::try_run_as;
 
-use crate::shared::{env::AT_HOME, feature::Feature};
+use crate::shared::{env::AT_HOME, feature::Feature, profile};
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -71,6 +71,8 @@ impl super::Run for Args {
             if Feature::edit(&feature)?.is_none() && new {
                 // If there was no modifications, delete the empty feature
                 fs::remove_file(feature)?;
+            } else {
+                fs::remove_dir_all(profile::CACHE_DIR.as_path())?;
             }
         }
         Ok(())

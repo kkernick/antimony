@@ -11,16 +11,17 @@ members = [
     "crates/user",
     "crates/antimony_completions",
     "crates/antimony_utils",
+    "crates/notify",
 ]
 
 [dependencies]
 user = { path = "crates/user", features = ["sync"] }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
 spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
+notify = { path = "crates/notify" }
 anyhow = { version = "1.0.98", features = ["std"] }
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std"], default-features = false }
 dashmap = { version = "6.1.0", features = ["rayon"] }
-env_logger = "0.11.8"
 inotify = { version = "0.11.0", default-features = false }
 log = "0.4.27"
 nix = { version = "0.30.1", features = ["fs", "poll", "process", "signal", "user", "socket", "uio"] }

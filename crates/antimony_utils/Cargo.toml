@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.5.53", features = ["derive"] }
-env_logger = "0.11.8"
 nix = "0.30.1"
 signal-hook = "0.3.18"
 spawn = { path = "../spawn", features = ["elevate"] }
+notify = { path = "../notify" }

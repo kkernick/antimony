@@ -5,7 +5,7 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     rayon::ThreadPoolBuilder::new().build_global()?;
-    env_logger::init();
+    notify::init()?;
 
     // In most SetUID applications, The effective user is the privileged
     // one (Usually root), but in Antimony its the opposite. The user

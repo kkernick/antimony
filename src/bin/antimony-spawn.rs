@@ -96,7 +96,6 @@ fn main() -> Result<()> {
     }
 
     rayon::ThreadPoolBuilder::new().build_global()?;
-    env_logger::init();
     let cli = Cli::parse();
 
     // Change the current directory.

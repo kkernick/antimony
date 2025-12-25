@@ -32,7 +32,7 @@ pub static FILE_MODES: [FileMode; 3] = [
     FileMode::ReadWrite,
 ];
 
-static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".profile");
     if !path.exists() {
         user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());

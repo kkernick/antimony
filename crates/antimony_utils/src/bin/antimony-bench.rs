@@ -105,7 +105,7 @@ fn cooldown(sensor: &Option<String>, target: &Option<u64>) -> Result<()> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    env_logger::init();
+    notify::init()?;
 
     let root = Spawner::new("git")
         .args(["rev-parse", "--show-toplevel"])?

@@ -11,7 +11,7 @@ use antimony::shared::{
     profile::SeccompPolicy,
     syscalls::{self, CACHE_DIR},
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use clap::Parser;
 use dashmap::DashMap;
 use inflector::Inflector;
@@ -50,6 +50,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
+    time::Duration,
 };
 use user::Mode;
 
@@ -219,28 +220,26 @@ static FCHMOD: LazyLock<i32> = LazyLock::new(|| {
 
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
-    let mut handle = Spawner::new("notify-send")
-        .args([
-            &format!("Syscall Request: {} => {}", profile.to_title_case(), name.to_title_case()),
-            &format!("The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?", path.to_string_lossy()),
-            "-a", "Antimony",
-            "-t", "30000",
-            "-A", "All=Save All",
-            "-A", "Save=Save",
-            "-A", "Allow=Allow",
-            "-A", "Deny=Deny",
-            "-A", "Kill=Kill",
-        ])?
-        .preserve_env(true)
-        .mode(Mode::Real)
-        .output(StreamMode::Pipe)
-        .spawn()?;
-
-    if handle.wait()? != 0 {
-        return Err(anyhow!("Failed to get input!"));
-    }
-    let output = handle.output_all()?;
-    Ok(output)
+    Ok(notify::action(
+        format!(
+            "Syscall Request: {} => {}",
+            profile.to_title_case(),
+            name.to_title_case()
+        ),
+        format!(
+            "The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?",
+            path.to_string_lossy()
+        ),
+        Some(Duration::from_secs(30)),
+        None,
+        vec![
+            ("All", "Save All"),
+            ("Save", "Save"),
+            ("Allow", "Allow"),
+            ("Deny", "Deny"),
+            ("Kill", "Kill"),
+        ],
+    )?)
 }
 
 pub fn notify_reader(
@@ -502,7 +501,7 @@ pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, 
 
 /// Receive and Respond to Notify Requests.
 fn main() -> Result<()> {
-    env_logger::init();
+    notify::init()?;
     let cli = Cli::parse();
 
     // We dispatch requests to a thread pool for performance.
@@ -571,76 +570,76 @@ fn main() -> Result<()> {
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
-    user::set(Mode::Effective)?;
+    user::try_run_as!(Mode::Effective, Result<()>, {
+        if !stats.is_empty() {
+            let mut conn = syscalls::DB_POOL.get()?;
+            let tx = conn.transaction()?;
+            println!("\n=== Syscall Summary ===");
 
-    if !stats.is_empty() {
-        let mut conn = syscalls::DB_POOL.get()?;
-        let tx = conn.transaction()?;
-        println!("\n=== Syscall Summary ===");
-
-        // Make sure the binary is either in the profile's persist home, or
-        // exists.
-        let binary_exist = |path: &str| -> Result<bool> {
-            Ok(if path.starts_with("/home/antimony") {
-                let path = path.replace("/home/antimony", "*");
-                !Spawner::new("/usr/bin/find")
-                    .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                    .args(["-wholename", &path])?
-                    .mode(user::Mode::Real)
-                    .output(StreamMode::Pipe)
-                    .spawn()?
-                    .output_all()?
-                    .is_empty()
-            } else if path.ends_with("flatpak-spawn") {
-                true
-            } else {
-                Path::new(&path).exists()
-            })
-        };
-
-        for (name, stats) in stats {
-            debug!("Updating {name}");
-            // Collect and insert syscall sets
-            let binaries: Set<String> = stats
-                .iter_mut()
-                .filter_map(|mut entry| {
-                    let binary = entry.key().clone();
-                    let syscalls = entry.value_mut();
-
-                    match binary_exist(&binary) {
-                        Ok(true) => {
-                            println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
-
-                            // Insert into DB using the transaction
-                            if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
-                                warn!("DB insert failed for {binary}: {e}");
-                                return None;
-                            }
-
-                            if binary.contains("strace") {
-                                None
-                            } else {
-                                Some(binary.clone())
-                            }
-                        }
-                        _ => {
-                            info!("Ignoring ephemeral binary {binary}");
-                            None
-                        }
-                    }
+            // Make sure the binary is either in the profile's persist home, or
+            // exists.
+            let binary_exist = |path: &str| -> Result<bool> {
+                Ok(if path.starts_with("/home/antimony") {
+                    let path = path.replace("/home/antimony", "*");
+                    !Spawner::new("/usr/bin/find")
+                        .arg(DATA_HOME.join("antimony").to_string_lossy())?
+                        .args(["-wholename", &path])?
+                        .mode(user::Mode::Real)
+                        .output(StreamMode::Pipe)
+                        .spawn()?
+                        .output_all()?
+                        .is_empty()
+                } else if path.ends_with("flatpak-spawn") {
+                    true
+                } else {
+                    Path::new(&path).exists()
                 })
-                .collect();
+            };
 
-            if name != "audit" {
-                update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
+            for (name, stats) in stats {
+                debug!("Updating {name}");
+                // Collect and insert syscall sets
+                let binaries: Set<String> = stats
+                    .iter_mut()
+                    .filter_map(|mut entry| {
+                        let binary = entry.key().clone();
+                        let syscalls = entry.value_mut();
+
+                        match binary_exist(&binary) {
+                            Ok(true) => {
+                                println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
+
+                                // Insert into DB using the transaction
+                                if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
+                                    warn!("DB insert failed for {binary}: {e}");
+                                    return None;
+                                }
+
+                                if binary.contains("strace") {
+                                    None
+                                } else {
+                                    Some(binary.clone())
+                                }
+                            }
+                            _ => {
+                                info!("Ignoring ephemeral binary {binary}");
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+
+                if name != "audit" {
+                    update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
+                }
             }
-        }
-        println!("========================\n");
-        tx.commit()?;
+            println!("========================\n");
+            tx.commit()?;
 
-        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
-            .with_context(|| "Flushing WAL")?;
-    }
-    info!("Finished: {}", cli.instance);
-    Ok(())
+            conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+                .with_context(|| "Flushing WAL")?;
+        }
+        info!("Finished: {}", cli.instance);
+        Ok(())
+    })
 }

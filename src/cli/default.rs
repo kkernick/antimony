@@ -1,5 +1,8 @@
 //! Edit the default profile
-use crate::shared::{env::AT_HOME, profile::Profile};
+use crate::shared::{
+    env::AT_HOME,
+    profile::{self, Profile},
+};
 use anyhow::Result;
 use std::fs::{self, File};
 
@@ -29,6 +32,8 @@ impl super::Run for Args {
 
         if Profile::edit(&path).is_err() {
             fs::remove_file(&path)?;
+        } else {
+            fs::remove_dir_all(profile::CACHE_DIR.as_path())?;
         }
         Ok(())
     }
