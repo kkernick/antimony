@@ -570,7 +570,7 @@ fn main() -> Result<()> {
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
-    user::try_run_as!(Mode::Effective, Result<()>, {
+    user::sync::try_run_as!(Mode::Effective, Result<()>, {
         if !stats.is_empty() {
             let mut conn = syscalls::DB_POOL.get()?;
             let tx = conn.transaction()?;

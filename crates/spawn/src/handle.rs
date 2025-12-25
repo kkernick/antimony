@@ -88,6 +88,8 @@ impl error::Error for Error {
     }
 }
 
+
+
 /// The shared state between StreamHandle and Worker Thread.
 struct InnerBuffer {
     /// The current contents from the pipe

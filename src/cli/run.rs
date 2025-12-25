@@ -231,6 +231,8 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
     if args.log {
         info.handle.error_i(StreamMode::Pipe);
+    } else {
+        info.handle.error_i(StreamMode::Log(log::Level::Warn));
     }
 
     // Run it

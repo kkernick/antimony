@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_LOG") {
+pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_LOG") {
     Ok(e) => match e.to_lowercase().as_str() {
         "trace" => log::Level::Trace,
         "warn" => log::Level::Warn,
@@ -19,16 +19,18 @@ static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_
     Err(_) => log::Level::Error,
 });
 
-static PROMPT_LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("NOTIFY") {
-    Ok(e) => match e.to_lowercase().as_str() {
-        "trace" => log::Level::Trace,
-        "warn" => log::Level::Warn,
-        "info" => log::Level::Info,
-        "debug" => log::Level::Debug,
-        _ => log::Level::Error,
-    },
-    Err(_) => log::Level::Error,
-});
+pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> =
+    LazyLock::new(|| match std::env::var("NOTIFY") {
+        Ok(e) => match e.to_lowercase().as_str() {
+            "none" => None,
+            "trace" => Some(log::Level::Trace),
+            "warn" => Some(log::Level::Warn),
+            "info" => Some(log::Level::Info),
+            "debug" => Some(log::Level::Debug),
+            _ => Some(log::Level::Error),
+        },
+        Err(_) => Some(log::Level::Error),
+    });
 
 static LOGGER: NotifyLogger = NotifyLogger::new();
 
@@ -201,10 +203,16 @@ impl log::Log for NotifyLogger {
         msg.push_str(&format!("[{} ", Self::level_color(record.level())));
         msg.push_str(&format!("{}", style(record.target()).bold().italic()));
 
-        msg.push_str(&format!("] {}\n", record.args()));
+        msg.push_str(&format!("] {}", record.args()));
+        if !msg.ends_with('\n') {
+            msg.push('\n')
+        }
+
         let _ = write!(out, "{msg}");
 
-        if level <= *PROMPT_LEVEL {
+        if let Some(prompt) = *PROMPT_LEVEL
+            && level <= prompt
+        {
             let _ = notify(
                 format!("{}: {}", Self::level_name(level), record.target()),
                 format!("{}", record.args()),

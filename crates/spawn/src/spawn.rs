@@ -2,7 +2,7 @@
 //! UID/GID, and File Stream handling.
 #![allow(dead_code)]
 
-use crate::handle::Handle;
+use crate::{Stream, handle::Handle};
 use log::trace;
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
@@ -118,6 +118,9 @@ pub enum StreamMode {
 
     /// Send the stream to /dev/null.
     Discard,
+
+    /// Send the output to the system logger at the provided level.
+    Log(log::Level),
 }
 
 /// Spawn a child.
@@ -663,13 +666,19 @@ impl<'a> Spawner {
         // hem.
         // Because we use these conditionals later on when using them,
         // we can unwrap() with impunity.
-        let stdout = cond_pipe(self.output)?;
-        let stderr = cond_pipe(self.error)?;
-        let stdin = cond_pipe(self.input)?;
+        let stdout = cond_pipe(&self.output)?;
+        let stderr = cond_pipe(&self.error)?;
+        let stdin = cond_pipe(&self.input)?;
 
         let fork = unsafe { fork() }.map_err(Error::Fork)?;
         match fork {
             ForkResult::Parent { child } => {
+                let name = if let Some(name) = self.unique_name {
+                    name
+                } else {
+                    self.cmd
+                };
+
                 // Set the relevant pipes.
                 let stdin = if let Some((read, write)) = stdin {
                     close(read).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
@@ -680,25 +689,35 @@ impl<'a> Spawner {
 
                 let stdout = if let Some((read, write)) = stdout {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
-                    Some(read)
+
+                    if let StreamMode::Log(log) = self.output {
+                        let name = name.clone();
+                        std::thread::spawn(move || logger(log, read, name));
+                        None
+                    } else {
+                        Some(read)
+                    }
                 } else {
                     None
                 };
 
                 let stderr = if let Some((read, write)) = stderr {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
-                    Some(read)
+
+                    if let StreamMode::Log(log) = self.error {
+                        let name = name.clone();
+                        std::thread::spawn(move || logger(log, read, name));
+                        None
+                    } else {
+                        Some(read)
+                    }
                 } else {
                     None
                 };
 
                 // Return.
                 let handle = Handle::new(
-                    if let Some(name) = self.unique_name {
-                        name
-                    } else {
-                        self.cmd
-                    },
+                    name,
                     child,
                     #[cfg(feature = "user")]
                     self.mode,
@@ -824,12 +843,22 @@ impl<'a> Spawner {
 
 /// Conditionally create a pipe.
 /// Returns either a set of `None`, or the result of `pipe()`
-fn cond_pipe(cond: StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
+fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
     match cond {
         StreamMode::Pipe => match pipe() {
             Ok((r, w)) => Ok(Some((r, w))),
             Err(e) => Err(Error::Errno(None, "pipe", e)),
         },
+        StreamMode::Log(e) => {
+            if log::log_enabled!(*e) {
+                match pipe() {
+                    Ok((r, w)) => Ok(Some((r, w))),
+                    Err(e) => Err(Error::Errno(None, "pipe", e)),
+                }
+            } else {
+                Ok(None)
+            }
+        }
         StreamMode::Share => Ok(None),
         StreamMode::Discard => {
             let null = std::fs::File::open("/dev/null").map_err(Error::Io)?;
@@ -837,6 +866,14 @@ fn cond_pipe(cond: StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
                 nix::unistd::dup(&null).map_err(|e| Error::Errno(None, "Duplicate Null", e))?;
             Ok(Some((OwnedFd::from(null), dup)))
         }
+    }
+}
+
+/// Log all activity from the child at the desired level.
+pub fn logger(level: log::Level, fd: OwnedFd, name: String) {
+    let stream = Stream::new(fd);
+    while let Some(line) = stream.read_line() {
+        log::log!(level, "{name}: {line}");
     }
 }
 

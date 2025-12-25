@@ -65,6 +65,7 @@ pub fn run(
         #[rustfmt::skip]
         let proxy = Spawner::new("/usr/bin/bwrap")
         .name("proxy")
+        .error(StreamMode::Log(log::Level::Error))
         .mode(user::Mode::Real).args([
             "--new-session",
             "--ro-bind", "/usr/bin/xdg-dbus-proxy", "/usr/bin/xdg-dbus-proxy",
@@ -120,9 +121,9 @@ pub fn run(
 
         if log::log_enabled!(log::Level::Debug) {
             proxy.arg_i("--log")?;
+            proxy.output_i(StreamMode::Log(log::Level::Debug));
         } else {
             proxy.output_i(StreamMode::Discard);
-            proxy.error_i(StreamMode::Discard);
         }
     });
 

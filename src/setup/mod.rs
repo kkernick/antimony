@@ -181,6 +181,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     // Start the command.
     #[rustfmt::skip]
     let handle = Spawner::new("/usr/bin/bwrap")
+        .name(&args.profile)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",
             "--proc", "/proc",
