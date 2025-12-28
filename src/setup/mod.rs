@@ -13,7 +13,7 @@ use crate::{
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
-        path::{user_dir, which_exclude},
+        path::user_dir,
         profile::Profile,
     },
 };
@@ -65,7 +65,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
             Err(e) => {
                 debug!("No profile: {name}: {e}, assuming binary");
                 Profile {
-                    path: Some(which_exclude(&name)?),
+                    path: Some(which::which(name.clone())?.to_string()),
                     ..Default::default()
                 }
             }
@@ -112,7 +112,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
                 fs::rename(&refresh_dir, &sys_dir)?;
 
                 debug!("Removing stale command caches.");
-                Spawner::new("find")
+                Spawner::abs("/usr/bin/find")
                     .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
                     .spawn()?
                     .wait()?;
@@ -180,7 +180,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     // Start the command.
     #[rustfmt::skip]
-    let handle = Spawner::new("/usr/bin/bwrap")
+    let handle = Spawner::abs("/usr/bin/bwrap")
         .name(&args.profile)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",

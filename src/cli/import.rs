@@ -37,8 +37,10 @@ impl super::Run for Args {
         }
 
         let import = |src: &Path, dst: &Path| -> Result<()> {
-            if Profile::new(&src.to_string_lossy(), None).is_ok() {
-                let dest = dst.join(src.file_name().unwrap());
+            if Profile::new(&src.to_string_lossy(), None).is_ok()
+                && let Some(file) = src.file_name()
+            {
+                let dest = dst.join(file);
                 if dest.exists()
                     && !self.overwrite
                     && !Confirm::new()
@@ -47,7 +49,7 @@ impl super::Run for Args {
                 {
                     return Ok(());
                 }
-                fs::copy(src, dst.join(src.file_name().unwrap()))?;
+                fs::copy(src, dest)?;
             } else {
                 warn!("Invalid profile: {profile:?}");
             }

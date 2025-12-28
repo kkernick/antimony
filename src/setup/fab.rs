@@ -36,7 +36,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     // Bin must run before lib so that bin can populate libraries
     debug_timer!(
         "::bin",
-        fab::bin::fabricate(&mut args.profile, &args.name, &args.handle)
+        fab::bin::fabricate(&mut args.profile, &args.instance, &args.name, &args.handle)
     )?;
 
     debug_timer!(

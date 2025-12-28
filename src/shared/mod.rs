@@ -26,6 +26,7 @@ macro_rules! debug_timer {
     ($name:literal, $expr:expr) => {{
         #[cfg(debug_assertions)]
         {
+            log::debug!("Starting {}", $name);
             let start = std::time::Instant::now();
             let result = $expr;
             log::info!("{}: {}us", $name, start.elapsed().as_micros());

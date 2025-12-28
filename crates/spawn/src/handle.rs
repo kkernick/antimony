@@ -6,11 +6,11 @@
 //!
 //!
 
-use log::warn;
+use log::{warn};
 use nix::{
     errno::Errno,
     sys::{
-        signal::{Signal, kill},
+        signal::{Signal, kill, raise},
         wait::{WaitPidFlag, WaitStatus, waitpid},
     },
     unistd::Pid,
@@ -23,7 +23,8 @@ use std::{
     io::{self, Read, Write},
     os::fd::OwnedFd,
     sync::{Arc, Condvar, Mutex, MutexGuard},
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, sleep},
+    time::Duration,
 };
 
 /// Errors related to a ProcessHandle
@@ -87,8 +88,6 @@ impl error::Error for Error {
         }
     }
 }
-
-
 
 /// The shared state between StreamHandle and Worker Thread.
 struct InnerBuffer {
@@ -294,7 +293,7 @@ pub struct Handle {
     stderr: Option<Stream>,
 
     #[cfg(feature = "user")]
-    mode: Option<user::Mode>,
+    mode: user::Mode,
 }
 impl Handle {
     /// Construct a new `Handle` from a Child PID and pipes
@@ -302,7 +301,7 @@ impl Handle {
         name: String,
         pid: Pid,
 
-        #[cfg(feature = "user")] mode: Option<user::Mode>,
+        #[cfg(feature = "user")] mode: user::Mode,
 
         stdin: Option<OwnedFd>,
         stdout: Option<OwnedFd>,
@@ -332,8 +331,54 @@ impl Handle {
         &self.child
     }
 
+    pub fn wait_timeout(&mut self, timeout: Duration) -> Result<i32, Error> {
+        if let Some(pid) = self.alive()? {
+            let mut signals = Signals::new([
+                signal::SIGTERM,
+                signal::SIGINT,
+                signal::SIGCHLD,
+                signal::SIGALRM,
+            ])
+            .map_err(Error::Io)?;
+
+            let _ = thread::spawn(move || {
+                sleep(timeout);
+                let _ = raise(Signal::SIGALRM);
+            });
+
+            'outer: loop {
+                for signal in signals.wait() {
+                    match signal {
+                        signal::SIGCHLD => match waitpid(pid, None) {
+                            Ok(status) => {
+                                self.child = None;
+                                if let WaitStatus::Exited(_, code) = status {
+                                    self.exit = code;
+                                    break 'outer;
+                                }
+                            }
+                            Err(Errno::ECHILD) => {
+                                self.child = None;
+                                self.exit = -1;
+                                break 'outer;
+                            }
+                            Err(e) => return Err(Error::Comm(e)),
+                        },
+                        signal::SIGALRM => return Err(Error::Timeout),
+                        _ => return Err(Error::Signal),
+                    }
+                }
+            }
+
+            // Collect the error code and return
+            self.wait()
+        } else {
+            Ok(self.exit)
+        }
+    }
+
     pub fn wait(&mut self) -> Result<i32, Error> {
-        if let Some(pid) = self.child {
+        if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])
                 .map_err(Error::Io)?;
             'outer: loop {
@@ -346,6 +391,11 @@ impl Handle {
                                     self.exit = code;
                                     break 'outer;
                                 }
+                            }
+                            Err(Errno::ECHILD) => {
+                                self.child = None;
+                                self.exit = -1;
+                                break 'outer;
                             }
                             Err(e) => return Err(Error::Comm(e)),
                         },
@@ -362,28 +412,55 @@ impl Handle {
     }
 
     /// Check if the process is still alive, non-blocking.
-    pub fn alive(&self) -> Result<bool, Error> {
+    pub fn alive(&mut self) -> Result<Option<Pid>, Error> {
         if let Some(pid) = self.child {
-            match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
-                Ok(WaitStatus::StillAlive) => Ok(true),
-                Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => Ok(false),
-                Ok(_) => Ok(true),
-                Err(e) => Err(Error::Comm(e)),
+            loop {
+                match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                    Ok(WaitStatus::StillAlive) => break Ok(Some(pid)),
+                    Ok(WaitStatus::Exited(_, exit)) => {
+                        self.child.take();
+                        self.exit = exit;
+                        break Ok(None);
+                    }
+                    Ok(WaitStatus::Signaled(_, _, _)) => {
+                        self.child.take();
+                        self.exit = -1;
+                        break Ok(None);
+                    }
+                    Ok(_) => continue,
+                    Err(Errno::ECHILD) => {
+                        self.child = None;
+                        self.exit = -1;
+                        break Ok(None);
+                    }
+                    Err(e) => break Err(Error::Comm(e)),
+                }
             }
         } else {
-            Ok(false)
+            Ok(None)
         }
+    }
+
+    pub fn terminate(&mut self) -> Result<(), Error> {
+        if let Some(pid) = self.alive()? {
+            match self.signal(Signal::SIGTERM) {
+                Ok(_) => {
+                    let _ = waitpid(pid, None);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     /// Send a signal to the child.
     /// If the child no longer exists, this returns an `Err`.
     pub fn signal(&mut self, sig: Signal) -> Result<(), Error> {
-        if let Some(pid) = self.child {
+        if let Some(pid) = self.alive()? {
             #[cfg(feature = "user")]
-            let result = if let Some(mode) = self.mode {
+            let result = {
+                let mode = self.mode;
                 user::sync::run_as!(mode, kill(pid, sig))
-            } else {
-                kill(pid, sig)
             };
 
             #[cfg(not(feature = "user"))]
@@ -486,18 +563,18 @@ impl Handle {
 }
 impl Drop for Handle {
     fn drop(&mut self) {
-        if let Some(pid) = self.child {
-            match self.signal(Signal::SIGTERM) {
-                Ok(_) => {
-                    let _ = waitpid(pid, None);
+        if let Ok(pid) = self.alive() {
+            if let Some(pid) = pid {
+                match self.signal(Signal::SIGTERM) {
+                    Ok(_) => {
+                        let _ = waitpid(pid, None);
+                    }
+                    Err(e) => warn!("Failed to terminate process {pid}: {e}"),
                 }
-                Err(e) => warn!("Failed to terminate process {pid}: {e}"),
             }
+        } else {
+            warn!("Could not communicate with child!")
         }
-
-        self.associated.iter_mut().for_each(|process| {
-            let _ = process.signal(Signal::SIGTERM);
-        });
     }
 }
 impl Write for Handle {

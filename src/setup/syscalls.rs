@@ -27,7 +27,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
                     debug!("Spawning SECCOMP Monitor");
                     #[rustfmt::skip]
-                let handle = Spawner::new("/usr/bin/antimony-monitor")
+                let handle = Spawner::abs("/usr/bin/antimony-monitor")
                     .args([
                         "--instance", args.instance.as_str(),
                         "--profile", &args.name,

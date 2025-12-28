@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, warn};
+use log::debug;
 use std::{fs, time::Duration};
 use user::try_run_as;
 
@@ -103,9 +103,9 @@ impl super::Run for Args {
                     .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
             );
             pb.enable_steady_tick(Duration::from_millis(100));
-
             pb.wrap_iter(profiles.into_iter()).try_for_each(|name| {
                 pb.set_message(format!("Refreshing {name}"));
+
                 let args = cli::run::Args {
                     profile: name.clone(),
                     dry: true,
@@ -113,9 +113,7 @@ impl super::Run for Args {
                     ..Default::default()
                 };
 
-                if let Err(e) = args.run() {
-                    warn!("Failed to refresh {name}: {e}");
-                }
+                try_run_as!(user::Mode::Effective, { args.run() })?;
 
                 if self.integrate {
                     debug!("Integrating {name}");

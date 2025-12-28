@@ -256,7 +256,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                             &info.home,
                             false,
                         )?
-                        .unwrap();
+                        .unwrap()
                 }
             }
 
@@ -270,7 +270,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         &info.home,
                         true,
                     )?
-                    .unwrap();
+                    .unwrap()
             }
         }
 
@@ -320,7 +320,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             if let Some(log) = log
                 && action.starts_with("Open")
             {
-                Spawner::new("xdg-open")
+                Spawner::new("xdg-open")?
                     .arg(log.to_string_lossy())?
                     .preserve_env(true)
                     .mode(Mode::Real)

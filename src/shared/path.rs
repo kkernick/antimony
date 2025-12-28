@@ -1,14 +1,6 @@
 //! Tools and definitions related to paths.
-use crate::shared::env::{CACHE_DIR, PATH, PWD, RUNTIME_DIR};
+use crate::shared::env::{CACHE_DIR, RUNTIME_DIR};
 use std::path::PathBuf;
-use which::which_in;
-
-/// Lookup a binary, excluding the path Antimony installs itself.
-#[inline]
-pub fn which_exclude(name: &str) -> Result<String, which::Error> {
-    let path = which_in(name, Some(PATH.as_str()), PWD.as_path())?;
-    Ok(path.to_string_lossy().into_owned())
-}
 
 /// The user dir is where the instance information is stored.
 #[inline]

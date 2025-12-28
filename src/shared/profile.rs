@@ -2,11 +2,10 @@
 //! to function properly.
 use crate::{
     cli,
-    fab::{self, lib::get_wildcards, resolve},
+    fab::{self, get_wildcards, resolve},
     shared::{
         Set, edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
-        path::which_exclude,
     },
 };
 use ahash::{HashSetExt, RandomState};
@@ -25,6 +24,7 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+use which::which;
 
 pub static FILE_MODES: [FileMode; 3] = [
     FileMode::Executable,
@@ -35,7 +35,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".profile");
     if !path.exists() {
-        user::sync::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+        user::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
     }
     path
 });
@@ -153,7 +153,7 @@ pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true) {
+            match get_wildcards(library, true, None) {
                 Ok(wilds) => {
                     for wild in wilds {
                         println!("\t\t- {}", style(wild).italic());
@@ -484,7 +484,7 @@ impl Profile {
             // Try and lookup the path. If it doesn't work, then the corresponding application
             // isn't installed. This is fine, as long as the user doesn't try and run the profile.
             if !name.ends_with(".toml") && profile.path.is_none() {
-                profile.path = Some(which_exclude(profile.app_path(name).as_ref())?);
+                profile.path = Some(which::which(profile.app_path(name))?.to_string());
             }
 
             debug!("Fabricating features");
@@ -599,8 +599,8 @@ impl Profile {
     pub fn app_path<'a>(&'a self, name: &'a str) -> Cow<'a, str> {
         match &self.path {
             Some(path) => Cow::Borrowed(path),
-            None => match which_exclude(name) {
-                Ok(path) => Cow::Owned(path),
+            None => match which(name) {
+                Ok(path) => Cow::Borrowed(path),
                 Err(_) => Cow::Borrowed(name),
             },
         }
@@ -892,9 +892,9 @@ impl Hook {
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
         let mut handle = if let Some(path) = self.path {
-            Spawner::new(path)
+            Spawner::new(path)?
         } else if let Some(content) = self.content {
-            Spawner::new("/usr/bin/bash").args(["-c", content.as_str()])?
+            Spawner::abs("/usr/bin/bash").args(["-c", content.as_str()])?
         } else {
             return Err(HookError::Missing);
         };

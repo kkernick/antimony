@@ -26,8 +26,11 @@ echo "Copying binaries"
 sudo cp -v "target/$RECIPE/antimony${SUFFIX}" "/usr/bin/antimony"
 sudo cp -v "target/$RECIPE/antimony-spawn${SUFFIX}" "/usr/bin/antimony-spawn"
 sudo cp -v "target/$RECIPE/antimony-monitor${SUFFIX}" "/usr/bin/antimony-monitor"
+sudo cp -v "target/$RECIPE/antimony-dumper${SUFFIX}" "/usr/bin/antimony-dumper"
+sudo cp -v "target/$RECIPE/antimony-open${SUFFIX}" "/usr/bin/antimony-open"
 
 sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
+sudo setcap cap_sys_ptrace+ep /usr/bin/antimony-dumper
 
 echo "Setting SetUID"
 exec="/usr/bin/antimony"

@@ -14,7 +14,7 @@ use which::which;
 
 pub static OVERLAY: LazyLock<bool> = LazyLock::new(|| {
     let args = || -> Result<String> {
-        let out = Spawner::new("/usr/bin/bwrap")
+        let out = Spawner::abs("/usr/bin/bwrap")
             .arg("--help")?
             .output(StreamMode::Pipe)
             .spawn()?
@@ -26,16 +26,6 @@ pub static OVERLAY: LazyLock<bool> = LazyLock::new(|| {
         Ok(args) => args.contains("--overlay"),
         Err(_) => false,
     }
-});
-
-/// The User's PATH variable, removing ~/.local/bin to prevent
-/// Antimony from using itself when a profile has been integrated.
-pub static PATH: LazyLock<String> = LazyLock::new(|| {
-    let path = env::var("PATH").unwrap_or("/usr/bin".to_string());
-    path.split(':')
-        .filter(|e| !e.contains("/.local/bin"))
-        .collect::<Vec<_>>()
-        .join(":")
 });
 
 /// Antimony's home folder is where configuration is stored
@@ -56,9 +46,11 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
     let writeable = if !cache_dir.exists() {
-        fs::create_dir(&cache_dir).is_ok()
+        user::run_as!(user::Mode::Effective, fs::create_dir(&cache_dir).is_ok())
     } else {
-        fs::File::create(cache_dir.join(".test")).is_ok()
+        user::run_as!(user::Mode::Effective, {
+            fs::File::create(cache_dir.join(".test")).is_ok()
+        })
     };
 
     if !writeable {
@@ -154,5 +146,5 @@ pub static EDITOR: LazyLock<String> = LazyLock::new(|| {
         }
     };
 
-    editor.to_string_lossy().into_owned()
+    editor.to_string()
 });

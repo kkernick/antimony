@@ -107,7 +107,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
 
-    let root = Spawner::new("git")
+    let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])?
         .output(spawn::StreamMode::Pipe)
         .spawn()?
@@ -128,10 +128,10 @@ fn main() -> Result<()> {
 
     if let Some(checkout) = &cli.checkout {
         // Stash our working edits
-        Spawner::new("git").arg("stash")?.spawn()?.wait()?;
+        Spawner::new("git")?.arg("stash")?.spawn()?.wait()?;
 
         // Checkout the desired state, but only for code and Cargo.
-        Spawner::new("git")
+        Spawner::new("git")?
             .args([
                 "checkout",
                 checkout,
@@ -167,14 +167,14 @@ fn main() -> Result<()> {
         let antimony = if let Some(recipe) = cli.recipe {
             match recipe.as_str() {
                 "pgo" => {
-                    Spawner::new(format!("{root}/pgo"))
+                    Spawner::abs(format!("{root}/pgo"))
                         .preserve_env(true)
                         .spawn()?
                         .wait()?;
                     format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony")
                 }
                 "bolt" => {
-                    Spawner::new(format!("{root}/bolt"))
+                    Spawner::abs(format!("{root}/bolt"))
                         .preserve_env(true)
                         .spawn()?
                         .wait()?;
@@ -183,7 +183,7 @@ fn main() -> Result<()> {
                     )
                 }
                 recipe if recipe == "release" || recipe == "dev" => {
-                    Spawner::new("cargo")
+                    Spawner::new("cargo")?
                         .args(["build", "--profile", recipe])?
                         .preserve_env(true)
                         .spawn()?
@@ -211,7 +211,7 @@ fn main() -> Result<()> {
                 if let Some(add) = &cli.antimony_args {
                     command.extend(add.clone());
                 }
-                Spawner::new("hyperfine")
+                Spawner::new("hyperfine")?
                     .args([
                         "--command-name",
                         &format!("Cold {profile}"),
@@ -235,7 +235,7 @@ fn main() -> Result<()> {
                 if let Some(add) = &cli.antimony_args {
                     command.extend(add.clone());
                 }
-                Spawner::new("hyperfine")
+                Spawner::new("hyperfine")?
                     .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])?
                     .args(args.clone())?
                     .arg(command.join(" "))?
@@ -254,7 +254,7 @@ fn main() -> Result<()> {
                 if let Some(add) = &cli.antimony_args {
                     command.extend(add.clone());
                 }
-                Spawner::new("hyperfine")
+                Spawner::new("hyperfine")?
                     .args([
                         "--command-name",
                         &format!("Real {profile}"),
@@ -279,7 +279,7 @@ fn main() -> Result<()> {
 
     if cli.checkout.is_some() {
         // Undo the checkout
-        Spawner::new("git")
+        Spawner::new("git")?
             .args([
                 "checkout",
                 "-",
@@ -293,13 +293,13 @@ fn main() -> Result<()> {
             .wait()?;
 
         // Reset to the original state
-        Spawner::new("git")
+        Spawner::new("git")?
             .args(["reset", "--hard"])?
             .spawn()?
             .wait()?;
 
         // Return uncommitted edits.
-        Spawner::new("git")
+        Spawner::new("git")?
             .args(["stash", "pop"])?
             .spawn()?
             .wait()?;

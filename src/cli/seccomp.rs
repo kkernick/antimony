@@ -1,7 +1,7 @@
 //! Modify the SECCOMP Database.
 use crate::shared::{
     env::{AT_HOME, DATA_HOME},
-    syscalls::{self, DB_POOL},
+    syscalls::{self, CACHE_DIR, DB_POOL},
 };
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
@@ -48,7 +48,7 @@ pub enum Operation {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         let result = try_run_as!(user::Mode::Real, Result<i32>, {
-            Ok(Spawner::new("pkcheck")
+            Ok(Spawner::abs("/usr/bin/pkcheck")
                 .args([
                     "--action-id",
                     "org.freedesktop.policykit.exec",
@@ -84,6 +84,9 @@ impl super::Run for Args {
 
                     if confirm {
                         fs::remove_dir_all(AT_HOME.join("seccomp"))?;
+                        if CACHE_DIR.exists() {
+                            fs::remove_dir_all(CACHE_DIR.as_path())?;
+                        }
                         println!("Deleted");
                     }
                     Ok(())
@@ -198,7 +201,7 @@ impl super::Run for Args {
                             let remove = if path.starts_with("/home/antimony") {
                                 // If any profile's home has the binary in it, we preserve.
                                 let wild = path.replace("/home/antimony", "*");
-                                Spawner::new("/usr/bin/find")
+                                Spawner::abs("/usr/bin/find")
                                     .arg(DATA_HOME.join("antimony").to_string_lossy())?
                                     .args(["-wholename", &wild])?
                                     .mode(user::Mode::Real)

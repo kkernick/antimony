@@ -1,16 +1,15 @@
 use crate::{
     debug_timer,
     fab::{
-        lib::{get_dir, get_wildcards, in_lib},
-        localize_home, localize_path,
+        get_cache, get_dir, get_wildcards, lib::in_lib, localize_home, localize_path, write_cache,
     },
     shared::{
-        Map, Set,
+        Set,
         path::direct_path,
         profile::{FileMode, Profile},
     },
 };
-use ahash::{HashMapExt, HashSetExt};
+use ahash::HashSetExt;
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
 use log::{debug, trace, warn};
@@ -23,45 +22,13 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock},
+    sync::Arc,
 };
 use user::try_run_as;
 use which::which;
 
-/// Characters used for splitting.
-static CHARS: LazyLock<Set<char>> = LazyLock::new(|| {
-    ['"', '\'', ';', '=', '$', '(', ')', '{', '}']
-        .into_iter()
-        .collect()
-});
-
-/// Reserved keywords in bash.
-pub static COMPGEN: LazyLock<Set<String>> = LazyLock::new(|| {
-    let mut compgen: Set<String> = Spawner::new("/usr/bin/bash")
-        .args(["-c", "compgen -k"])
-        .unwrap()
-        .output(StreamMode::Pipe)
-        .mode(user::Mode::Real)
-        .spawn()
-        .unwrap()
-        .output_all()
-        .unwrap()
-        .lines()
-        .map(str::to_string)
-        .collect();
-
-    // These ones are usually false positives.
-    compgen.insert("true".to_string());
-    compgen.insert("false".to_string());
-
-    compgen
-});
-
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
-
-/// The location to store cache files.
-static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| crate::shared::env::CACHE_DIR.join(".bin"));
 
 #[derive(Debug)]
 pub enum Type {
@@ -77,6 +44,9 @@ pub enum Type {
 /// Information returned from parse.
 #[derive(Debug, Default)]
 pub struct ParseReturn {
+    /// The location of the cache
+    cache: PathBuf,
+
     /// ELF files, to be passed to the library fabricator.
     pub elf: DashSet<String>,
 
@@ -96,9 +66,20 @@ pub struct ParseReturn {
     pub directories: DashSet<String>,
 }
 impl ParseReturn {
+    fn new(cache: &Path) -> Self {
+        Self {
+            cache: cache.to_path_buf(),
+            ..Default::default()
+        }
+    }
+
+    fn get_cache(&self) -> &Path {
+        &self.cache
+    }
+
     /// Get cached definitions if they exist.
-    fn cache(name: &str) -> Result<Option<Self>> {
-        let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
+    fn cache(name: &str, cache: &Path) -> Result<Option<Self>> {
+        let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
         if cache_file.exists() {
             let mut ret = Self::default();
             let file = File::open(&cache_file)?;
@@ -141,7 +122,7 @@ impl ParseReturn {
     /// Write a cache file.
     fn write(&self, name: &str) -> Result<()> {
         user::sync::try_run_as!(user::Mode::Effective, Result<()>, {
-            let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
+            let cache_file = self.cache.join(name.replace("/", ".").replace("*", "."));
             let mut file = File::create(&cache_file)?;
 
             let mut write = |dash: &DashSet<String>| -> Result<()> {
@@ -165,38 +146,6 @@ impl ParseReturn {
             Ok(())
         })
     }
-
-    /// Merge two Parse Returns together.
-    fn merge(&self, rh: ParseReturn) {
-        rh.elf.into_par_iter().for_each(|elf| {
-            self.elf.insert(elf);
-        });
-        rh.files.into_par_iter().for_each(|file| {
-            self.files.insert(file);
-        });
-        rh.scripts.into_par_iter().for_each(|script| {
-            self.scripts.insert(script);
-        });
-        rh.symlinks.into_par_iter().for_each(|symlink| {
-            self.symlinks.insert(symlink.0, symlink.1);
-        });
-        rh.directories.into_par_iter().for_each(|dir| {
-            self.directories.insert(dir);
-        });
-    }
-}
-
-/// Tokenize a string
-fn tokenize(line: String) -> Set<String> {
-    let mut ret = Set::new();
-    for token in line.split_whitespace() {
-        let token: String = token.chars().filter(|e| !CHARS.contains(e)).collect();
-        if COMPGEN.contains(&token) {
-            continue;
-        }
-        ret.insert(token);
-    }
-    ret
 }
 
 /// Resolve the path of a binary, canonicalized to /usr/bin.
@@ -212,12 +161,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
         } else if path.starts_with('/') {
             Cow::Borrowed(path)
         } else {
-            Cow::Owned(
-                which(path)
-                    .with_context(|| path.to_string())?
-                    .to_string_lossy()
-                    .into_owned(),
-            )
+            Cow::Borrowed(which(path).with_context(|| path.to_string())?)
         };
 
         if resolved.starts_with("/bin") {
@@ -231,6 +175,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 /// Parses binaries, specifically for shell scripts.
 fn parse(
     path: &str,
+    instance: &str,
     ret: Arc<ParseReturn>,
     done: Arc<DashSet<String>>,
     mut include_self: bool,
@@ -270,7 +215,8 @@ fn parse(
                 }
             };
         }
-        parse(&dest, ret.clone(), done.clone(), true)?;
+
+        parse(&dest, instance, ret.clone(), done.clone(), true)?;
         return Ok(Type::Link);
     }
 
@@ -278,7 +224,6 @@ fn parse(
         if let Some(parent) = resolve_dir(path)?
             && PathBuf::from(&parent).is_dir()
         {
-            debug!("Directory => {parent}");
             ret.directories.insert(parent);
         }
         include_self = false;
@@ -312,16 +257,13 @@ fn parse(
             ret.scripts.insert(resolved.to_string());
         }
 
-        if let Some(cache) = ParseReturn::cache(&resolved)? {
-            ret.merge(cache);
+        let binaries = if let Some(cache) = get_cache(path, ret.get_cache())? {
+            cache
         } else {
-            // Store environment assignment for later evaluation
-            let mut environment = Map::<String, String>::new();
-
+            let mut binaries = Vec::new();
             // Rewind.
             file.seek(io::SeekFrom::Start(0))?;
             let reader = BufReader::new(file);
-
             let mut iter = reader.lines();
 
             // Grab the shebang
@@ -333,63 +275,37 @@ fn parse(
                 None => return Ok(Type::None),
             };
 
-            tokenize(header[2..].to_string())
-                .par_iter()
-                .try_for_each(|token| -> Result<()> {
-                    parse(token, ret.clone(), done.clone(), true)?;
-                    Ok(())
-                })?;
+            binaries.extend(
+                header
+                    .split(' ')
+                    .map(|token| token.strip_prefix("#!").unwrap_or(token).to_string()),
+            );
 
-            for line in iter {
-                let mut line = line?.trim().to_string();
-                if line.starts_with("#") || line.is_empty() {
-                    continue;
-                }
+            if ["dash", "bash", "sh", "zsh"]
+                .into_iter()
+                .any(|shell| header.contains(shell))
+            {
+                let out = Spawner::abs("/usr/bin/antimony-dumper")
+                    .args(["run", &resolved, instance])?
+                    .output(StreamMode::Pipe)
+                    .preserve_env(true)
+                    .mode(user::Mode::Real)
+                    .spawn()?
+                    .output_all()?;
 
-                // Substitute variables.
-                for (key, value) in &environment {
-                    if line.contains(key) {
-                        let syntax = format!("${key}");
-                        line = line.replace(&syntax, value);
-
-                        let syntax = format!("${{{key}}}");
-                        line = line.replace(&syntax, value);
-
-                        let syntax = format!("$({key})");
-                        line = line.replace(&syntax, value);
-                    }
-                }
-
-                if let Some((key, val)) = line.split_once('=')
-                    && !line.starts_with("-")
-                    && !line.is_empty()
-                {
-                    let mut result = Spawner::new("/usr/bin/bash")
-                        .args(["-ec", &format!("{line}; echo ${key}")])?
-                        .output(StreamMode::Pipe)
-                        .error(StreamMode::Discard)
-                        .mode(user::Mode::Real)
-                        .spawn()?;
-                    match result.wait() {
-                        Ok(_) => {
-                            let result = result.output_all()?;
-                            environment.insert(key.to_string(), result);
-                            line = val.to_string();
-                        }
-                        Err(spawn::HandleError::Timeout) => warn!("Timeout parsing environment!"),
-                        Err(e) => return Err(e.into()),
-                    }
-                }
-
-                tokenize(line)
-                    .par_iter()
-                    .try_for_each(|token| -> Result<()> {
-                        parse(token, ret.clone(), done.clone(), true)?;
-                        Ok(())
-                    })?;
+                let out = out.lines().map(String::from);
+                trace!("{resolved} => {binaries:?}");
+                binaries.extend(out);
             }
-            ret.write(path)?;
+
+            write_cache(path, &binaries, ret.get_cache())?;
+            binaries
+        };
+
+        for bin in binaries {
+            parse(&bin, instance, ret.clone(), done.clone(), true)?;
         }
+
         Ok(Type::Script)
     } else {
         if include_self {
@@ -414,16 +330,18 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
 
 fn handle_localize(
     file: &str,
+    instance: &str,
     home: bool,
     include_self: bool,
     parsed: Arc<ParseReturn>,
     done: Arc<DashSet<String>>,
 ) -> Result<()> {
+    let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            parse(file, parsed.clone(), done.clone(), include_self)?;
+            parse(file, instance, parsed.clone(), done.clone(), include_self)?;
         } else {
-            match parse(&src, parsed.clone(), done.clone(), false)? {
+            match parse(&src, instance, parsed.clone(), done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
                     parsed.localized.insert(src.into_owned(), dst);
                 }
@@ -431,7 +349,7 @@ fn handle_localize(
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    handle_localize(&ldst, home, false, parsed.clone(), done.clone())?;
+                    handle_localize(&ldst, instance, home, false, parsed.clone(), done.clone())?;
                     parsed.symlinks.insert(dst, ldst);
                 }
                 e => warn!("Excluding localization of type {e:?} for {file}"),
@@ -439,15 +357,17 @@ fn handle_localize(
         }
         Ok(())
     } else {
-        parse(file, parsed.clone(), done.clone(), true)?;
+        parse(file, instance, parsed.clone(), done.clone(), true)?;
         Ok(())
     }
 }
 
-pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
-    if !CACHE_DIR.exists() {
-        fs::create_dir_all(CACHE_DIR.as_path())?;
-    }
+pub fn collect(
+    profile: &mut Profile,
+    name: &str,
+    instance: &str,
+    parsed: Arc<ParseReturn>,
+) -> Result<()> {
     let mut resolved = Set::new();
     resolved.insert(profile.app_path(name).to_string());
 
@@ -460,7 +380,7 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
             resolved.extend(
                 wildcards
                     .into_par_iter()
-                    .filter_map(|e| get_wildcards(&e, false).ok())
+                    .filter_map(|e| get_wildcards(&e, false, Some(parsed.get_cache())).ok())
                     .collect::<Vec<_>>()
                     .into_par_iter()
                     .flatten()
@@ -469,7 +389,6 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
         })
     };
 
-    let parsed = Arc::new(ParseReturn::default());
     let done = Arc::new(DashSet::new());
 
     // Read direct files so we can determine dependencies.
@@ -478,31 +397,32 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
             if let Some(user) = &mut files.user
                 && let Some(x) = user.remove(&FileMode::Executable)
             {
-                x.into_par_iter().try_for_each(|file| {
-                    handle_localize(&file, true, true, parsed.clone(), done.clone())
+                x.into_iter().try_for_each(|file| {
+                    handle_localize(&file, instance, true, true, parsed.clone(), done.clone())
                 })?;
             }
             if let Some(sys) = &mut files.resources
                 && let Some(x) = sys.remove(&FileMode::Executable)
             {
-                x.into_par_iter().try_for_each(|file| {
-                    handle_localize(&file, false, true, parsed.clone(), done.clone())
+                x.into_iter().try_for_each(|file| {
+                    handle_localize(&file, instance, false, true, parsed.clone(), done.clone())
                 })?;
             }
             if let Some(sys) = &mut files.platform
                 && let Some(x) = sys.remove(&FileMode::Executable)
             {
-                x.into_par_iter().try_for_each(|file| {
-                    handle_localize(&file, false, true, parsed.clone(), done.clone())
+                x.into_iter().try_for_each(|file| {
+                    handle_localize(&file, instance, false, true, parsed.clone(), done.clone())
                 })?;
             }
             if let Some(direct) = &mut files.direct
                 && let Some(x) = direct.remove(&FileMode::Executable)
             {
-                x.into_par_iter().try_for_each(|(file, _)| {
+                x.into_iter().try_for_each(|(file, _)| {
                     let path = direct_path(&file);
                     handle_localize(
                         &path.to_string_lossy(),
+                        instance,
                         false,
                         false,
                         parsed.clone(),
@@ -516,14 +436,25 @@ pub fn collect(profile: &mut Profile, name: &str) -> Result<ParseReturn> {
     // Parse the binaries
     debug_timer!("::collect::localization", {
         resolved.into_par_iter().try_for_each(|binary| {
-            handle_localize(binary.as_str(), false, true, parsed.clone(), done.clone())
+            handle_localize(
+                binary.as_str(),
+                instance,
+                false,
+                true,
+                parsed.clone(),
+                done.clone(),
+            )
         })?;
     });
-
-    Arc::try_unwrap(parsed).map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))
+    Ok(())
 }
 
-pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<()> {
+pub fn fabricate(
+    profile: &mut Profile,
+    name: &str,
+    instance: &str,
+    handle: &Spawner,
+) -> Result<()> {
     if let Some(binaries) = &profile.binaries
         && binaries.contains("/usr/bin")
     {
@@ -537,11 +468,29 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
         return Ok(());
     }
 
+    let cache = crate::shared::env::CACHE_DIR.join(".bin");
+    if !cache.exists() {
+        user::run_as!(user::Mode::Effective, {
+            std::fs::create_dir_all(&cache).expect("Failed to create binary cache")
+        });
+    }
+
     let mut elf_binaries = BTreeSet::<String>::new();
-    let parsed = debug_timer!(
-        "::collect",
-        try_run_as!(user::Mode::Effective, collect(profile, name))
-    )?;
+    let parsed = match ParseReturn::cache(name, &cache)? {
+        Some(parsed) => parsed,
+        None => {
+            let parsed = Arc::new(ParseReturn::new(&cache));
+            debug_timer!(
+                "::collect",
+                try_run_as!(
+                    user::Mode::Effective,
+                    collect(profile, instance, name, Arc::clone(&parsed))
+                )
+            )?;
+            parsed.write(name)?;
+            Arc::into_inner(parsed).unwrap()
+        }
+    };
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
@@ -606,15 +555,14 @@ pub fn fabricate(profile: &mut Profile, name: &str, handle: &Spawner) -> Result<
     if let Some(home) = &profile.home {
         debug_timer!("::home_binaries", {
             let home_dir = home.path(name);
-            try_run_as!(user::Mode::Real, Result<()>, {
-                if !home_dir.exists() {
-                    fs::create_dir_all(&home_dir)?;
-                }
-                let home_str = home_dir.to_string_lossy();
-                let home_binaries = get_dir(&home_str)?;
-                elf_binaries.extend(home_binaries);
-                Ok(())
-            })?;
+            if home_dir.exists() {
+                try_run_as!(user::Mode::Real, Result<()>, {
+                    let home_str = home_dir.to_string_lossy();
+                    let home_binaries = get_dir(&home_str, Some(&cache))?;
+                    elf_binaries.extend(home_binaries);
+                    Ok(())
+                })?
+            }
         })
     }
 

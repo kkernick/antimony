@@ -1,18 +1,15 @@
 use crate::{
     debug_timer,
-    shared::{
-        Set,
-        env::AT_HOME,
-        path::{user_dir, which_exclude},
-        profile::SeccompPolicy,
-    },
+    shared::{Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
 };
 use ahash::HashSetExt;
+use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, trace, warn};
 use nix::{
-    errno,
-    sys::socket::{self, ControlMessage, MsgFlags},
+    errno::{self, Errno},
+    poll::{PollFd, PollFlags, PollTimeout},
+    sys::socket::{self, ControlMessage, ControlMessageOwned, MsgFlags, recvmsg},
 };
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
@@ -24,10 +21,10 @@ use std::{
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{self, BufRead, BufReader, IoSlice, Write},
+    io::{self, BufRead, BufReader, IoSlice, IoSliceMut, Write},
     os::{
-        fd::{AsRawFd, IntoRawFd, OwnedFd},
-        unix::net::UnixStream,
+        fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd},
+        unix::net::{UnixListener, UnixStream},
     },
     path::PathBuf,
     sync::LazyLock,
@@ -92,6 +89,57 @@ pub static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
 /// The location to store cache files.
 pub static CACHE_DIR: LazyLock<PathBuf> =
     LazyLock::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
+
+static CACHE: LazyLock<DashMap<String, i32, ahash::RandomState>> = LazyLock::new(DashMap::default);
+
+pub fn get_name(name: &str) -> i32 {
+    // Insert if missing
+    if !CACHE.contains_key(name) {
+        CACHE.insert(
+            name.to_string(),
+            Syscall::from_name(name).unwrap().get_number(),
+        );
+    }
+    *CACHE.get(name).unwrap().value()
+}
+
+/*
+ static SECCOMP: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("seccomp")
+        .expect("Failed to code seccomp code")
+        .get_number()
+});
+
+pub static PRCTL: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("prctl")
+        .expect("Failed to code prctl code")
+        .get_number()
+});
+
+pub static FCHMOD: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("fchmod")
+        .expect("Failed to code fchmod code")
+        .get_number()
+});
+
+pub static EXECVE: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("execve")
+        .expect("Failed to code execve code")
+        .get_number()
+});
+
+pub static PPOLL: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("ppoll")
+        .expect("Failed to code ppoll code")
+        .get_number()
+});
+
+pub static WAIT: LazyLock<i32> = LazyLock::new(|| {
+    Syscall::from_name("wait4")
+        .expect("Failed to code wait code")
+        .get_number()
+});
+*/
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug)]
@@ -174,7 +222,7 @@ impl From<errno::Errno> for Error {
 }
 
 /// The Antimony Monitor Notifier Implementation.
-struct Notifier {
+pub struct Notifier {
     /// The path to the socket.
     path: PathBuf,
 
@@ -234,7 +282,7 @@ impl seccomp::filter::Notifier for Notifier {
 
     /// Send the FD to the Monitor.
     fn handle(&mut self, fd: OwnedFd) {
-        let stream = self.stream.take().unwrap();
+        let stream = self.stream.take().expect("Failed to get stream");
         let raw_fd = stream.as_raw_fd();
         let name_bytes = self.name.as_bytes();
         let io = [IoSlice::new(name_bytes)];
@@ -332,8 +380,8 @@ fn extend(binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
         None => binary,
     };
 
-    let resolved = match which_exclude(binary) {
-        Ok(resolved) => Cow::Owned(resolved),
+    let resolved = match which::which(binary) {
+        Ok(resolved) => Cow::Borrowed(resolved),
         Err(_) => Cow::Borrowed(binary),
     };
 
@@ -473,7 +521,7 @@ pub fn new(
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-    for required in ["execve", "wait4"] {
+    for required in ["execve", "wait4", "exit"] {
         syscalls.insert(Syscall::from_name(required)?.get_number());
     }
 
@@ -515,4 +563,63 @@ pub fn new(
         filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
     }
     Ok((filter, fd))
+}
+
+/// Poll on Accept, Timing out after timeout.
+fn accept_with_timeout(
+    listener: &UnixListener,
+    timeout: PollTimeout,
+) -> Result<Option<UnixStream>, Error> {
+    listener.set_nonblocking(true)?;
+
+    let fd = listener.as_fd();
+    let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
+
+    let res = nix::poll::poll(&mut fds, timeout)?;
+
+    if res == 0 {
+        // Timed out
+        Ok(None)
+    } else {
+        // Ready to accept
+        match listener.accept() {
+            Ok((stream, _addr)) => Ok(Some(stream)),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+}
+
+/// Receive a file descriptor from a Unix socket as an `OwnedFd`.
+pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, Error> {
+    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
+    if let Some(stream) = stream {
+        let mut buf = [0u8; 256];
+        let pair = || -> Result<Option<(OwnedFd, usize)>, Errno> {
+            let raw_fd = stream.as_raw_fd();
+
+            let mut io = [IoSliceMut::new(&mut buf)];
+            let mut msg_space = nix::cmsg_space!([RawFd; 1]);
+
+            let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
+
+            for cmsg in msg.cmsgs()? {
+                if let ControlMessageOwned::ScmRights(fds) = cmsg
+                    && let Some(fd) = fds.first()
+                {
+                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
+                    return Ok(Some((owned_fd, msg.bytes)));
+                }
+            }
+            Ok(None)
+        }()?;
+
+        if let Some((fd, bytes)) = pair {
+            let name = String::from_utf8_lossy(&buf[..bytes])
+                .trim_end_matches(char::from(0))
+                .to_string();
+            return Ok(Some((fd, name)));
+        }
+    }
+    Ok(None)
 }

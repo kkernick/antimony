@@ -125,7 +125,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     //  2. Bails
     let buffer = loop {
         // Launch the editor.
-        Spawner::new(EDITOR.as_str())
+        Spawner::new(EDITOR.as_str())?
             .preserve_env(true)
             .arg(temp.path().to_string_lossy())?
             .mode(user::Mode::Real)

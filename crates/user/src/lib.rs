@@ -107,6 +107,18 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
     Ok((uid, gid))
 }
 
+/// Get the current user mode
+pub fn current() -> Result<Mode, Errno> {
+    let uid = getresuid()?.real;
+    if uid == USER.real {
+        Ok(Mode::Real)
+    } else if uid == USER.effective {
+        Ok(Mode::Effective)
+    } else {
+        Err(Errno::EINVAL)
+    }
+}
+
 /// Revert the Mode to the original.
 /// This function returns to the values of `USER` and `GROUP`.
 /// This function can fail if the underlying syscall does.

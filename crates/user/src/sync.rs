@@ -38,7 +38,8 @@
 //! This implementation only protects the interior of the macro.
 #![cfg(feature = "sync")]
 
-use std::sync::{Arc, Condvar, LazyLock, Mutex, MutexGuard};
+use parking_lot::{Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, LazyLock};
 
 /// The global semaphore controls which thread is allowed to change users.
 static SEMAPHORE: LazyLock<Arc<(Mutex<bool>, Condvar)>> =
@@ -72,11 +73,11 @@ impl Sync {
         let sem = Arc::clone(&SEMAPHORE);
         let (mutex, cvar) = &*sem;
         let mut guard: MutexGuard<'static, bool> = unsafe {
-            let tmp_guard = mutex.lock().expect("Sync poisoned!");
+            let tmp_guard = mutex.lock();
             std::mem::transmute::<MutexGuard<'_, bool>, MutexGuard<'static, bool>>(tmp_guard)
         };
         while *guard {
-            guard = cvar.wait(guard).expect("Sync poisoned!");
+            cvar.wait(&mut guard);
         }
         *guard = true;
         Self { sem, guard }

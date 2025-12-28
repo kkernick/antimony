@@ -26,8 +26,10 @@ fn get_x(file: &str, handle: &Spawner) -> Result<()> {
 
 pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
     let path = direct_path(file);
-    if !path.exists() {
-        fs::create_dir_all(path.parent().unwrap())?;
+    if !path.exists()
+        && let Some(parent) = path.parent()
+    {
+        fs::create_dir_all(parent)?;
         let contents = resolve_env(Cow::Borrowed(&contents));
         fs::write(&path, contents.as_ref())?;
     }

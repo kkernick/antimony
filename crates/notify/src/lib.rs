@@ -5,6 +5,7 @@ use std::{
     borrow::Cow,
     io::{Write, stdout},
     sync::LazyLock,
+    thread,
     time::Duration,
 };
 
@@ -91,7 +92,7 @@ pub fn notify(
     urgency: Option<Urgency>,
 ) -> Result<(), Error> {
     #[rustfmt::skip]
-    let handle = Spawner::new("notify-send")
+    let handle = Spawner::new("notify-send")?
         .args([title.into(), body.into()])?
         .arg("-a")?
         .arg(if let Ok(path) = std::env::current_exe() && let Some(name) = path.file_name() {
@@ -123,7 +124,7 @@ pub fn action(
     actions: Vec<(impl Into<Cow<'static, str>>, impl Into<Cow<'static, str>>)>,
 ) -> Result<String, Error> {
     #[rustfmt::skip]
-    let handle = Spawner::new("notify-send")
+    let handle = Spawner::new("notify-send")?
         .args([title.into(), body.into()])?
         .arg("-a")?
         .arg(if let Ok(path) = std::env::current_exe() && let Some(name) = path.file_name() {
@@ -200,10 +201,14 @@ impl log::Log for NotifyLogger {
 
         let mut out = stdout();
         let mut msg = String::new();
-        msg.push_str(&format!("[{} ", Self::level_color(record.level())));
-        msg.push_str(&format!("{}", style(record.target()).bold().italic()));
+        msg.push_str(&format!(
+            "[{} {} {:?}] {}",
+            Self::level_color(record.level()),
+            style(record.target()).bold().italic(),
+            thread::current().id(),
+            record.args()
+        ));
 
-        msg.push_str(&format!("] {}", record.args()));
         if !msg.ends_with('\n') {
             msg.push('\n')
         }

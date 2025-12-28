@@ -8,13 +8,15 @@ use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
     unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execv, execve, fork, pipe},
 };
+use parking_lot::Mutex;
 use std::{
     borrow::Cow,
+    convert::Infallible,
     env, error,
     ffi::{CString, NulError},
     fmt,
     os::fd::OwnedFd,
-    sync::Mutex,
+    process::exit,
 };
 use which::which;
 
@@ -116,9 +118,6 @@ pub enum StreamMode {
     #[default]
     Share,
 
-    /// Send the stream to /dev/null.
-    Discard,
-
     /// Send the output to the system logger at the provided level.
     Log(log::Level),
 }
@@ -132,13 +131,13 @@ pub enum StreamMode {
 /// ## Examples
 /// Launch bash in a child, inheriting the parent's input/output/error:
 /// ```rust
-/// spawn::Spawner::new("bash").spawn().unwrap();
+/// spawn::Spawner::new("bash").unwrap().spawn().unwrap();
 /// ```
 ///
 /// Launch cat, feeding it input from the parent:
 /// ```rust
 /// use std::io::Write;
-/// let mut handle = spawn::Spawner::new("cat")
+/// let mut handle = spawn::Spawner::new("cat").unwrap()
 ///     .input(spawn::StreamMode::Pipe)
 ///     .output(spawn::StreamMode::Pipe)
 ///     .spawn()
@@ -203,7 +202,13 @@ pub struct Spawner {
 impl<'a> Spawner {
     /// Construct a `Spawner` to spawn *cmd*.
     /// *cmd* will be resolved from **PATH**.
-    pub fn new(cmd: impl Into<String>) -> Self {
+    pub fn new(cmd: impl Into<String>) -> Result<Self, Error> {
+        let cmd = cmd.into();
+        let path = which::which(&cmd).map_err(|_| Error::Path(cmd))?;
+        Ok(Self::abs(path))
+    }
+
+    pub fn abs(cmd: impl Into<String>) -> Self {
         Self {
             cmd: cmd.into(),
             unique_name: None,
@@ -397,7 +402,7 @@ impl<'a> Spawner {
     /// commit both the FD and argument in the same transaction:
     /// ```rust
     /// let file = std::fs::File::create("file.txt").unwrap();
-    /// spawn::Spawner::new("bwrap")
+    /// spawn::Spawner::new("bwrap").unwrap()
     ///     .fd_arg("--file", file).unwrap()
     ///     .arg("/file.txt").unwrap()
     ///     .spawn().unwrap();
@@ -502,7 +507,6 @@ impl<'a> Spawner {
     pub fn arg_i(&self, arg: impl Into<Cow<'a, str>>) -> Result<(), Error> {
         self.args
             .lock()
-            .expect("Args poisoned!")
             .push(CString::new(arg.into().as_ref()).map_err(Error::Null)?);
         Ok(())
     }
@@ -511,7 +515,7 @@ impl<'a> Spawner {
     /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fd_i(&self, fd: impl Into<OwnedFd>) {
-        self.fds.lock().expect("FDs poisoned!").push(fd.into());
+        self.fds.lock().push(fd.into());
     }
 
     /// Move FDs to the `Spawner` in-place, passing it as an argument.
@@ -536,10 +540,7 @@ impl<'a> Spawner {
         I: IntoIterator<Item = S>,
         S: Into<OwnedFd>,
     {
-        self.fds
-            .lock()
-            .expect("FDs poisoned!")
-            .extend(fds.into_iter().map(Into::into));
+        self.fds.lock().extend(fds.into_iter().map(Into::into));
     }
 
     /// Move an iterator of arguments to the `Spawner` in-place.
@@ -551,7 +552,8 @@ impl<'a> Spawner {
         I: IntoIterator<Item = S>,
         S: Into<Cow<'a, str>>,
     {
-        let mut a = self.args.lock().expect("Lock poisoned!");
+        let mut a = self.args.lock();
+
         for s in args {
             let cow: Cow<'a, str> = s.into();
             a.push(CString::new(cow.as_ref()).map_err(Error::Null)?);
@@ -572,7 +574,7 @@ impl<'a> Spawner {
     ///
     /// ```rust
     /// let cache = std::path::PathBuf::from("cmd.cache");
-    /// let mut handle = spawn::Spawner::new("bash");
+    /// let mut handle = spawn::Spawner::new("bash").unwrap();
     /// if cache.exists() {
     ///     handle.cache_read(&cache).unwrap();
     /// } else {
@@ -594,7 +596,7 @@ impl<'a> Spawner {
         if self.cache_index.is_some() {
             Err(Error::Cache("Caching already started!"))
         } else {
-            self.cache_index = Some(self.args.lock().expect("Arguments poisoned!").len());
+            self.cache_index = Some(self.args.lock().len());
             Ok(())
         }
     }
@@ -608,7 +610,8 @@ impl<'a> Spawner {
     pub fn cache_write(&mut self, path: &Path) -> Result<(), Error> {
         use std::io::Write;
         if let Some(i) = self.cache_index {
-            let args = self.args.lock().expect("Arguments poisoned!");
+            let args = self.args.lock();
+
             if let Some(parent) = path.parent()
                 && !parent.exists()
             {
@@ -633,7 +636,8 @@ impl<'a> Spawner {
     /// or if the contents contain strings will NULL bytes.
     #[cfg(feature = "cache")]
     pub fn cache_read(&mut self, path: &Path) -> Result<(), Error> {
-        let mut args = self.args.lock().expect("Args poisoned!");
+        let mut args = self.args.lock();
+
         for arg in fs::read_to_string(path).map_err(Error::Io)?.lines() {
             args.push(CString::new(arg).map_err(Error::Null)?);
         }
@@ -715,12 +719,16 @@ impl<'a> Spawner {
                     None
                 };
 
+                let mode = self.mode.unwrap_or(
+                    user::current().map_err(|e| Error::Errno(Some(fork), "getresuid", e))?,
+                );
+
                 // Return.
                 let handle = Handle::new(
                     name,
                     child,
                     #[cfg(feature = "user")]
-                    self.mode,
+                    mode,
                     stdin,
                     stdout,
                     stderr,
@@ -730,112 +738,113 @@ impl<'a> Spawner {
             }
 
             ForkResult::Child => {
-                let resolved = which(&self.cmd).map_err(|_| Error::Path(self.cmd.clone()))?;
-                let resolved = resolved.to_string_lossy();
+                let result = || -> Result<Infallible, Error> {
+                    #[cfg(feature = "fd")]
+                    let fds = self.fds.into_inner();
 
-                #[cfg(feature = "fd")]
-                let fds = self.fds.into_inner().expect("FDs poisoned!");
+                    let mut cmd_c: Option<CString> = None;
+                    let mut args_c = Vec::<CString>::new();
 
-                let mut cmd_c: Option<CString> = None;
-                let mut args_c = Vec::<CString>::new();
+                    // Launch with pkexec if we're elevated.
+                    #[cfg(feature = "elevate")]
+                    if self.elevate {
+                        let polkit = CString::new(
+                            which("pkexec")
+                                .map_err(|e| Error::Path(e.to_string()))?
+                                .as_bytes(),
+                        )
+                        .map_err(Error::Null)?;
 
-                // Launch with pkexec if we're elevated.
-                #[cfg(feature = "elevate")]
-                if self.elevate {
-                    let polkit = CString::new(
-                        which("pkexec")
-                            .map_err(|e| Error::Path(e.to_string()))?
-                            .to_string_lossy()
-                            .as_bytes(),
-                    )
-                    .map_err(Error::Null)?;
-
-                    if cmd_c.is_none() {
-                        cmd_c = Some(polkit.clone());
+                        if cmd_c.is_none() {
+                            cmd_c = Some(polkit.clone());
+                        }
+                        args_c.push(polkit);
                     }
-                    args_c.push(polkit);
-                }
 
-                let resolved = CString::new(resolved.into_owned()).map_err(Error::Null)?;
-                let cmd_c = if let Some(cmd) = cmd_c {
-                    cmd
-                } else {
-                    resolved.clone()
-                };
+                    let resolved = CString::new(self.cmd).map_err(Error::Null)?;
+                    let cmd_c = if let Some(cmd) = cmd_c {
+                        cmd
+                    } else {
+                        resolved.clone()
+                    };
 
-                args_c.push(resolved);
-                args_c.append(&mut self.args.into_inner().expect("Args poisoned!"));
+                    args_c.push(resolved);
+                    args_c.append(&mut self.args.into_inner());
 
-                // Log if desired.
-                if log::log_enabled!(log::Level::Trace) {
-                    let formatted = args_c
-                        .iter()
-                        .filter_map(|s| s.to_str().ok())
-                        .collect::<Vec<&str>>()
-                        .join(" ");
-                    trace!("{formatted:?}");
-                }
+                    // Log if desired.
+                    if log::log_enabled!(log::Level::Trace) {
+                        let formatted = args_c
+                            .iter()
+                            .filter_map(|s| s.to_str().ok())
+                            .collect::<Vec<&str>>()
+                            .join(" ");
+                        trace!("{formatted:?}");
+                    }
 
-                // Setup the pipes.
-                if let Some((read, write)) = stdout {
-                    close(read).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
-                    dup2_stdout(write).map_err(|e| Error::Errno(Some(fork), "dup output", e))?;
-                }
-                if let Some((read, write)) = stderr {
-                    close(read).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
-                    dup2_stderr(write).map_err(|e| Error::Errno(Some(fork), "dup error", e))?;
-                }
-                if let Some((read, write)) = stdin {
-                    close(write).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
-                    dup2_stdin(read).map_err(|e| Error::Errno(Some(fork), "dup input", e))?;
-                }
+                    // Setup the pipes.
+                    if let Some((read, write)) = stdout {
+                        close(read).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
+                        dup2_stdout(write)
+                            .map_err(|e| Error::Errno(Some(fork), "dup output", e))?;
+                    }
+                    if let Some((read, write)) = stderr {
+                        close(read).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
+                        dup2_stderr(write).map_err(|e| Error::Errno(Some(fork), "dup error", e))?;
+                    }
+                    if let Some((read, write)) = stdin {
+                        close(write).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
+                        dup2_stdin(read).map_err(|e| Error::Errno(Some(fork), "dup input", e))?;
+                    }
 
-                // Clear F_SETFD to allow passed FD's to persist after execve
-                #[cfg(feature = "fd")]
-                for fd in &fds {
-                    fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
-                        .map_err(|e| Error::Errno(Some(fork), "fnctl fd", e))?;
-                }
+                    // Clear F_SETFD to allow passed FD's to persist after execve
+                    #[cfg(feature = "fd")]
+                    for fd in &fds {
+                        fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
+                            .map_err(|e| Error::Errno(Some(fork), "fnctl fd", e))?;
+                    }
 
-                // Ensure that the child dies when the parent does.
-                prctl::set_pdeathsig(SIGTERM)
-                    .map_err(|e| Error::Errno(Some(fork), "set death signal", e))?;
+                    // Ensure that the child dies when the parent does.
+                    prctl::set_pdeathsig(SIGTERM)
+                        .map_err(|e| Error::Errno(Some(fork), "set death signal", e))?;
 
-                // Drop modes
-                #[cfg(feature = "user")]
-                if let Some(mode) = self.mode {
-                    user::drop(mode)
-                        .map_err(|e| Error::Errno(Some(fork), "drop user privilege", e))?;
-                }
+                    // Drop modes
+                    #[cfg(feature = "user")]
+                    if let Some(mode) = self.mode {
+                        user::drop(mode)
+                            .map_err(|e| Error::Errno(Some(fork), "drop user privilege", e))?;
+                    }
 
-                // Apply SECCOMP.
-                // Because we can't just trust the application is able/willing to
-                // apply a SECCOMP filter on it's own, we have to do it before the execve
-                // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
-                // or some other mechanism to let the process to spawn.
-                #[cfg(feature = "seccomp")]
-                if let Some(filter) = self.seccomp {
-                    filter.load().map_err(Error::Seccomp)?;
-                }
+                    // Apply SECCOMP.
+                    // Because we can't just trust the application is able/willing to
+                    // apply a SECCOMP filter on it's own, we have to do it before the execve
+                    // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
+                    // or some other mechanism to let the process to spawn.
+                    #[cfg(feature = "seccomp")]
+                    if let Some(filter) = self.seccomp {
+                        filter.load().map_err(Error::Seccomp)?;
+                    }
 
-                for env in &self.env {
-                    // We already converted from Strings, so these are UT8-safe.
-                    let estr = env.clone().into_string().map_err(|_| Error::Environment)?;
-                    let mut split = estr.split('=');
-                    let key = split.next().ok_or(Error::Environment)?;
-                    let value = split.next().ok_or(Error::Environment)?;
-                    unsafe { env::set_var(key, value) }
-                }
+                    for env in &self.env {
+                        // We already converted from Strings, so these are UT8-safe.
+                        let estr = env.clone().into_string().map_err(|_| Error::Environment)?;
+                        let mut split = estr.split('=');
+                        let key = split.next().ok_or(Error::Environment)?;
+                        let value = split.next().ok_or(Error::Environment)?;
+                        unsafe { env::set_var(key, value) }
+                    }
 
-                // Execve
-                if self.preserve_env {
-                    execv(&cmd_c, &args_c)
-                } else {
-                    execve(&cmd_c, &args_c, &self.env)
-                }
-                .map_err(|errno| Error::Errno(Some(fork), "exec", errno))
-                .expect_err("This should never happen");
-                unreachable!();
+                    // Execve
+                    if self.preserve_env {
+                        execv(&cmd_c, &args_c)
+                    } else {
+                        execve(&cmd_c, &args_c, &self.env)
+                    }
+                    .map_err(|errno| Error::Errno(Some(fork), "exec", errno))
+                }();
+
+                let e = result.unwrap_err();
+                log::error!("Failed to spawn child: {e}");
+                exit(-1);
             }
         }
     }
@@ -860,12 +869,6 @@ fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
             }
         }
         StreamMode::Share => Ok(None),
-        StreamMode::Discard => {
-            let null = std::fs::File::open("/dev/null").map_err(Error::Io)?;
-            let dup =
-                nix::unistd::dup(&null).map_err(|e| Error::Errno(None, "Duplicate Null", e))?;
-            Ok(Some((OwnedFd::from(null), dup)))
-        }
     }
 }
 
@@ -887,29 +890,29 @@ mod tests {
     #[test]
     fn bash() -> Result<()> {
         let string = "Hello, World!";
-        let mut handle = Spawner::new("bash")
+        let mut handle = Spawner::new("bash")?
             .args(["-c", &format!("echo '{string}'")])?
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all().unwrap();
+        let output = handle.output()?.read_all()?;
         assert!(output.trim() == string);
         Ok(())
     }
 
     #[test]
     fn cat() -> Result<()> {
-        let mut handle = Spawner::new("cat")
+        let mut handle = Spawner::new("cat")?
             .input(StreamMode::Pipe)
             .output(StreamMode::Pipe)
             .spawn()?;
 
         let string = "Hello, World!";
-        write!(handle, "{string}").unwrap();
-        handle.close().unwrap();
+        write!(handle, "{string}")?;
+        handle.close()?;
 
-        let output = handle.output()?.read_all().unwrap();
+        let output = handle.output()?.read_all()?;
         assert!(output.trim() == string);
         Ok(())
     }
@@ -917,12 +920,12 @@ mod tests {
     #[test]
     fn read() -> Result<()> {
         let string = "Hello!";
-        let mut handle = Spawner::new("echo")
+        let mut handle = Spawner::new("echo")?
             .arg(string)?
             .output(StreamMode::Pipe)
             .spawn()?;
 
-        let bytes = handle.output()?.read_bytes(string.len()).unwrap();
+        let bytes = handle.output()?.read_bytes(string.len())?;
         let output = String::from_utf8_lossy(&bytes);
         assert!(output.trim() == string);
         Ok(())
@@ -930,13 +933,13 @@ mod tests {
 
     #[test]
     fn clear_env() -> Result<()> {
-        let mut handle = Spawner::new("bash")
+        let mut handle = Spawner::new("bash")?
             .args(["-c", "echo $USER"])?
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all().unwrap();
+        let output = handle.output()?.read_all()?;
         assert!(output.trim().is_empty());
         Ok(())
     }
@@ -944,14 +947,14 @@ mod tests {
     #[test]
     fn preserve_env() -> Result<()> {
         let user = "Test";
-        let mut handle = Spawner::new("bash")
+        let mut handle = Spawner::new("bash")?
             .args(["-c", "echo $USER"])?
             .env(format!("USER={user}"))?
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all().unwrap();
+        let output = handle.output()?.read_all()?;
         assert!(output.trim() == user);
         Ok(())
     }

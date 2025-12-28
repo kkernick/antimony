@@ -9,7 +9,7 @@ use antimony::shared::{
     Set,
     env::{DATA_HOME, RUNTIME_DIR},
     profile::SeccompPolicy,
-    syscalls::{self, CACHE_DIR},
+    syscalls::{self, CACHE_DIR, receive_fd},
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -19,15 +19,14 @@ use log::{debug, error, info, trace, warn};
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
-    poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
         signal::{
             Signal::{SIGKILL, SIGTERM},
             kill,
         },
         socket::{
-            AddressFamily, ControlMessageOwned, MsgFlags, NetlinkAddr, SockFlag, SockProtocol,
-            SockType, bind, recv, recvmsg, socket,
+            AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType, bind, recv,
+            socket,
         },
     },
     unistd::Pid,
@@ -39,14 +38,13 @@ use spawn::{Spawner, StreamMode};
 use std::{
     fmt::Display,
     fs,
-    io::{self, IoSliceMut},
     os::{
-        fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
-        unix::net::{UnixListener, UnixStream},
+        fd::{AsRawFd, OwnedFd},
+        unix::net::UnixListener,
     },
     path::Path,
     sync::{
-        Arc, LazyLock,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -200,24 +198,6 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) 
     Ok(())
 }
 
-static SECCOMP: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("seccomp")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
-static PRCTL: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("prctl")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
-static FCHMOD: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("fchmod")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
     Ok(notify::action(
@@ -273,13 +253,13 @@ pub fn notify_reader(
                 rayon::spawn(move || {
                     // Reply to the thread. Our handler just gets the name of the executable,
                     // resolves the syscall name, and permits the request.
-                    if let Err(e) = pair.reply(raw, |req, resp| {
+                    let result = pair.reply(raw, |req, resp| {
                         // Get the binary name
                         let pid = req.pid;
                         let exe_path = match fs::read_link(format!("/proc/{pid}/exe")) {
                             Ok(path) => Some(path),
-                            Err(_) => {
-                                warn!("Invalid exe at PID {pid}");
+                            Err(e) => {
+                                warn!("Invalid exe at PID {pid}: {e}");
                                 None
                             }
                         };
@@ -412,20 +392,26 @@ pub fn notify_reader(
                         // anything. Chromium/Electron, for some reason, do not use seccomp_api_get
                         // to determine features, but instead send null pointers to test capabilities.
                         // We handle both cases, and only ignore filters that would have actually worked.
-                        if ((call == *PRCTL && args[0] == PR_SET_SECCOMP as u64)
-                            || call == *SECCOMP)
+                        if ((call == syscalls::get_name("prctl")
+                            && args[0] == PR_SET_SECCOMP as u64)
+                            || call == syscalls::get_name("seccomp"))
                             && args[2] != 0
                         {
                             trace!("Ignoring SECCOMP request");
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
-                        } else if call == *FCHMOD && args[0] as i32 == -1 && args[1] == 0o7777 {
+                        } else if call == syscalls::get_name("fchmod")
+                            && args[0] as i32 == -1
+                            && args[1] == 0o7777
+                        {
                             trace!("Injected fchmod => EPERM");
                             resp.error = -EPERM;
                             resp.flags = 0;
                         }
-                    }) {
+                    });
+
+                    if let Err(e) = result {
                         warn!("Failed to reply: {e}");
                     }
                 });
@@ -440,69 +426,30 @@ pub fn notify_reader(
     Ok(())
 }
 
-/// Poll on Accept, Timing out after timeout.
-fn accept_with_timeout(
-    listener: &UnixListener,
-    timeout: PollTimeout,
-) -> Result<Option<UnixStream>, Error> {
-    listener.set_nonblocking(true)?;
-
-    let fd = listener.as_fd();
-    let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
-
-    let res = poll(&mut fds, timeout)?;
-
-    if res == 0 {
-        // Timed out
-        Ok(None)
-    } else {
-        // Ready to accept
-        match listener.accept() {
-            Ok((stream, _addr)) => Ok(Some(stream)),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-/// Receive a file descriptor from a Unix socket as an `OwnedFd`.
-pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, Error> {
-    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
-    if let Some(stream) = stream {
-        let mut buf = [0u8; 256];
-        let pair = || -> Result<Option<(OwnedFd, usize)>, Errno> {
-            let raw_fd = stream.as_raw_fd();
-
-            let mut io = [IoSliceMut::new(&mut buf)];
-            let mut msg_space = nix::cmsg_space!([RawFd; 1]);
-
-            let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
-
-            for cmsg in msg.cmsgs()? {
-                if let ControlMessageOwned::ScmRights(fds) = cmsg
-                    && let Some(fd) = fds.first()
-                {
-                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
-                    return Ok(Some((owned_fd, msg.bytes)));
-                }
-            }
-            Ok(None)
-        }()?;
-
-        if let Some((fd, bytes)) = pair {
-            let name = String::from_utf8_lossy(&buf[..bytes])
-                .trim_end_matches(char::from(0))
-                .to_string();
-            return Ok(Some((fd, name)));
-        }
-    }
-    Ok(None)
-}
-
 /// Receive and Respond to Notify Requests.
 fn main() -> Result<()> {
     notify::init()?;
     let cli = Cli::parse();
+
+    #[cfg(debug_assertions)]
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            println!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                println!("Deadlock #{}", i);
+                for t in threads {
+                    println!("Thread Id {:#?}", t.thread_id());
+                    println!("{:#?}", t.backtrace());
+                }
+            }
+        }
+    });
 
     // We dispatch requests to a thread pool for performance.
     rayon::ThreadPoolBuilder::new().build_global()?;
@@ -534,8 +481,7 @@ fn main() -> Result<()> {
         .clone();
 
     let audit_term = term.clone();
-
-    thread::spawn(move || audit_reader(audit_term, audit));
+    let mut threads = Vec::from([thread::spawn(move || audit_reader(audit_term, audit))]);
 
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
@@ -549,7 +495,7 @@ fn main() -> Result<()> {
                     .clone();
 
                 let profile_name = cli.profile.clone();
-                thread::spawn(move || {
+                threads.push(thread::spawn(move || {
                     notify_reader(
                         term_clone,
                         profile,
@@ -557,9 +503,9 @@ fn main() -> Result<()> {
                         profile_name.clone(),
                         AtomicBool::new(cli.mode == SeccompPolicy::Notify),
                     )
-                });
+                }));
             }
-            Ok(None) | Err(Error::Errno(Errno::EINTR)) => continue,
+            Ok(None) | Err(syscalls::Error::Errno(Errno::EINTR)) => continue,
             Err(e) => {
                 error!("Failed to received fd: {e}");
                 break;
@@ -567,79 +513,86 @@ fn main() -> Result<()> {
         }
     }
 
+    debug!("Waiting for threads to cleanup");
+    for thread in threads {
+        if thread.join().is_err() {
+            error!("Failed to join worker thread!");
+        }
+    }
+
+    user::set(Mode::Effective)?;
+
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
-    user::sync::try_run_as!(Mode::Effective, Result<()>, {
-        if !stats.is_empty() {
-            let mut conn = syscalls::DB_POOL.get()?;
-            let tx = conn.transaction()?;
-            println!("\n=== Syscall Summary ===");
+    if !stats.is_empty() {
+        let mut conn = syscalls::DB_POOL.get()?;
+        let tx = conn.transaction()?;
+        println!("\n=== Syscall Summary ===");
 
-            // Make sure the binary is either in the profile's persist home, or
-            // exists.
-            let binary_exist = |path: &str| -> Result<bool> {
-                Ok(if path.starts_with("/home/antimony") {
-                    let path = path.replace("/home/antimony", "*");
-                    !Spawner::new("/usr/bin/find")
-                        .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                        .args(["-wholename", &path])?
-                        .mode(user::Mode::Real)
-                        .output(StreamMode::Pipe)
-                        .spawn()?
-                        .output_all()?
-                        .is_empty()
-                } else if path.ends_with("flatpak-spawn") {
-                    true
-                } else {
-                    Path::new(&path).exists()
-                })
-            };
+        // Make sure the binary is either in the profile's persist home, or
+        // exists.
+        let binary_exist = |path: &str| -> Result<bool> {
+            Ok(if path.starts_with("/home/antimony") {
+                let path = path.replace("/home/antimony", "*");
+                !Spawner::abs("/usr/bin/find")
+                    .arg(DATA_HOME.join("antimony").to_string_lossy())?
+                    .args(["-wholename", &path])?
+                    .mode(user::Mode::Real)
+                    .output(StreamMode::Pipe)
+                    .spawn()?
+                    .output_all()?
+                    .is_empty()
+            } else if path.ends_with("flatpak-spawn") {
+                true
+            } else {
+                Path::new(&path).exists()
+            })
+        };
 
-            for (name, stats) in stats {
-                debug!("Updating {name}");
-                // Collect and insert syscall sets
-                let binaries: Set<String> = stats
-                    .iter_mut()
-                    .filter_map(|mut entry| {
-                        let binary = entry.key().clone();
-                        let syscalls = entry.value_mut();
+        for (name, stats) in stats {
+            debug!("Updating {name}");
+            // Collect and insert syscall sets
+            let binaries: Set<String> = stats
+                .iter_mut()
+                .filter_map(|mut entry| {
+                    let binary = entry.key().clone();
+                    let syscalls = entry.value_mut();
 
-                        match binary_exist(&binary) {
-                            Ok(true) => {
-                                println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
+                    match binary_exist(&binary) {
+                        Ok(true) => {
+                            println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
 
-                                // Insert into DB using the transaction
-                                if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
-                                    warn!("DB insert failed for {binary}: {e}");
-                                    return None;
-                                }
-
-                                if binary.contains("strace") {
-                                    None
-                                } else {
-                                    Some(binary.clone())
-                                }
+                            // Insert into DB using the transaction
+                            if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
+                                warn!("DB insert failed for {binary}: {e}");
+                                return None;
                             }
-                            _ => {
-                                info!("Ignoring ephemeral binary {binary}");
+
+                            if binary.contains("strace") {
                                 None
+                            } else {
+                                Some(binary.clone())
                             }
                         }
-                    })
-                    .collect();
+                        _ => {
+                            info!("Ignoring ephemeral binary {binary}");
+                            None
+                        }
+                    }
+                })
+                .collect();
 
-                if name != "audit" {
-                    update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
-                }
+            if name != "audit" {
+                update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
             }
-            println!("========================\n");
-            tx.commit()?;
-
-            conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
-                .with_context(|| "Flushing WAL")?;
         }
-        info!("Finished: {}", cli.instance);
-        Ok(())
-    })
+        println!("========================\n");
+
+        tx.commit()?;
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .with_context(|| "Flushing WAL")?;
+    }
+    info!("Finished: {}", cli.instance);
+    Ok(())
 }

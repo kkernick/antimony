@@ -43,7 +43,7 @@ Arguments can be passed via three methods:
 The in-place and consuming variants of these functions can be used interchangeably. For example:
 
 ```rust
-let proxy = Spawner::new("/usr/bin/bwrap")
+let proxy = Spawner::abs("/usr/bin/bwrap")
 .name("proxy")
 .mode(user::Mode::Real).args([
 		"--new-session",
@@ -130,6 +130,3 @@ A `Handle` can be *associated* with another `Handle`, such that they will be dro
 3. When the main `Handle` drops, its associated processes are cleaned up with it.
 
 A `Handle` can be given a unique, memorable name via `Spawner::name`, which is used in the `get_associate` of both objects. If no such name is provided, the string passed to `Spawner::new` is used instead (IE the path will not be resolved).
-
-
-

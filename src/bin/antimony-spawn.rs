@@ -95,6 +95,26 @@ fn main() -> Result<()> {
         unsafe { env::set_var("USER", "antimony") };
     }
 
+    #[cfg(debug_assertions)]
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(10));
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+
+            println!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                println!("Deadlock #{}", i);
+                for t in threads {
+                    println!("Thread Id {:#?}", t.thread_id());
+                    println!("{:#?}", t.backtrace());
+                }
+            }
+        }
+    });
+
     rayon::ThreadPoolBuilder::new().build_global()?;
     let cli = Cli::parse();
 
@@ -141,7 +161,7 @@ fn main() -> Result<()> {
         info.handle.spawn()?
     } else {
         // If --host, or no --sandbox, just spawn the command.
-        let mut handle = Spawner::new(cli.command);
+        let mut handle = Spawner::new(cli.command)?;
         if let Some(passthrough) = cli.passthrough {
             handle.args_i(passthrough)?;
         }

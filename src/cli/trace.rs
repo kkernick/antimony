@@ -1,7 +1,7 @@
 //! Run the sandbox under strace to locate missing files.
 use crate::{
     cli::run_vec,
-    fab::{lib::get_wildcards, localize_home, resolve},
+    fab::{get_wildcards, localize_home, resolve},
     setup::setup,
     shared::{Set, env::AT_HOME, feature::Feature, profile::FileMode},
 };
@@ -162,7 +162,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
                             let found = if file.is_empty() {
                                 false
                             } else if d_name.contains("*") {
-                                match get_wildcards(&d_name, true) {
+                                match get_wildcards(&d_name, true, None) {
                                     Ok(cards) => cards.contains(file),
                                     Err(_) => false,
                                 }

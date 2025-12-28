@@ -103,6 +103,7 @@ dependencies = [
  "log",
  "nix",
  "notify",
+ "parking_lot",
  "r2d2",
  "r2d2_sqlite",
  "rand",
@@ -375,12 +376,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
-name = "env_home"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7f84e12ccf0a7ddc17a6c41c93326024c42920d7ee630d04950e6926645c0fe"
-
-[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -413,6 +408,12 @@ name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+
+[[package]]
+name = "fixedbitset"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "foldhash"
@@ -677,11 +678,23 @@ version = "0.9.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
 dependencies = [
+ "backtrace",
  "cfg-if",
  "libc",
+ "petgraph",
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "petgraph"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
 ]
 
 [[package]]
@@ -947,6 +960,7 @@ dependencies = [
  "anyhow",
  "log",
  "nix",
+ "parking_lot",
  "seccomp",
  "signal-hook",
  "user",
@@ -1081,7 +1095,10 @@ checksum = "81e544489bf3d8ef66c953931f56617f423cd4b5494be343d9b9d3dda037b9a3"
 name = "user"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "log",
  "nix",
+ "parking_lot",
 ]
 
 [[package]]
@@ -1186,13 +1203,11 @@ dependencies = [
 
 [[package]]
 name = "which"
-version = "8.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3fabb953106c3c8eea8306e4393700d7657561cb43122571b172bbfb7c7ba1d"
+version = "0.1.0"
 dependencies = [
- "env_home",
- "rustix",
- "winsafe",
+ "ahash",
+ "dashmap",
+ "rayon",
 ]
 
 [[package]]
@@ -1291,12 +1306,6 @@ checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "winsafe"
-version = "0.0.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-bindgen"

@@ -1,6 +1,6 @@
 use crate::{
     debug_timer,
-    fab::lib::{add_sof, get_libraries},
+    fab::{get_libraries, lib::add_sof},
     shared::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
@@ -32,7 +32,8 @@ pub fn run(
     refresh: bool,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
-    let sof = CACHE_DIR.join(".proxy");
+    let cache = CACHE_DIR.join(".proxy");
+    let sof = cache.join("sof");
     let app_dir = RUNTIME_DIR.join("app").join(id);
     let proxy = user_dir(instance).join("proxy");
 
@@ -53,17 +54,19 @@ pub fn run(
     // It's shared between every application and instance.
     // Performed before we drop to the user.
     if !sof.exists() {
+        user::sync::try_run_as!(user::Mode::Effective, fs::create_dir_all(&sof))?;
+
         debug_timer!("::sof", {
-            let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"))?;
+            let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"), Some(&cache))?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Owned(library)))?;
+                .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache))?;
         });
     }
 
     let mut proxy = debug_timer!("::spawner", {
         #[rustfmt::skip]
-        let proxy = Spawner::new("/usr/bin/bwrap")
+        let proxy = Spawner::abs("/usr/bin/bwrap")
         .name("proxy")
         .error(StreamMode::Log(log::Level::Error))
         .mode(user::Mode::Real).args([
@@ -122,8 +125,6 @@ pub fn run(
         if log::log_enabled!(log::Level::Debug) {
             proxy.arg_i("--log")?;
             proxy.output_i(StreamMode::Log(log::Level::Debug));
-        } else {
-            proxy.output_i(StreamMode::Discard);
         }
     });
 

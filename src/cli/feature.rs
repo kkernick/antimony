@@ -22,7 +22,7 @@ pub struct Args {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         let result = try_run_as!(user::Mode::Real, Result<i32>, {
-            Ok(Spawner::new("pkcheck")
+            Ok(Spawner::abs("/usr/bin/pkcheck")
                 .args([
                     "--action-id",
                     "org.freedesktop.policykit.exec",

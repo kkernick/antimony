@@ -5,7 +5,7 @@ use crate::debug_timer;
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(proxy) = args.handle.get_associate("proxy")
-        && !proxy.alive()?
+        && proxy.alive()?.is_none()
     {
         return Err(anyhow!("Proxy died!"));
     }

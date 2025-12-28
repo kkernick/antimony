@@ -48,10 +48,7 @@ impl super::Run for Args {
                     if s_profile.exists()
                         && fs::read_to_string(profile.path())? == fs::read_to_string(s_profile)?
                     {
-                        println!(
-                            "Removing identical user profile {:?}",
-                            profile.path().file_stem().unwrap()
-                        );
+                        println!("Removing identical user profile {:?}", profile.path());
                         fs::remove_file(profile.path())?;
                     }
                 }

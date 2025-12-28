@@ -8,7 +8,7 @@ use crate::{
 };
 use ahash::{HashMapExt, HashSetExt};
 use log::{debug, warn};
-use spawn::{Spawner, StreamMode};
+use spawn::Spawner;
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -182,12 +182,12 @@ fn add_feature(
 ) -> Result<(), Error> {
     if let Some(condition) = feature.conditional.take() {
         let code = || -> anyhow::Result<i32> {
-            let code = Spawner::new("/usr/bin/bash")
+            let code = Spawner::abs("/usr/bin/bash")
                 .args(["-c", &condition])?
                 .preserve_env(true)
                 .mode(user::Mode::Real)
-                .output(StreamMode::Discard)
-                .error(StreamMode::Discard)
+                .output(spawn::StreamMode::Pipe)
+                .error(spawn::StreamMode::Pipe)
                 .spawn()?
                 .wait()?;
             Ok(code)

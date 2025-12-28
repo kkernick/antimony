@@ -9,7 +9,6 @@ use crate::shared::{
 use anyhow::Result;
 use clap::ValueEnum;
 use console::style;
-use log::error;
 use seccomp::syscall::Syscall;
 use std::{fs, path::Path};
 
@@ -67,7 +66,7 @@ impl super::Run for Args {
                                 style("Application not installed").red()
                             );
                         }
-                        Err(e) => error!("{e}"),
+                        Err(e) => return Err(e.into()),
                     }
                     Ok(())
                 };
