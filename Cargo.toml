@@ -16,7 +16,7 @@ members = [
 
 [dependencies]
 user = { path = "crates/user", features = ["sync"] }
-temp = { path = "crates/temp", features = ["user"] }
+temp = { path = "crates/temp" }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
 spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
 notify = { path = "crates/notify" }
@@ -27,7 +27,6 @@ dashmap = { version = "6.1.0", features = ["rayon"] }
 inotify = { version = "0.11.0", default-features = false }
 log = "0.4.27"
 nix = { version = "0.30.1", features = ["fs", "poll", "process", "signal", "user", "socket", "uio"] }
-rand = { version = "0.9.1", default-features = false, features = ["os_rng", "small_rng", "std"] }
 rayon = "1.10.0"
 serde = { version = "1.0.219", features = ["derive"] }
 toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }

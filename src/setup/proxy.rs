@@ -224,9 +224,10 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
         );
     }
 
-    let instance = &args.instance;
+    let instance = args.instance.name();
     let id = &args.id;
-    let user_dir_str = user_dir(&args.instance).to_string_lossy().into_owned();
+    let instance_dir = args.instance.full();
+    let instance_dir_str = instance_dir.to_string_lossy();
     let info = user_dir(instance).join(".flatpak-info");
 
     // Create the flatpak-info
@@ -266,7 +267,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
                         "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
                         "--ro-bind", "/run/dbus", "/run/dbus",
                         "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
-                        "--ro-bind", &format!("{user_dir_str}/.flatpak-info"), "/.flatpak-info",
+                        "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
                         "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
                         ].map(String::from).map(Cow::Owned));
                 Ok(())
@@ -311,7 +312,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
             run(
                 &args.sys_dir,
                 &args.profile,
-                &args.instance,
+                args.instance.name(),
                 &info,
                 id,
                 args.args.dry,
@@ -321,7 +322,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
         arguments.extend(
             [
                 "--ro-bind",
-                &format!("{user_dir_str}/proxy/bus"),
+                &format!("{instance_dir_str}/proxy/bus"),
                 &format!("{runtime}/bus"),
             ]
             .map(String::from)
@@ -331,12 +332,10 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
         if !args.args.dry {
             try_run_as!(user::Mode::Real, Result<()>, {
                 debug!("Creating proxy watch");
-                args.watches.insert(
-                    args.inotify
-                        .lock()
-                        .watches()
-                        .add(user_dir(&args.instance).join("proxy"), WatchMask::CREATE)?,
-                );
+                args.watches.insert(args.inotify.lock().watches().add(
+                    user_dir(args.instance.name()).join("proxy"),
+                    WatchMask::CREATE,
+                )?);
                 Ok(())
             })?;
             return Ok(Some((proxy.spawn()?, arguments)));

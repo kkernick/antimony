@@ -14,7 +14,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<Handle>> {
             if !args.args.dry
                 && let Some((filter, fd)) = syscalls::new(
                     &args.name,
-                    &args.instance,
+                    args.instance.name(),
                     policy,
                     &args.profile.lock().binaries,
                     args.args.refresh,
@@ -31,7 +31,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<Handle>> {
                     #[rustfmt::skip]
                 let handle = Spawner::abs("/usr/bin/antimony-monitor")
                     .args([
-                        "--instance", args.instance.as_str(),
+                        "--instance", args.instance.name(),
                         "--profile", &args.name,
                         "--mode", &format!("{policy:?}").to_lowercase()
                     ])?

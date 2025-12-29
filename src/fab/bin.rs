@@ -298,7 +298,7 @@ fn parse(
                     .any(|shell| header.contains(shell))
                 {
                     let out = Spawner::abs("/usr/bin/antimony-dumper")
-                        .args(["run", &resolved, instance])?
+                        .args(["run", "--path", &resolved, "--instance", instance])?
                         .output(StreamMode::Pipe)
                         .preserve_env(true)
                         .mode(user::Mode::Real)
@@ -500,7 +500,13 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             timer!(
                 "::collect",
                 try_run_as!(user::Mode::Effective, {
-                    collect(info.profile, info.instance, info.name, &parsed, &cache)
+                    collect(
+                        info.profile,
+                        info.name,
+                        info.instance.name(),
+                        &parsed,
+                        &cache,
+                    )
                 })
             )?;
             parsed.lock().write("bin.cache")?;

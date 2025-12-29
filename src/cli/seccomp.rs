@@ -14,7 +14,6 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-use temp::TempFile;
 use user::try_run_as;
 
 #[derive(clap::Args, Debug)]
@@ -123,7 +122,9 @@ impl super::Run for Args {
                         None => getcwd()?.join("syscalls.db"),
                     };
 
-                    let temp = TempFile::new().within(AT_HOME.join("seccomp")).create()?;
+                    let temp = temp::Builder::new()
+                        .within(AT_HOME.join("seccomp"))
+                        .create::<temp::File>()?;
                     fs::copy(&db, temp.path())?;
 
                     let mut conn = pool.get()?;

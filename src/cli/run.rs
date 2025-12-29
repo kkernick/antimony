@@ -282,7 +282,10 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             let error = handle.error_all()?;
             // Write it to a log file.
             if !error.is_empty() {
-                let log = info.sys_dir.join(&info.instance).with_extension("log");
+                let log = info
+                    .sys_dir
+                    .join(info.instance.name())
+                    .with_extension("log");
                 let mut file = fs::File::create(&log)?;
                 file.write_all(error.as_bytes())?;
                 Some(log)
@@ -349,9 +352,6 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             }
         }
     }
-
-    debug!("Cleaning up");
-    crate::setup::cleanup(info.instance)?;
     Ok(())
 }
 

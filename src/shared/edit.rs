@@ -9,7 +9,6 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use temp::TempFile;
 use user::run_as;
 
 use crate::shared::env::EDITOR;
@@ -109,7 +108,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
     let temp = run_as!(user::Mode::Real, Result<_, Error>, {
-        let temp = TempFile::create_now().map_err(|e| Error::Io("open temporary file", e))?;
+        let temp = temp::Builder::new().create::<temp::File>().map_err(|e| Error::Io("open temporary file", e))?;
         fs::copy(path, temp.path()).map_err(|e| Error::Io("write temporary file", e))?;
         Ok(temp)
     })?;

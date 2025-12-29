@@ -266,6 +266,5 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
             })?;
         }
     }
-
-    crate::setup::cleanup(info.instance)
+    Ok(())
 }

@@ -11,7 +11,6 @@ use crate::{
     cli::run::mounted,
     shared::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
-        path::user_dir,
         profile::Profile,
     },
     timer,
@@ -26,16 +25,15 @@ use dbus::{
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
 use parking_lot::Mutex;
-use rand::RngCore;
 use spawn::{Handle, Spawner};
 use std::{
     borrow::Cow,
     fs,
-    os::unix::fs::symlink,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
+use temp::Temp;
 use user::try_run_as;
 
 struct Args<'a> {
@@ -46,7 +44,7 @@ struct Args<'a> {
     pub inotify: Mutex<Inotify>,
     pub watches: DashSet<WatchDescriptor>,
     pub sys_dir: PathBuf,
-    pub instance: String,
+    pub instance: &'a Temp,
     pub args: &'a mut super::cli::run::Args,
 }
 
@@ -55,7 +53,7 @@ pub struct Info {
     pub handle: Spawner,
     pub post: Vec<String>,
     pub profile: Profile,
-    pub instance: PathBuf,
+    pub instance: Temp,
     pub home: Option<String>,
     pub sys_dir: PathBuf,
 }
@@ -82,21 +80,10 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     let mut sys_dir = CACHE_DIR.join(&hash);
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let instance = timer!("::instance", {
-        loop {
-            let mut bytes = [0; 8];
-            rand::rng().fill_bytes(&mut bytes);
-            let instance = bytes
-                .iter()
-                .map(|byte| format!("{byte:02x?}"))
-                .collect::<Vec<String>>()
-                .join("");
-
-            if !sys_dir.join("instances").join(&instance).exists() {
-                break instance;
-            }
-        }
-    });
+    let mut instance = temp::Builder::new()
+        .within(PathBuf::from(RUNTIME_DIR.as_path()).join("antimony"))
+        .owner(user::Mode::Real)
+        .create::<temp::Directory>()?;
 
     timer!("::cache", {
         let busy = |path: &Path| -> bool {
@@ -148,37 +135,42 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     if !instances.exists() {
         fs::create_dir(&instances)?;
     }
-
     let runtime = RUNTIME_STR.as_str();
 
     timer!("::document_wakeup", {
-        try_run_as!(user::Mode::Real, Result<()>, {
-            if let Some(ipc) = &profile.ipc
-                && !ipc.disable.unwrap_or(false)
-                && !mounted(&format!("{runtime}/doc"))
-            {
-                let connection = LocalConnection::new_session()?;
-                let msg = Message::new_method_call(
-                    BusName::from("org.freedesktop.portal.Documents\0"),
-                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                    Interface::from("org.freedesktop.DBus.Peer\0"),
-                    Member::from("Ping\0"),
-                );
+        if let Some(ipc) = &profile.ipc
+            && !ipc.disable.unwrap_or(false)
+        {
+            try_run_as!(user::Mode::Real, Result<()>, {
+                if !mounted(&format!("{runtime}/doc")) {
+                    let connection = LocalConnection::new_session()?;
+                    let msg = Message::new_method_call(
+                        BusName::from("org.freedesktop.portal.Documents\0"),
+                        dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                        Interface::from("org.freedesktop.DBus.Peer\0"),
+                        Member::from("Ping\0"),
+                    );
 
-                if let Ok(msg) = msg {
-                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-                } else {
-                    return Err(anyhow!("Failed to send ping to Document Portal"));
+                    if let Ok(msg) = msg {
+                        connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+                    } else {
+                        return Err(anyhow!("Failed to send ping to Document Portal"));
+                    }
                 }
-            }
+                Ok(())
+            })?;
 
-            // The user dir is at XDG_RUNTIME_DIR, and contains user-facing files.
-            fs::create_dir_all(user_dir(&instance).as_path())?;
-            Ok(())
-        })?;
+            instance.associate(
+                temp::Builder::new()
+                    .within(RUNTIME_DIR.join(".flatpak"))
+                    .name(instance.name())
+                    .owner(user::Mode::Real)
+                    .create::<temp::Directory>()?,
+            );
+        }
     });
 
-    symlink(user_dir(&instance), instances.join(&instance))?;
+    instance.link(instances.join(instance.name()), user::Mode::Effective)?;
 
     // Start the command.
     #[rustfmt::skip]
@@ -212,7 +204,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         inotify,
         watches,
         sys_dir: sys_dir.clone(),
-        instance,
+        instance: &instance,
         args,
     });
 
@@ -257,32 +249,8 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         handle: a.handle,
         post,
         profile: a.profile.into_inner(),
-        instance: instances.join(a.instance),
+        instance,
         home,
         sys_dir,
     })
-}
-
-pub fn cleanup(instance: PathBuf) -> Result<()> {
-    debug!("Cleaning up!");
-
-    let user_dir = fs::read_link(&instance)?;
-    fs::remove_file(&instance)?;
-
-    try_run_as!(user::Mode::Real, Result<()>, {
-        let runtime = RUNTIME_DIR.join(".flatpak").join(&instance);
-        if runtime.exists() {
-            fs::remove_dir_all(runtime)?;
-        }
-
-        if user_dir.exists() {
-            debug!("Removing instance at {user_dir:?}");
-            fs::remove_dir_all(user_dir)?;
-        }
-
-        Ok(())
-    })?;
-
-    debug!("Goodbye!");
-    Ok(())
 }

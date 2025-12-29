@@ -13,7 +13,6 @@ use clap::{Parser, ValueEnum};
 use dialoguer::Input;
 use nix::unistd::chdir;
 use spawn::Spawner;
-use temp::TempDir;
 
 #[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
 pub enum Benchmark {
@@ -146,10 +145,10 @@ fn main() -> Result<()> {
         // Set AT_HOME to our current config.
         unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
         Some(
-            TempDir::new()
+            temp::Builder::new()
                 .name("cache")
                 .within(Path::new(root).join("config"))
-                .create()?,
+                .create::<temp::Directory>()?,
         )
     } else {
         None

@@ -23,6 +23,7 @@ use std::{
     path::Path,
     sync::{LazyLock, OnceLock},
 };
+use temp::Temp;
 
 /// A lock for initializing LIB_ROOTS
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -41,7 +42,7 @@ pub struct FabInfo<'a> {
     pub profile: &'a Mutex<Profile>,
     pub handle: &'a Spawner,
     pub name: &'a str,
-    pub instance: &'a str,
+    pub instance: &'a Temp,
     pub sys_dir: &'a Path,
 }
 

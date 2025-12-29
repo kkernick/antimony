@@ -47,11 +47,13 @@ pub enum Command {
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct RunArgs {
+    #[arg(long)]
     path: String,
 
+    #[arg(long)]
     instance: String,
 
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     no_timeout: bool,
 }
 

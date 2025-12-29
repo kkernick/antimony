@@ -30,7 +30,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
         profile: &args.profile,
         handle: &args.handle,
         name: &args.name,
-        instance: &args.instance,
+        instance: args.instance,
         sys_dir: &args.sys_dir,
     };
 
