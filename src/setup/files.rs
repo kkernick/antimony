@@ -13,6 +13,7 @@ use std::{
     borrow::Cow,
     fs::{self, File},
     os::fd::{AsRawFd, OwnedFd},
+    sync::Arc,
 };
 
 #[inline]
@@ -41,10 +42,10 @@ pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) ->
     Ok(())
 }
 
-pub fn setup(args: &mut super::Args) -> Result<()> {
+pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     debug!("Setting up files");
     // Add direct files.
-    if let Some(files) = &mut args.profile.files {
+    if let Some(files) = &mut args.profile.lock().files {
         if let Some(user) = &mut files.user
             && let Some(exe) = user.remove(&FileMode::Executable)
         {

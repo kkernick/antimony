@@ -1,13 +1,13 @@
 //! Run a profile.
 use crate::{
     cli::Run,
-    debug_timer,
     fab::localize_home,
     setup::setup,
     shared::{
         env::RUNTIME_DIR,
         profile::{FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
     },
+    timer,
 };
 use anyhow::{Result, anyhow};
 use inflector::Inflector;
@@ -160,11 +160,11 @@ impl super::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {
-            let info = debug_timer!(
+            let info = timer!(
                 "::setup",
                 setup(Cow::Owned(self.profile.clone()), &mut self)
             )?;
-            debug_timer!("::run", run(info, &mut self))?;
+            timer!("::run", run(info, &mut self))?;
             Ok(())
         }();
 

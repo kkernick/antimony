@@ -99,59 +99,53 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
         let pair = Pair::new()?;
         match pair.recv(fd.as_raw_fd()) {
             Ok(Some(_)) => {
-                let raw = fd.as_raw_fd();
-                let found_clone = Arc::clone(&found);
-                let term_clone = term.clone();
-                rayon::spawn(move || {
-                    let _ = pair.reply(raw, |req, resp| {
-                        let pid = req.pid;
-                        let call = req.data.nr;
-                        let args = req.data.args;
+                let _ = pair.reply(fd.as_raw_fd(), |req, resp| {
+                    let pid = req.pid;
+                    let call = req.data.nr;
+                    let args = req.data.args;
 
-                        if let Ok(exe_path) = fs::read_link(format!("/proc/{pid}/exe"))
-                            && exe_path == SELF.as_path()
-                        {
-                            resp.val = 0;
-                            resp.error = 0;
-                            resp.flags = 1;
-                            return;
-                        }
-
-                        if call == syscalls::get_name("execve")
-                            && let Ok(paths) = collect_paths(pid, &args)
-                            && !paths.is_empty()
-                        {
-                            let mut local_found = found_clone.entry(pid).or_default();
-                            for path in paths {
-                                if !local_found.contains(&path) {
-                                    println!("{path}");
-                                    local_found.push(path);
-                                }
-                            }
-                        } else if call == syscalls::get_name("ppoll")
-                            || call == syscalls::get_name("wait4")
-                        {
-                            term_clone.store(true, Ordering::Relaxed);
-                            let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
-                            resp.error = -EPERM;
-                            resp.flags = 0;
-                            return;
-                        }
-
+                    if let Ok(exe_path) = fs::read_link(format!("/proc/{pid}/exe"))
+                        && exe_path == SELF.as_path()
+                    {
                         resp.val = 0;
                         resp.error = 0;
                         resp.flags = 1;
+                        return;
+                    }
 
-                        // Ignore SECCOMP and EXECVE.
-                        if (((call == syscalls::get_name("prctl")
-                            && args[0] == PR_SET_SECCOMP as u64)
-                            || call == syscalls::get_name("seccomp"))
-                            && args[2] != 0)
-                            || call == syscalls::get_name("execve")
-                        {
-                            resp.flags = 0;
+                    if call == syscalls::get_name("execve")
+                        && let Ok(paths) = collect_paths(pid, &args)
+                        && !paths.is_empty()
+                    {
+                        let mut local_found = found.entry(pid).or_default();
+                        for path in paths {
+                            if !local_found.contains(&path) {
+                                println!("{path}");
+                                local_found.push(path);
+                            }
                         }
-                    });
+                    } else if call == syscalls::get_name("ppoll")
+                        || call == syscalls::get_name("wait4")
+                    {
+                        term.store(true, Ordering::Relaxed);
+                        let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
+                        resp.error = -EPERM;
+                        resp.flags = 0;
+                        return;
+                    }
+
+                    resp.val = 0;
+                    resp.error = 0;
+                    resp.flags = 1;
+
+                    // Ignore SECCOMP and EXECVE.
+                    if (((call == syscalls::get_name("prctl") && args[0] == PR_SET_SECCOMP as u64)
+                        || call == syscalls::get_name("seccomp"))
+                        && args[2] != 0)
+                        || call == syscalls::get_name("execve")
+                    {
+                        resp.flags = 0;
+                    }
                 });
             }
             Ok(None) => continue,
@@ -229,9 +223,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    rayon::ThreadPoolBuilder::new().build_global()?;
     notify::init()?;
-
     match Cli::parse().command {
         Command::Run(args) => runner(args)?,
         Command::Attach(args) => collection(args)?,

@@ -10,7 +10,7 @@ fn main() -> Result<()> {
     #[cfg(debug_assertions)]
     std::thread::spawn(move || {
         loop {
-            std::thread::sleep(std::time::Duration::from_secs(10));
+            std::thread::sleep(std::time::Duration::from_secs(1));
             let deadlocks = parking_lot::deadlock::check_deadlock();
             if deadlocks.is_empty() {
                 continue;

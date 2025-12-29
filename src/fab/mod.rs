@@ -7,9 +7,9 @@ pub mod lib;
 pub mod ns;
 
 use crate::{
-    debug_timer,
     fab::bin::ELF_MAGIC,
-    shared::{Set, env::HOME},
+    shared::{Set, env::HOME, profile::Profile},
+    timer,
 };
 use anyhow::Result;
 use log::debug;
@@ -36,6 +36,14 @@ pub static SINGLE_LIB: LazyLock<bool> = LazyLock::new(|| {
     debug!("Single Library Folder: {single}");
     single
 });
+
+pub struct FabInfo<'a> {
+    pub profile: &'a Mutex<Profile>,
+    pub handle: &'a Spawner,
+    pub name: &'a str,
+    pub instance: &'a str,
+    pub sys_dir: &'a Path,
+}
 
 /// Get cached definitions.
 #[inline]
@@ -185,7 +193,7 @@ pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Vec<Str
 
     if LIB_ROOTS.get().is_none() {
         let _lock = LOCK.lock();
-        debug_timer!("::lib_roots", {
+        timer!("::lib_roots", {
             let mut roots: Set<String> = libraries
                 .iter()
                 .filter_map(|lib| Path::new(&lib).parent().map(|p| p.to_owned()))

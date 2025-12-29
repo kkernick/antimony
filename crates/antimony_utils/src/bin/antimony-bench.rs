@@ -2,8 +2,7 @@ use std::{
     borrow::Cow,
     env,
     fs::read_to_string,
-    os::unix::fs::symlink,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, atomic::AtomicBool},
     thread::sleep,
     time::Duration,
@@ -11,8 +10,10 @@ use std::{
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
+use dialoguer::Input;
 use nix::unistd::chdir;
 use spawn::Spawner;
+use temp::TempDir;
 
 #[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
 pub enum Benchmark {
@@ -31,6 +32,14 @@ pub enum Benchmark {
     /// This benchmark runs the sandbox as usual, but passes the dry feature, which simply spawns a shell in the
     /// environment, then immediately exits.
     Real,
+
+    /// This benchmark performs a refresh of all system integrated profiles (So the ones specified on the command line
+    /// are not used). This is used to evaluate the shared cache of profiles, namely:
+    ///     1.  Binary and library caches are shared. If one QT6 application scans /usr/lib/qt6, subsequent ones can use
+    ///         those definitions for free. Similarly, parsed binaries are cached and shared.
+    ///     2.  Non-SetUID installations created a shared folder for SOF/Bin. Once a single profile pulls in a resource
+    ///         through a copy, subsequent requests are as fast as SetUID, since they both just use hard-links.
+    Refresh,
 }
 
 #[derive(Parser, Debug, Default)]
@@ -51,6 +60,10 @@ pub struct Cli {
     #[arg(long)]
     pub runs: Option<u64>,
 
+    /// Ensure at least this many runs are performed.
+    #[arg(long)]
+    pub min: Option<u64>,
+
     /// Checkout a specific state of the git tree, such as tags/1.0.0, or a commit ID.
     #[arg(long)]
     pub checkout: Option<String>,
@@ -70,6 +83,10 @@ pub struct Cli {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub bench: Option<Vec<Benchmark>>,
 
+    /// Pause the benchmark after each invocation to allow inspection of the cache.
+    #[arg(long, default_value_t = false)]
+    pub inspect: bool,
+
     /// Additional commands to pass to antimony
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub antimony_args: Option<Vec<String>>,
@@ -79,7 +96,17 @@ pub struct Cli {
     pub hyperfine_args: Option<Vec<String>>,
 }
 
-fn cooldown(sensor: &Option<String>, target: &Option<u64>) -> Result<()> {
+fn cooldown(sensor: &Option<String>, target: &Option<u64>, inspect: bool) -> Result<()> {
+    if inspect {
+        let prompt = Input::<String>::new()
+            .allow_empty(true)
+            .with_prompt("The benchmarker has been paused to inspect the profile cache. Press any key to continue. Type quit to abort early").report(false).interact()?;
+
+        if prompt.to_lowercase() == "quit" {
+            return Err(anyhow::anyhow!("User aborted"));
+        }
+    }
+
     if let Some(sensor) = &sensor
         && Path::new(sensor).exists()
         && let Some(target) = target
@@ -115,12 +142,18 @@ fn main() -> Result<()> {
     let root = &root[..root.len() - 1];
     chdir(root)?;
 
-    // Set AT_HOME to our current config.
-    unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
-
-    let temp = "/tmp/antimony";
-    std::fs::create_dir_all(temp)?;
-    symlink(temp, format!("{root}/config/cache"))?;
+    let _cache = if cli.recipe.is_some() {
+        // Set AT_HOME to our current config.
+        unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
+        Some(
+            TempDir::new()
+                .name("cache")
+                .within(Path::new(root).join("config"))
+                .create()?,
+        )
+    } else {
+        None
+    };
 
     let term = Arc::new(AtomicBool::new(false));
 
@@ -163,6 +196,9 @@ fn main() -> Result<()> {
         if let Some(runs) = cli.runs {
             args.extend([Cow::Borrowed("-M"), Cow::Owned(runs.to_string())])
         }
+        if let Some(min) = cli.min {
+            args.extend([Cow::Borrowed("-m"), Cow::Owned(min.to_string())])
+        }
 
         let antimony = if let Some(recipe) = cli.recipe {
             match recipe.as_str() {
@@ -201,14 +237,15 @@ fn main() -> Result<()> {
 
         println!("Using: {antimony}");
         for profile in &cli.profiles {
-            cooldown(&cli.temp_sensor, &cli.temp)?;
+            cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
 
             if benchmarks.contains(&Benchmark::Cold) {
-                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry", "--hard"]
                     .into_iter()
                     .map(String::from)
                     .collect();
                 if let Some(add) = &cli.antimony_args {
+                    command.push("--".to_string());
                     command.extend(add.clone());
                 }
                 Spawner::new("hyperfine")?
@@ -224,7 +261,7 @@ fn main() -> Result<()> {
                     .spawn()?
                     .wait()?;
 
-                cooldown(&cli.temp_sensor, &cli.temp)?;
+                cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
             }
 
             if benchmarks.contains(&Benchmark::Hot) {
@@ -243,17 +280,19 @@ fn main() -> Result<()> {
                     .spawn()?
                     .wait()?;
 
-                cooldown(&cli.temp_sensor, &cli.temp)?;
+                cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
             }
 
             if benchmarks.contains(&Benchmark::Real) {
-                let mut command: Vec<String> = [&antimony, "run", profile, "--features=dry"]
+                let mut command: Vec<String> = [&antimony, "run", profile]
                     .into_iter()
                     .map(String::from)
                     .collect();
                 if let Some(add) = &cli.antimony_args {
                     command.extend(add.clone());
                 }
+                command.push("--features=dry".to_string());
+
                 Spawner::new("hyperfine")?
                     .args([
                         "--command-name",
@@ -268,14 +307,18 @@ fn main() -> Result<()> {
                     .wait()?;
             }
         }
+
+        if benchmarks.contains(&Benchmark::Refresh) {
+            Spawner::new("hyperfine")?
+                .args(["--command-name", "System Refresh", "--warmup", "1"])?
+                .args(args)?
+                .arg(format!("{antimony} refresh"))?
+                .preserve_env(true)
+                .spawn()?
+                .wait()?;
+        }
         Ok(())
     }();
-
-    let cache = PathBuf::from(format!("{root}/config/cache"));
-    if cache.exists() {
-        std::fs::remove_dir_all(&cache)?;
-    }
-    std::fs::remove_dir_all(temp)?;
 
     if cli.checkout.is_some() {
         // Undo the checkout

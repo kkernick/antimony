@@ -180,7 +180,7 @@ pub struct Spawner {
 
     /// An index to cache parts of the command line
     #[cfg(feature = "cache")]
-    cache_index: Option<usize>,
+    cache_index: Mutex<Option<usize>>,
 
     /// FD's to pass to the program. These do not include 0,1,2 who's
     /// logic is controlled via input/capture respectively.
@@ -197,7 +197,7 @@ pub struct Spawner {
 
     /// An optional *SECCOMP* policy to load on the child.
     #[cfg(feature = "seccomp")]
-    seccomp: Option<Filter>,
+    seccomp: Mutex<Option<Filter>>,
 }
 impl<'a> Spawner {
     /// Construct a `Spawner` to spawn *cmd*.
@@ -224,7 +224,7 @@ impl<'a> Spawner {
             associated: Vec::new(),
 
             #[cfg(feature = "cache")]
-            cache_index: None,
+            cache_index: Mutex::new(None),
 
             #[cfg(feature = "fd")]
             fds: Mutex::new(vec![]),
@@ -236,7 +236,7 @@ impl<'a> Spawner {
             elevate: false,
 
             #[cfg(feature = "seccomp")]
-            seccomp: None,
+            seccomp: Mutex::new(None),
         }
     }
 
@@ -363,9 +363,9 @@ impl<'a> Spawner {
     ///      This does not have to be ALLOW. See the caveats to Notify if
     ///      you are using it.
     ///
-    /// This function is not thread safe.
+    /// This function is thread safe.
     #[cfg(feature = "seccomp")]
-    pub fn seccomp(mut self, seccomp: Filter) -> Self {
+    pub fn seccomp(self, seccomp: Filter) -> Self {
         self.seccomp_i(seccomp);
         self
     }
@@ -495,10 +495,10 @@ impl<'a> Spawner {
     }
 
     /// Set a *SECCOMP* filter without consuming the `Spawner`.
-    /// This function is not thread safe.
+    /// This function is thread safe.
     #[cfg(feature = "seccomp")]
-    pub fn seccomp_i(&mut self, seccomp: Filter) {
-        self.seccomp = Some(seccomp)
+    pub fn seccomp_i(&self, seccomp: Filter) {
+        *self.seccomp.lock() = Some(seccomp)
     }
 
     /// Move an argument to the `Spawner` in-place.
@@ -566,7 +566,7 @@ impl<'a> Spawner {
     /// be cached to the file provided to cache_write.
     /// On future runs, `cache_read` can be used to append those cached
     /// contents to the `Spawner`'s arguments.
-    /// This function is not thread safe.
+    /// This function is thread safe.
     /// This function fails if cache_start is called twice without having
     /// first called cache_write.
     ///
@@ -592,24 +592,26 @@ impl<'a> Spawner {
     /// Spawner, otherwise those values would be cached, and likely
     /// be invalid when trying to use the cached results.
     #[cfg(feature = "cache")]
-    pub fn cache_start(&mut self) -> Result<(), Error> {
-        if self.cache_index.is_some() {
+    pub fn cache_start(&self) -> Result<(), Error> {
+        let mut index = self.cache_index.lock();
+        if index.is_some() {
             Err(Error::Cache("Caching already started!"))
         } else {
-            self.cache_index = Some(self.args.lock().len());
+            *index = Some(self.args.lock().len());
             Ok(())
         }
     }
 
     /// Write all arguments added to the `Spawner` since `cache_start`
     /// was called to the file provided.
-    /// This function is not thread safe.
+    /// This function is thread safe.
     /// This function will fail if `cache_start` was not called,
     /// or if there are errors writing to the provided path.
     #[cfg(feature = "cache")]
-    pub fn cache_write(&mut self, path: &Path) -> Result<(), Error> {
+    pub fn cache_write(&self, path: &Path) -> Result<(), Error> {
         use std::io::Write;
-        if let Some(i) = self.cache_index {
+        let mut index = self.cache_index.lock();
+        if let Some(i) = *index {
             let args = self.args.lock();
 
             if let Some(parent) = path.parent()
@@ -622,7 +624,7 @@ impl<'a> Spawner {
             for arg in &args[i..] {
                 writeln!(file, "{}", arg.to_string_lossy()).map_err(Error::Io)?;
             }
-            self.cache_index = None;
+            *index = None;
             Ok(())
         } else {
             Err(Error::Cache("Cache not started!"))
@@ -635,7 +637,7 @@ impl<'a> Spawner {
     /// This function will fail if there is an error reading the file,
     /// or if the contents contain strings will NULL bytes.
     #[cfg(feature = "cache")]
-    pub fn cache_read(&mut self, path: &Path) -> Result<(), Error> {
+    pub fn cache_read(&self, path: &Path) -> Result<(), Error> {
         let mut args = self.args.lock();
 
         for arg in fs::read_to_string(path).map_err(Error::Io)?.lines() {
@@ -820,7 +822,7 @@ impl<'a> Spawner {
                     // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
                     // or some other mechanism to let the process to spawn.
                     #[cfg(feature = "seccomp")]
-                    if let Some(filter) = self.seccomp {
+                    if let Some(filter) = self.seccomp.into_inner() {
                         filter.load().map_err(Error::Seccomp)?;
                     }
 

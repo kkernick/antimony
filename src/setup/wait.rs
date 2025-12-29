@@ -1,27 +1,35 @@
 use anyhow::{Result, anyhow};
+use dashmap::DashSet;
+use inotify::{Inotify, WatchDescriptor};
 use log::debug;
+use spawn::Spawner;
 
-use crate::debug_timer;
+use crate::timer;
 
-pub fn setup(args: &mut super::Args) -> Result<()> {
-    if let Some(proxy) = args.handle.get_associate("proxy")
+pub fn setup(
+    watches: DashSet<WatchDescriptor>,
+    mut inotify: Inotify,
+    handle: &mut Spawner,
+    dry: bool,
+) -> Result<()> {
+    if let Some(proxy) = handle.get_associate("proxy")
         && proxy.alive()?.is_none()
     {
         return Err(anyhow!("Proxy died!"));
     }
 
-    debug_timer!("::inotify", {
-        if !args.watches.is_empty() && !args.args.dry {
+    timer!("::inotify", {
+        if !watches.is_empty() && !dry {
             debug!("Waiting for inotify");
             let mut buffer = [0; 1024];
-            while !args.watches.is_empty() {
-                let events = args.inotify.read_events_blocking(&mut buffer)?;
+            while !watches.is_empty() {
+                let events = inotify.read_events_blocking(&mut buffer)?;
                 for event in events {
-                    if args.watches.contains(&event.wd) {
+                    if watches.contains(&event.wd) {
                         if let Some(path) = event.name {
                             debug!("Finished Notify Event: {path:?}");
                         }
-                        args.watches.remove(&event.wd);
+                        watches.remove(&event.wd);
                     }
                 }
             }

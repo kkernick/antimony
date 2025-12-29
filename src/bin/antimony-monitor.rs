@@ -352,7 +352,8 @@ pub fn notify_reader(
 
                                 if commit {
                                     user::sync::run_as!(user::Mode::Effective, {
-                                        if let Ok(mut conn) = syscalls::DB_POOL.get()
+                                        if let Some(pool) = syscalls::DB_POOL.as_ref()
+                                            && let Ok(mut conn) = pool.get()
                                             && let Ok(tx) = conn.transaction()
                                             && update_binary(&tx, &path, [call].iter()).is_ok()
                                             && tx.commit().is_ok()
@@ -525,8 +526,10 @@ fn main() -> Result<()> {
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
-    if !stats.is_empty() {
-        let mut conn = syscalls::DB_POOL.get()?;
+    if !stats.is_empty()
+        && let Some(pool) = syscalls::DB_POOL.as_ref()
+    {
+        let mut conn = pool.get()?;
         let tx = conn.transaction()?;
         println!("\n=== Syscall Summary ===");
 

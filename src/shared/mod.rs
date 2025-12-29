@@ -9,7 +9,7 @@ pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 
 #[macro_export]
-macro_rules! debug_timer {
+macro_rules! timer {
     ($name:literal, $body:block) => {{
         #[cfg(debug_assertions)]
         {
@@ -37,4 +37,4 @@ macro_rules! debug_timer {
         $expr
     }};
 }
-pub use debug_timer;
+pub use timer;

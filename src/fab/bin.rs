@@ -1,24 +1,25 @@
 use crate::{
-    debug_timer,
     fab::{
-        get_cache, get_dir, get_wildcards, lib::in_lib, localize_home, localize_path, write_cache,
+        FabInfo, get_dir, get_wildcards,
+        lib::{add_sof, in_lib},
+        localize_path,
     },
     shared::{
         Set,
         path::direct_path,
         profile::{FileMode, Profile},
     },
+    timer,
 };
-use ahash::HashSetExt;
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{debug, trace, warn};
-
+use log::{debug, error, trace, warn};
+use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
+
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -73,8 +74,13 @@ impl ParseReturn {
         }
     }
 
-    fn get_cache(&self) -> &Path {
-        &self.cache
+    fn merge(global: &Mutex<Self>, cache: Self) {
+        let mut global = global.lock();
+        global.elf.par_extend(cache.elf);
+        global.scripts.par_extend(cache.scripts);
+        global.files.par_extend(cache.files);
+        global.directories.par_extend(cache.directories);
+        global.symlinks.par_extend(cache.symlinks);
     }
 
     /// Get cached definitions if they exist.
@@ -176,7 +182,8 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 fn parse(
     path: &str,
     instance: &str,
-    ret: Arc<ParseReturn>,
+    global: &Mutex<ParseReturn>,
+    cache: &Path,
     done: Arc<DashSet<String>>,
     mut include_self: bool,
 ) -> Result<Type> {
@@ -185,134 +192,140 @@ fn parse(
         return Ok(Type::Done);
     }
 
+    if let Some(cache) = ParseReturn::cache(path, cache)? {
+        ParseReturn::merge(global, cache);
+        return Ok(Type::None);
+    }
+
     let resolved = match resolve_bin(path) {
         Ok(path) => path,
         Err(_) => return Ok(Type::None),
     };
 
+    let ret = ParseReturn::new(cache);
+
     trace!("Parsing: {path}");
     let dest = user::sync::try_run_as!(user::Mode::Real, Result<String>, {
         let dest = fs::read_link(resolved.as_ref())?;
         let canon = Path::new(resolved.as_ref())
+            .canonicalize()?
             .parent()
             .ok_or(anyhow!("Binary does not have parent!"))?
-            .join(&dest)
-            .canonicalize()?;
+            .join(&dest);
         Ok(canon.to_string_lossy().into_owned())
     });
 
     // Ensure it's a valid binary.
-    if let Ok(dest) = dest {
-        if include_self {
-            match resolve_bin(dest.as_ref()) {
-                Ok(dest) => ret
-                    .symlinks
-                    .insert(resolved.into_owned(), dest.into_owned()),
+    let t = {
+        if let Ok(dest) = dest {
+            if include_self {
+                match resolve_bin(dest.as_ref()) {
+                    Ok(dest) => ret
+                        .symlinks
+                        .insert(resolved.into_owned(), dest.into_owned()),
 
-                Err(e) => {
-                    warn!("Could not resolve symlink destination {dest}: {e}");
-                    return Ok(Type::None);
-                }
-            };
-        }
-
-        parse(&dest, instance, ret.clone(), done.clone(), true)?;
-        return Ok(Type::Link);
-    }
-
-    if in_lib(path) {
-        if let Some(parent) = resolve_dir(path)?
-            && PathBuf::from(&parent).is_dir()
-        {
-            ret.directories.insert(parent);
-        }
-        include_self = false;
-    }
-
-    // Open it.
-    let mut file =
-        match user::sync::try_run_as!(user::Mode::Real, { File::open(resolved.as_ref()) }) {
-            Ok(file) => file,
-            Err(_) => return Ok(Type::None),
-        };
-
-    // Get the magic.
-    let mut magic = [0u8; 5];
-    if file.read_exact(&mut magic).is_err() {
-        return Ok(Type::None);
-    }
-
-    // ELF binaries are returned, as they are LDD'd by the library fabricator.
-    if magic == ELF_MAGIC {
-        if include_self {
-            ret.elf.insert(resolved.to_string());
-        }
-        Ok(Type::Elf)
-    }
-    // Shell scripts are parsed, but they aren't added to the return since
-    // LDD can't deal with them. Programs used in the script, however,
-    // will be added if the themselves are ELF binaries.
-    else if magic[0] == b'#' {
-        if include_self {
-            ret.scripts.insert(resolved.to_string());
-        }
-
-        let binaries = if let Some(cache) = get_cache(path, ret.get_cache())? {
-            cache
-        } else {
-            let mut binaries = Vec::new();
-            // Rewind.
-            file.seek(io::SeekFrom::Start(0))?;
-            let reader = BufReader::new(file);
-            let mut iter = reader.lines();
-
-            // Grab the shebang
-            let header = match iter.next() {
-                Some(line) => match line {
-                    Ok(line) => line,
-                    Err(_) => return Ok(Type::None),
-                },
-                None => return Ok(Type::None),
-            };
-
-            binaries.extend(
-                header
-                    .split(' ')
-                    .map(|token| token.strip_prefix("#!").unwrap_or(token).to_string()),
-            );
-
-            if ["dash", "bash", "sh", "zsh"]
-                .into_iter()
-                .any(|shell| header.contains(shell))
-            {
-                let out = Spawner::abs("/usr/bin/antimony-dumper")
-                    .args(["run", &resolved, instance])?
-                    .output(StreamMode::Pipe)
-                    .preserve_env(true)
-                    .mode(user::Mode::Real)
-                    .spawn()?
-                    .output_all()?;
-
-                let out = out.lines().map(String::from);
-                trace!("{resolved} => {binaries:?}");
-                binaries.extend(out);
+                    Err(e) => {
+                        warn!("Could not resolve symlink destination {dest}: {e}");
+                        return Ok(Type::None);
+                    }
+                };
             }
 
-            write_cache(path, &binaries, ret.get_cache())?;
-            binaries
-        };
+            parse(&dest, instance, global, cache, done.clone(), true)?;
+            Type::Link
+        } else {
+            if in_lib(path) {
+                if let Some(parent) = resolve_dir(path)?
+                    && PathBuf::from(&parent).is_dir()
+                {
+                    ret.directories.insert(parent);
+                }
+                include_self = false;
+            }
 
-        for bin in binaries {
-            parse(&bin, instance, ret.clone(), done.clone(), true)?;
-        }
+            // Open it.
+            let mut file = match user::sync::try_run_as!(user::Mode::Real, {
+                File::open(resolved.as_ref())
+            }) {
+                Ok(file) => file,
+                Err(_) => return Ok(Type::None),
+            };
 
-        Ok(Type::Script)
-    } else {
-        if include_self {
-            ret.files.insert(resolved.to_string());
+            // Get the magic.
+            let mut magic = [0u8; 5];
+            if file.read_exact(&mut magic).is_err() {
+                return Ok(Type::None);
+            }
+
+            // ELF binaries are returned, as they are LDD'd by the library fabricator.
+            if magic == ELF_MAGIC {
+                if include_self {
+                    ret.elf.insert(resolved.to_string());
+                }
+                Type::Elf
+            }
+            // Shell scripts are parsed, but they aren't added to the return since
+            // LDD can't deal with them. Programs used in the script, however,
+            // will be added if the themselves are ELF binaries.
+            else if magic[0] == b'#' {
+                if include_self {
+                    ret.scripts.insert(resolved.to_string());
+                }
+
+                let mut binaries = Vec::new();
+                // Rewind.
+                file.seek(io::SeekFrom::Start(0))?;
+                let reader = BufReader::new(file);
+                let mut iter = reader.lines();
+
+                // Grab the shebang
+                let header = match iter.next() {
+                    Some(line) => match line {
+                        Ok(line) => line,
+                        Err(_) => return Ok(Type::None),
+                    },
+                    None => return Ok(Type::None),
+                };
+
+                binaries.extend(
+                    header
+                        .split(' ')
+                        .map(|token| token.strip_prefix("#!").unwrap_or(token).to_string()),
+                );
+
+                if ["dash", "bash", "sh", "zsh"]
+                    .into_iter()
+                    .any(|shell| header.contains(shell))
+                {
+                    let out = Spawner::abs("/usr/bin/antimony-dumper")
+                        .args(["run", &resolved, instance])?
+                        .output(StreamMode::Pipe)
+                        .preserve_env(true)
+                        .mode(user::Mode::Real)
+                        .spawn()?
+                        .output_all()?;
+
+                    let out = out.lines().map(String::from);
+                    trace!("{resolved} => {binaries:?}");
+                    binaries.extend(out);
+                }
+
+                for bin in binaries {
+                    parse(&bin, instance, global, cache, done.clone(), true)?;
+                }
+
+                Type::Script
+            } else {
+                if include_self {
+                    ret.files.insert(resolved.to_string());
+                }
+                Type::File
+            }
         }
-        Ok(Type::File)
-    }
+    };
+    ret.write(path)?;
+    ParseReturn::merge(global, ret);
+    Ok(t)
 }
 
 /// Get the immediate parent within /usr/lib.
@@ -333,100 +346,105 @@ fn handle_localize(
     instance: &str,
     home: bool,
     include_self: bool,
-    parsed: Arc<ParseReturn>,
+    parsed: &Mutex<ParseReturn>,
     done: Arc<DashSet<String>>,
+    cache: &Path,
 ) -> Result<()> {
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            parse(file, instance, parsed.clone(), done.clone(), include_self)?;
+            parse(file, instance, parsed, cache, done.clone(), include_self)?;
         } else {
-            match parse(&src, instance, parsed.clone(), done.clone(), false)? {
+            match parse(&src, instance, parsed, cache, done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
-                    parsed.localized.insert(src.into_owned(), dst);
+                    parsed.lock().localized.insert(src.into_owned(), dst);
                 }
 
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    handle_localize(&ldst, instance, home, false, parsed.clone(), done.clone())?;
-                    parsed.symlinks.insert(dst, ldst);
+                    handle_localize(&ldst, instance, home, false, parsed, done.clone(), cache)?;
+                    parsed.lock().symlinks.insert(dst, ldst);
                 }
                 e => warn!("Excluding localization of type {e:?} for {file}"),
             }
         }
         Ok(())
     } else {
-        parse(file, instance, parsed.clone(), done.clone(), true)?;
+        parse(file, instance, parsed, cache, done.clone(), true)?;
         Ok(())
     }
 }
 
 pub fn collect(
-    profile: &mut Profile,
+    profile: &Mutex<Profile>,
     name: &str,
     instance: &str,
-    parsed: Arc<ParseReturn>,
+    parsed: &Mutex<ParseReturn>,
+    cache: &Path,
 ) -> Result<()> {
-    let mut resolved = Set::new();
-    resolved.insert(profile.app_path(name).to_string());
+    let resolved = Arc::new(DashSet::new());
+    resolved.insert(profile.lock().app_path(name).to_string());
 
-    if let Some(binaries) = profile.binaries.take() {
-        debug_timer!("::collect::wildcard", {
+    if let Some(binaries) = &profile.lock().binaries {
+        timer!("::collect::wildcard", {
             // Separate the wildcards from the files/dirs.
             let (wildcards, flat): (Set<_>, Set<_>) =
                 binaries.into_par_iter().partition(|e| e.contains('*'));
-            resolved.extend(flat);
-            resolved.extend(
-                wildcards
-                    .into_par_iter()
-                    .filter_map(|e| get_wildcards(&e, false, Some(parsed.get_cache())).ok())
-                    .collect::<Vec<_>>()
-                    .into_par_iter()
-                    .flatten()
-                    .collect::<Set<_>>(),
-            )
+
+            flat.into_par_iter().for_each(|f| {
+                resolved.insert(f.clone());
+            });
+
+            wildcards.into_par_iter().for_each(|w| {
+                if let Ok(cards) = get_wildcards(w, false, Some(cache)) {
+                    for card in cards {
+                        resolved.insert(card);
+                    }
+                }
+            })
         })
     };
 
     let done = Arc::new(DashSet::new());
 
     // Read direct files so we can determine dependencies.
-    debug_timer!("::collect::files", {
-        if let Some(files) = &mut profile.files {
-            if let Some(user) = &mut files.user
-                && let Some(x) = user.remove(&FileMode::Executable)
+    timer!("::collect::files", {
+        if let Some(files) = &profile.lock().files {
+            if let Some(user) = &files.user
+                && let Some(x) = user.get(&FileMode::Executable)
             {
-                x.into_iter().try_for_each(|file| {
-                    handle_localize(&file, instance, true, true, parsed.clone(), done.clone())
+                x.iter().try_for_each(|file| {
+                    handle_localize(file, instance, true, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(sys) = &mut files.resources
-                && let Some(x) = sys.remove(&FileMode::Executable)
+            if let Some(sys) = &files.resources
+                && let Some(x) = sys.get(&FileMode::Executable)
             {
-                x.into_iter().try_for_each(|file| {
-                    handle_localize(&file, instance, false, true, parsed.clone(), done.clone())
+                x.iter().try_for_each(|file| {
+                    handle_localize(file, instance, false, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(sys) = &mut files.platform
-                && let Some(x) = sys.remove(&FileMode::Executable)
+            if let Some(sys) = &files.platform
+                && let Some(x) = sys.get(&FileMode::Executable)
             {
-                x.into_iter().try_for_each(|file| {
-                    handle_localize(&file, instance, false, true, parsed.clone(), done.clone())
+                x.iter().try_for_each(|file| {
+                    handle_localize(file, instance, false, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(direct) = &mut files.direct
-                && let Some(x) = direct.remove(&FileMode::Executable)
+            if let Some(direct) = &files.direct
+                && let Some(x) = direct.get(&FileMode::Executable)
             {
-                x.into_iter().try_for_each(|(file, _)| {
-                    let path = direct_path(&file);
+                x.iter().try_for_each(|(file, _)| {
+                    let path = direct_path(file);
                     handle_localize(
                         &path.to_string_lossy(),
                         instance,
                         false,
                         false,
-                        parsed.clone(),
+                        parsed,
                         done.clone(),
+                        cache,
                     )
                 })?;
             }
@@ -434,32 +452,32 @@ pub fn collect(
     });
 
     // Parse the binaries
-    debug_timer!("::collect::localization", {
-        resolved.into_par_iter().try_for_each(|binary| {
-            handle_localize(
-                binary.as_str(),
-                instance,
-                false,
-                true,
-                parsed.clone(),
-                done.clone(),
-            )
-        })?;
+    // Parallelizing this causes deadlocks. Perhaps handle_localize calls itself with other parallelization too aggressively.
+    timer!("::collect::localization", {
+        Arc::into_inner(resolved)
+            .unwrap()
+            .into_iter()
+            .try_for_each(|binary| {
+                handle_localize(
+                    binary.as_str(),
+                    instance,
+                    false,
+                    true,
+                    parsed,
+                    done.clone(),
+                    cache,
+                )
+            })?;
     });
     Ok(())
 }
 
-pub fn fabricate(
-    profile: &mut Profile,
-    name: &str,
-    instance: &str,
-    handle: &Spawner,
-) -> Result<()> {
-    if let Some(binaries) = &profile.binaries
+pub fn fabricate(info: &FabInfo) -> Result<()> {
+    if let Some(binaries) = &info.profile.lock().binaries
         && binaries.contains("/usr/bin")
     {
         #[rustfmt::skip]
-            handle.args_i([
+            info.handle.args_i([
                 "--ro-bind", "/usr/bin", "/usr/bin",
                 "--ro-bind", "/usr/sbin", "/usr/sbin",
                 "--symlink", "/usr/bin", "/bin",
@@ -475,105 +493,162 @@ pub fn fabricate(
         });
     }
 
-    let mut elf_binaries = BTreeSet::<String>::new();
-    let parsed = match ParseReturn::cache(name, &cache)? {
+    let parsed = match ParseReturn::cache("bin.cache", info.sys_dir)? {
         Some(parsed) => parsed,
         None => {
-            let parsed = Arc::new(ParseReturn::new(&cache));
-            debug_timer!(
+            let parsed = Mutex::new(ParseReturn::new(info.sys_dir));
+            timer!(
                 "::collect",
-                try_run_as!(
-                    user::Mode::Effective,
-                    collect(profile, instance, name, Arc::clone(&parsed))
-                )
+                try_run_as!(user::Mode::Effective, {
+                    collect(info.profile, info.instance, info.name, &parsed, &cache)
+                })
             )?;
-            parsed.write(name)?;
-            Arc::into_inner(parsed).unwrap()
+            parsed.lock().write("bin.cache")?;
+            parsed.into_inner()
         }
     };
 
+    let elf_binaries = Arc::new(DashSet::<String>::new());
+
+    debug!("Creating Binary Folder");
+    let bin = info.sys_dir.join("bin");
+    if !bin.exists() {
+        fs::create_dir(&bin)?;
+    }
+
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
-    debug_timer!("::elf", {
-        parsed.elf.into_iter().try_for_each(|elf| -> Result<()> {
-            if !in_lib(&elf) {
-                handle.args_i(["--ro-bind", &elf, &localize_home(&elf)])?;
+    timer!("::elf", {
+        parsed.elf.into_par_iter().for_each(|elf| {
+            if let Err(e) = add_sof(
+                &bin,
+                Cow::Borrowed(&elf),
+                Cow::Borrowed(&elf),
+                &cache,
+                "/usr/bin",
+            ) {
+                error!("Failed to add {elf} to Bin: {e}")
             }
             elf_binaries.insert(elf.to_string());
-            Ok(())
         })
-    })?;
+    });
 
     // Scripts are consumed here, and are only bound to the sandbox.
-    debug_timer!("::scripts", {
-        parsed
-            .scripts
-            .into_par_iter()
-            .try_for_each(|script| handle.args_i(["--ro-bind", &script, &script]))
-    })?;
+    timer!("::scripts", {
+        parsed.scripts.into_par_iter().for_each(|script| {
+            if let Err(e) = add_sof(
+                &bin,
+                Cow::Borrowed(&script),
+                Cow::Borrowed(&script),
+                &cache,
+                "/usr/bin",
+            ) {
+                error!("Failed to add {script} to Bin: {e}")
+            }
+        })
+    });
 
-    // Files are treated similarly to ELF file in terms of being
-    // heuristics for library folders, but are not LDD searched
-    // because they are not ELF binaries.
-    debug_timer!("::files", {
+    timer!("::files", {
         parsed
             .files
             .into_par_iter()
-            .try_for_each(|file| handle.args_i(["--ro-bind", &file, &file]))
+            .try_for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]))
     })?;
 
-    debug_timer!("::localized", {
+    timer!("::localized", {
         parsed
             .localized
             .into_iter()
             .try_for_each(|(src, dst)| -> anyhow::Result<()> {
-                handle.args_i(["--ro-bind", &src, &dst])?;
+                if dst.starts_with("/usr/bin") {
+                    if let Err(e) = add_sof(
+                        &bin,
+                        Cow::Borrowed(&src),
+                        Cow::Borrowed(&dst),
+                        &cache,
+                        "/usr/bin",
+                    ) {
+                        error!("Failed to add {src} to SOF: {e}")
+                    }
+                } else {
+                    info.handle.args_i(["--ro-bind", &src, &dst])?;
+                }
                 elf_binaries.insert(src);
                 Ok(())
             })
     })?;
 
-    debug_timer!("::libraries", {
-        profile
+    timer!("::libraries", {
+        info.profile
+            .lock()
             .libraries
             .get_or_insert_default()
             .extend(parsed.directories)
     });
 
-    debug_timer!("::symlinks", {
+    timer!("::symlinks", {
         parsed
             .symlinks
             .into_par_iter()
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
                 if !in_lib(&link) {
-                    handle.args_i(["--symlink", &dest, &link])?;
+                    if dest.starts_with("/usr/bin") {
+                        if let Err(e) = add_sof(
+                            &bin,
+                            Cow::Borrowed(&link),
+                            Cow::Borrowed(&dest),
+                            &cache,
+                            "/usr/bin",
+                        ) {
+                            error!("Failed to add {link} to SOF: {e}")
+                        }
+                    } else {
+                        info.handle.args_i([
+                            "--ro-bind",
+                            &dest,
+                            &dest,
+                            "--symlink",
+                            &dest,
+                            &link,
+                        ])?;
+                    }
                 }
                 Ok(())
             })
     })?;
 
-    if let Some(home) = &profile.home {
-        debug_timer!("::home_binaries", {
-            let home_dir = home.path(name);
+    if let Some(home) = &info.profile.lock().home {
+        timer!("::home_binaries", {
+            let home_dir = home.path(info.name);
             if home_dir.exists() {
                 try_run_as!(user::Mode::Real, Result<()>, {
                     let home_str = home_dir.to_string_lossy();
                     let home_binaries = get_dir(&home_str, Some(&cache))?;
-                    elf_binaries.extend(home_binaries);
+                    for binary in home_binaries {
+                        elf_binaries.insert(binary);
+                    }
                     Ok(())
                 })?
             }
         })
     }
 
+    let bin_str = bin.to_string_lossy();
+
     #[rustfmt::skip]
-    handle.args_i([
+    info.handle.args_i([
+        "--ro-bind-try", &bin_str, "/usr/bin",
         "--symlink", "/usr/bin", "/bin",
         "--symlink", "/usr/sbin", "/sbin"
 
     ])?;
 
     debug!("Handing off binaries: {elf_binaries:?}");
-    profile.binaries = Some(elf_binaries);
+    info.profile.lock().binaries = Some(
+        Arc::into_inner(elf_binaries)
+            .expect("Failed to get elf binaries")
+            .into_iter()
+            .collect(),
+    );
     Ok(())
 }

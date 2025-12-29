@@ -1,5 +1,5 @@
 use crate::{
-    debug_timer,
+    timer,
     shared::{Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
 };
 use ahash::HashSetExt;
@@ -33,57 +33,56 @@ use std::{
 };
 
 /// Connection to the Database
-pub static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
-    user::run_as!(user::Mode::Effective, {
-        let dir = AT_HOME.join("seccomp");
-        if !dir.exists() {
-            fs::create_dir_all(&dir).expect("Failed to create SECCOMP directory");
-        }
-        let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
-        let pool = Pool::new(manager).expect("Failed to create pool");
-
-        let conn = pool.get().expect("Failed to get connection");
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .expect("Failed to set mode");
-
-        conn.execute_batch(
-            "
-        PRAGMA foreign_keys = ON;
-        CREATE TABLE IF NOT EXISTS binaries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL UNIQUE
-        );
-
-        CREATE TABLE IF NOT EXISTS syscalls (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name INTEGER NOT NULL UNIQUE
-        );
-
-        CREATE TABLE IF NOT EXISTS binary_syscalls (
-            binary_id INTEGER NOT NULL,
-            syscall_id INTEGER NOT NULL,
-            PRIMARY KEY (binary_id, syscall_id),
-            FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE,
-            FOREIGN KEY (syscall_id) REFERENCES syscalls(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS profiles (
+pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::new(|| {
+    let init = || -> anyhow::Result<Pool<SqliteConnectionManager>> {
+        user::try_run_as!(user::Mode::Effective, {
+            let dir = AT_HOME.join("seccomp");
+            if !dir.exists() {
+                fs::create_dir_all(&dir)?;
+            }
+            let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
+            let pool = Pool::new(manager)?;
+            let conn = pool.get()?;
+            conn.pragma_update(None, "journal_mode", "WAL")?;
+            conn.execute_batch(
+                "
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE IF NOT EXISTS binaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL
+                path TEXT NOT NULL UNIQUE
             );
 
-        CREATE TABLE IF NOT EXISTS profile_binaries (
-            profile_id INTEGER NOT NULL,
-            binary_id INTEGER NOT NULL,
-            PRIMARY KEY (profile_id, binary_id),
-            FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
-            FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
-        );
-        ",
-        )
-        .expect("Failed to initialize schema");
-        pool
-    })
+            CREATE TABLE IF NOT EXISTS syscalls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name INTEGER NOT NULL UNIQUE
+            );
+
+            CREATE TABLE IF NOT EXISTS binary_syscalls (
+                binary_id INTEGER NOT NULL,
+                syscall_id INTEGER NOT NULL,
+                PRIMARY KEY (binary_id, syscall_id),
+                FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE,
+                FOREIGN KEY (syscall_id) REFERENCES syscalls(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS profiles (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL
+                );
+
+            CREATE TABLE IF NOT EXISTS profile_binaries (
+                profile_id INTEGER NOT NULL,
+                binary_id INTEGER NOT NULL,
+                PRIMARY KEY (profile_id, binary_id),
+                FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+                FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
+            );
+            ",
+            )?;
+            Ok(pool)
+        })
+    };
+    init().ok()
 });
 
 /// The location to store cache files.
@@ -372,31 +371,37 @@ pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, E
 
 /// Add the syscalls from a binary to the working set.
 fn extend(binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
-    let mut conn = DB_POOL.get()?;
-    let tx = conn.transaction()?;
+    if let Some(pool) = DB_POOL.as_ref() {
+        let mut conn = pool.get()?;
+        let tx = conn.transaction()?;
 
-    let binary = match binary.split_once('=') {
-        Some((_, dest)) => dest,
-        None => binary,
-    };
+        let binary = match binary.split_once('=') {
+            Some((_, dest)) => dest,
+            None => binary,
+        };
 
-    let resolved = match which::which(binary) {
-        Ok(resolved) => Cow::Borrowed(resolved),
-        Err(_) => Cow::Borrowed(binary),
-    };
+        let resolved = match which::which(binary) {
+            Ok(resolved) => Cow::Borrowed(resolved),
+            Err(_) => Cow::Borrowed(binary),
+        };
 
-    for syscall in get_binary_syscalls(&tx, &resolved)? {
-        syscalls.insert(syscall);
+        for syscall in get_binary_syscalls(&tx, &resolved)? {
+            syscalls.insert(syscall);
+        }
+    } else {
+        log::error!("Could not initialize connection to SECCOMP Database. SECCOMP is disabled!");
     }
     Ok(())
 }
+
+type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
 pub fn get_calls(
     name: &str,
     p_binaries: &Option<BTreeSet<String>>,
     refresh: bool,
-) -> Result<(Set<i32>, Set<i32>), Error> {
+) -> Result<Option<PolicyPair>, Error> {
     let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
     if cache_file.exists() && !refresh {
         debug!("Using SECCOMP cache for {name}");
@@ -412,70 +417,75 @@ pub fn get_calls(
 
             if let Some(bwrap) = lines.next() {
                 let bwrap: Set<i32> = bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
-                return Ok((syscalls, bwrap));
+                return Ok(Some((syscalls, bwrap)));
             }
         }
     };
 
-    let mut conn = DB_POOL.get()?;
-    let binaries = || -> Result<Set<String>, Error> {
-        let tx = conn.transaction()?;
-
-        // Get profile_id, insert profile if missing
-        let profile_id = profile_id(&tx, name)?;
-
-        let mut stmt = tx.prepare(
-            "SELECT b.path
-            FROM binaries b
-            JOIN profile_binaries pb ON b.id = pb.binary_id
-            WHERE pb.profile_id = ?1",
-        )?;
-
-        let mut binaries = Set::new();
-        if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
-            for bin_res in binaries_iter {
-                binaries.insert(bin_res?);
-            }
-        }
-
-        // Add extra binaries if passed
-        if let Some(extra_bins) = p_binaries {
-            for b in extra_bins {
-                binaries.insert(b.clone());
-            }
-        }
-        Ok(binaries)
-    }()?;
-
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
-    binaries.iter().for_each(|bin| {
-        if let Err(e) = extend(
-            bin,
-            if bin.ends_with("bwrap") {
-                &mut bwrap
-            } else {
-                &mut syscalls
-            },
-        ) {
-            warn!("Failed to extend syscalls for binary {bin}: {e}");
-        }
-    });
+    if let Some(pool) = DB_POOL.as_ref() {
+        let mut conn = pool.get()?;
+        let binaries = || -> Result<Set<String>, Error> {
+            let tx = conn.transaction()?;
 
-    user::sync::try_run_as!(user::Mode::Effective, Result<(), Error>, {
-        if let Some(parent) = cache_file.parent() && !parent.exists() {
-            fs::create_dir_all(parent)?;
-        }
+            // Get profile_id, insert profile if missing
+            let profile_id = profile_id(&tx, name)?;
 
-        let mut file = std::fs::File::create(&cache_file)?;
-        syscalls.iter().try_for_each(|call| write!(file, "{call} "))?;
-        writeln!(file)?;
-        bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
-        Ok(())
-    })?;
-    let bwrap = bwrap.difference(&syscalls).cloned().collect();
-    Ok((syscalls, bwrap))
+            let mut stmt = tx.prepare(
+                "SELECT b.path
+            FROM binaries b
+            JOIN profile_binaries pb ON b.id = pb.binary_id
+            WHERE pb.profile_id = ?1",
+            )?;
+
+            let mut binaries = Set::new();
+            if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
+                for bin_res in binaries_iter {
+                    binaries.insert(bin_res?);
+                }
+            }
+
+            // Add extra binaries if passed
+            if let Some(extra_bins) = p_binaries {
+                for b in extra_bins {
+                    binaries.insert(b.clone());
+                }
+            }
+            Ok(binaries)
+        }()?;
+
+        binaries.iter().for_each(|bin| {
+            if let Err(e) = extend(
+                bin,
+                if bin.ends_with("bwrap") {
+                    &mut bwrap
+                } else {
+                    &mut syscalls
+                },
+            ) {
+                warn!("Failed to extend syscalls for binary {bin}: {e}");
+            }
+        });
+
+        user::sync::try_run_as!(user::Mode::Effective, Result<(), Error>, {
+            if let Some(parent) = cache_file.parent() && !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+
+            let mut file = std::fs::File::create(&cache_file)?;
+            syscalls.iter().try_for_each(|call| write!(file, "{call} "))?;
+            writeln!(file)?;
+            bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
+            Ok(())
+        })?;
+        bwrap = bwrap.difference(&syscalls).cloned().collect();
+    } else {
+        log::error!("Could not initialize connection to SECCOMP Database!");
+        return Ok(None);
+    }
+    Ok(Some((syscalls, bwrap)))
 }
 
 /// Return a new Policy
@@ -485,84 +495,86 @@ pub fn new(
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
     refresh: bool,
-) -> Result<(Filter, Option<OwnedFd>), Error> {
-    let (mut syscalls, bwrap) = debug_timer!(
+) -> Result<Option<(Filter, Option<OwnedFd>)>, Error> {
+    if let Some((mut syscalls, bwrap)) = timer!(
         "::get_calls",
         get_calls(name, binaries, refresh).unwrap_or_default()
-    );
-
-    if log::log_enabled!(log::Level::Trace) {
-        trace!(
-            "{:?}\n{:?}",
-            syscalls
-                .iter()
-                .filter_map(|e| Syscall::get_name(*e).ok())
-                .collect::<Vec<String>>(),
-            bwrap
-                .iter()
-                .filter_map(|e| Syscall::get_name(*e).ok())
-                .collect::<Vec<String>>(),
-        );
-    }
-
-    let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
-        let mut filter = Filter::new(Action::Notify)?;
-        filter.set_notifier(Notifier::new(
-            user_dir(instance).join("monitor"),
-            name.to_string(),
-        ));
-
-        filter
-    } else {
-        Filter::new(Action::KillProcess)?
-    };
-
-    filter.set_attribute(Attribute::NoNewPrivileges(true))?;
-    filter.set_attribute(Attribute::ThreadSync(true))?;
-    filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
-
-    for required in ["execve", "wait4", "exit"] {
-        syscalls.insert(Syscall::from_name(required)?.get_number());
-    }
-
-    let syscalls = syscalls.into_iter().collect::<Vec<_>>();
-    debug_timer!("::add_rules", {
-        for syscall in &syscalls {
-            filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
-        }
-    });
-
-    let fd = if policy == SeccompPolicy::Enforcing {
-        let mut s = DefaultHasher::new();
-        syscalls.hash(&mut s);
-        let hash = format!("{}", s.finish());
-
-        debug!("Enforcing BPF");
-        let bpf = AT_HOME
-            .join("cache")
-            .join(".seccomp")
-            .join(format!("{hash}.bpf"));
-
-        if let Some(parent) = bpf.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
+    ) {
+        if log::log_enabled!(log::Level::Trace) {
+            trace!(
+                "{:?}\n{:?}",
+                syscalls
+                    .iter()
+                    .filter_map(|e| Syscall::get_name(*e).ok())
+                    .collect::<Vec<String>>(),
+                bwrap
+                    .iter()
+                    .filter_map(|e| Syscall::get_name(*e).ok())
+                    .collect::<Vec<String>>(),
+            );
         }
 
-        Some(if !bpf.exists() {
-            debug!("Writing filter...");
-            filter.write(&bpf)?
+        let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
+            let mut filter = Filter::new(Action::Notify)?;
+            filter.set_notifier(Notifier::new(
+                user_dir(instance).join("monitor"),
+                name.to_string(),
+            ));
+
+            filter
         } else {
-            File::open(&bpf)?.into()
-        })
-    } else {
-        None
-    };
+            Filter::new(Action::KillProcess)?
+        };
 
-    for syscall in bwrap {
-        filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
+        filter.set_attribute(Attribute::NoNewPrivileges(true))?;
+        filter.set_attribute(Attribute::ThreadSync(true))?;
+        filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
+
+        for required in ["execve", "wait4", "exit"] {
+            syscalls.insert(Syscall::from_name(required)?.get_number());
+        }
+
+        let syscalls = syscalls.into_iter().collect::<Vec<_>>();
+        timer!("::add_rules", {
+            for syscall in &syscalls {
+                filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
+            }
+        });
+
+        let fd = if policy == SeccompPolicy::Enforcing {
+            let mut s = DefaultHasher::new();
+            syscalls.hash(&mut s);
+            let hash = format!("{}", s.finish());
+
+            debug!("Enforcing BPF");
+            let bpf = AT_HOME
+                .join("cache")
+                .join(".seccomp")
+                .join(format!("{hash}.bpf"));
+
+            if let Some(parent) = bpf.parent()
+                && !parent.exists()
+            {
+                fs::create_dir_all(parent)?;
+            }
+
+            Some(if !bpf.exists() {
+                debug!("Writing filter...");
+                filter.write(&bpf)?
+            } else {
+                File::open(&bpf)?.into()
+            })
+        } else {
+            None
+        };
+
+        for syscall in bwrap {
+            filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
+        }
+        Ok(Some((filter, fd)))
+    } else {
+        Ok(None)
     }
-    Ok((filter, fd))
 }
 
 /// Poll on Accept, Timing out after timeout.

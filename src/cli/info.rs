@@ -102,14 +102,23 @@ impl super::Run for Args {
                 Some(name) => {
                     print!("{name}: ");
                     let calls: Set<i32> = if name.contains('/') {
-                        let mut conn = syscalls::DB_POOL.get()?;
-                        let tx = conn.transaction()?;
-                        let calls = syscalls::get_binary_syscalls(&tx, &name)?;
-                        tx.commit()?;
-                        calls
-                    } else {
-                        let (syscalls, _) = syscalls::get_calls(&name, &None, false)?;
+                        if let Some(pool) = syscalls::DB_POOL.as_ref() {
+                            let mut conn = pool.get()?;
+                            let tx = conn.transaction()?;
+                            let calls = syscalls::get_binary_syscalls(&tx, &name)?;
+                            tx.commit()?;
+                            calls
+                        } else {
+                            return Err(anyhow::anyhow!(
+                                "Could not initialize connection to SECCOMP Database"
+                            ));
+                        }
+                    } else if let Some((syscalls, _)) = syscalls::get_calls(&name, &None, false)? {
                         syscalls.into_iter().collect()
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "Could not initialize connection to SECCOMP Database"
+                        ));
                     };
 
                     if self.verbosity > 0 {
@@ -130,44 +139,51 @@ impl super::Run for Args {
 
                 // Get information on everything in the database.
                 None => {
-                    let mut conn = syscalls::DB_POOL.get()?;
-                    let tx = conn.transaction()?;
+                    if let Some(pool) = syscalls::DB_POOL.as_ref() {
+                        let mut conn = pool.get()?;
+                        let tx = conn.transaction()?;
 
-                    // Profile info.
-                    println!("\n=== Profiles ===");
-                    let mut stmt = tx.prepare("SELECT name FROM profiles")?;
-                    for profile in stmt.query_map([], |row| row.get::<_, String>(0))?.flatten() {
-                        let mut stmt = tx.prepare(
-                            "SELECT b.path
+                        // Profile info.
+                        println!("\n=== Profiles ===");
+                        let mut stmt = tx.prepare("SELECT name FROM profiles")?;
+                        for profile in stmt.query_map([], |row| row.get::<_, String>(0))?.flatten()
+                        {
+                            let mut stmt = tx.prepare(
+                                "SELECT b.path
                                  FROM profiles p
                                  JOIN profile_binaries pb ON pb.profile_id = p.id
                                  JOIN binaries b ON b.id = pb.binary_id
                                  WHERE p.name = ?1",
-                        )?;
+                            )?;
 
-                        let binaries: Vec<String> = stmt
-                            .query_map([&profile], |row| row.get::<_, String>(0))?
-                            .flatten()
-                            .collect();
+                            let binaries: Vec<String> = stmt
+                                .query_map([&profile], |row| row.get::<_, String>(0))?
+                                .flatten()
+                                .collect();
 
-                        println!("{profile} => {}", binaries.join(" "))
-                    }
-                    println!("================");
+                            println!("{profile} => {}", binaries.join(" "))
+                        }
+                        println!("================");
 
-                    // Binary information.
-                    println!("\n=== Binaries ===");
-                    let mut stmt = tx.prepare("SELECT path FROM binaries")?;
-                    for path in stmt.query_map([], |row| row.get::<_, String>(0))?.flatten() {
-                        if let Ok(syscalls) = syscalls::get_binary_syscalls(&tx, &path) {
-                            let syscalls = syscalls::get_names(syscalls);
-                            if self.verbosity > 0 {
-                                println!("{path} => {}", syscalls.join(" "))
-                            } else {
-                                println!("{path} => {} syscalls", syscalls.len())
+                        // Binary information.
+                        println!("\n=== Binaries ===");
+                        let mut stmt = tx.prepare("SELECT path FROM binaries")?;
+                        for path in stmt.query_map([], |row| row.get::<_, String>(0))?.flatten() {
+                            if let Ok(syscalls) = syscalls::get_binary_syscalls(&tx, &path) {
+                                let syscalls = syscalls::get_names(syscalls);
+                                if self.verbosity > 0 {
+                                    println!("{path} => {}", syscalls.join(" "))
+                                } else {
+                                    println!("{path} => {} syscalls", syscalls.len())
+                                }
                             }
                         }
+                        println!("================");
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "Could not initialize connection to SECCOMP Database"
+                        ));
                     }
-                    println!("================");
                 }
             },
         }

@@ -1,0 +1,9 @@
+path = "keepassxc"
+id = "org.keepassxc.KeePassXC"
+features = ["kf6", "qt6"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]

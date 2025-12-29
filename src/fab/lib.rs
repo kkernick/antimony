@@ -1,20 +1,17 @@
 use crate::{
-    debug_timer,
     fab::{
         LIB_ROOTS, SINGLE_LIB, elf_filter, get_dir, get_libraries, get_wildcards, localize_home,
     },
     shared::{
         Set,
         env::{AT_HOME, HOME},
-        profile::Profile,
     },
+    timer,
 };
-use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
 use log::{debug, error, warn};
 use rayon::prelude::*;
-use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs, io,
@@ -45,12 +42,18 @@ fn dir_resolve(
     Ok(dependencies)
 }
 
-fn get_sof_path(sof: &Path, library: &str) -> PathBuf {
-    PathBuf::from(library.replace("/usr", &sof.to_string_lossy()))
+pub fn get_sof_path(sof: &Path, library: &str, prefix: &str) -> PathBuf {
+    PathBuf::from(library.replace(prefix, &sof.to_string_lossy()))
 }
 
-pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
-    let sof_path = get_sof_path(sof, &library);
+pub fn add_sof(
+    sof: &Path,
+    library: Cow<'_, str>,
+    destination: Cow<'_, str>,
+    cache: &Path,
+    prefix: &str,
+) -> Result<()> {
+    let sof_path = get_sof_path(sof, &destination, prefix);
 
     if let Some(parent) = sof_path.parent() {
         if !parent.exists() {
@@ -68,7 +71,7 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
             // This reduces redundancy between profiles, and since shared exists
             // in the CACHE_DIR, hard links will work.
 
-            let shared_path = get_sof_path(&cache.join("shared"), &library);
+            let shared_path = get_sof_path(&cache.join("shared"), &library, prefix);
             if let Some(parent) = shared_path.parent() {
                 if !parent.exists() {
                     fs::create_dir_all(parent)?;
@@ -82,34 +85,29 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
 }
 
 /// Generate the libraries for a program.
-pub fn fabricate(
-    profile: &mut Profile,
-    name: &str,
-    sys_dir: &Path,
-    handle: &Spawner,
-) -> Result<()> {
-    if let Some(libraries) = &profile.libraries
+pub fn fabricate(info: &super::FabInfo) -> Result<()> {
+    if let Some(libraries) = &info.profile.lock().libraries
         && libraries.contains("/usr/lib")
     {
         #[rustfmt::skip]
-            handle.args_i([
-                "--ro-bind", "/usr/lib", "/usr/lib",
-                "--ro-bind", "/usr/lib64", "/usr/lib64",
-                "--symlink", "/usr/lib", "/lib",
-                "--symlink", "/usr/lib64", "/lib64",
-            ])?;
+        info.handle.args_i([
+            "--ro-bind", "/usr/lib", "/usr/lib",
+            "--ro-bind", "/usr/lib64", "/usr/lib64",
+            "--symlink", "/usr/lib", "/lib",
+            "--symlink", "/usr/lib64", "/lib64",
+        ])?;
         return Ok(());
     }
 
     let cache = Arc::new(crate::shared::env::CACHE_DIR.join(".lib"));
     if !cache.exists() {
         user::run_as!(user::Mode::Effective, {
-            fs::create_dir_all(cache.as_path()).unwrap()
-        });
+            fs::create_dir_all(cache.as_path())
+        })?;
     }
 
     debug!("Creating SOF");
-    let sof = sys_dir.join("sof");
+    let sof = info.sys_dir.join("sof");
     if !sof.exists() {
         fs::create_dir(&sof)?;
     }
@@ -123,8 +121,8 @@ pub fn fabricate(
     // I cannot think of any situation in which profile.binaries will be None, or empty. Profiles are
     // either elf binaries themselves, or they use an interpreter that is. We fallback to the current
     // program in emergencies.
-    if let Some(binaries) = &profile.binaries {
-        debug_timer!("::binaries", {
+    if let Some(binaries) = &info.profile.lock().binaries {
+        timer!("::binaries", {
             binaries.par_iter().for_each(|binary| {
                 let dep = dependencies.clone();
                 if let Ok(libraries) =
@@ -147,68 +145,69 @@ pub fn fabricate(
     }
 
     // Libraries and Binaries, Wildcard and Directories Resolved
-    let mut resolved = Set::new();
+    let resolved = Arc::new(DashSet::new());
 
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    for lib_root in LIB_ROOTS.get().unwrap().iter() {
-        let app_lib = format!("{lib_root}/{name}");
-        if Path::new(&app_lib).exists() {
-            debug!("Adding program lib folder");
-            resolved.insert(Cow::Owned(app_lib));
+    if let Some(roots) = LIB_ROOTS.get() {
+        for lib_root in roots.iter() {
+            let app_lib = format!("{lib_root}/{}", info.name);
+            if Path::new(&app_lib).exists() {
+                debug!("Adding program lib folder");
+                resolved.insert(Cow::Owned(app_lib));
+            }
         }
     }
 
-    debug_timer!("::wildcards", {
-        if let Some(libraries) = profile.libraries.take() {
+    timer!("::wildcards", {
+        if let Some(libraries) = &info.profile.lock().libraries.take() {
             // Separate the wildcards from the files/dirs.
             let (wildcards, flat): (Set<_>, Set<_>) =
                 libraries.into_par_iter().partition(|e| e.contains('*'));
 
             debug!("Formatting flat");
-            resolved.extend(flat.into_iter().filter_map(|e| {
+            flat.into_par_iter().for_each(|e| {
                 if e.starts_with("/") {
-                    Some(Cow::Owned(e))
+                    resolved.insert(Cow::Owned(e.to_string()));
                 } else if e.starts_with("~") {
-                    Some(Cow::Owned(e.replace("~", HOME.as_str())))
-                } else {
-                    for root in LIB_ROOTS.get().unwrap().iter() {
+                    resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
+                } else if let Some(roots) = LIB_ROOTS.get() {
+                    for root in roots.iter() {
                         let path = format!("{root}/{e}");
                         if Path::new(&path).exists() {
-                            return Some(Cow::Owned(path));
+                            resolved.insert(Cow::Owned(path));
+                            return;
                         }
                     }
                     warn!("Failed to find library: {e}");
-                    None
                 }
-            }));
+            });
 
+            // Parallelizing this causes deadlocks. Not sure why. The Spawn Handle does not
+            // call its drop because we call wait(), so its not contention on the user lock,
+            // and it does not seem to be contention on writing/reading the cache.
             debug!("Resolving wildcards");
-            resolved.extend(
-                wildcards
-                    .into_par_iter()
-                    .filter_map(|e| get_wildcards(&e, true, Some(&cache)).ok())
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .flatten()
-                    .map(Cow::Owned)
-                    .collect::<Set<_>>(),
-            );
+            wildcards.into_iter().for_each(|w| {
+                if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
+                    cards.into_par_iter().for_each(|card| {
+                        resolved.insert(Cow::Owned(card));
+                    });
+                }
+            });
         }
     });
 
-    let files = debug_timer!("::directories", {
-        resolved
-            .into_par_iter()
-            .filter_map(|e| dir_resolve(e, directories.clone(), &cache).ok())
-            .collect::<Vec<_>>()
+    let files = timer!("::directories", {
+        Arc::into_inner(resolved)
+            .unwrap()
             .into_iter()
+            .filter_map(|e| dir_resolve(e, directories.clone(), &cache).ok())
             .flatten()
             .collect::<Set<_>>()
     });
 
-    debug_timer!("::resolve", {
+    timer!("::resolve", {
         files.into_par_iter().for_each(|file| {
             let dep = dependencies.clone();
             dep.insert(file.clone());
@@ -222,7 +221,7 @@ pub fn fabricate(
 
     let dependencies = Arc::into_inner(dependencies).unwrap();
 
-    debug_timer!("::writing", {
+    timer!("::writing", {
         dependencies
             .into_par_iter()
             .map(|library| {
@@ -243,7 +242,10 @@ pub fn fabricate(
                     library.as_str()
                 };
 
-                if parent.contains("lib") && LIB_ROOTS.get().unwrap().iter().any(|r| parent == r) {
+                if parent.contains("lib")
+                    && let Some(roots) = LIB_ROOTS.get()
+                    && roots.iter().any(|r| parent == r)
+                {
                     true
                 } else {
                     !directories
@@ -253,42 +255,50 @@ pub fn fabricate(
             })
             // Write the SOF version, as a hard link preferably.
             .for_each(|lib| {
-                if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache) {
+                if let Err(e) = add_sof(
+                    &sof,
+                    Cow::Borrowed(&lib),
+                    Cow::Borrowed(&lib),
+                    &cache,
+                    "/usr",
+                ) {
                     error!("Failed to add {lib} to SOF: {e}")
                 }
             });
     });
 
     let sof_str = sof.to_string_lossy();
-    handle.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
+    info.handle
+        .args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
 
     let path = &format!("{sof_str}/lib64");
     if Path::new(path).exists() {
-        handle.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
+        info.handle.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
     } else {
-        handle.args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
+        info.handle
+            .args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
     }
 
     #[rustfmt::skip]
-    handle.args_i([
+    info.handle.args_i([
         "--symlink", "/usr/lib", "/lib",
         "--symlink", "/usr/lib64", "/lib64",
     ])?;
 
-    debug_timer!("::mount_directories", {
+    timer!("::mount_directories", {
         directories.par_iter().try_for_each(|dir| -> Result<()> {
             if let Some(roots) = LIB_ROOTS.get() {
                 if roots.iter().any(|r| dir.starts_with(r)) {
-                    let sof_path = get_sof_path(&sof, dir.as_str());
+                    let sof_path = get_sof_path(&sof, dir.as_str(), "/usr");
                     if !sof_path.exists() {
                         fs::create_dir_all(sof_path)?;
                     }
                 }
             } else {
-                return Err(anyhow!("Roots not initalized!"));
+                return Err(anyhow!("Roots not initialized!"));
             }
 
-            handle.args_i([
+            info.handle.args_i([
                 "--ro-bind",
                 dir.as_str(),
                 localize_home(dir.as_str()).as_ref(),
@@ -297,11 +307,5 @@ pub fn fabricate(
         })?;
     });
 
-    profile.libraries = Some(
-        Arc::try_unwrap(directories)
-            .map_err(|_| anyhow!("Deadlock collecting binary dependencies!"))?
-            .into_iter()
-            .collect(),
-    );
     Ok(())
 }

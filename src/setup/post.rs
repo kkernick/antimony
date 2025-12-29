@@ -8,15 +8,15 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
     let mut post_args = Vec::new();
 
-    if let Some(mut arguments) = args.profile.arguments.take() {
+    if let Some(mut arguments) = args.profile.lock().arguments.take() {
         post_args.append(&mut arguments);
     }
-    if let Some(mut passthrough) = args.args.passthrough.take() {
-        post_args.append(&mut passthrough);
+    if let Some(passthrough) = &args.args.passthrough {
+        post_args.extend(passthrough.iter().cloned());
     }
 
     if !post_args.is_empty() {
-        let operation = match args.profile.files.take() {
+        let operation = match args.profile.lock().files.take() {
             Some(mut files) => match files.passthrough.take() {
                 Some(passthrough) => passthrough,
                 None => FileMode::ReadOnly,

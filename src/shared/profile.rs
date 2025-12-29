@@ -1286,7 +1286,7 @@ impl FileMode {
 }
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Hash, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Hash, Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.
@@ -1430,7 +1430,9 @@ pub enum Portal {
 
 /// Namespaces. By default, none are shared. You will likely not need to use these
 /// directly, as they are included in relevant features.
-#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, PartialOrd, Ord)]
+#[derive(
+    Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, PartialOrd, Ord, Copy,
+)]
 #[serde(deny_unknown_fields)]
 pub enum Namespace {
     All,

@@ -1,7 +1,7 @@
 //! Modify the SECCOMP Database.
 use crate::shared::{
     env::{AT_HOME, DATA_HOME},
-    syscalls::{self, CACHE_DIR, DB_POOL},
+    syscalls::{self, CACHE_DIR},
 };
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
@@ -14,7 +14,7 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-use tempfile::NamedTempFile;
+use temp::TempFile;
 use user::try_run_as;
 
 #[derive(clap::Args, Debug)]
@@ -47,6 +47,14 @@ pub enum Operation {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
+        let pool = if let Some(pool) = syscalls::DB_POOL.as_ref() {
+            pool
+        } else {
+            return Err(anyhow::anyhow!(
+                "Could not initialize connection to SECCOMP Database"
+            ));
+        };
+
         let result = try_run_as!(user::Mode::Real, Result<i32>, {
             Ok(Spawner::abs("/usr/bin/pkcheck")
                 .args([
@@ -71,7 +79,7 @@ impl super::Run for Args {
 
             match self.operation {
                 Operation::Optimize => {
-                    let conn = DB_POOL.get()?;
+                    let conn = pool.get()?;
                     conn.execute("VACUUM;", [])?;
                     conn.execute("ANALYZE;", [])?;
                     println!("Optimized!");
@@ -115,10 +123,10 @@ impl super::Run for Args {
                         None => getcwd()?.join("syscalls.db"),
                     };
 
-                    let temp = NamedTempFile::new_in(AT_HOME.join("seccomp"))?;
+                    let temp = TempFile::new().within(AT_HOME.join("seccomp")).create()?;
                     fs::copy(&db, temp.path())?;
 
-                    let mut conn = DB_POOL.get()?;
+                    let mut conn = pool.get()?;
                     let tx = conn.transaction()?;
                     tx.execute(
                         &format!("ATTACH DATABASE '{}' AS other", temp.path().display()),
@@ -157,7 +165,7 @@ impl super::Run for Args {
                 }
 
                 Operation::Clean => {
-                    let mut conn = syscalls::DB_POOL.get()?;
+                    let mut conn = pool.get()?;
                     let tx = conn.transaction()?;
 
                     || -> Result<()> {

@@ -1,9 +1,13 @@
-use crate::{debug_timer, fab, shared::env::USER_NAME};
+use crate::{
+    fab::{self, FabInfo},
+    shared::env::USER_NAME,
+    timer,
+};
 use anyhow::Result;
 use log::debug;
-use std::fs;
+use std::{fs, sync::Arc};
 
-pub fn setup(args: &mut super::Args) -> Result<()> {
+pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // The fabricators are cached.
     let cmd_cache = args.sys_dir.join(USER_NAME.as_str()).join("cmd.cache");
     if let Some(parent) = cmd_cache.parent()
@@ -22,35 +26,25 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
     debug!("Fabricating sandbox");
 
+    let info = FabInfo {
+        profile: &args.profile,
+        handle: &args.handle,
+        name: &args.name,
+        instance: &args.instance,
+        sys_dir: &args.sys_dir,
+    };
+
     // Start caching.
     args.handle.cache_start()?;
 
     // Home must run before bin so that bin can populate files.
-    debug_timer!(
-        "::files",
-        fab::files::fabricate(&mut args.profile, &args.handle)
-    )?;
+    timer!("::files", fab::files::fabricate(&info))?;
+    timer!("::etc", fab::etc::fabricate(&info));
+    timer!("::bin", fab::bin::fabricate(&info))?;
+    timer!("::lib", fab::lib::fabricate(&info))?;
+    timer!("::ns", fab::ns::fabricate(&info))?;
+    timer!("::dev", fab::dev::fabricate(&info))?;
 
-    debug_timer!("::etc", fab::etc::fabricate(&mut args.profile, &args.name));
-
-    // Bin must run before lib so that bin can populate libraries
-    debug_timer!(
-        "::bin",
-        fab::bin::fabricate(&mut args.profile, &args.instance, &args.name, &args.handle)
-    )?;
-
-    debug_timer!(
-        "::lib",
-        fab::lib::fabricate(&mut args.profile, &args.name, &args.sys_dir, &args.handle)
-    )?;
-
-    debug_timer!("::ns", fab::ns::fabricate(&mut args.profile, &args.handle))?;
-
-    debug_timer!(
-        "::dev",
-        fab::dev::fabricate(&mut args.profile, &args.handle)
-    )?;
-
-    debug_timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
+    timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
     Ok(())
 }

@@ -2,7 +2,7 @@ use crate::{
     fab::localize_path,
     shared::{
         env::HOME,
-        profile::{FILE_MODES, FileMode, Profile},
+        profile::{FILE_MODES, FileMode},
     },
 };
 use anyhow::Result;
@@ -22,9 +22,9 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
     }
 }
 
-pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
+pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     user::try_run_as!(user::Mode::Real, {
-        if let Some(files) = &mut profile.files {
+        if let Some(mut files) = info.profile.lock().files.take() {
             if let Some(mut user_files) = files.user.take() {
                 for mode in FILE_MODES {
                     if let Some(files) = user_files.remove(&mode) {
@@ -35,7 +35,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
                                     mode,
                                     &file.replace("~", HOME.as_str()),
                                     true,
-                                    handle,
+                                    info.handle,
                                     true,
                                 )
                             })
@@ -49,7 +49,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
                     if let Some(files) = system.remove(&mode) {
                         files
                             .into_par_iter()
-                            .try_for_each(|file| localize(mode, &file, false, handle, true))
+                            .try_for_each(|file| localize(mode, &file, false, info.handle, true))
                             .ok();
                     }
                 }
@@ -60,7 +60,7 @@ pub fn fabricate(profile: &mut Profile, handle: &Spawner) -> Result<()> {
                     if let Some(files) = system.remove(&mode) {
                         files
                             .into_par_iter()
-                            .try_for_each(|file| localize(mode, &file, false, handle, false))
+                            .try_for_each(|file| localize(mode, &file, false, info.handle, false))
                             .ok();
                     }
                 }

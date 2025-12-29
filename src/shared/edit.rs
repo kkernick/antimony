@@ -9,8 +9,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use tempfile::NamedTempFile;
-
+use temp::TempFile;
 use user::run_as;
 
 use crate::shared::env::EDITOR;
@@ -109,12 +108,9 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
-    let temp = run_as!(user::Mode::Real, Result<NamedTempFile, Error>, {
-        let temp = tempfile::Builder::new()
-            .suffix(".toml")
-            .tempfile()
-            .map_err(|e| Error::Io("open temporary file", e))?;
-        fs::copy(path, &temp).map_err(|e| Error::Io("write temporary file", e))?;
+    let temp = run_as!(user::Mode::Real, Result<_, Error>, {
+        let temp = TempFile::create_now().map_err(|e| Error::Io("open temporary file", e))?;
+        fs::copy(path, temp.path()).map_err(|e| Error::Io("write temporary file", e))?;
         Ok(temp)
     })?;
 
@@ -133,7 +129,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
             .wait()?;
 
         // Read the contents.
-        match fs::read_to_string(&temp) {
+        match fs::read_to_string(temp.path()) {
             Ok(string) => match toml::from_str::<T>(string.as_ref()) {
                 // If they didn't make any changes, we want to tell edit
                 // so that they don't create a redundant user profile.

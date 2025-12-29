@@ -9,16 +9,15 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
-    debug_timer,
     shared::{
-        Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
         profile::Profile,
     },
+    timer,
 };
-use ahash::HashSetExt;
 use anyhow::{Result, anyhow};
+use dashmap::DashSet;
 use dbus::{
     Message,
     blocking::{BlockingSender, LocalConnection},
@@ -26,23 +25,26 @@ use dbus::{
 };
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
+use parking_lot::Mutex;
 use rand::RngCore;
-use spawn::Spawner;
+use spawn::{Handle, Spawner};
 use std::{
     borrow::Cow,
     fs,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 use user::try_run_as;
 
 struct Args<'a> {
-    pub profile: Profile,
+    pub profile: Mutex<Profile>,
+    pub id: String,
     pub name: Cow<'a, str>,
     pub handle: Spawner,
-    pub inotify: Inotify,
-    pub watches: Set<WatchDescriptor>,
+    pub inotify: Mutex<Inotify>,
+    pub watches: DashSet<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: String,
     pub args: &'a mut super::cli::run::Args,
@@ -59,7 +61,7 @@ pub struct Info {
 }
 
 pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
-    let profile = debug_timer!("::profile", {
+    let profile = timer!("::profile", {
         let profile = match Profile::new(&name, args.config.take()) {
             Ok(profile) => profile,
             Err(e) => {
@@ -76,10 +78,11 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     })?;
 
     let hash = profile.hash_str();
+    debug!("Profile Hash: {hash}");
     let mut sys_dir = CACHE_DIR.join(&hash);
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let instance = debug_timer!("::instance", {
+    let instance = timer!("::instance", {
         loop {
             let mut bytes = [0; 8];
             rand::rng().fill_bytes(&mut bytes);
@@ -95,7 +98,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     });
 
-    debug_timer!("::cache", {
+    timer!("::cache", {
         let busy = |path: &Path| -> bool {
             match path.read_dir() {
                 Ok(mut iter) => iter.next().is_some(),
@@ -110,7 +113,6 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
                 debug!("Updating to refreshed definitions");
                 fs::remove_dir_all(&sys_dir)?;
                 fs::rename(&refresh_dir, &sys_dir)?;
-
                 debug!("Removing stale command caches.");
                 Spawner::abs("/usr/bin/find")
                     .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])?
@@ -149,7 +151,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     let runtime = RUNTIME_STR.as_str();
 
-    debug_timer!("::document_wakeup", {
+    timer!("::document_wakeup", {
         try_run_as!(user::Mode::Real, Result<()>, {
             if let Some(ipc) = &profile.ipc
                 && !ipc.disable.unwrap_or(false)
@@ -198,11 +200,13 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         .mode(user::Mode::Real);
 
     debug!("Initializing inotify handle");
-    let inotify = try_run_as!(user::Mode::Real, Inotify::init())?;
-    let watches = Set::new();
+    let inotify = Mutex::new(try_run_as!(user::Mode::Real, Inotify::init())?);
+    let watches = DashSet::new();
+    let id = profile.id(&name);
 
-    let mut a = Args {
-        profile,
+    let a = Arc::new(Args {
+        profile: Mutex::new(profile),
+        id,
         name: name.clone(),
         handle,
         inotify,
@@ -210,24 +214,49 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         sys_dir: sys_dir.clone(),
         instance,
         args,
-    };
+    });
 
-    debug_timer!("::proxy", proxy::setup(&mut a))?;
-    let home = debug_timer!("::home", home::setup(&mut a))?;
+    let (proxy, pair) = timer!(
+        "::setup_total",
+        rayon::join(
+            || timer!("::proxy", proxy::setup(Arc::clone(&a))),
+            || -> Result<(Option<String>, Option<Handle>)> {
+                timer!("::setup_rest", {
+                    let a = Arc::clone(&a);
+                    let home = timer!("::home", home::setup(&a))?;
+                    timer!("::file", files::setup(&a))?;
+                    timer!("::env", env::setup(&a));
+                    timer!("::fab", fab::setup(&a))?;
+                    let monitor = timer!("::syscalls", syscalls::setup(&a))?;
+                    Ok((home, monitor))
+                })
+            },
+        )
+    );
 
-    debug_timer!("::file", files::setup(&mut a))?;
-    debug_timer!("::env", env::setup(&mut a));
-    debug_timer!("::fab", fab::setup(&mut a))?;
-    debug_timer!("::syscalls", syscalls::setup(&mut a))?;
+    let (home, monitor) = pair?;
+    let mut a = Arc::into_inner(a).expect("Failed to unwrap fabricator");
 
-    let post = debug_timer!("::post", post::setup(&mut a))?;
-    debug_timer!("::wait", wait::setup(&mut a))?;
+    if let Some((proxy, arguments)) = proxy? {
+        a.handle.associate(proxy);
+        a.handle.args_i(arguments)?;
+    }
+    if let Some(monitor) = monitor {
+        a.handle.associate(monitor);
+    }
+
+    let post = timer!("::post", post::setup(&mut a))?;
+
+    timer!(
+        "::wait",
+        wait::setup(a.watches, a.inotify.into_inner(), &mut a.handle, a.args.dry)
+    )?;
 
     Ok(Info {
         name: name.into_owned(),
         handle: a.handle,
         post,
-        profile: a.profile,
+        profile: a.profile.into_inner(),
         instance: instances.join(a.instance),
         home,
         sys_dir,

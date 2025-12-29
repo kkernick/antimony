@@ -1,17 +1,23 @@
 use crate::shared::{env::OVERLAY, profile::HomePolicy};
 use anyhow::{Result, anyhow};
 use log::debug;
-use std::fs::{self, File};
+use std::{
+    fs::{self, File},
+    sync::Arc,
+};
 
-pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
-    if let Some(home) = &args.profile.home {
+pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
+    if let Some(home) = &args.profile.lock().home.take() {
         let home_dir = home.path(&args.name);
+
+        log::trace!("LOCK: {:?}", home.lock);
 
         // If we explicitly disable the lock, unlock the home.
         if let Some(lock) = home.lock
             && !lock
             && home_dir.exists()
         {
+            debug!("Unlocking home");
             let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
             lock.unlock()?;
         }

@@ -1,6 +1,6 @@
 name = "dry"
 description = "Immediately exit from the sandbox. This feature is primarily for benchmarking, as you'll usually want to use --dry. This achieves the same thing, but forces the entire sandbox online, including auxiliary binaries, etc."
 
-conditional = "command -v /usr/bin/sh"
-binaries = ["sh"]
-sandbox_args = ["#", "sh", "-c", "exit", "!"]
+conditional = "command -v /usr/bin/bash"
+binaries = ["/usr/bin/bash"]
+sandbox_args = ["#", "/usr/bin/bash", "-c", "exit", "!"]

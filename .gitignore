@@ -1,3 +1,4 @@
 /target
 /.zed
 /codebook.toml
+/config/cache
