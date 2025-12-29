@@ -4,6 +4,7 @@ use crate::shared::{
     profile::{self, Profile},
 };
 use anyhow::Result;
+use log::{error, trace};
 use std::fs::{self, File};
 
 #[derive(clap::Args, Debug, Default)]
@@ -30,8 +31,11 @@ impl super::Run for Args {
             File::create(&path)?;
         }
 
-        if Profile::edit(&path).is_err() {
+        trace!("Editing");
+        if let Err(e) = Profile::edit(&path) {
             fs::remove_file(&path)?;
+            error!("Failed to edit default: {e}");
+            return Err(e.into());
         } else {
             fs::remove_dir_all(profile::CACHE_DIR.as_path())?;
         }

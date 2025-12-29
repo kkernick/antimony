@@ -11,8 +11,7 @@ pub struct Args {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         if self.profile == "default" {
-            let args = default::Args::default();
-            args.run()
+            default::Args::default().run()
         } else {
             user::set(user::Mode::Effective)?;
 

@@ -1,10 +1,10 @@
 use crate::{
     fab::{get_libraries, lib::add_sof},
+    setup::syscalls,
     shared::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
         profile::{Namespace, Portal, Profile},
-        syscalls,
     },
     timer,
 };
@@ -57,15 +57,9 @@ pub fn run(
 
         timer!("::sof", {
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"), Some(&cache))?;
-            libraries.into_par_iter().try_for_each(|library| {
-                add_sof(
-                    &sof,
-                    Cow::Borrowed(&library),
-                    Cow::Borrowed(&library),
-                    &cache,
-                    "/usr",
-                )
-            })?;
+            libraries
+                .into_par_iter()
+                .try_for_each(|library| add_sof(&sof, Cow::Borrowed(&library), &cache, "/usr"))?;
         });
     }
 
@@ -110,13 +104,10 @@ pub fn run(
     // Setup SECCOMP.
     if !dry && let Some(policy) = profile.lock().seccomp {
         timer!("::seccomp", {
-            if let Some((filter, fd)) =
-                syscalls::new("xdg-dbus-proxy", instance, policy, &None, refresh)?
+            if let Some(handle) =
+                syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, refresh, &proxy)?
             {
-                proxy.seccomp_i(filter);
-                if let Some(fd) = fd {
-                    proxy.fd_arg_i("--seccomp", fd)?;
-                }
+                proxy.associate(handle);
             }
         })
     }

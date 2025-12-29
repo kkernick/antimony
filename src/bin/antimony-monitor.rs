@@ -97,6 +97,9 @@ pub struct Cli {
 
     #[arg(short, long)]
     pub mode: SeccompPolicy,
+
+    #[arg(short, long, default_value_t = false)]
+    pub audit: bool,
 }
 
 fn update_binary<'a, T: Iterator<Item = &'a i32>>(
@@ -156,45 +159,55 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) 
     let mut buf = vec![0u8; BUFFER_SIZE];
 
     while !term.load(Ordering::Relaxed) {
-        let size = recv(sock_fd.as_raw_fd(), &mut buf, MsgFlags::empty())?;
-        if size == 0 {
-            continue;
-        }
-        let msg = String::from_utf8_lossy(&buf[..size]);
-        if msg.contains("syscall=") {
-            // Grab the executable name
-            let exe =
-                if let Some(exe_match) = msg.split_whitespace().find(|s| s.starts_with("exe=")) {
-                    exe_match
-                        .trim_start_matches("exe=")
-                        .trim_matches('"')
-                        .to_string()
-                } else {
+        match recv(sock_fd.as_raw_fd(), &mut buf, MsgFlags::MSG_DONTWAIT) {
+            Ok(size) => {
+                if size == 0 {
                     continue;
-                };
-
-            // Grab the syscall name.
-            let syscall = if let Some(syscall_match) =
-                msg.split_whitespace().find(|s| s.starts_with("syscall="))
-            {
-                syscall_match
-                    .trim_start_matches("syscall=")
-                    .to_string()
-                    .parse::<i32>()
-            } else {
-                continue;
-            };
-
-            // If everything is valid, log it.
-            if let Ok(syscall) = syscall {
-                let mut entry = log.entry(exe.clone()).or_default();
-                if !entry.contains(&syscall) {
-                    trace!("Audited Syscall: {exe} => {syscall}");
-                    entry.insert(syscall);
                 }
+                let msg = String::from_utf8_lossy(&buf[..size]);
+                if msg.contains("syscall=") {
+                    // Grab the executable name
+                    let exe = if let Some(exe_match) =
+                        msg.split_whitespace().find(|s| s.starts_with("exe="))
+                    {
+                        exe_match
+                            .trim_start_matches("exe=")
+                            .trim_matches('"')
+                            .to_string()
+                    } else {
+                        continue;
+                    };
+
+                    // Grab the syscall name.
+                    let syscall = if let Some(syscall_match) =
+                        msg.split_whitespace().find(|s| s.starts_with("syscall="))
+                    {
+                        syscall_match
+                            .trim_start_matches("syscall=")
+                            .to_string()
+                            .parse::<i32>()
+                    } else {
+                        continue;
+                    };
+
+                    // If everything is valid, log it.
+                    if let Ok(syscall) = syscall {
+                        let mut entry = log.entry(exe.clone()).or_default();
+                        if !entry.contains(&syscall) {
+                            trace!("Audited Syscall: {exe} => {syscall}");
+                            entry.insert(syscall);
+                        }
+                    }
+                }
+            }
+            Err(Errno::EAGAIN) => thread::sleep(Duration::from_millis(10)),
+            Err(e) => {
+                error!("Audit error: {e}");
+                break;
             }
         }
     }
+    trace!("Closing Audit");
     Ok(())
 }
 
@@ -429,6 +442,7 @@ pub fn notify_reader(
             }
         }
     }
+    trace!("Closing {name}");
     Ok(())
 }
 
@@ -436,6 +450,13 @@ pub fn notify_reader(
 fn main() -> Result<()> {
     notify::init()?;
     let cli = Cli::parse();
+
+    user::set(Mode::Real)?;
+    let monitor_path = RUNTIME_DIR
+        .join("antimony")
+        .join(&cli.instance)
+        .join(format!("monitor-{}", cli.profile));
+    let listener = UnixListener::bind(&monitor_path)?;
 
     #[cfg(debug_assertions)]
     std::thread::spawn(move || {
@@ -466,12 +487,6 @@ fn main() -> Result<()> {
     );
 
     // Setup the socket. We run this as the user.
-    user::set(Mode::Real)?;
-    let monitor_path = RUNTIME_DIR
-        .join("antimony")
-        .join(&cli.instance)
-        .join("monitor");
-    let listener = UnixListener::bind(&monitor_path)?;
 
     // Ensure that we can record syscall info after the attached process dies.
     let term = Arc::new(AtomicBool::new(false));
@@ -480,14 +495,18 @@ fn main() -> Result<()> {
 
     // Shared DashSet for stats.
     let stats = DashMap::<String, Arc<DashMap<String, Set<i32>>>>::new();
+    let mut threads = Vec::new();
 
-    let audit = stats
-        .entry("audit".to_string())
-        .or_insert_with(|| Arc::new(DashMap::new()))
-        .clone();
+    if cli.audit {
+        let audit = stats
+            .entry("audit".to_string())
+            .or_insert_with(|| Arc::new(DashMap::new()))
+            .clone();
 
-    let audit_term = term.clone();
-    let mut threads = Vec::from([thread::spawn(move || audit_reader(audit_term, audit))]);
+        info!("Spawning audit reader");
+        let audit_term = term.clone();
+        threads.push(thread::spawn(move || audit_reader(audit_term, audit)));
+    }
 
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
@@ -527,7 +546,6 @@ fn main() -> Result<()> {
     }
 
     user::set(Mode::Effective)?;
-
     info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
@@ -536,7 +554,6 @@ fn main() -> Result<()> {
     {
         let mut conn = pool.get()?;
         let tx = conn.transaction()?;
-        println!("\n=== Syscall Summary ===");
 
         // Make sure the binary is either in the profile's persist home, or
         // exists.
@@ -559,7 +576,6 @@ fn main() -> Result<()> {
         };
 
         for (name, stats) in stats {
-            debug!("Updating {name}");
             // Collect and insert syscall sets
             let binaries: Set<String> = stats
                 .iter_mut()
@@ -591,7 +607,8 @@ fn main() -> Result<()> {
                 })
                 .collect();
 
-            if name != "audit" {
+            if name != "audit" && !binaries.is_empty() {
+                debug!("Updating {name}");
                 update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
             }
         }

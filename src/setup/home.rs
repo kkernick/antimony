@@ -2,7 +2,7 @@ use crate::shared::profile::HomePolicy;
 use anyhow::{Result, anyhow};
 use log::debug;
 use std::{
-    fs::{self, File},
+    fs::{self, File, TryLockError},
     sync::Arc,
 };
 use user::as_real;
@@ -10,8 +10,7 @@ use user::as_real;
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
     if let Some(home) = &args.profile.lock().home.take() {
         let home_dir = home.path(&args.name);
-
-        log::trace!("LOCK: {:?}", home.lock);
+        debug!("Home directory at {home_dir:?}");
 
         // If we explicitly disable the lock, unlock the home.
         if let Some(lock) = home.lock
@@ -19,15 +18,19 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             && home_dir.exists()
         {
             debug!("Unlocking home");
-            let lock = as_real!(File::open(&home_dir))??;
-            lock.unlock()?;
+            as_real!(File::open(&home_dir)?.unlock())??;
         }
 
         if home.lock.unwrap_or(false) && !args.args.dry && home_dir.exists() {
-            let lock = as_real!(File::open(&home_dir))??;
-            match lock.try_lock() {
-                Ok(_) => args.handle.fd_i(lock),
-                Err(fs::TryLockError::WouldBlock) => {
+            let (file, lock) = as_real!(Result<(File, Result<(), TryLockError>)>, {
+                let file = File::open(&home_dir)?;
+                let lock = file.try_lock();
+                Ok((file, lock))
+            })??;
+
+            match lock {
+                Ok(_) => args.handle.fd_i(file),
+                Err(TryLockError::WouldBlock) => {
                     return Err(anyhow!(
                         "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
                     ));

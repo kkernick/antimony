@@ -13,7 +13,7 @@ use clap::ValueEnum;
 use console::style;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use spawn::{HandleError, SpawnError, Spawner};
+use spawn::{HandleError, SpawnError, Spawner, StreamMode};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -900,16 +900,18 @@ impl Hook {
             return Err(HookError::Missing);
         };
         handle.preserve_env_i(self.env.unwrap_or(false));
-        handle.env_i(format!("ANTIMONY_NAME={name}"))?;
-        handle.env_i(format!("ANTIMONY_CACHE={cache}"))?;
+        handle.env_i("ANTIMONY_NAME", name)?;
+        handle.env_i("ANTIMONY_CACHE", cache)?;
         handle.mode_i(user::Mode::Real);
+        handle.output_i(StreamMode::Log(log::Level::Debug));
+        handle.error_i(StreamMode::Log(log::Level::Error));
 
         if let Some(args) = self.args {
             handle.args_i(args)?;
         }
 
         if let Some(home) = home {
-            handle.env_i(format!("ANTIMONY_HOME={home}"))?;
+            handle.env_i("ANTIMONY_HOME", home)?;
         }
 
         if parent {

@@ -5,7 +5,7 @@ use crate::{
 use ahash::HashSetExt;
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use nix::{
     errno::{self, Errno},
     poll::{PollFd, PollFlags, PollTimeout},
@@ -31,7 +31,7 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-use user::as_effective;
+use user::{as_effective, as_real};
 
 /// Connection to the Database
 pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::new(|| {
@@ -102,44 +102,6 @@ pub fn get_name(name: &str) -> i32 {
     }
     *CACHE.get(name).unwrap().value()
 }
-
-/*
- static SECCOMP: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("seccomp")
-        .expect("Failed to code seccomp code")
-        .get_number()
-});
-
-pub static PRCTL: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("prctl")
-        .expect("Failed to code prctl code")
-        .get_number()
-});
-
-pub static FCHMOD: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("fchmod")
-        .expect("Failed to code fchmod code")
-        .get_number()
-});
-
-pub static EXECVE: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("execve")
-        .expect("Failed to code execve code")
-        .get_number()
-});
-
-pub static PPOLL: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("ppoll")
-        .expect("Failed to code ppoll code")
-        .get_number()
-});
-
-pub static WAIT: LazyLock<i32> = LazyLock::new(|| {
-    Syscall::from_name("wait4")
-        .expect("Failed to code wait code")
-        .get_number()
-});
-*/
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug)]
@@ -267,17 +229,20 @@ impl seccomp::filter::Notifier for Notifier {
 
     /// Setup the UnixStream. We wait for the Monitor to setup the socket.
     fn prepare(&mut self) {
-        if !self.path.exists() {
-            if let Some(mut notify) = self.notify.take() {
-                let mut buffer = [0; 1024];
-                let _ = notify.read_events_blocking(&mut buffer);
-            } else {
-                while !self.path.exists() {
-                    sleep(Duration::from_millis(10));
+        as_real!({
+            if !self.path.exists() {
+                if let Some(mut notify) = self.notify.take() {
+                    let mut buffer = [0; 1024];
+                    let _ = notify.read_events_blocking(&mut buffer);
+                } else {
+                    while !self.path.exists() {
+                        sleep(Duration::from_millis(10));
+                    }
                 }
             }
-        }
-        self.stream = Some(UnixStream::connect(&self.path).expect("Failed to connect"));
+            self.stream = Some(UnixStream::connect(&self.path).expect("Failed to connect"))
+        })
+        .expect("Failed to get monitor socket");
     }
 
     /// Send the FD to the Monitor.
@@ -496,29 +461,15 @@ pub fn new(
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
     refresh: bool,
-) -> Result<Option<(Filter, Option<OwnedFd>)>, Error> {
+) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     if let Some((mut syscalls, bwrap)) = timer!(
         "::get_calls",
         get_calls(name, binaries, refresh).unwrap_or_default()
     ) {
-        if log::log_enabled!(log::Level::Trace) {
-            trace!(
-                "{:?}\n{:?}",
-                syscalls
-                    .iter()
-                    .filter_map(|e| Syscall::get_name(*e).ok())
-                    .collect::<Vec<String>>(),
-                bwrap
-                    .iter()
-                    .filter_map(|e| Syscall::get_name(*e).ok())
-                    .collect::<Vec<String>>(),
-            );
-        }
-
         let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
             let mut filter = Filter::new(Action::Notify)?;
             filter.set_notifier(Notifier::new(
-                user_dir(instance).join("monitor"),
+                user_dir(instance).join(format!("monitor-{name}")),
                 name.to_string(),
             ));
 
@@ -534,6 +485,8 @@ pub fn new(
         for required in ["execve", "wait4", "exit"] {
             syscalls.insert(Syscall::from_name(required)?.get_number());
         }
+
+        let audit = !syscalls.contains(&get_name("sendmsg"));
 
         let syscalls = syscalls.into_iter().collect::<Vec<_>>();
         timer!("::add_rules", {
@@ -572,7 +525,7 @@ pub fn new(
         for syscall in bwrap {
             filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
         }
-        Ok(Some((filter, fd)))
+        Ok(Some((filter, fd, audit)))
     } else {
         Ok(None)
     }

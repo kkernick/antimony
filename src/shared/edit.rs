@@ -109,7 +109,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // to extend privilege.
     let temp = as_real!(Result<_, Error>, {
         let temp = temp::Builder::new().create::<temp::File>().map_err(|e| Error::Io("open temporary file", e))?;
-        fs::copy(path, temp.path()).map_err(|e| Error::Io("write temporary file", e))?;
+        fs::copy(path, temp.full()).map_err(|e| Error::Io("write temporary file", e))?;
         Ok(temp)
     })??;
 
@@ -122,13 +122,13 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         // Launch the editor.
         Spawner::new(EDITOR.as_str())?
             .preserve_env(true)
-            .arg(temp.path().to_string_lossy())?
+            .arg(temp.full().to_string_lossy())?
             .mode(user::Mode::Real)
             .spawn()?
             .wait()?;
 
         // Read the contents.
-        match fs::read_to_string(temp.path()) {
+        match fs::read_to_string(temp.full()) {
             Ok(string) => match toml::from_str::<T>(string.as_ref()) {
                 // If they didn't make any changes, we want to tell edit
                 // so that they don't create a redundant user profile.

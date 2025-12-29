@@ -6,18 +6,18 @@ use crate::{Stream, handle::Handle};
 use log::trace;
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
-    unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execv, execve, fork, pipe},
+    unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork, pipe},
 };
 use parking_lot::Mutex;
 use std::{
     borrow::Cow,
     collections::HashMap,
-    convert::Infallible,
-    env, error,
-    ffi::{CString, NulError},
+    error,
+    ffi::{CString, NulError, OsString},
     fmt,
     os::fd::OwnedFd,
     process::exit,
+    str::FromStr,
 };
 use which::which;
 
@@ -173,7 +173,7 @@ pub struct Spawner {
     preserve_env: bool,
 
     /// Environment variables
-    env: Vec<CString>,
+    env: HashMap<CString, CString>,
 
     /// A list of other Pids that the eventual Handle should be responsible for,
     /// attached to the main child.
@@ -220,7 +220,7 @@ impl<'a> Spawner {
             error: StreamMode::Share,
 
             preserve_env: false,
-            env: Vec::new(),
+            env: HashMap::new(),
 
             associated: Vec::new(),
 
@@ -238,19 +238,6 @@ impl<'a> Spawner {
 
             #[cfg(feature = "seccomp")]
             seccomp: Mutex::new(None),
-        }
-    }
-
-    /// Resolve an environment variable.
-    /// Fails if the value contains a NULL byte, or the key could not
-    /// be resolved.
-    /// This function is not thread safe.
-    fn resolve_env(var: String) -> Result<CString, Error> {
-        if var.contains('=') {
-            CString::new(var).map_err(Error::Null)
-        } else {
-            let val = env::var(&var).map_err(|_| Error::Path(var.clone()))?;
-            CString::new(format!("{var}={val}")).map_err(Error::Null)
         }
     }
 
@@ -348,8 +335,17 @@ impl<'a> Spawner {
     /// in the parent environment
     ///
     /// This function is not thread safe.
-    pub fn env(mut self, var: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
-        self.env_i(var)?;
+    pub fn env(
+        mut self,
+        key: impl Into<Cow<'a, str>>,
+        var: impl Into<Cow<'a, str>>,
+    ) -> Result<Self, Error> {
+        self.env_i(key, var)?;
+        Ok(self)
+    }
+
+    pub fn pass_env(mut self, key: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
+        self.pass_env_i(key)?;
         Ok(self)
     }
 
@@ -477,9 +473,30 @@ impl<'a> Spawner {
 
     /// Sets an environment variable to the child process.
     /// Fails if the key doesn't exist, or the var contains a NULL byte.
-    pub fn env_i(&mut self, var: impl Into<Cow<'a, str>>) -> Result<(), Error> {
-        self.env.push(Self::resolve_env(var.into().into_owned())?);
+    pub fn env_i(
+        &mut self,
+        key: impl Into<Cow<'a, str>>,
+        value: impl Into<Cow<'a, str>>,
+    ) -> Result<(), Error> {
+        self.env.insert(
+            CString::from_str(&key.into()).map_err(Error::Null)?,
+            CString::from_str(&value.into()).map_err(Error::Null)?,
+        );
         Ok(())
+    }
+
+    pub fn pass_env_i(&mut self, key: impl Into<Cow<'a, str>>) -> Result<(), Error> {
+        let key = key.into();
+        let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
+        if let Ok(env) = std::env::var(&os_key) {
+            self.env.insert(
+                CString::from_str(&key).map_err(Error::Null)?,
+                CString::from_str(&env).map_err(Error::Null)?,
+            );
+            Ok(())
+        } else {
+            Err(Error::Environment)
+        }
     }
 
     /// Set the user mode without consuming the `Spawner`.
@@ -709,16 +726,6 @@ impl<'a> Spawner {
         args_c.push(resolved);
         args_c.append(&mut self.args.into_inner());
 
-        // Log if desired.
-        if log::log_enabled!(log::Level::Trace) {
-            let formatted = args_c
-                .iter()
-                .filter_map(|s| s.to_str().ok())
-                .collect::<Vec<&str>>()
-                .join(" ");
-            trace!("{formatted:?}");
-        }
-
         // Clear F_SETFD to allow passed FD's to persist after execve
         #[cfg(feature = "fd")]
         for fd in &fds {
@@ -726,21 +733,59 @@ impl<'a> Spawner {
                 .map_err(|e| Error::Errno(None, "fnctl fd", e))?;
         }
 
-        let envs: HashMap<String, String> = self
-            .env
-            .iter()
-            .filter_map(|env| {
-                if let Ok(estr) = env.clone().into_string() {
-                    let mut split = estr.split('=');
-                    if let Some(key) = split.next()
-                        && let Some(value) = split.next()
+        if self.preserve_env {
+            let environment: HashMap<_, _> = std::env::vars_os()
+                .filter_map(|(key, value)| {
+                    if let Some(key) = key.to_str()
+                        && let Some(value) = value.to_str()
+                        && let Ok(key) = CString::from_str(key)
+                        && let Ok(value) = CString::from_str(value)
                     {
-                        return Some((key.to_string(), value.to_string()));
+                        if !self.env.contains_key(&key) {
+                            Some((key, value))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
                     }
-                }
-                None
+                })
+                .collect();
+
+            self.env.extend(environment)
+        }
+
+        let envs: Vec<_> = self
+            .env
+            .into_iter()
+            .filter_map(|(k, v)| {
+                // We already know both are valid strings, because we converted them from Str to begin with.
+                CString::from_str(&format!("{}={}", k.to_str().unwrap(), v.to_str().unwrap())).ok()
             })
             .collect();
+
+        // Log if desired.
+        if log::log_enabled!(log::Level::Trace) {
+            let formatted = args_c
+                .iter()
+                .filter_map(|s| s.to_str().ok())
+                .collect::<Vec<&str>>()
+                .join(" ");
+            if envs.is_empty() {
+                trace!("{formatted:?}");
+            } else {
+                trace!("{envs:?} {formatted:?}");
+            }
+        }
+
+        #[cfg(feature = "seccomp")]
+        let filter = {
+            let mut filter = self.seccomp.into_inner();
+            if let Some(filter) = &mut filter {
+                filter.setup().map_err(Error::Seccomp)?;
+            }
+            filter
+        };
 
         let fork = unsafe { fork() }.map_err(Error::Fork)?;
         match fork {
@@ -806,58 +851,41 @@ impl<'a> Spawner {
             }
 
             ForkResult::Child => {
-                let result = || -> Result<Infallible, Error> {
-                    // Setup the pipes.
-                    if let Some((read, write)) = stdout {
-                        close(read).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
-                        dup2_stdout(write)
-                            .map_err(|e| Error::Errno(Some(fork), "dup output", e))?;
-                    }
-                    if let Some((read, write)) = stderr {
-                        close(read).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
-                        dup2_stderr(write).map_err(|e| Error::Errno(Some(fork), "dup error", e))?;
-                    }
-                    if let Some((read, write)) = stdin {
-                        close(write).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
-                        dup2_stdin(read).map_err(|e| Error::Errno(Some(fork), "dup input", e))?;
-                    }
+                // Setup the pipes.
+                if let Some((read, write)) = stdout {
+                    let _ = close(read);
+                    let _ = dup2_stdout(write);
+                }
 
-                    // Ensure that the child dies when the parent does.
-                    prctl::set_pdeathsig(SIGTERM)
-                        .map_err(|e| Error::Errno(Some(fork), "set death signal", e))?;
+                if let Some((read, write)) = stderr {
+                    let _ = close(read);
+                    let _ = dup2_stderr(write);
+                }
+                if let Some((read, write)) = stdin {
+                    let _ = close(write);
+                    let _ = dup2_stdin(read);
+                }
 
-                    // Drop modes
-                    #[cfg(feature = "user")]
-                    if let Some(mode) = self.mode {
-                        user::drop(mode)
-                            .map_err(|e| Error::Errno(Some(fork), "drop user privilege", e))?;
-                    }
+                let _ = prctl::set_pdeathsig(SIGTERM);
 
-                    // Apply SECCOMP.
-                    // Because we can't just trust the application is able/willing to
-                    // apply a SECCOMP filter on it's own, we have to do it before the execve
-                    // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
-                    // or some other mechanism to let the process to spawn.
-                    #[cfg(feature = "seccomp")]
-                    if let Some(filter) = self.seccomp.into_inner() {
-                        filter.load().map_err(Error::Seccomp)?;
-                    }
+                // Drop modes
+                #[cfg(feature = "user")]
+                if let Some(mode) = self.mode {
+                    let _ = user::drop(mode);
+                }
 
-                    for (key, value) in envs {
-                        unsafe { env::set_var(key, value) };
-                    }
+                // Apply SECCOMP.
+                // Because we can't just trust the application is able/willing to
+                // apply a SECCOMP filter on it's own, we have to do it before the execve
+                // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
+                // or some other mechanism to let the process to spawn.
+                #[cfg(feature = "seccomp")]
+                if let Some(filter) = filter {
+                    filter.load();
+                }
 
-                    // Execve
-                    if self.preserve_env {
-                        execv(&cmd_c, &args_c)
-                    } else {
-                        execve(&cmd_c, &args_c, &self.env)
-                    }
-                    .map_err(|errno| Error::Errno(Some(fork), "exec", errno))
-                }();
-
-                let e = result.unwrap_err();
-                log::error!("Failed to spawn child: {e}");
+                // Execve
+                let _ = execve(&cmd_c, &args_c, &envs);
                 exit(-1);
             }
         }
@@ -963,7 +991,7 @@ mod tests {
         let user = "Test";
         let mut handle = Spawner::new("bash")?
             .args(["-c", "echo $USER"])?
-            .env(format!("USER={user}"))?
+            .env("USER", user)?
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;

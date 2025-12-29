@@ -521,13 +521,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     // to use LDD on depends.
     timer!("::elf", {
         parsed.elf.into_par_iter().for_each(|elf| {
-            if let Err(e) = add_sof(
-                &bin,
-                Cow::Borrowed(&elf),
-                Cow::Borrowed(&elf),
-                &cache,
-                "/usr/bin",
-            ) {
+            if let Err(e) = add_sof(&bin, Cow::Borrowed(&elf), &cache, "/usr/bin") {
                 error!("Failed to add {elf} to Bin: {e}")
             }
             elf_binaries.insert(elf.to_string());
@@ -537,13 +531,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     // Scripts are consumed here, and are only bound to the sandbox.
     timer!("::scripts", {
         parsed.scripts.into_par_iter().for_each(|script| {
-            if let Err(e) = add_sof(
-                &bin,
-                Cow::Borrowed(&script),
-                Cow::Borrowed(&script),
-                &cache,
-                "/usr/bin",
-            ) {
+            if let Err(e) = add_sof(&bin, Cow::Borrowed(&script), &cache, "/usr/bin") {
                 error!("Failed to add {script} to Bin: {e}")
             }
         })
@@ -561,19 +549,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             .localized
             .into_iter()
             .try_for_each(|(src, dst)| -> anyhow::Result<()> {
-                if dst.starts_with("/usr/bin") {
-                    if let Err(e) = add_sof(
-                        &bin,
-                        Cow::Borrowed(&src),
-                        Cow::Borrowed(&dst),
-                        &cache,
-                        "/usr/bin",
-                    ) {
-                        error!("Failed to add {src} to SOF: {e}")
-                    }
-                } else {
-                    info.handle.args_i(["--ro-bind", &src, &dst])?;
-                }
+                info.handle.args_i(["--ro-bind", &src, &dst])?;
                 elf_binaries.insert(src);
                 Ok(())
             })
@@ -594,13 +570,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
                 if !in_lib(&link) {
                     if dest.starts_with("/usr/bin") {
-                        if let Err(e) = add_sof(
-                            &bin,
-                            Cow::Borrowed(&link),
-                            Cow::Borrowed(&dest),
-                            &cache,
-                            "/usr/bin",
-                        ) {
+                        if let Err(e) = add_sof(&bin, Cow::Borrowed(&link), &cache, "/usr/bin") {
                             error!("Failed to add {link} to SOF: {e}")
                         }
                     } else {

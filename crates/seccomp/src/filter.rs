@@ -190,33 +190,39 @@ impl Filter {
         }
     }
 
-    /// Loads the policy, optionally executing a Notifier function.
-    pub fn load(mut self) -> Result<(), Error> {
-        #[cfg(feature = "notify")]
-        if let Some(mut notifier) = self.notifier.take() {
-            // Add exempt calls.
+    #[cfg(feature = "notify")]
+    pub fn setup(&mut self) -> Result<(), Error> {
+        if let Some(notifier) = &mut self.notifier {
             for (action, call) in notifier.exempt() {
                 self.add_rule(action, call)?
             }
-
-            // Prepare
-            notifier.prepare();
-
-            // Load
-            return match unsafe { raw::seccomp_load(self.ctx) } {
-                0 => {
-                    // Handle
-                    let fd = unsafe { OwnedFd::from_raw_fd(raw::seccomp_notify_fd(self.ctx)) };
-                    notifier.handle(fd);
-                    Ok(())
-                }
-                errno => Err(Error::Load(Errno::from_raw(errno))),
-            };
         }
 
-        match unsafe { raw::seccomp_load(self.ctx) } {
-            0 => Ok(()),
-            err => Err(Error::Load(Errno::from_raw(err))),
+        if let Some(notifier) = &mut self.notifier {
+            notifier.prepare();
+        }
+        Ok(())
+    }
+
+    /// Loads the policy, optionally executing a Notifier function.
+    #[cfg(feature = "notify")]
+    pub fn load(mut self) {
+        #[cfg(feature = "notify")]
+        if let Some(mut notifier) = self.notifier.take() {
+            match unsafe { raw::seccomp_load(self.ctx) } {
+                0 => {
+                    let fd = unsafe { OwnedFd::from_raw_fd(raw::seccomp_notify_fd(self.ctx)) };
+                    notifier.handle(fd);
+                }
+                errno => panic!("Failed to set filter: {errno}"),
+            };
+        }
+    }
+
+    #[cfg(not(feature = "notify"))]
+    pub fn load(mut self) {
+        if let Err(e) = unsafe { raw::seccomp_load(self.ctx) } {
+            panic!("Failed to set filter: {errno}");
         }
     }
 }

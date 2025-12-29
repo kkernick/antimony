@@ -7,12 +7,12 @@ profile () {
   echo "Profiling"
   $1 refresh --hard
   for profile in $(ls ~/.local/bin/); do
-    ./bench $profile --recipe $1 --runs 1 --antimony-args='--hard' --antimony-args='--home-lock=false'
+    ./bench $profile --recipe $1 --runs 1
   done
 }
 
 RUSTFLAGS="-Ctarget-cpu=native"
-ARGS="--bin antimony --no-default-features"
+ARGS="--bin antimony"
 
 echo "Building Profiling Binary"
 ANTIMONY=$(cargo pgo build -- $ARGS --profile symbols 2>&1 | grep "Now run" | awk '{print $6}')

@@ -47,14 +47,8 @@ pub fn get_sof_path(sof: &Path, library: &str, prefix: &str) -> PathBuf {
     PathBuf::from(library.replace(prefix, &sof.to_string_lossy()))
 }
 
-pub fn add_sof(
-    sof: &Path,
-    library: Cow<'_, str>,
-    destination: Cow<'_, str>,
-    cache: &Path,
-    prefix: &str,
-) -> Result<()> {
-    let sof_path = get_sof_path(sof, &destination, prefix);
+pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) -> Result<()> {
+    let sof_path = get_sof_path(sof, &library, prefix);
 
     if let Some(parent) = sof_path.parent() {
         if !parent.exists() {
@@ -257,13 +251,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             })
             // Write the SOF version, as a hard link preferably.
             .for_each(|lib| {
-                if let Err(e) = add_sof(
-                    &sof,
-                    Cow::Borrowed(&lib),
-                    Cow::Borrowed(&lib),
-                    &cache,
-                    "/usr",
-                ) {
+                if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache, "/usr") {
                     error!("Failed to add {lib} to SOF: {e}")
                 }
             });

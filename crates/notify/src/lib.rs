@@ -91,18 +91,20 @@ pub fn notify(
     timeout: Option<Duration>,
     urgency: Option<Urgency>,
 ) -> Result<(), Error> {
-    #[rustfmt::skip]
     let handle = Spawner::new("notify-send")?
         .args([title.into(), body.into()])?
         .arg("-a")?
-        .arg(if let Ok(path) = std::env::current_exe() && let Some(name) = path.file_name() {
+        .arg(
+            if let Ok(path) = std::env::current_exe()
+                && let Some(name) = path.file_name()
+            {
                 name.to_string_lossy().to_title_case()
             } else {
-                    "Notify".to_string()
-            }
+                "Notify".to_string()
+            },
         )?
-        .mode(user::Mode::Real)
-        .preserve_env(true);
+        .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+        .mode(user::Mode::Real);
 
     if let Some(timeout) = timeout {
         handle.args_i(["-t", &timeout.as_millis().to_string()])?;

@@ -135,10 +135,6 @@ pub fn current() -> Result<Mode, Errno> {
 /// This function returns to the values of `USER` and `GROUP`.
 /// This function can fail if the underlying syscall does.
 pub fn revert() -> Result<(), Errno> {
-    if !*SETUID {
-        return Ok(());
-    }
-
     setresuid(USER.real, USER.effective, USER.saved)?;
     setresgid(GROUP.real, GROUP.effective, GROUP.saved)
 }
@@ -155,10 +151,6 @@ pub fn revert() -> Result<(), Errno> {
 /// }
 /// ```
 pub fn drop(mode: Mode) -> Result<(), Errno> {
-    if !*SETUID {
-        return Ok(());
-    }
-
     match mode {
         Mode::Real => {
             setresuid(USER.real, USER.real, USER.real)?;
@@ -168,7 +160,6 @@ pub fn drop(mode: Mode) -> Result<(), Errno> {
             setresuid(USER.effective, USER.effective, USER.effective)?;
             setresgid(GROUP.effective, GROUP.effective, GROUP.effective)
         }
-
         Mode::Existing => revert(),
     }
 }
