@@ -24,6 +24,7 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+use user::as_effective;
 use which::which;
 
 pub static FILE_MODES: [FileMode; 3] = [
@@ -35,7 +36,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = crate::shared::env::CACHE_DIR.join(".profile");
     if !path.exists() {
-        user::run_as!(user::Mode::Effective, fs::create_dir_all(&path).unwrap());
+        as_effective!(fs::create_dir_all(&path).unwrap()).expect("Failed to create profile cache");
     }
     path
 });

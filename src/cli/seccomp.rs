@@ -14,7 +14,7 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-use user::try_run_as;
+use user::as_real;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
@@ -54,7 +54,7 @@ impl super::Run for Args {
             ));
         };
 
-        let result = try_run_as!(user::Mode::Real, Result<i32>, {
+        let result = as_real!(Result<i32>, {
             Ok(Spawner::abs("/usr/bin/pkcheck")
                 .args([
                     "--action-id",
@@ -67,7 +67,7 @@ impl super::Run for Args {
                 .preserve_env(true)
                 .spawn()?
                 .wait()?)
-        })?;
+        })??;
 
         if result != 0 {
             Err(anyhow!(
@@ -99,21 +99,19 @@ impl super::Run for Args {
                     Ok(())
                 }
                 Operation::Export => {
-                    try_run_as!(user::Mode::Real, Result<()>, {
-                        let db = AT_HOME.join("seccomp").join("syscalls.db");
-                        if !db.exists() {
-                            return Err(anyhow!("No database exists!"));
-                        } else {
-                            let dest = match self.path {
-                                Some(path) => PathBuf::from(path),
-                                None => getcwd()?.join("syscalls.db"),
-                            };
+                    let db = AT_HOME.join("seccomp").join("syscalls.db");
+                    if !db.exists() {
+                        return Err(anyhow!("No database exists!"));
+                    } else {
+                        let dest = match self.path {
+                            Some(path) => PathBuf::from(path),
+                            None => getcwd()?.join("syscalls.db"),
+                        };
 
-                            io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
-                            println!("Exported to {dest:?}");
-                        }
-                        Ok(())
-                    })
+                        as_real!({io::copy(&mut File::open(db)?, &mut File::create(&dest)?)})??;
+                        println!("Exported to {dest:?}");
+                    }
+                    Ok(())
                 }
 
                 Operation::Merge => {

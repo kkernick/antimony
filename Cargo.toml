@@ -15,7 +15,7 @@ members = [
 ]
 
 [dependencies]
-user = { path = "crates/user", features = ["sync"] }
+user = { path = "crates/user" }
 temp = { path = "crates/temp" }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
 spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }

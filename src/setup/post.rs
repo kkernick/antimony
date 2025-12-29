@@ -2,7 +2,7 @@ use crate::shared::{env::HOME, profile::FileMode};
 use anyhow::Result;
 use log::debug;
 use std::{fs, path::Path};
-use user::try_run_as;
+use user::as_real;
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
@@ -24,30 +24,22 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
             None => FileMode::ReadOnly,
         };
 
-        try_run_as!(user::Mode::Real, Result<()>, {
-            for arg in &mut post_args {
-                if Path::new(arg).exists() || arg.starts_with("file://") {
-                    debug!("File passthrough: {arg}");
-                    let file = arg.strip_prefix("file://").unwrap_or(arg);
-                    let dest = file.replace(HOME.as_str(), "/home/antimony");
-                    match operation {
-                        FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest])?,
-                        FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest])?,
-                        FileMode::Executable => {
-                            let contents = fs::read_to_string(file)?;
-                            super::files::add_file(
-                                &args.handle,
-                                file,
-                                contents,
-                                FileMode::Executable,
-                            )?
-                        }
-                    };
-                    *arg = dest;
-                }
+        for arg in &mut post_args {
+            if as_real!(Path::new(arg).exists())? || arg.starts_with("file://") {
+                debug!("File passthrough: {arg}");
+                let file = arg.strip_prefix("file://").unwrap_or(arg);
+                let dest = file.replace(HOME.as_str(), "/home/antimony");
+                match operation {
+                    FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest])?,
+                    FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest])?,
+                    FileMode::Executable => {
+                        let contents = as_real!(fs::read_to_string(file))??;
+                        super::files::add_file(&args.handle, file, contents, FileMode::Executable)?
+                    }
+                };
+                *arg = dest;
             }
-            Ok(())
-        })?;
+        }
 
         return Ok(post_args);
     }

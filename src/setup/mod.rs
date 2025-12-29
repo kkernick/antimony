@@ -34,7 +34,7 @@ use std::{
     time::Duration,
 };
 use temp::Temp;
-use user::try_run_as;
+use user::as_real;
 
 struct Args<'a> {
     pub profile: Mutex<Profile>,
@@ -141,8 +141,8 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         if let Some(ipc) = &profile.ipc
             && !ipc.disable.unwrap_or(false)
         {
-            try_run_as!(user::Mode::Real, Result<()>, {
-                if !mounted(&format!("{runtime}/doc")) {
+            if !mounted(&format!("{runtime}/doc")) {
+                as_real!(Result<()>, {
                     let connection = LocalConnection::new_session()?;
                     let msg = Message::new_method_call(
                         BusName::from("org.freedesktop.portal.Documents\0"),
@@ -156,9 +156,10 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
                     } else {
                         return Err(anyhow!("Failed to send ping to Document Portal"));
                     }
-                }
-                Ok(())
-            })?;
+
+                    Ok(())
+                })??;
+            }
 
             instance.associate(
                 temp::Builder::new()
@@ -192,7 +193,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         .mode(user::Mode::Real);
 
     debug!("Initializing inotify handle");
-    let inotify = Mutex::new(try_run_as!(user::Mode::Real, Inotify::init())?);
+    let inotify = Mutex::new(as_real!(Inotify::init())??);
     let watches = DashSet::new();
     let id = profile.id(&name);
 

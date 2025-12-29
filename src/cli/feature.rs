@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
 use nix::unistd::getpid;
 use spawn::Spawner;
-use user::try_run_as;
+use user::as_real;
 
 use crate::shared::{env::AT_HOME, feature::Feature, profile};
 
@@ -21,7 +21,7 @@ pub struct Args {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        let result = try_run_as!(user::Mode::Real, Result<i32>, {
+        let result = as_real!(Result<i32>, {
             Ok(Spawner::abs("/usr/bin/pkcheck")
                 .args([
                     "--action-id",
@@ -32,7 +32,7 @@ impl super::Run for Args {
                 ])?
                 .spawn()?
                 .wait()?)
-        })?;
+        })??;
 
         if result != 0 {
             return Err(anyhow!(

@@ -24,6 +24,7 @@ use std::{
     sync::{LazyLock, OnceLock},
 };
 use temp::Temp;
+use user::{as_effective, as_real};
 
 /// A lock for initializing LIB_ROOTS
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -62,13 +63,13 @@ fn get_cache(name: &str, cache: &Path) -> Result<Option<Vec<String>>> {
 #[inline]
 fn write_cache(name: &str, list: &Vec<String>, cache: &Path) -> Result<()> {
     let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
-    user::sync::try_run_as!(user::Mode::Effective, Result<()>, {
+    as_effective!(Result<()>, {
         let mut file = File::create(&cache_file)?;
         for library in list {
             writeln!(file, "{library}")?;
         }
         Ok(())
-    })
+    })?
 }
 
 /// Filter non-elf files.
@@ -284,13 +285,11 @@ pub fn localize_path(file: &str, home: bool) -> Result<(Option<Cow<'_, str>>, St
     };
     let dest = localize_home(&dest);
 
-    Ok(
-        if user::run_as!(user::Mode::Real, { Path::new(source.as_ref()).exists() }) {
-            debug!("{source} => {dest}");
-            (Some(source), dest.into_owned())
-        } else {
-            debug!("{source} (does not exist) => {dest}");
-            (None, dest.into_owned())
-        },
-    )
+    Ok(if as_real!({ Path::new(source.as_ref()).exists() })? {
+        debug!("{source} => {dest}");
+        (Some(source), dest.into_owned())
+    } else {
+        debug!("{source} (does not exist) => {dest}");
+        (None, dest.into_owned())
+    })
 }

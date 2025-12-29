@@ -26,7 +26,7 @@ On top of these primitive functions, a pair of macros exist which simplify usage
 
 The User Mode of a program affects all threads. This can cause many issues in a multi-threaded program, as one thread can switch the mode from under another, to which a operation that would allowed under the prior mode (Such as creating a file) now causes an error. This issue is exasperated when all the threads are changing mode, as it can cause the mode to change between the `user::set` and `user::restore`.
 
-If your program requires synchronization between multiple threads for switching users, the `sync` feature provides a synchronization mechanism in the `user::sync` namespace. These are available via the `user::sync::run_as!`, and `user::sync_try_run_as!` macros. There are two caveats to using these variants:
+If your program requires synchronization between multiple threads for switching users, the `sync` feature provides a synchronization mechanism in the `user::sync` namespace. These are available via the `run_as!`, and `user::sync_try_run_as!` macros. There are two caveats to using these variants:
 
 1. These macros guarantee that the block will be executed in the provided mode *only* if all threads use the `sync` variants. If another thread uses a regular `user::` function, this guarantee breaks.
 2. These macros cannot be nested. Doing so will cause a deadlock. These macros hold a global mutex at the start of the macro, and release it at the end. If the block tries to take ownership of that mutex, it will hang forever.

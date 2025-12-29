@@ -1,10 +1,11 @@
-use crate::shared::{env::OVERLAY, profile::HomePolicy};
+use crate::shared::profile::HomePolicy;
 use anyhow::{Result, anyhow};
 use log::debug;
 use std::{
     fs::{self, File},
     sync::Arc,
 };
+use user::as_real;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
     if let Some(home) = &args.profile.lock().home.take() {
@@ -18,12 +19,12 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             && home_dir.exists()
         {
             debug!("Unlocking home");
-            let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
+            let lock = as_real!(File::open(&home_dir))??;
             lock.unlock()?;
         }
 
         if home.lock.unwrap_or(false) && !args.args.dry && home_dir.exists() {
-            let lock = user::try_run_as!(user::Mode::Real, File::open(&home_dir))?;
+            let lock = as_real!(File::open(&home_dir))??;
             match lock.try_lock() {
                 Ok(_) => args.handle.fd_i(lock),
                 Err(fs::TryLockError::WouldBlock) => {
@@ -41,7 +42,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
                 let home_str = home_dir.to_string_lossy();
                 debug!("Setting up home at {home_dir:?}");
                 if !home_dir.exists() {
-                    user::run_as!(user::Mode::Real, fs::create_dir_all(&home_dir))?;
+                    as_real!(fs::create_dir_all(&home_dir))??;
                 }
 
                 let dest = match &home.path {
@@ -54,27 +55,23 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
                         args.handle.args_i(["--bind", &home_str, dest])?;
                     }
                     _ => {
-                        if *OVERLAY {
-                            if policy == HomePolicy::Overlay {
-                                #[rustfmt::skip]
+                        if policy == HomePolicy::Overlay {
+                            #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &home_str,
                                     "--tmp-overlay", dest,
                                 ])?;
-                            } else {
-                                let work = args.sys_dir.join("work");
-                                let work_str = work.to_string_lossy();
-                                fs::create_dir_all(&work)?;
+                        } else {
+                            let work = args.sys_dir.join("work");
+                            let work_str = work.to_string_lossy();
+                            fs::create_dir_all(&work)?;
 
-                                #[rustfmt::skip]
+                            #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &work_str,
                                     "--overlay-src", &home_str,
                                     "--ro-overlay", dest,
                                 ])?;
-                            }
-                        } else {
-                            return Err(anyhow!("Bubblewrap version too old for overlays!"));
                         }
                     }
                 }

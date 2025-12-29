@@ -170,6 +170,7 @@ impl super::Run for Args {
 
         if let Err(e) = result {
             error!("{e}");
+            return Err(e);
         }
         Ok(())
     }

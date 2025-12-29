@@ -4,10 +4,14 @@ use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
 };
-use std::sync::LazyLock;
-use std::{error, fmt};
-
-pub mod sync;
+use parking_lot::{
+    Condvar, Mutex, MutexGuard, RawMutex, RawThreadId, ReentrantMutex,
+    lock_api::ReentrantMutexGuard,
+};
+use std::{
+    error, fmt,
+    sync::{Arc, LazyLock},
+};
 
 /// The Real, Effective, and Saved UID of the application.
 pub static USER: LazyLock<ResUid> = LazyLock::new(|| getresuid().expect("Failed to get UID!"));
@@ -18,6 +22,14 @@ pub static GROUP: LazyLock<ResGid> = LazyLock::new(|| getresgid().expect("Failed
 /// Whether the system is actually running under SetUid. If false, all functions here
 /// are no-ops.
 pub static SETUID: LazyLock<bool> = LazyLock::new(|| USER.effective != USER.real);
+
+/// The global semaphore controls which thread is allowed to change users.
+static SEMAPHORE: LazyLock<Semaphore> =
+    LazyLock::new(|| Arc::new((ReentrantMutex::new(()), Mutex::new(false), Condvar::new())));
+
+type Semaphore = Arc<(ReentrantMutex<()>, Mutex<bool>, Condvar)>;
+type Guard = MutexGuard<'static, bool>;
+type ThreadGuard = ReentrantMutexGuard<'static, RawMutex, RawThreadId, ()>;
 
 /// An error when trying to change UID/GID.
 #[derive(Debug)]
@@ -178,66 +190,127 @@ pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
     setresgid(gid.real, gid.effective, gid.saved)
 }
 
-/// Run a particular function/lamdba under a user.
-/// Accepts a Mode to switch to, then saves the current mode,
-/// reverting at the end of execution. This function, therefore,
-/// does not change the existing mode after returning.
+/// A synchronization primitive.
+/// Only one thread will ever have a Sync object. When the Sync object
+/// drops, control is relinquished to another thread.
 ///
-/// This macro can only be used in the context of a function returning
-/// a Result, as errors in saving/setting/restoring are propagated. If
-/// you can't return a Result, use `run_as`
-#[macro_export]
-macro_rules! try_run_as {
-    ($mode:path, $ret:ty, $body:block) => {{
-        let __saved = user::set($mode)?;
-        let __result: $ret = (|| -> $ret { $body })();
-        user::restore(__saved)?;
-        __result
-    }};
+/// Though this object is designed with this crate in mind, there's nothing
+/// implementation-specific to this object; you could use it for any logic
+/// that requires something along the following:
+///
+/// ```rust
+/// let lock = Sync::new();
+/// // Do things
+/// drop(lock);
+/// ```
+///
+///
+/// Note that the lock automatically relinquishes control on drop, or when
+/// falling out of scope.
+pub struct Sync {
+    sem: Semaphore,
+    guard: Guard,
+    _thread_guard: ThreadGuard,
+}
+impl Sync {
+    /// Take ownership of the shared semaphore.
+    /// This function is blocking.
+    pub fn new() -> Option<Self> {
+        let sem = Arc::clone(&SEMAPHORE);
+        let (thread_lock, mutex, cvar) = &*sem;
 
-    ($mode:path, $body:block) => {{
-        let __saved = user::set($mode)?;
-        let __result = (|| $body)();
-        user::restore(__saved)?;
-        __result
-    }};
+        if thread_lock.is_owned_by_current_thread() {
+            log::trace!("Already owned by current thread. Stepping past.");
+            return None;
+        }
 
-    ($mode:path, $expr:expr) => {{
-        let __saved = user::set($mode)?;
-        let __result = $expr;
-        user::restore(__saved)?;
-        __result
-    }};
+        let mut guard: Guard = unsafe {
+            let tmp_guard = mutex.lock();
+            std::mem::transmute::<MutexGuard<'_, bool>, Guard>(tmp_guard)
+        };
+        while *guard {
+            cvar.wait(&mut guard);
+        }
+
+        let _thread_guard: ThreadGuard = unsafe {
+            let tmp_guard = thread_lock.lock();
+            std::mem::transmute::<ReentrantMutexGuard<'_, RawMutex, RawThreadId, ()>, ThreadGuard>(
+                tmp_guard,
+            )
+        };
+
+        *guard = true;
+        Some(Self {
+            sem,
+            guard,
+            _thread_guard,
+        })
+    }
+}
+impl Drop for Sync {
+    fn drop(&mut self) {
+        *self.guard = false;
+        let (_, _, cvar) = &*self.sem;
+        cvar.notify_one();
+    }
 }
 
-/// This macro is functionally equivalent to `try_run_as`, but will panic
-/// the program with `expect()` rather than returning an Err on failure
-/// to save/set/restore the user mode.
-///
-/// Note that due to how these functions work (Relying on the original
-/// Real/Effective/Saved values), there is no situation in which
-/// these modes will actually fail save the kernel being unable
-/// to allocate (Or, in other words, never).
+pub fn obtain_lock() -> Option<Sync> {
+    if *crate::SETUID { Sync::new() } else { None }
+}
+
 #[macro_export]
 macro_rules! run_as {
     ($mode:path, $ret:ty, $body:block) => {{
-        let __saved = user::set($mode).expect("Failed to set user mode");
-        let __result: $ret = (|| -> $ret { $body })();
-        user::restore(__saved).expect("Failed to restore user mode");
-        __result
+        {
+            let lock = user::obtain_lock();
+            match user::set($mode) {
+                Ok(__saved) => {
+                    let __result = (|| -> $ret { $body })();
+                    user::restore(__saved).map(|e| __result)
+                }
+                Err(e) => Err(e),
+            }
+        }
     }};
 
     ($mode:path, $body:block) => {{
-        let __saved = user::set($mode).expect("Failed to set user mode");
-        let __result = (|| $body)();
-        user::restore(__saved).expect("Failed to restore user mode");
-        __result
+        {
+            let lock = user::obtain_lock();
+            match user::set($mode) {
+                Ok(__saved) => {
+                    let __result = (|| $body)();
+                    user::restore(__saved).map(|e| __result)
+                }
+                Err(e) => Err(e),
+            }
+        }
     }};
 
     ($mode:path, $expr:expr) => {{
-        let __saved = user::set($mode).expect("Failed to set user mode");
-        let __result = $expr;
-        user::restore(__saved).expect("Failed to restore user mode");
-        __result
+        {
+            let lock = user::obtain_lock();
+            match user::set($mode) {
+                Ok(__saved) => {
+                    let __result = $expr;
+                    user::restore(__saved).map(|e| __result)
+                }
+                Err(e) => Err(e),
+            }
+        }
     }};
+}
+
+#[macro_export]
+macro_rules! as_real {
+    ($ret:ty, $body:block) => {{ user::run_as!(user::Mode::Real, $ret, $body) }};
+    ($body:block) => {{ user::run_as!(user::Mode::Real, $body) }};
+    ($expr:expr) => {{ user::run_as!(user::Mode::Real, { $expr }) }};
+}
+
+#[macro_export]
+macro_rules! as_effective {
+    ($ret:ty, $body:block) => {{ user::run_as!(user::Mode::Effective, $ret, $body) }};
+    ($body:block) => {{ user::run_as!(user::Mode::Effective, $body) }};
+    ($expr:expr) => {{ user::run_as!(user::Mode::Effective, { $expr }) }};
 }

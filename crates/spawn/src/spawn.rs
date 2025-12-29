@@ -11,6 +11,7 @@ use nix::{
 use parking_lot::Mutex;
 use std::{
     borrow::Cow,
+    collections::HashMap,
     convert::Infallible,
     env, error,
     ffi::{CString, NulError},
@@ -676,6 +677,71 @@ impl<'a> Spawner {
         let stderr = cond_pipe(&self.error)?;
         let stdin = cond_pipe(&self.input)?;
 
+        #[cfg(feature = "fd")]
+        let fds = self.fds.into_inner();
+
+        let mut cmd_c: Option<CString> = None;
+        let mut args_c = Vec::<CString>::new();
+
+        // Launch with pkexec if we're elevated.
+        #[cfg(feature = "elevate")]
+        if self.elevate {
+            let polkit = CString::new(
+                which("pkexec")
+                    .map_err(|e| Error::Path(e.to_string()))?
+                    .as_bytes(),
+            )
+            .map_err(Error::Null)?;
+
+            if cmd_c.is_none() {
+                cmd_c = Some(polkit.clone());
+            }
+            args_c.push(polkit);
+        }
+
+        let resolved = CString::new(self.cmd.clone()).map_err(Error::Null)?;
+        let cmd_c = if let Some(cmd) = cmd_c {
+            cmd
+        } else {
+            resolved.clone()
+        };
+
+        args_c.push(resolved);
+        args_c.append(&mut self.args.into_inner());
+
+        // Log if desired.
+        if log::log_enabled!(log::Level::Trace) {
+            let formatted = args_c
+                .iter()
+                .filter_map(|s| s.to_str().ok())
+                .collect::<Vec<&str>>()
+                .join(" ");
+            trace!("{formatted:?}");
+        }
+
+        // Clear F_SETFD to allow passed FD's to persist after execve
+        #[cfg(feature = "fd")]
+        for fd in &fds {
+            fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
+                .map_err(|e| Error::Errno(None, "fnctl fd", e))?;
+        }
+
+        let envs: HashMap<String, String> = self
+            .env
+            .iter()
+            .filter_map(|env| {
+                if let Ok(estr) = env.clone().into_string() {
+                    let mut split = estr.split('=');
+                    if let Some(key) = split.next()
+                        && let Some(value) = split.next()
+                    {
+                        return Some((key.to_string(), value.to_string()));
+                    }
+                }
+                None
+            })
+            .collect();
+
         let fork = unsafe { fork() }.map_err(Error::Fork)?;
         match fork {
             ForkResult::Parent { child } => {
@@ -741,48 +807,6 @@ impl<'a> Spawner {
 
             ForkResult::Child => {
                 let result = || -> Result<Infallible, Error> {
-                    #[cfg(feature = "fd")]
-                    let fds = self.fds.into_inner();
-
-                    let mut cmd_c: Option<CString> = None;
-                    let mut args_c = Vec::<CString>::new();
-
-                    // Launch with pkexec if we're elevated.
-                    #[cfg(feature = "elevate")]
-                    if self.elevate {
-                        let polkit = CString::new(
-                            which("pkexec")
-                                .map_err(|e| Error::Path(e.to_string()))?
-                                .as_bytes(),
-                        )
-                        .map_err(Error::Null)?;
-
-                        if cmd_c.is_none() {
-                            cmd_c = Some(polkit.clone());
-                        }
-                        args_c.push(polkit);
-                    }
-
-                    let resolved = CString::new(self.cmd).map_err(Error::Null)?;
-                    let cmd_c = if let Some(cmd) = cmd_c {
-                        cmd
-                    } else {
-                        resolved.clone()
-                    };
-
-                    args_c.push(resolved);
-                    args_c.append(&mut self.args.into_inner());
-
-                    // Log if desired.
-                    if log::log_enabled!(log::Level::Trace) {
-                        let formatted = args_c
-                            .iter()
-                            .filter_map(|s| s.to_str().ok())
-                            .collect::<Vec<&str>>()
-                            .join(" ");
-                        trace!("{formatted:?}");
-                    }
-
                     // Setup the pipes.
                     if let Some((read, write)) = stdout {
                         close(read).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
@@ -796,13 +820,6 @@ impl<'a> Spawner {
                     if let Some((read, write)) = stdin {
                         close(write).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
                         dup2_stdin(read).map_err(|e| Error::Errno(Some(fork), "dup input", e))?;
-                    }
-
-                    // Clear F_SETFD to allow passed FD's to persist after execve
-                    #[cfg(feature = "fd")]
-                    for fd in &fds {
-                        fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
-                            .map_err(|e| Error::Errno(Some(fork), "fnctl fd", e))?;
                     }
 
                     // Ensure that the child dies when the parent does.
@@ -826,13 +843,8 @@ impl<'a> Spawner {
                         filter.load().map_err(Error::Seccomp)?;
                     }
 
-                    for env in &self.env {
-                        // We already converted from Strings, so these are UT8-safe.
-                        let estr = env.clone().into_string().map_err(|_| Error::Environment)?;
-                        let mut split = estr.split('=');
-                        let key = split.next().ok_or(Error::Environment)?;
-                        let value = split.next().ok_or(Error::Environment)?;
-                        unsafe { env::set_var(key, value) }
+                    for (key, value) in envs {
+                        unsafe { env::set_var(key, value) };
                     }
 
                     // Execve

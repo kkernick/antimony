@@ -1,7 +1,6 @@
 //! Environment Variables Antimony needs defined.
 use anyhow::Result;
 use log::{debug, warn};
-use spawn::{Spawner, StreamMode};
 use std::{
     env::{self, temp_dir},
     fs,
@@ -9,24 +8,8 @@ use std::{
     path::PathBuf,
     sync::LazyLock,
 };
-use user::try_run_as;
+use user::as_effective;
 use which::which;
-
-pub static OVERLAY: LazyLock<bool> = LazyLock::new(|| {
-    let args = || -> Result<String> {
-        let out = Spawner::abs("/usr/bin/bwrap")
-            .arg("--help")?
-            .output(StreamMode::Pipe)
-            .spawn()?
-            .output_all()?;
-        Ok(out)
-    }();
-
-    match args {
-        Ok(args) => args.contains("--overlay"),
-        Err(_) => false,
-    }
-});
 
 /// Antimony's home folder is where configuration is stored
 pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
@@ -46,24 +29,23 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
     let writeable = if !cache_dir.exists() {
-        user::run_as!(user::Mode::Effective, fs::create_dir(&cache_dir).is_ok())
+        as_effective!(fs::create_dir(&cache_dir).is_ok())
     } else {
-        user::run_as!(user::Mode::Effective, {
-            fs::File::create(cache_dir.join(".test")).is_ok()
-        })
-    };
+        as_effective!({ fs::File::create(cache_dir.join(".test")).is_ok() })
+    }
+    .expect("Failed to create cache dir");
 
     if !writeable {
         debug!("Cache dir not-writable. Pivoting to /tmp");
         cache_dir = temp_dir().join("antimony");
         let result = || -> Result<()> {
-            try_run_as!(user::Mode::Effective, {
+            as_effective!({
                 if !cache_dir.exists() {
                     fs::create_dir_all(&cache_dir).unwrap();
                 }
                 fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))?;
                 Ok(())
-            })
+            })?
         }();
 
         if result.is_err() {

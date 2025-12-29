@@ -7,7 +7,7 @@ use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
 use std::{fs, time::Duration};
-use user::try_run_as;
+use user::as_real;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -73,7 +73,7 @@ impl super::Run for Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
-            let profiles: Vec<String> = try_run_as!(user::Mode::Real, Result<Vec<String>>, {
+            let profiles: Vec<String> = as_real!(Result<Vec<String>>, {
                 let bin = HOME_PATH.join(".local").join("bin");
                 debug!("Refreshing local binaries");
 
@@ -92,7 +92,7 @@ impl super::Run for Args {
                         None
                     })
                     .collect())
-            })?;
+            })??;
 
             // DO NOT TRY AND RUN THIS IN PARALLEL. ANTIMONY WILL
             // CAUSE A KERNEL PANIC IF YOU RUN IT IN PARALLEL!
@@ -103,32 +103,31 @@ impl super::Run for Args {
                     .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
             );
             pb.enable_steady_tick(Duration::from_millis(100));
-            pb.wrap_iter(profiles.into_iter()).try_for_each(|name| {
-                pb.set_message(format!("Refreshing {name}"));
+            pb.wrap_iter(profiles.into_iter())
+                .try_for_each(|name| -> Result<()> {
+                    pb.set_message(format!("Refreshing {name}"));
 
-                let args = cli::run::Args {
-                    profile: name.clone(),
-                    dry: true,
-                    refresh: true,
-                    ..Default::default()
-                };
+                    let args = cli::run::Args {
+                        profile: name.clone(),
+                        dry: true,
+                        refresh: true,
+                        ..Default::default()
+                    };
 
-                try_run_as!(user::Mode::Effective, { args.run() })?;
+                    user::set(user::Mode::Effective)?;
+                    args.run()?;
 
-                if self.integrate {
-                    debug!("Integrating {name}");
-                    try_run_as!(user::Mode::Real, Result<()>, {
+                    if self.integrate {
+                        debug!("Integrating {name}");
                         pb.set_message(format!("Integrating {name}"));
+                        user::set(user::Mode::Real)?;
                         cli::integrate::integrate(cli::integrate::Args {
                             profile: name,
                             ..Default::default()
                         })?;
-                        Ok(())
-                    })
-                } else {
+                    }
                     Ok(())
-                }
-            })?;
+                })?;
         }
         Ok(())
     }

@@ -6,7 +6,7 @@
 //!
 //!
 
-use log::{warn};
+use log::warn;
 use nix::{
     errno::Errno,
     sys::{
@@ -57,6 +57,9 @@ pub enum Error {
 
     /// Timeout error
     Timeout,
+
+    /// User switching errors.
+    User(Errno),
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -76,6 +79,7 @@ impl fmt::Display for Error {
             Self::Io(e) => write!(f, "IO Error: {e}"),
             Self::NoAssociate(name) => write!(f, "No such associate: {name}"),
             Self::Timeout => write!(f, "Timeout"),
+            Self::User(e) => write!(f, "Failed to switch user: {e}"),
         }
     }
 }
@@ -84,6 +88,7 @@ impl error::Error for Error {
         match self {
             Error::Comm(errno) => Some(errno),
             Error::Io(error) => Some(error),
+            Error::User(errno) => Some(errno),
             _ => None,
         }
     }
@@ -460,7 +465,7 @@ impl Handle {
             #[cfg(feature = "user")]
             let result = {
                 let mode = self.mode;
-                user::sync::run_as!(mode, kill(pid, sig))
+                user::run_as!(mode, kill(pid, sig)).map_err(Error::User)?
             };
 
             #[cfg(not(feature = "user"))]

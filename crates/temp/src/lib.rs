@@ -1,4 +1,3 @@
-use log::warn;
 use rand::{RngCore, SeedableRng, rngs::SmallRng};
 use std::{
     env::temp_dir,
@@ -129,7 +128,7 @@ impl Temp {
         if let Some(parent) = link.parent()
             && let Some(name) = link.file_name()
         {
-            user::try_run_as!(mode, { symlink(self.object.full(), &link) })?;
+            user::run_as!(mode, { symlink(self.object.full(), &link) })??;
             self.associated.push(Temp {
                 object: Box::new(File {
                     parent: parent.to_path_buf(),
@@ -147,12 +146,7 @@ impl Temp {
 impl Drop for Temp {
     fn drop(&mut self) {
         let mode = self.mode;
-        let result = user::sync::run_as!(mode, { self.object.remove() });
-        if let Err(e) = result
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            warn!("Failed to remove temporary file: {e}");
-        }
+        let _ = user::run_as!(mode, { self.object.remove() });
     }
 }
 unsafe impl Send for Temp {}
@@ -190,7 +184,7 @@ impl Builder {
         let mode = self.mode.unwrap_or(user::current()?);
 
         let object = T::new(parent, name);
-        user::run_as!(mode, object.create())?;
+        user::run_as!(mode, object.create())??;
         Ok(Temp {
             object: Box::new(object),
             associated: Vec::new(),

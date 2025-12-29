@@ -1,6 +1,6 @@
 use crate::{
-    timer,
     shared::{Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
+    timer,
 };
 use ahash::HashSetExt;
 use dashmap::DashMap;
@@ -31,11 +31,12 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use user::as_effective;
 
 /// Connection to the Database
 pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::new(|| {
     let init = || -> anyhow::Result<Pool<SqliteConnectionManager>> {
-        user::try_run_as!(user::Mode::Effective, {
+        as_effective!({
             let dir = AT_HOME.join("seccomp");
             if !dir.exists() {
                 fs::create_dir_all(&dir)?;
@@ -80,7 +81,7 @@ pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::
             ",
             )?;
             Ok(pool)
-        })
+        })?
     };
     init().ok()
 });
@@ -469,7 +470,7 @@ pub fn get_calls(
             }
         });
 
-        user::sync::try_run_as!(user::Mode::Effective, Result<(), Error>, {
+        as_effective!(Result<(), Error>, {
             if let Some(parent) = cache_file.parent() && !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
@@ -479,7 +480,7 @@ pub fn get_calls(
             writeln!(file)?;
             bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
             Ok(())
-        })?;
+        })??;
         bwrap = bwrap.difference(&syscalls).cloned().collect();
     } else {
         log::error!("Could not initialize connection to SECCOMP Database!");

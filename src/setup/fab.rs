@@ -6,6 +6,7 @@ use crate::{
 use anyhow::Result;
 use log::debug;
 use std::{fs, sync::Arc};
+use user::as_effective;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // The fabricators are cached.
@@ -13,7 +14,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
     {
-        fs::create_dir_all(parent)?;
+        as_effective!(fs::create_dir_all(parent))??;
     }
 
     if cmd_cache.exists() {

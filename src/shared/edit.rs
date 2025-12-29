@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use user::run_as;
+use user::as_real;
 
 use crate::shared::env::EDITOR;
 
@@ -107,11 +107,11 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
-    let temp = run_as!(user::Mode::Real, Result<_, Error>, {
+    let temp = as_real!(Result<_, Error>, {
         let temp = temp::Builder::new().create::<temp::File>().map_err(|e| Error::Io("open temporary file", e))?;
         fs::copy(path, temp.path()).map_err(|e| Error::Io("write temporary file", e))?;
         Ok(temp)
-    })?;
+    })??;
 
     let original = fs::read_to_string(path).map_err(|e| Error::Io("read original profile", e))?;
 

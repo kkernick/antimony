@@ -50,7 +50,7 @@ use std::{
     thread,
     time::Duration,
 };
-use user::Mode;
+use user::{Mode, as_effective};
 
 #[derive(Debug)]
 pub enum Error {
@@ -351,7 +351,7 @@ pub fn notify_reader(
                                 };
 
                                 if commit {
-                                    user::sync::run_as!(user::Mode::Effective, {
+                                    if let Err(e) = as_effective!({
                                         if let Some(pool) = syscalls::DB_POOL.as_ref()
                                             && let Ok(mut conn) = pool.get()
                                             && let Ok(tx) = conn.transaction()
@@ -372,7 +372,12 @@ pub fn notify_reader(
                                             fs::remove_file(cache)
                                                 .expect("Failed to invalidate cache");
                                         }
-                                    });
+                                    }) {
+                                        warn!(
+                                            "Failed to commit syscall: {e}. Scheduling for later"
+                                        );
+                                        entry.insert(call);
+                                    }
                                     allow_clone.entry(path).or_default().insert(call);
                                 }
                             }

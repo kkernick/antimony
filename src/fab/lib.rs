@@ -18,6 +18,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use user::as_effective;
 
 pub fn in_lib(path: &str) -> bool {
     path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
@@ -57,7 +58,7 @@ pub fn add_sof(
 
     if let Some(parent) = sof_path.parent() {
         if !parent.exists() {
-            fs::create_dir_all(parent)?;
+            as_effective!(fs::create_dir_all(parent))??;
         }
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
@@ -73,11 +74,14 @@ pub fn add_sof(
 
             let shared_path = get_sof_path(&cache.join("shared"), &library, prefix);
             if let Some(parent) = shared_path.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)?;
-                }
-                fs::copy(&canon, &shared_path)?;
-                fs::hard_link(&shared_path, &sof_path)?;
+                as_effective!(Result<()>, {
+                    if !parent.exists() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::copy(&canon, &shared_path)?;
+                    fs::hard_link(&shared_path, &sof_path)?;
+                    Ok(())
+                })??;
             }
         }
     }
@@ -101,9 +105,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
 
     let cache = Arc::new(crate::shared::env::CACHE_DIR.join(".lib"));
     if !cache.exists() {
-        user::run_as!(user::Mode::Effective, {
-            fs::create_dir_all(cache.as_path())
-        })?;
+        as_effective!({ fs::create_dir_all(cache.as_path()) })??;
     }
 
     debug!("Creating SOF");
@@ -188,7 +190,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             // call its drop because we call wait(), so its not contention on the user lock,
             // and it does not seem to be contention on writing/reading the cache.
             debug!("Resolving wildcards");
-            wildcards.into_iter().for_each(|w| {
+            wildcards.into_par_iter().for_each(|w| {
                 if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
                     cards.into_par_iter().for_each(|card| {
                         resolved.insert(Cow::Owned(card));
@@ -201,7 +203,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     let files = timer!("::directories", {
         Arc::into_inner(resolved)
             .unwrap()
-            .into_iter()
+            .into_par_iter()
             .filter_map(|e| dir_resolve(e, directories.clone(), &cache).ok())
             .flatten()
             .collect::<Set<_>>()

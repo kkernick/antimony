@@ -17,6 +17,7 @@ use log::{debug, error, trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
+use user::{as_effective, as_real, run_as};
 
 use std::{
     borrow::Cow,
@@ -25,7 +26,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use user::try_run_as;
 use which::which;
 
 /// The magic for an ELF file.
@@ -127,8 +127,9 @@ impl ParseReturn {
 
     /// Write a cache file.
     fn write(&self, name: &str) -> Result<()> {
-        user::sync::try_run_as!(user::Mode::Effective, Result<()>, {
-            let cache_file = self.cache.join(name.replace("/", ".").replace("*", "."));
+        let cache_file = self.cache.join(name.replace("/", ".").replace("*", "."));
+
+        as_effective!(Result<()>, {
             let mut file = File::create(&cache_file)?;
 
             let mut write = |dash: &DashSet<String>| -> Result<()> {
@@ -150,32 +151,31 @@ impl ParseReturn {
                     .collect(),
             )?;
             Ok(())
-        })
+        })?
     }
 }
 
 /// Resolve the path of a binary, canonicalized to /usr/bin.
 fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
-    user::sync::try_run_as!(user::Mode::Real, {
-        let resolved: Cow<'_, str> = if path.contains("..") {
-            Cow::Owned(
-                Path::new(path)
-                    .canonicalize()?
-                    .to_string_lossy()
-                    .into_owned(),
-            )
-        } else if path.starts_with('/') {
-            Cow::Borrowed(path)
-        } else {
-            Cow::Borrowed(which(path).with_context(|| path.to_string())?)
-        };
+    let resolved: Cow<'_, str> = if path.contains("..") {
+        let path = run_as!(user::Mode::Real, Result<String>, {
+            Ok(Path::new(path)
+                .canonicalize()?
+                .to_string_lossy()
+                .into_owned())
+        })??;
+        Cow::Owned(path)
+    } else if path.starts_with('/') {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Borrowed(which(path).with_context(|| path.to_string())?)
+    };
 
-        if resolved.starts_with("/bin") {
-            Ok(Cow::Owned(format!("/usr{resolved}")))
-        } else {
-            Ok(resolved)
-        }
-    })
+    if resolved.starts_with("/bin") {
+        Ok(Cow::Owned(format!("/usr{resolved}")))
+    } else {
+        Ok(resolved)
+    }
 }
 
 /// Parses binaries, specifically for shell scripts.
@@ -205,7 +205,7 @@ fn parse(
     let ret = ParseReturn::new(cache);
 
     trace!("Parsing: {path}");
-    let dest = user::sync::try_run_as!(user::Mode::Real, Result<String>, {
+    let dest = run_as!(user::Mode::Real, Result<String>, {
         let dest = fs::read_link(resolved.as_ref())?;
         let canon = Path::new(resolved.as_ref())
             .canonicalize()?
@@ -213,7 +213,7 @@ fn parse(
             .ok_or(anyhow!("Binary does not have parent!"))?
             .join(&dest);
         Ok(canon.to_string_lossy().into_owned())
-    });
+    })?;
 
     // Ensure it's a valid binary.
     let t = {
@@ -244,9 +244,7 @@ fn parse(
             }
 
             // Open it.
-            let mut file = match user::sync::try_run_as!(user::Mode::Real, {
-                File::open(resolved.as_ref())
-            }) {
+            let mut file = match as_real!({ File::open(resolved.as_ref()) })? {
                 Ok(file) => file,
                 Err(_) => return Ok(Type::None),
             };
@@ -456,7 +454,7 @@ pub fn collect(
     timer!("::collect::localization", {
         Arc::into_inner(resolved)
             .unwrap()
-            .into_iter()
+            .into_par_iter()
             .try_for_each(|binary| {
                 handle_localize(
                     binary.as_str(),
@@ -488,9 +486,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
 
     let cache = crate::shared::env::CACHE_DIR.join(".bin");
     if !cache.exists() {
-        user::run_as!(user::Mode::Effective, {
-            std::fs::create_dir_all(&cache).expect("Failed to create binary cache")
-        });
+        as_effective!({ std::fs::create_dir_all(&cache).expect("Failed to create binary cache") })?;
     }
 
     let parsed = match ParseReturn::cache("bin.cache", info.sys_dir)? {
@@ -499,16 +495,15 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             let parsed = Mutex::new(ParseReturn::new(info.sys_dir));
             timer!(
                 "::collect",
-                try_run_as!(user::Mode::Effective, {
-                    collect(
-                        info.profile,
-                        info.name,
-                        info.instance.name(),
-                        &parsed,
-                        &cache,
-                    )
-                })
+                collect(
+                    info.profile,
+                    info.name,
+                    info.instance.name(),
+                    &parsed,
+                    &cache,
+                )
             )?;
+
             parsed.lock().write("bin.cache")?;
             parsed.into_inner()
         }
@@ -627,14 +622,11 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         timer!("::home_binaries", {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
-                try_run_as!(user::Mode::Real, Result<()>, {
-                    let home_str = home_dir.to_string_lossy();
-                    let home_binaries = get_dir(&home_str, Some(&cache))?;
-                    for binary in home_binaries {
-                        elf_binaries.insert(binary);
-                    }
-                    Ok(())
-                })?
+                let home_str = home_dir.to_string_lossy();
+                let home_binaries = get_dir(&home_str, Some(&cache))?;
+                for binary in home_binaries {
+                    elf_binaries.insert(binary);
+                }
             }
         })
     }

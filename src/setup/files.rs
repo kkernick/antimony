@@ -15,6 +15,7 @@ use std::{
     os::fd::{AsRawFd, OwnedFd},
     sync::Arc,
 };
+use user::as_effective;
 
 #[inline]
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
@@ -27,15 +28,18 @@ fn get_x(file: &str, handle: &Spawner) -> Result<()> {
 
 pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
     let path = direct_path(file);
-    if !path.exists()
-        && let Some(parent) = path.parent()
-    {
-        fs::create_dir_all(parent)?;
-        let contents = resolve_env(Cow::Borrowed(&contents));
-        fs::write(&path, contents.as_ref())?;
-    }
+    let fd = as_effective!(Result<OwnedFd>, {
+        if !path.exists()
+            && let Some(parent) = path.parent()
+        {
+            fs::create_dir_all(parent)?;
+            let contents = resolve_env(Cow::Borrowed(&contents));
+            fs::write(&path, contents.as_ref())?;
+        }
 
-    let fd = OwnedFd::from(File::open(path)?);
+        Ok(OwnedFd::from(File::open(path)?))
+    })??;
+
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file])?;
     handle.fd_i(fd);
     handle.args_i(["--chmod", op.chmod(), file])?;
