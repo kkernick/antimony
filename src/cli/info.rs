@@ -102,8 +102,7 @@ impl super::Run for Args {
                 Some(name) => {
                     print!("{name}: ");
                     let calls: Set<i32> = if name.contains('/') {
-                        if let Some(pool) = syscalls::DB_POOL.as_ref() {
-                            let mut conn = pool.get()?;
+                        if let Ok(mut conn) = syscalls::get_connection() {
                             let tx = conn.transaction()?;
                             let calls = syscalls::get_binary_syscalls(&tx, &name)?;
                             tx.commit()?;
@@ -113,7 +112,7 @@ impl super::Run for Args {
                                 "Could not initialize connection to SECCOMP Database"
                             ));
                         }
-                    } else if let Some((syscalls, _)) = syscalls::get_calls(&name, &None, false)? {
+                    } else if let Some((syscalls, _)) = syscalls::get_calls(&name, &None)? {
                         syscalls.into_iter().collect()
                     } else {
                         return Err(anyhow::anyhow!(
@@ -139,8 +138,7 @@ impl super::Run for Args {
 
                 // Get information on everything in the database.
                 None => {
-                    if let Some(pool) = syscalls::DB_POOL.as_ref() {
-                        let mut conn = pool.get()?;
+                    if let Ok(mut conn) = syscalls::get_connection() {
                         let tx = conn.transaction()?;
 
                         // Profile info.

@@ -11,9 +11,8 @@ use nix::{
     poll::{PollFd, PollFlags, PollTimeout},
     sys::socket::{self, ControlMessage, ControlMessageOwned, MsgFlags, recvmsg},
 };
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::Transaction;
+use parking_lot::{Mutex, MutexGuard};
+use rusqlite::{Connection, Transaction};
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
     borrow::Cow,
@@ -21,30 +20,34 @@ use std::{
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{self, BufRead, BufReader, IoSlice, IoSliceMut, Write},
+    io::{self, IoSlice, IoSliceMut},
     os::{
         fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd},
         unix::net::{UnixListener, UnixStream},
     },
     path::PathBuf,
-    sync::LazyLock,
-    thread::sleep,
+    sync::{Arc, LazyLock},
+    thread::{ThreadId, sleep},
     time::Duration,
 };
 use user::{as_effective, as_real};
 
-/// Connection to the Database
-pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::new(|| {
-    let init = || -> anyhow::Result<Pool<SqliteConnectionManager>> {
-        as_effective!({
-            let dir = AT_HOME.join("seccomp");
-            if !dir.exists() {
-                fs::create_dir_all(&dir)?;
-            }
-            let manager = SqliteConnectionManager::file(dir.join("syscalls.db"));
-            let pool = Pool::new(manager)?;
-            let conn = pool.get()?;
-            conn.pragma_update(None, "journal_mode", "WAL")?;
+fn new_connection() -> Result<Connection, Error> {
+    as_effective!({
+        let dir = AT_HOME.join("seccomp");
+        if !dir.exists() {
+            fs::create_dir_all(&dir)?;
+        }
+        let conn = Connection::open(dir.join("syscalls.db"))?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        Ok(conn)
+    })?
+}
+
+pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
+    LazyLock::new(|| {
+        let init = || -> anyhow::Result<()> {
+            let conn = new_connection()?;
             conn.execute_batch(
                 "
             PRAGMA foreign_keys = ON;
@@ -80,15 +83,31 @@ pub static DB_POOL: LazyLock<Option<Pool<SqliteConnectionManager>>> = LazyLock::
             );
             ",
             )?;
-            Ok(pool)
-        })?
-    };
-    init().ok()
-});
+            Ok(())
+        };
 
-/// The location to store cache files.
-pub static CACHE_DIR: LazyLock<PathBuf> =
-    LazyLock::new(|| crate::shared::env::CACHE_DIR.join(".seccomp"));
+        if init().is_ok() {
+            Some(DashMap::new())
+        } else {
+            None
+        }
+    });
+
+pub fn get_connection() -> Result<MutexGuard<'static, Connection>, Error> {
+    if let Some(pool) = POOL.as_ref() {
+        let id = std::thread::current().id();
+
+        if !pool.contains_key(&id) {
+            pool.insert(id, Arc::new(Mutex::new(new_connection()?)));
+        }
+        let arc = pool.get(&id).unwrap().value().clone();
+        let raw_ptr = Arc::into_raw(arc);
+        let static_ref = unsafe { &*raw_ptr };
+        Ok(static_ref.lock())
+    } else {
+        Err(Error::Pool)
+    }
+}
 
 static CACHE: LazyLock<DashMap<String, i32, ahash::RandomState>> = LazyLock::new(DashMap::default);
 
@@ -112,22 +131,27 @@ pub enum Error {
     /// Errors interfacing with the database
     Database(rusqlite::Error),
 
-    /// Errors connecting to the database.
-    Connection(r2d2::Error),
-
     /// Errors for IO.
     Io(io::Error),
 
+    /// Misc Errnos.
     Errno(errno::Errno),
+
+    /// Error when the pool failed to initialize
+    Pool,
+
+    /// Errors with multithreading.
+    Sync,
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Seccomp(e) => write!(f, "SECCOMP Error: {e}"),
             Self::Database(e) => write!(f, "Database Error: {e}"),
-            Self::Connection(e) => write!(f, "Connection Error: {e}"),
             Self::Io(e) => write!(f, "Io Error: {e}"),
             Self::Errno(e) => write!(f, "Error {e}"),
+            Self::Pool => write!(f, "Database pool could not be initialized"),
+            Self::Sync => write!(f, "Multiple references exist to Connection!"),
         }
     }
 }
@@ -136,9 +160,9 @@ impl error::Error for Error {
         match self {
             Self::Seccomp(e) => Some(e),
             Self::Database(e) => Some(e),
-            Self::Connection(e) => Some(e),
             Self::Io(e) => Some(e),
             Self::Errno(e) => Some(e),
+            _ => None,
         }
     }
 }
@@ -165,11 +189,6 @@ impl From<seccomp::notify::Error> for Error {
 impl From<rusqlite::Error> for Error {
     fn from(value: rusqlite::Error) -> Self {
         Error::Database(value)
-    }
-}
-impl From<r2d2::Error> for Error {
-    fn from(value: r2d2::Error) -> Self {
-        Error::Connection(value)
     }
 }
 impl From<io::Error> for Error {
@@ -272,7 +291,7 @@ pub fn insert_profile(tx: &Transaction, name: &str) -> Result<i64, Error> {
     if let Ok(id) = profile_id(tx, name) {
         Ok(id)
     } else {
-        tx.execute("INSERT OR IGNORE INTO profiles (name) VALUES (?1)", [name])?;
+        tx.execute("INSERT INTO profiles (name) VALUES (?1)", [name])?;
         profile_id(tx, name)
     }
 }
@@ -336,26 +355,19 @@ pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, E
 }
 
 /// Add the syscalls from a binary to the working set.
-fn extend(binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
-    if let Some(pool) = DB_POOL.as_ref() {
-        let mut conn = pool.get()?;
-        let tx = conn.transaction()?;
+fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
+    let binary = match binary.split_once('=') {
+        Some((_, dest)) => dest,
+        None => binary,
+    };
 
-        let binary = match binary.split_once('=') {
-            Some((_, dest)) => dest,
-            None => binary,
-        };
+    let resolved = match which::which(binary) {
+        Ok(resolved) => Cow::Borrowed(resolved),
+        Err(_) => Cow::Borrowed(binary),
+    };
 
-        let resolved = match which::which(binary) {
-            Ok(resolved) => Cow::Borrowed(resolved),
-            Err(_) => Cow::Borrowed(binary),
-        };
-
-        for syscall in get_binary_syscalls(&tx, &resolved)? {
-            syscalls.insert(syscall);
-        }
-    } else {
-        log::error!("Could not initialize connection to SECCOMP Database. SECCOMP is disabled!");
+    for syscall in get_binary_syscalls(tx, &resolved)? {
+        syscalls.insert(syscall);
     }
     Ok(())
 }
@@ -366,38 +378,15 @@ type PolicyPair = (Set<i32>, Set<i32>);
 pub fn get_calls(
     name: &str,
     p_binaries: &Option<BTreeSet<String>>,
-    refresh: bool,
 ) -> Result<Option<PolicyPair>, Error> {
-    let cache_file = CACHE_DIR.join(name.replace("/", ".").replace("*", "."));
-    if cache_file.exists() && !refresh {
-        debug!("Using SECCOMP cache for {name}");
-        let file = File::open(&cache_file)?;
-        let reader = BufReader::new(file);
-        let mut lines = reader.lines();
-
-        if let Some(syscalls) = lines.next() {
-            let syscalls: Set<i32> = syscalls?
-                .split(" ")
-                .filter_map(|e| e.parse().ok())
-                .collect();
-
-            if let Some(bwrap) = lines.next() {
-                let bwrap: Set<i32> = bwrap?.split(" ").filter_map(|e| e.parse().ok()).collect();
-                return Ok(Some((syscalls, bwrap)));
-            }
-        }
-    };
-
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
-    if let Some(pool) = DB_POOL.as_ref() {
-        let mut conn = pool.get()?;
-        let binaries = || -> Result<Set<String>, Error> {
-            let tx = conn.transaction()?;
+    if let Ok(mut conn) = get_connection() {
+        let tx = conn.transaction()?;
 
-            // Get profile_id, insert profile if missing
-            let profile_id = profile_id(&tx, name)?;
+        let binaries = || -> Result<Set<String>, Error> {
+            let profile_id = insert_profile(&tx, name)?;
 
             let mut stmt = tx.prepare(
                 "SELECT b.path
@@ -424,6 +413,7 @@ pub fn get_calls(
 
         binaries.iter().for_each(|bin| {
             if let Err(e) = extend(
+                &tx,
                 bin,
                 if bin.ends_with("bwrap") {
                     &mut bwrap
@@ -434,18 +424,6 @@ pub fn get_calls(
                 warn!("Failed to extend syscalls for binary {bin}: {e}");
             }
         });
-
-        as_effective!(Result<(), Error>, {
-            if let Some(parent) = cache_file.parent() && !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
-
-            let mut file = std::fs::File::create(&cache_file)?;
-            syscalls.iter().try_for_each(|call| write!(file, "{call} "))?;
-            writeln!(file)?;
-            bwrap.iter().try_for_each(|call| write!(file, "{call} "))?;
-            Ok(())
-        })??;
         bwrap = bwrap.difference(&syscalls).cloned().collect();
     } else {
         log::error!("Could not initialize connection to SECCOMP Database!");
@@ -460,23 +438,20 @@ pub fn new(
     instance: &str,
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
-    refresh: bool,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
-    if let Some((mut syscalls, bwrap)) = timer!(
-        "::get_calls",
-        get_calls(name, binaries, refresh).unwrap_or_default()
-    ) {
-        let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
-            let mut filter = Filter::new(Action::Notify)?;
-            filter.set_notifier(Notifier::new(
-                user_dir(instance).join(format!("monitor-{name}")),
-                name.to_string(),
-            ));
+    if let Some((mut syscalls, bwrap)) = timer!("::get_calls", get_calls(name, binaries)?) {
+        let mut filter =
+            if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
+                let mut filter = Filter::new(Action::Notify)?;
+                filter.set_notifier(Notifier::new(
+                    user_dir(instance).join(format!("monitor-{name}")),
+                    name.to_string(),
+                ));
 
-            filter
-        } else {
-            Filter::new(Action::KillProcess)?
-        };
+                filter
+            } else {
+                Filter::new(Action::KillProcess)?
+            };
 
         filter.set_attribute(Attribute::NoNewPrivileges(true))?;
         filter.set_attribute(Attribute::ThreadSync(true))?;
@@ -527,6 +502,7 @@ pub fn new(
         }
         Ok(Some((filter, fd, audit)))
     } else {
+        warn!("Failed to get syscall information. No filter installed");
         Ok(None)
     }
 }

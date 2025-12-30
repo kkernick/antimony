@@ -1,4 +1,3 @@
-
 use antimony::shared::{
     env::AT_HOME,
     path::user_dir,
@@ -8,7 +7,6 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
-use log::{error, warn};
 use nix::{
     libc::{EPERM, PR_SET_SECCOMP},
     sys::signal::{Signal::SIGKILL, kill},
@@ -153,10 +151,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                 });
             }
             Ok(None) => continue,
-            Err(e) => {
-                error!("Fatal error: {e}");
-                break;
-            }
+            Err(_) => break,
         }
     }
     Ok(())
@@ -216,16 +211,13 @@ pub fn runner(args: RunArgs) -> Result<()> {
     let mut buffer = [0; 1024];
     let _ = inotify.read_events_blocking(&mut buffer)?;
 
-    if let Err(e) = Spawner::new(args.path)?
+    Spawner::new(args.path)?
         .preserve_env(true)
         .output(spawn::StreamMode::Pipe)
         .error(spawn::StreamMode::Pipe)
         .seccomp(filter)
         .spawn()?
-        .wait()
-    {
-        warn!("Binary exited with an error: {e}");
-    }
+        .wait()?;
 
     fs::remove_file(sock_str)?;
     Ok(())

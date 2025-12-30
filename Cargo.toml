@@ -1,5 +1,3 @@
-cargo-features = ["profile-rustflags"]
-
 [package]
 name = "antimony"
 version = "3.0.0"
@@ -44,8 +42,6 @@ nix = { version = "0.30.1", features = ["poll", "socket", "uio"], default-featur
 parking_lot = { version = "0.12.5", default-features = false }
 rayon = { version = "1.10.0", default-features = false }
 rusqlite = { version = "0.37.0", default-features = false }
-r2d2 = { version = "0.8.10", default-features = false }
-r2d2_sqlite = { version = "0.31.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive"], default-features = false }
 signal-hook = { version = "0.3.18", default-features = false }
 toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
@@ -57,10 +53,6 @@ anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
 debug = false
 
 [profile.release]
-rustflags = [
-  "-Z", "location-detail=none",
-]
-
 opt-level = 3
 codegen-units = 1
 lto = "fat"

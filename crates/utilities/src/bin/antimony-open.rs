@@ -6,7 +6,6 @@ use dbus::{
     blocking::{BlockingSender, LocalConnection},
     strings::{BusName, Interface, Member},
 };
-use log::info;
 use std::{env, fs::File, os::fd::OwnedFd, path::Path, time::Duration};
 
 fn main() -> Result<()> {
@@ -15,8 +14,6 @@ fn main() -> Result<()> {
         Some(arg) => arg,
         None => return Err(anyhow!("Invalid command line!")),
     };
-
-    info!("Opening {arg}");
 
     let (uri, member) = if Path::new(arg).exists() {
         (false, Member::from("OpenFile\0"))

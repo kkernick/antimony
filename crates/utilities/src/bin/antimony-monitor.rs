@@ -5,18 +5,18 @@
 //! *Enforcing*, the logged syscalls are the only ones permitted, and the
 //! `Filter` is loaded immediately.
 
+use ahash::RandomState;
 use antimony::shared::{
     Set,
     env::{DATA_HOME, RUNTIME_DIR},
     format_iter,
     profile::SeccompPolicy,
-    syscalls::{self, CACHE_DIR, receive_fd},
+    syscalls::{self, receive_fd},
 };
 use anyhow::{Context, Result};
 use clap::Parser;
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::one::RefMut};
 use inflector::Inflector;
-use log::{debug, error, info, trace, warn};
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
@@ -37,6 +37,7 @@ use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::{Spawner, StreamMode};
 use std::{
+    collections::HashSet,
     fmt::Display,
     fs,
     os::{
@@ -51,7 +52,7 @@ use std::{
     thread,
     time::Duration,
 };
-use user::{Mode, as_effective};
+use user::Mode;
 
 #[derive(Debug)]
 pub enum Error {
@@ -124,7 +125,11 @@ fn update_binary<'a, T: Iterator<Item = &'a i32>>(
     Ok(())
 }
 
-fn update_profile(tx: &Transaction, profile: &str, binaries: &Set<String>) -> Result<()> {
+fn update_profile<'a, T: Iterator<Item = &'a String>>(
+    tx: &Transaction,
+    profile: &str,
+    binaries: T,
+) -> Result<()> {
     let profile_id = syscalls::insert_profile(tx, profile)?;
     for binary_name in binaries {
         let binary_id = syscalls::binary_id(tx, binary_name)?;
@@ -136,13 +141,39 @@ fn update_profile(tx: &Transaction, profile: &str, binaries: &Set<String>) -> Re
     Ok(())
 }
 
+pub fn commit_or_defer(
+    profile: &str,
+    path: String,
+    call: i32,
+    mut entry: RefMut<'_, String, HashSet<i32, RandomState>>,
+) {
+    if let Ok(mut conn) = syscalls::get_connection()
+        && let Ok(tx) = conn.transaction()
+        && update_binary(&tx, &path, [call].iter()).is_ok()
+        && update_profile(&tx, profile, [&path].into_iter()).is_ok()
+        && tx.commit().is_ok()
+    {
+        println!(
+            "{path} => {}",
+            Syscall::get_name(call).unwrap_or(format!("{call}"))
+        );
+    } else {
+        println!("Pending commit");
+        entry.insert(call);
+    }
+}
+
 /// Read from the Audit log
 ///
 /// This function requires CAP_AUDIT_READ.
 ///
 /// Because we cannot Notify for the syscalls used to send the SECCOMP FD to
 /// the monitor, we LOG them instead.
-pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) -> Result<()> {
+pub fn audit_reader(
+    profile: String,
+    term: Arc<AtomicBool>,
+    log: Arc<DashMap<String, Set<i32>>>,
+) -> Result<()> {
     const BUFFER_SIZE: usize = 4096;
 
     // Open netlink socket for audit
@@ -156,8 +187,10 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) 
     let addr = NetlinkAddr::new(0, 1);
     bind(sock_fd.as_raw_fd(), &addr)?;
 
-    debug!("Listening to Audit.");
+    println!("Listening to Audit.");
     let mut buf = vec![0u8; BUFFER_SIZE];
+
+    let allow = Arc::new(DashMap::<String, Set<i32>>::new());
 
     while !term.load(Ordering::Relaxed) {
         match recv(sock_fd.as_raw_fd(), &mut buf, MsgFlags::MSG_DONTWAIT) {
@@ -193,22 +226,26 @@ pub fn audit_reader(term: Arc<AtomicBool>, log: Arc<DashMap<String, Set<i32>>>) 
 
                     // If everything is valid, log it.
                     if let Ok(syscall) = syscall {
-                        let mut entry = log.entry(exe.clone()).or_default();
-                        if !entry.contains(&syscall) {
-                            trace!("Audited Syscall: {exe} => {syscall}");
-                            entry.insert(syscall);
+                        
+                        if let Some(entry) = allow.get(&exe)
+                            && entry.contains(&syscall)
+                        {
+                            continue;
                         }
+
+                        let entry = log.entry(exe.clone()).or_default();
+                        commit_or_defer(&profile, exe.clone(), syscall, entry);
+                        allow.entry(exe).or_default().insert(syscall);
                     }
                 }
             }
             Err(Errno::EAGAIN) => thread::sleep(Duration::from_millis(10)),
             Err(e) => {
-                error!("Audit error: {e}");
+                println!("Audit error: {e}");
                 break;
             }
         }
     }
-    trace!("Closing Audit");
     Ok(())
 }
 
@@ -273,7 +310,7 @@ pub fn notify_reader(
                         let exe_path = match fs::read_link(format!("/proc/{pid}/exe")) {
                             Ok(path) => Some(path),
                             Err(e) => {
-                                warn!("Invalid exe at PID {pid}: {e}");
+                                println!("Invalid exe at PID {pid}: {e}");
                                 None
                             }
                         };
@@ -283,7 +320,7 @@ pub fn notify_reader(
 
                             // Get the syscall name
                             let call = req.data.nr;
-                            let mut entry = log.entry(path.clone()).or_default();
+                            let entry = log.entry(path.clone()).or_default();
 
                             if let Some(value) = deny_clone.get(&path)
                                 && value.contains(&call)
@@ -346,17 +383,17 @@ pub fn notify_reader(
                                                         if let Err(e) =
                                                             kill(Pid::from_raw(0), SIGTERM)
                                                         {
-                                                            error!("Failed to kill child: {e}");
+                                                            println!("Failed to kill child: {e}");
                                                         }
                                                     }
                                                     e => {
-                                                        warn!("Unrecognized option: {e}");
+                                                        println!("Unrecognized option: {e}");
                                                     }
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            warn!("Failed to ask user: {e}");
+                                            println!("Failed to ask user: {e}");
                                         }
                                     }
                                     commit
@@ -365,33 +402,7 @@ pub fn notify_reader(
                                 };
 
                                 if commit {
-                                    if let Err(e) = as_effective!({
-                                        if let Some(pool) = syscalls::DB_POOL.as_ref()
-                                            && let Ok(mut conn) = pool.get()
-                                            && let Ok(tx) = conn.transaction()
-                                            && update_binary(&tx, &path, [call].iter()).is_ok()
-                                            && tx.commit().is_ok()
-                                        {
-                                            info!(
-                                                "{path} => {}",
-                                                Syscall::get_name(call)
-                                                    .unwrap_or(format!("{call}"))
-                                            );
-                                        } else {
-                                            warn!("Pending commit");
-                                            entry.insert(call);
-                                        }
-                                        let cache = CACHE_DIR.join(&profile_name);
-                                        if cache.exists() {
-                                            fs::remove_file(cache)
-                                                .expect("Failed to invalidate cache");
-                                        }
-                                    }) {
-                                        warn!(
-                                            "Failed to commit syscall: {e}. Scheduling for later"
-                                        );
-                                        entry.insert(call);
-                                    }
+                                    commit_or_defer(&profile_name, path.clone(), call, entry);
                                     allow_clone.entry(path).or_default().insert(call);
                                 }
                             }
@@ -417,7 +428,7 @@ pub fn notify_reader(
                             || call == syscalls::get_name("seccomp"))
                             && args[2] != 0
                         {
-                            trace!("Ignoring SECCOMP request");
+                            println!("Ignoring SECCOMP request");
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
@@ -425,31 +436,29 @@ pub fn notify_reader(
                             && args[0] as i32 == -1
                             && args[1] == 0o7777
                         {
-                            trace!("Injected fchmod => EPERM");
+                            println!("Injected fchmod => EPERM");
                             resp.error = -EPERM;
                             resp.flags = 0;
                         }
                     });
 
                     if let Err(e) = result {
-                        warn!("Failed to reply: {e}");
+                        println!("Failed to reply: {e}");
                     }
                 });
             }
             Ok(None) => continue,
             Err(e) => {
-                error!("Fatal error: {e}");
+                println!("Fatal error: {e}");
                 break;
             }
         }
     }
-    trace!("Closing {name}");
     Ok(())
 }
 
 /// Receive and Respond to Notify Requests.
 fn main() -> Result<()> {
-    notify::init()?;
     let cli = Cli::parse();
 
     user::set(Mode::Real)?;
@@ -462,7 +471,7 @@ fn main() -> Result<()> {
     // We dispatch requests to a thread pool for performance.
     rayon::ThreadPoolBuilder::new().build_global()?;
 
-    info!(
+    println!(
         "SECCOMP Monitor Started! ({} at {} using {})",
         cli.profile, cli.instance, cli.mode
     );
@@ -484,15 +493,18 @@ fn main() -> Result<()> {
             .or_insert_with(|| Arc::new(DashMap::new()))
             .clone();
 
-        info!("Spawning audit reader");
+        println!("Spawning audit reader");
         let audit_term = term.clone();
-        threads.push(thread::spawn(move || audit_reader(audit_term, audit)));
+        let profile_clone = cli.profile.clone();
+        threads.push(thread::spawn(move || {
+            audit_reader(profile_clone, audit_term, audit)
+        }));
     }
 
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
             Ok(Some((fd, name))) => {
-                info!("New connection established with {name}!");
+                println!("New connection established with {name}!");
 
                 let term_clone = term.clone();
                 let profile = stats
@@ -513,27 +525,25 @@ fn main() -> Result<()> {
             }
             Ok(None) | Err(syscalls::Error::Errno(Errno::EINTR)) => continue,
             Err(e) => {
-                error!("Failed to received fd: {e}");
+                println!("Failed to received fd: {e}");
                 break;
             }
         }
     }
 
-    debug!("Waiting for threads to cleanup");
     for thread in threads {
         if thread.join().is_err() {
-            error!("Failed to join worker thread!");
+            println!("Failed to join worker thread!");
         }
     }
 
     user::set(Mode::Effective)?;
-    info!("Storing syscall data.");
 
     // Once we're done, move to Effective to save the information.
     if !stats.is_empty()
-        && let Some(pool) = syscalls::DB_POOL.as_ref()
+        && let Ok(mut conn) = syscalls::get_connection()
     {
-        let mut conn = pool.get()?;
+        println!("Storing syscall data.");
         let tx = conn.transaction()?;
 
         // Make sure the binary is either in the profile's persist home, or
@@ -564,6 +574,10 @@ fn main() -> Result<()> {
                     let binary = entry.key().clone();
                     let syscalls = entry.value_mut();
 
+                    if syscalls.is_empty() {
+                        return None;
+                    }
+
                     match binary_exist(&binary) {
                         Ok(true) => {
                             println!(
@@ -575,7 +589,7 @@ fn main() -> Result<()> {
 
                             // Insert into DB using the transaction
                             if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
-                                warn!("DB insert failed for {binary}: {e}");
+                                println!("DB insert failed for {binary}: {e}");
                                 return None;
                             }
 
@@ -586,7 +600,7 @@ fn main() -> Result<()> {
                             }
                         }
                         _ => {
-                            info!("Ignoring ephemeral binary {binary}");
+                            println!("Ignoring ephemeral binary {binary}");
                             None
                         }
                     }
@@ -594,8 +608,8 @@ fn main() -> Result<()> {
                 .collect();
 
             if name != "audit" && !binaries.is_empty() {
-                debug!("Updating {name}");
-                update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
+                println!("Updating {name}");
+                update_profile(&tx, &name, binaries.iter()).with_context(|| "Updating profile")?;
             }
         }
 
@@ -603,6 +617,5 @@ fn main() -> Result<()> {
         conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
             .with_context(|| "Flushing WAL")?;
     }
-    info!("Finished: {}", cli.instance);
     Ok(())
 }

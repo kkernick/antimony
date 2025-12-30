@@ -32,7 +32,6 @@ pub fn run(
     info: &Path,
     id: &str,
     dry: bool,
-    refresh: bool,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let cache = CACHE_DIR.join(".proxy");
@@ -105,7 +104,7 @@ pub fn run(
     if !dry && let Some(policy) = profile.lock().seccomp {
         timer!("::seccomp", {
             if let Some(handle) =
-                syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, refresh, &proxy)?
+                syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, &proxy)?
             {
                 proxy.associate(handle);
             }
@@ -307,7 +306,6 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
                 &info,
                 id,
                 args.args.dry,
-                args.args.refresh,
             )
         )?;
         arguments.extend(

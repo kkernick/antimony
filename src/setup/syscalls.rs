@@ -14,10 +14,9 @@ pub fn install_filter(
     instance: &str,
     policy: SeccompPolicy,
     binaries: Option<BTreeSet<String>>,
-    refresh: bool,
     handle: &Spawner,
 ) -> Result<Option<Handle>> {
-    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, &binaries, refresh)? {
+    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, &binaries)? {
         handle.seccomp_i(filter);
 
         if let Some(fd) = fd {
@@ -26,12 +25,13 @@ pub fn install_filter(
 
         if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
             debug!("Spawning SECCOMP Monitor");
-            let handle = Spawner::abs(
+            let mut handle = Spawner::abs(
                 AT_HOME
                     .join("utilities")
                     .join("antimony-monitor")
                     .to_string_lossy(),
             )
+            .name("monitor")
             .args([
                 "--instance",
                 instance,
@@ -42,9 +42,14 @@ pub fn install_filter(
             ])?
             .env("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
             .env("XDG_RUNTIME_DIR", RUNTIME_DIR.to_string_lossy())?
+            .output(spawn::StreamMode::Log(log::Level::Info))
             .mode(user::Mode::Existing);
+
             if audit {
                 handle.arg_i("--audit")?;
+            }
+            if log::log_enabled!(log::Level::Info) {
+                handle.pass_env_i("RUST_LOG")?
             }
             return Ok(Some(handle.spawn()?));
         }
@@ -74,7 +79,6 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<Handle>> {
                     args.instance.name(),
                     policy,
                     binaries,
-                    args.args.refresh,
                     &args.handle,
                 );
             }
