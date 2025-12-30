@@ -44,14 +44,17 @@ impl super::Run for Args {
                 if dest.exists()
                     && !self.overwrite
                     && !Confirm::new()
-                        .with_prompt(format!("Profile {dest:?} already exists. Overwrite?"))
+                        .with_prompt(format!(
+                            "Profile {} already exists. Overwrite?",
+                            dest.display()
+                        ))
                         .interact()?
                 {
                     return Ok(());
                 }
                 fs::copy(src, dest)?;
             } else {
-                warn!("Invalid profile: {profile:?}");
+                warn!("Invalid profile: {}", profile.display());
             }
             Ok(())
         };

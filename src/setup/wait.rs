@@ -27,7 +27,7 @@ pub fn setup(
                 for event in events {
                     if watches.contains(&event.wd) {
                         if let Some(path) = event.name {
-                            debug!("Finished Notify Event: {path:?}");
+                            debug!("Finished Notify Event: {}", path.display());
                         }
                         watches.remove(&event.wd);
                     }

@@ -9,7 +9,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use user::as_real;
+use user::{Mode, as_effective, as_real};
 
 use crate::shared::env::EDITOR;
 
@@ -108,7 +108,12 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
     let temp = as_real!(Result<_, Error>, {
-        let temp = temp::Builder::new().create::<temp::File>().map_err(|e| Error::Io("open temporary file", e))?;
+        let temp = temp::Builder::new()
+            .owner(Mode::Real)
+            .extension("toml")
+            .create::<temp::File>()
+            .map_err(|e| Error::Io("open temporary file", e))?;
+
         fs::copy(path, temp.full()).map_err(|e| Error::Io("write temporary file", e))?;
         Ok(temp)
     })??;
@@ -159,12 +164,15 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         }
     };
 
-    write!(
-        File::create(path).map_err(|e| Error::Io("write", e))?,
-        "{}",
-        toml::to_string(&buffer)?
-    )
-    .map_err(|e| Error::Io("write", e))?;
+    as_effective!(Result<(), Error>, {
+        write!(
+            File::create(path).map_err(|e| Error::Io("truncate file", e))?,
+            "{}",
+            toml::to_string(&buffer)?
+        )
+        .map_err(|e| Error::Io("write file", e))?;
+        Ok(())
+    })??;
 
     Ok(Some(()))
 }

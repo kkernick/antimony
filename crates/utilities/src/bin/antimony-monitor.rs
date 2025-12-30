@@ -8,6 +8,7 @@
 use antimony::shared::{
     Set,
     env::{DATA_HOME, RUNTIME_DIR},
+    format_iter,
     profile::SeccompPolicy,
     syscalls::{self, CACHE_DIR, receive_fd},
 };
@@ -458,31 +459,11 @@ fn main() -> Result<()> {
         .join(format!("monitor-{}", cli.profile));
     let listener = UnixListener::bind(&monitor_path)?;
 
-    #[cfg(debug_assertions)]
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(10));
-            let deadlocks = parking_lot::deadlock::check_deadlock();
-            if deadlocks.is_empty() {
-                continue;
-            }
-
-            println!("{} deadlocks detected", deadlocks.len());
-            for (i, threads) in deadlocks.iter().enumerate() {
-                println!("Deadlock #{}", i);
-                for t in threads {
-                    println!("Thread Id {:#?}", t.thread_id());
-                    println!("{:#?}", t.backtrace());
-                }
-            }
-        }
-    });
-
     // We dispatch requests to a thread pool for performance.
     rayon::ThreadPoolBuilder::new().build_global()?;
 
     info!(
-        "SECCOMP Monitor Started! ({} at {} using {:?})",
+        "SECCOMP Monitor Started! ({} at {} using {})",
         cli.profile, cli.instance, cli.mode
     );
 
@@ -526,7 +507,7 @@ fn main() -> Result<()> {
                         profile,
                         fd,
                         profile_name.clone(),
-                        AtomicBool::new(cli.mode == SeccompPolicy::Notify),
+                        AtomicBool::new(cli.mode == SeccompPolicy::Notifying),
                     )
                 }));
             }
@@ -585,7 +566,12 @@ fn main() -> Result<()> {
 
                     match binary_exist(&binary) {
                         Ok(true) => {
-                            println!("{}: {} => {:?}", binary, syscalls.len(), syscalls);
+                            println!(
+                                "{}: {} => {}",
+                                binary,
+                                syscalls.len(),
+                                format_iter(syscalls.iter())
+                            );
 
                             // Insert into DB using the transaction
                             if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
@@ -612,7 +598,6 @@ fn main() -> Result<()> {
                 update_profile(&tx, &name, &binaries).with_context(|| "Updating profile")?;
             }
         }
-        println!("========================\n");
 
         tx.commit()?;
         conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")

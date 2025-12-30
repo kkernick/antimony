@@ -526,11 +526,11 @@ _antimony() {
                     return 0
                     ;;
                 --seccomp)
-                    COMPREPLY=($(compgen -W "disabled permissive enforcing notify" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "disabled permissive enforcing notifying" -- "${cur}"))
                     return 0
                     ;;
                 --portals)
-                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser flatpak global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor power-management" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor" -- "${cur}"))
                     return 0
                     ;;
                 --see)

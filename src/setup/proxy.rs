@@ -155,8 +155,8 @@ pub fn run(
                             proxy.arg_i(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"))?;
                         }
                         proxy.args_i([
-                            format!("--call={desktop}=org.freedesktop.portal.{portal:?}.*@{path}"),
-                            format!("--talk=org.freedesktop.portal.{portal:?}"),
+                            format!("--call={desktop}=org.freedesktop.portal.{portal}.*@{path}"),
+                            format!("--talk=org.freedesktop.portal.{portal}"),
                         ])?;
                     }
                 }

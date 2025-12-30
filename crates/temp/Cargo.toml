@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-log = "0.4.29"
+user = { path = "../user", features = ["sync"]}
+
+log = { version = "0.4.29", default-features = false }
 parking_lot = { version = "0.12.5", default-features = false }
 rand = { version = "0.9.2", default-features = false, features = ["std", "small_rng", "os_rng"] }
-user = { path = "../user", features = ["sync"]}

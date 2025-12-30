@@ -3,6 +3,6 @@ description = "Use Antimony-Spawn to permit sandboxes to run other applications 
 namespaces = ["User"]
 
 binaries = [
-  "/usr/bin/antimony-spawn=/usr/bin/flatpak-spawn",
+  "$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn",
   "ldd", "bwrap", "find", "bash"
 ]

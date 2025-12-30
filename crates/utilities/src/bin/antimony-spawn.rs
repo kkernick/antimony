@@ -95,26 +95,6 @@ fn main() -> Result<()> {
         unsafe { env::set_var("USER", "antimony") };
     }
 
-    #[cfg(debug_assertions)]
-    std::thread::spawn(move || {
-        loop {
-            std::thread::sleep(std::time::Duration::from_secs(10));
-            let deadlocks = parking_lot::deadlock::check_deadlock();
-            if deadlocks.is_empty() {
-                continue;
-            }
-
-            println!("{} deadlocks detected", deadlocks.len());
-            for (i, threads) in deadlocks.iter().enumerate() {
-                println!("Deadlock #{}", i);
-                for t in threads {
-                    println!("Thread Id {:#?}", t.thread_id());
-                    println!("{:#?}", t.backtrace());
-                }
-            }
-        }
-    });
-
     rayon::ThreadPoolBuilder::new().build_global()?;
     let cli = Cli::parse();
 

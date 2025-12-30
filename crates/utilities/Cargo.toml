@@ -1,0 +1,28 @@
+[package]
+name = "utilities"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+antimony = { path = "../../" }
+notify = { path = "../notify" }
+seccomp = { path = "../seccomp" }
+spawn = { path = "../spawn", features = ["elevate"] }
+temp = { path = "../temp" }
+user = { path = "../user" }
+
+ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
+anyhow = {version = "1.0.100", default-features = false}
+clap = { version = "4.5.39", features = ["derive", "help", "usage", "std"], default-features = false }
+clap_complete = { version = "4.5.63", default-features = false}
+dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }
+dbus = { version = "0.9.10", features = ["stdfd"] }
+dialoguer = { version = "0.12.0", default-features = false }
+Inflector = { version = "0.11.4", default-features = false }
+inotify = { version = "0.11.0", default-features = false }
+log = { version = "0.4.27", default-features = false }
+nix = { version = "0.30.1", default-features = false }
+parking_lot = { version = "0.12.5", default-features = false }
+rayon = { version = "1.10.0", default-features = false }
+rusqlite = { version = "0.37.0", default-features = false }
+signal-hook = { version = "0.3.18", default-features = false}

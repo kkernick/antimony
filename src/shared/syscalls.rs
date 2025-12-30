@@ -466,7 +466,7 @@ pub fn new(
         "::get_calls",
         get_calls(name, binaries, refresh).unwrap_or_default()
     ) {
-        let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
+        let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
             let mut filter = Filter::new(Action::Notify)?;
             filter.set_notifier(Notifier::new(
                 user_dir(instance).join(format!("monitor-{name}")),

@@ -1,4 +1,6 @@
+
 use antimony::shared::{
+    env::AT_HOME,
     path::user_dir,
     syscalls::{self, Notifier},
 };
@@ -201,10 +203,15 @@ pub fn runner(args: RunArgs) -> Result<()> {
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-    let _handle = Spawner::abs("/usr/bin/antimony-dumper")
-        .args(["attach", &sock_str])?
-        .preserve_env(true)
-        .spawn()?;
+    let _handle = Spawner::abs(
+        AT_HOME
+            .join("utilities")
+            .join("antimony-dumper")
+            .to_string_lossy(),
+    )
+    .args(["attach", &sock_str])?
+    .preserve_env(true)
+    .spawn()?;
 
     let mut buffer = [0; 1024];
     let _ = inotify.read_events_blocking(&mut buffer)?;

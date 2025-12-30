@@ -5,7 +5,6 @@ use std::{
     borrow::Cow,
     io::{Write, stdout},
     sync::LazyLock,
-    thread,
     time::Duration,
 };
 
@@ -204,10 +203,9 @@ impl log::Log for NotifyLogger {
         let mut out = stdout();
         let mut msg = String::new();
         msg.push_str(&format!(
-            "[{} {} {:?}] {}",
+            "[{} {}] {}",
             Self::level_color(record.level()),
             style(record.target()).bold().italic(),
-            thread::current().id(),
             record.args()
         ));
 

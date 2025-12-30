@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ahash = { version = "0.8.12", features = ["compile-time-rng", "std"], default-features = false }
-dashmap = "6.1.0"
-rayon = "1.11.0"
+ahash = { version = "0.8.12", features = ["no-rng"], default-features = false }
+dashmap = { version = "6.1.0", default-features = false }
+rayon = { version = "1.11.0", default-features = false }

@@ -1,7 +1,7 @@
 name = "xdg-open"
 description = "Allow the program to open files in the default application."
 
-binaries = ["/usr/bin/antimony-open=/usr/bin/xdg-open"]
+binaries = ["$AT_HOME/utilities/antimony-open=/usr/bin/xdg-open"]
 
 [ipc]
 portals = ["OpenURI"]

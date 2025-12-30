@@ -6,7 +6,9 @@ use crate::{
     },
     shared::{
         Set,
+        env::AT_HOME,
         path::direct_path,
+        format_iter,
         profile::{FileMode, Profile},
     },
     timer,
@@ -295,16 +297,21 @@ fn parse(
                     .into_iter()
                     .any(|shell| header.contains(shell))
                 {
-                    let out = Spawner::abs("/usr/bin/antimony-dumper")
-                        .args(["run", "--path", &resolved, "--instance", instance])?
-                        .output(StreamMode::Pipe)
-                        .preserve_env(true)
-                        .mode(user::Mode::Real)
-                        .spawn()?
-                        .output_all()?;
+                    let out = Spawner::abs(
+                        AT_HOME
+                            .join("utilities")
+                            .join("antimony-dumper")
+                            .to_string_lossy(),
+                    )
+                    .args(["run", "--path", &resolved, "--instance", instance])?
+                    .output(StreamMode::Pipe)
+                    .preserve_env(true)
+                    .mode(user::Mode::Real)
+                    .spawn()?
+                    .output_all()?;
 
                     let out = out.lines().map(String::from);
-                    trace!("{resolved} => {binaries:?}");
+                    trace!("{resolved} => {}", format_iter(binaries.iter()));
                     binaries.extend(out);
                 }
 
@@ -364,7 +371,7 @@ fn handle_localize(
                     handle_localize(&ldst, instance, home, false, parsed, done.clone(), cache)?;
                     parsed.lock().symlinks.insert(dst, ldst);
                 }
-                e => warn!("Excluding localization of type {e:?} for {file}"),
+                _ => warn!("Excluding localization for {file}"),
             }
         }
         Ok(())
@@ -611,7 +618,6 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
 
     ])?;
 
-    debug!("Handing off binaries: {elf_binaries:?}");
     info.profile.lock().binaries = Some(
         Arc::into_inner(elf_binaries)
             .expect("Failed to get elf binaries")

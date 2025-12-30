@@ -334,7 +334,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         } else if let Some(log) = log
             && args.log
         {
-            log::info!("Log is available at {log:?}")
+            log::info!("Log is available at {}", log.display())
         }
 
         if let Some(mut hooks) = info.profile.hooks.take()
@@ -342,7 +342,6 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         {
             debug!("Executing post-hooks");
             for hook in post {
-                debug!("Processing post-hook: {hook:?}");
                 hook.process(
                     None,
                     &info.name,

@@ -2,7 +2,7 @@ name = "mpris"
 description = "Give access to the MPRIS bus for Media Control"
 
 [ipc]
-portals = ["PowerManagement"]
+talk = ["org.freedesktop.PowerManagement.*"]
 own = [
   "org.mpris.MediaPlayer2.{name}.*",
   "org.mpris.MediaPlayer2.{desktop}.*",

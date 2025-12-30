@@ -8,6 +8,16 @@ pub mod syscalls;
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 
+pub fn format_iter<T, V>(iter: T) -> String
+where
+    T: Iterator<Item = V>,
+    V: Display,
+{
+    let mut ret = String::new();
+    iter.for_each(|f| ret.push_str(&format!("{f} ")));
+    ret
+}
+
 #[macro_export]
 macro_rules! timer {
     ($name:literal, $body:block) => {{
@@ -37,4 +47,6 @@ macro_rules! timer {
         $expr
     }};
 }
+use std::fmt::Display;
+
 pub use timer;

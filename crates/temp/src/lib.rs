@@ -156,6 +156,7 @@ unsafe impl Sync for Temp {}
 pub struct Builder {
     name: Option<String>,
     path: Option<PathBuf>,
+    extension: Option<String>,
     mode: Option<user::Mode>,
 }
 impl Builder {
@@ -178,10 +179,19 @@ impl Builder {
         self
     }
 
+    pub fn extension(mut self, extension: impl Into<String>) -> Self {
+        self.extension = Some(extension.into());
+        self
+    }
+
     pub fn create<T: BuilderCreate + Object + 'static>(self) -> Result<Temp, std::io::Error> {
         let parent = self.path.unwrap_or(temp_dir());
-        let name = self.name.unwrap_or(unique(&parent));
+        let mut name = self.name.unwrap_or(unique(&parent));
         let mode = self.mode.unwrap_or(user::current()?);
+
+        if let Some(extension) = &self.extension {
+            name.push_str(&format!(".{extension}"));
+        }
 
         let object = T::new(parent, name);
         user::run_as!(mode, object.create())??;

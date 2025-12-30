@@ -1,9 +1,0 @@
-[package]
-name = "antimony_completions"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-antimony = { path = "../../" }
-clap = { version = "4.5.41", features = ["derive"] }
-clap_complete = "4.5.55"

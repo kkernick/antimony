@@ -1,3 +1,5 @@
+cargo-features = ["profile-rustflags"]
+
 [package]
 name = "antimony"
 version = "3.0.0"
@@ -9,38 +11,44 @@ members = [
     "crates/seccomp",
     "crates/spawn",
     "crates/user",
-    "crates/antimony_completions",
-    "crates/antimony_utils",
-    "crates/notify", "crates/which", "crates/temp",
+    "crates/notify",
+    "crates/which",
+    "crates/temp",
+    "crates/utilities",
 ]
 
+[[bin]]
+name = "antimony"
+path = "src/antimony.rs"
+
 [dependencies]
-user = { path = "crates/user" }
-temp = { path = "crates/temp" }
+notify = { path = "crates/notify" }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
 spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
-notify = { path = "crates/notify" }
+temp = { path = "crates/temp" }
+user = { path = "crates/user" }
 which = { path = "crates/which" }
-anyhow = { version = "1.0.98", features = ["std"] }
+
+ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
+anyhow = { version = "1.0.98", features = ["std"], default-features = false }
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std"], default-features = false }
-dashmap = { version = "6.1.0", features = ["rayon"] }
-inotify = { version = "0.11.0", default-features = false }
-log = "0.4.27"
-nix = { version = "0.30.1", features = ["fs", "poll", "process", "signal", "user", "socket", "uio"] }
-rayon = "1.10.0"
-serde = { version = "1.0.219", features = ["derive"] }
-toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
-indicatif = { version = "0.18.0", features = ["improved_unicode", "rayon"] }
-signal-hook = "0.3.18"
-console = "0.16.0"
-Inflector = { version = "0.11.4", default-features = false }
-rusqlite = "0.37.0"
-r2d2_sqlite = "0.31.0"
-r2d2 = "0.8.10"
+console = { version = "0.16.0", default-features = false }
+dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }
+dbus = { version = "0.9.10", features = ["stdfd"], default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
-dbus = { version = "0.9.10", features = ["stdfd"] }
-ahash = { version = "0.8.12", default-features = false, features = ["compile-time-rng", "std"] }
-parking_lot = { version = "0.12.5", features = ["deadlock_detection"] }
+indicatif = { version = "0.18.0", default-features = false }
+Inflector = { version = "0.11.4", default-features = false }
+inotify = { version = "0.11.0", default-features = false }
+log = { version = "0.4.27", default-features = false }
+nix = { version = "0.30.1", features = ["poll", "socket", "uio"], default-features = false }
+parking_lot = { version = "0.12.5", default-features = false }
+rayon = { version = "1.10.0", default-features = false }
+rusqlite = { version = "0.37.0", default-features = false }
+r2d2 = { version = "0.8.10", default-features = false }
+r2d2_sqlite = { version = "0.31.0", default-features = false }
+serde = { version = "1.0.219", features = ["derive"], default-features = false }
+signal-hook = { version = "0.3.18", default-features = false }
+toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
 
 [dev-dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
@@ -49,11 +57,15 @@ anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
 debug = false
 
 [profile.release]
+rustflags = [
+  "-Z", "location-detail=none",
+]
+
 opt-level = 3
 codegen-units = 1
 lto = "fat"
 panic = "abort"
-strip = "symbols"
+strip = true
 
 [profile.gdb]
 inherits = "dev"

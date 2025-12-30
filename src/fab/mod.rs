@@ -8,7 +8,11 @@ pub mod ns;
 
 use crate::{
     fab::bin::ELF_MAGIC,
-    shared::{Set, env::HOME, profile::Profile},
+    shared::{
+        Set,
+        env::{AT_HOME, HOME},
+        profile::Profile,
+    },
     timer,
 };
 use anyhow::Result;
@@ -237,6 +241,7 @@ pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
                 if !var_name.is_empty() {
                     let val = match var_name.as_str() {
                         "UID" => format!("{}", user::USER.real),
+                        "AT_HOME" => format!("{}", AT_HOME.display()),
                         name => env::var(name).unwrap_or_else(|_| format!("${name}")),
                     };
                     resolved.push_str(&val);

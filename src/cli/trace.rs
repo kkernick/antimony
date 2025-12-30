@@ -257,7 +257,7 @@ pub fn trace(info: crate::setup::Info, mut args: Args) -> Result<()> {
                 if !features.is_empty() {
                     writeln!(out, "{file} can be provided with the following features")?;
                     for (feature, path, mode) in features {
-                        println!("\t- {feature} (via {path}) as {mode:?}");
+                        println!("\t- {feature} (via {path}) as {mode}");
                     }
                 } else {
                     writeln!(out, "{file}")?;

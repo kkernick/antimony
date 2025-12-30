@@ -108,8 +108,8 @@ impl super::Run for Args {
                             None => getcwd()?.join("syscalls.db"),
                         };
 
-                        as_real!({io::copy(&mut File::open(db)?, &mut File::create(&dest)?)})??;
-                        println!("Exported to {dest:?}");
+                        as_real!({ io::copy(&mut File::open(db)?, &mut File::create(&dest)?) })??;
+                        println!("Exported to {}", dest.display());
                     }
                     Ok(())
                 }

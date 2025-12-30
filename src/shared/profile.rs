@@ -6,6 +6,7 @@ use crate::{
     shared::{
         Set, edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
+        format_iter,
     },
 };
 use ahash::{HashSetExt, RandomState};
@@ -85,7 +86,8 @@ impl fmt::Display for Error {
             Self::CommandLine(arg, value, valid) => {
                 write!(
                     f,
-                    "Unrecognized value for {arg}: {value}. Expected one of {valid:?}"
+                    "Unrecognized value for {arg}: {value}. Expected one of {}",
+                    format_iter(valid.iter())
                 )
             }
         }
@@ -663,7 +665,7 @@ impl Profile {
             if inherits.is_empty() {
                 print!("(No default)");
             } else {
-                print!("(Inherits: {inherits:?})");
+                print!("(Inherits: {})", format_iter(inherits.iter()));
             }
         };
         println!();
@@ -674,11 +676,11 @@ impl Profile {
             }
 
             if let Some(features) = &self.features {
-                println!("\t- Required Features: {features:?}");
+                println!("\t- Required Features: {}", format_iter(features.iter()));
             }
 
             if let Some(conflicts) = &self.conflicts {
-                println!("\t- Conflicting Features: {conflicts:?}");
+                println!("\t- Conflicting Features: {}", format_iter(conflicts.iter()));
             }
 
             if let Some(home) = &self.home {
@@ -691,7 +693,7 @@ impl Profile {
                 match self.seccomp.unwrap_or_default() {
                     SeccompPolicy::Permissive => style("Permissive").yellow(),
                     SeccompPolicy::Enforcing => style("Enforcing").green(),
-                    SeccompPolicy::Notify => style("Notify").blue(),
+                    SeccompPolicy::Notifying => style("Notify").blue(),
                     SeccompPolicy::Disabled => style("Disabled").red(),
                 }
             );
@@ -705,7 +707,7 @@ impl Profile {
             }
 
             if let Some(binaries) = &self.binaries {
-                println!("\t- Binaries: {binaries:?}");
+                println!("\t- Binaries: {}", format_iter(binaries.iter()));
             }
 
             if let Some(libraries) = &self.libraries {
@@ -720,14 +722,7 @@ impl Profile {
             }
 
             if let Some(namespaces) = &self.namespaces {
-                println!(
-                    "\t- Namespaces: {}",
-                    namespaces
-                        .iter()
-                        .map(|e| format!("{e:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
+                println!("\t- Namespaces: {}", format_iter(namespaces.iter()));
             }
 
             if let Some(envs) = &self.environment {
@@ -982,7 +977,17 @@ pub enum SeccompPolicy {
     Enforcing,
 
     /// The policy is enforced: unrecognized syscalls are presented to the user for decision.
-    Notify,
+    Notifying,
+}
+impl std::fmt::Display for SeccompPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Disabled => write!(f, "Disabled"),
+            Self::Permissive => write!(f, "Permissive"),
+            Self::Enforcing => write!(f, "Enforcing"),
+            Self::Notifying => write!(f, "Notifying"),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Default)]
@@ -1217,7 +1222,7 @@ impl Files {
                 }
             }
             if !files.is_empty() {
-                println!("\t- {mode:?} Files:");
+                println!("\t- {mode} Files:");
                 files.into_iter().for_each(|file| println!("{file}"))
             }
         }
@@ -1284,6 +1289,15 @@ impl FileMode {
             Self::ReadOnly => "444",
             Self::ReadWrite => "666",
             Self::Executable => "555",
+        }
+    }
+}
+impl std::fmt::Display for FileMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ReadOnly => write!(f, "ro"),
+            Self::ReadWrite => write!(f, "rw"),
+            Self::Executable => write!(f, "rx"),
         }
     }
 }
@@ -1379,26 +1393,19 @@ impl Ipc {
     pub fn info(&self) {
         println!("\t- IPC mediated via xdg-dbus-proxy");
         if !self.portals.is_empty() {
-            println!(
-                "\t\t- Portals: {}",
-                self.portals
-                    .iter()
-                    .map(|e| format!("{e:?}"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
+            println!("\t\t- Portals: {}", format_iter(self.portals.iter()));
         }
         if !self.talk.is_empty() {
-            println!("\t\t- Talk: {:?}", self.talk);
+            println!("\t\t- Talk: {}", format_iter(self.talk.iter()));
         }
         if !self.see.is_empty() {
-            println!("\t\t- Visible: {:?}", self.see);
+            println!("\t\t- Visible: {}", format_iter(self.see.iter()));
         }
         if !self.own.is_empty() {
-            println!("\t\t- Owns: {:?}", self.own);
+            println!("\t\t- Owns: {}", format_iter(self.own.iter()));
         }
         if !self.call.is_empty() {
-            println!("\t\t- Calls via: {:?}", self.call);
+            println!("\t\t- Calls via: {}", format_iter(self.call.iter()));
         }
     }
 }
@@ -1415,7 +1422,6 @@ pub enum Portal {
     Clipboard,
     Documents,
     FileChooser,
-    Flatpak,
     GlobalShortcuts,
     Inhibit,
     Location,
@@ -1428,7 +1434,29 @@ pub enum Portal {
     Settings,
     Secret,
     NetworkMonitor,
-    PowerManagement,
+}
+impl std::fmt::Display for Portal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Portal::Background => write!(f, "Background"),
+            Portal::Camera => write!(f, "Camera"),
+            Portal::Clipboard => write!(f, "Clipboard"),
+            Portal::Documents => write!(f, "Documents"),
+            Portal::FileChooser => write!(f, "FileChooser"),
+            Portal::GlobalShortcuts => write!(f, "GlobalShortcuts"),
+            Portal::Inhibit => write!(f, "Inhibit"),
+            Portal::Location => write!(f, "Location"),
+            Portal::Notifications => write!(f, "Notifications"),
+            Portal::OpenURI => write!(f, "OpenURI"),
+            Portal::ProxyResolver => write!(f, "ProxyResolver"),
+            Portal::Realtime => write!(f, "Realtime"),
+            Portal::ScreenCast => write!(f, "ScreenCast"),
+            Portal::Screenshot => write!(f, "Screenshot"),
+            Portal::Settings => write!(f, "Settings"),
+            Portal::Secret => write!(f, "Secret"),
+            Portal::NetworkMonitor => write!(f, "NetworkMonitor"),
+        }
+    }
 }
 
 /// Namespaces. By default, none are shared. You will likely not need to use these
@@ -1451,6 +1479,19 @@ pub enum Namespace {
 
     Uts,
     CGroup,
+}
+impl std::fmt::Display for Namespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Namespace::All => write!(f, "All"),
+            Namespace::User => write!(f, "User"),
+            Namespace::Ipc => write!(f, "Ipc"),
+            Namespace::Pid => write!(f, "Pid"),
+            Namespace::Net => write!(f, "Net"),
+            Namespace::Uts => write!(f, "Uts"),
+            Namespace::CGroup => write!(f, "Cgroup"),
+        }
+    }
 }
 
 #[cfg(test)]

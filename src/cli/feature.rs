@@ -61,7 +61,7 @@ impl super::Run for Args {
                     .with_prompt(format!("Are you sure you want to delete {}?", self.feature))
                     .interact()?;
                 if confirm {
-                    println!("Deleting {feature:?}");
+                    println!("Deleting {}", feature.display());
                     fs::remove_file(&feature)?;
                 }
                 return Ok(());

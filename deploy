@@ -6,31 +6,37 @@ if [[ -z $RECIPE ]]; then
   RECIPE="release"
 fi
 
+TARGET="x86_64-unknown-linux-gnu"
+
 if [[ "${RECIPE}" == "pgo" ]]; then
   ./pgo
-  RECIPE="x86_64-unknown-linux-gnu/release"
+  RECIPE="release"
 elif [[ "${RECIPE}" == "bolt" ]]; then
   ./bolt
-  RECIPE="x86_64-unknown-linux-gnu/release"
+  RECIPE="release"
   SUFFIX="-bolt-optimized"
 else
-  RUSTFLAGS="-C target-cpu=native" cargo build --profile $RECIPE --workspace
+  RUSTFLAGS="-Ctarget-cpu=native" cargo build \
+    --profile $RECIPE \
+    --workspace \
+    --target $TARGET \
+    -Z build-std=std,panic_abort
+
   if [[ "${RECIPE}" == "dev" ]]; then
       RECIPE="debug"
   fi
 fi
 
-sudo rm -v /usr/bin/antimony*
-
 echo "Copying binaries"
-sudo cp -v "target/$RECIPE/antimony${SUFFIX}" "/usr/bin/antimony"
-sudo cp -v "target/$RECIPE/antimony-spawn${SUFFIX}" "/usr/bin/antimony-spawn"
-sudo cp -v "target/$RECIPE/antimony-monitor${SUFFIX}" "/usr/bin/antimony-monitor"
-sudo cp -v "target/$RECIPE/antimony-dumper${SUFFIX}" "/usr/bin/antimony-dumper"
-sudo cp -v "target/$RECIPE/antimony-open${SUFFIX}" "/usr/bin/antimony-open"
+if [[ ! -d /usr/share/antimony/utilities ]]; then
+  sudo mkdir -p /usr/share/antimony/utilities
+fi
 
-sudo setcap cap_audit_read+ep /usr/bin/antimony-monitor
-sudo setcap cap_sys_ptrace+ep /usr/bin/antimony-dumper
+sudo cp --remove-destination -v "target/$TARGET/$RECIPE/antimony${SUFFIX}" "/usr/bin/antimony"
+sudo cp --remove-destination -v "target/$TARGET/$RECIPE/antimony-spawn${SUFFIX}" "/usr/share/antimony/utilities/antimony-spawn"
+sudo cp --remove-destination -v "target/$TARGET/$RECIPE/antimony-monitor${SUFFIX}" "/usr/share/antimony/utilities/antimony-monitor"
+sudo cp --remove-destination -v "target/$TARGET/$RECIPE/antimony-dumper${SUFFIX}" "/usr/share/antimony/utilities/antimony-dumper"
+sudo cp --remove-destination -v "target/$TARGET/$RECIPE/antimony-open${SUFFIX}" "/usr/share/antimony/utilities/antimony-open"
 
 echo "Setting SetUID"
 exec="/usr/bin/antimony"
@@ -42,24 +48,20 @@ sudo setcap cap_fowner+ep /usr/bin/antimony
 echo "Removing old config"
 sudo rm -fr /usr/share/antimony/{features,profiles}
 
-if [[ ! -d /usr/share/antimony ]]; then
-  sudo mkdir /usr/share/antimony
-fi
-
-echo "Setting up HOME"
-sudo chown antimony:antimony /usr/share/antimony
-sudo cp -r config/features /usr/share/antimony
-sudo cp -r config/profiles /usr/share/antimony
-
 echo "Setting up config"
 if [[ ! -d /usr/share/antimony/config ]]; then
   sudo mkdir /usr/share/antimony/config
 fi
+
+sudo cp -r config/features /usr/share/antimony
+sudo cp -r config/profiles /usr/share/antimony
 
 sudo cp config/default.toml /usr/share/antimony/config
 sudo cp config/feature.toml /usr/share/antimony/config
 sudo cp config/new.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
+sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
+sudo setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
 
-./deploy-completions $RECIPE
+./deploy-completions "${TARGET}/${RECIPE}"

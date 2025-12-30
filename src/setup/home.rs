@@ -10,7 +10,7 @@ use user::as_real;
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
     if let Some(home) = &args.profile.lock().home.take() {
         let home_dir = home.path(&args.name);
-        debug!("Home directory at {home_dir:?}");
+        debug!("Home directory at {}", home_dir.display());
 
         // If we explicitly disable the lock, unlock the home.
         if let Some(lock) = home.lock
@@ -43,7 +43,6 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             HomePolicy::None => Ok(None),
             policy => {
                 let home_str = home_dir.to_string_lossy();
-                debug!("Setting up home at {home_dir:?}");
                 if !home_dir.exists() {
                     as_real!(fs::create_dir_all(&home_dir))??;
                 }

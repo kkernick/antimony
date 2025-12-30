@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-Inflector = { version = "0.11.4", default-features = false }
-console = { version = "0.16.2", default-features = false, features = ["std"] }
-log = "0.4.29"
 spawn = { path = "../spawn", features = ["user"]}
 user = {path = "../user"}
+
+console = { version = "0.16.2", default-features = false, features = ["std"] }
+Inflector = { version = "0.11.4", default-features = false }
+log = { version = "0.4.29", default-features = false }

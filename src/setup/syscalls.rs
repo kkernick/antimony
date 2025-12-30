@@ -1,7 +1,7 @@
 use std::{collections::BTreeSet, sync::Arc};
 
 use crate::shared::{
-    env::{DATA_HOME, RUNTIME_DIR},
+    env::{AT_HOME, DATA_HOME, RUNTIME_DIR},
     profile::SeccompPolicy,
     syscalls,
 };
@@ -24,20 +24,25 @@ pub fn install_filter(
             handle.fd_arg_i("--seccomp", fd)?;
         }
 
-        if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notify {
+        if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
             debug!("Spawning SECCOMP Monitor");
-            let handle = Spawner::abs("/usr/bin/antimony-monitor")
-                .args([
-                    "--instance",
-                    instance,
-                    "--profile",
-                    name,
-                    "--mode",
-                    &format!("{policy:?}").to_lowercase(),
-                ])?
-                .env("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
-                .env("XDG_RUNTIME_DIR", RUNTIME_DIR.to_string_lossy())?
-                .mode(user::Mode::Existing);
+            let handle = Spawner::abs(
+                AT_HOME
+                    .join("utilities")
+                    .join("antimony-monitor")
+                    .to_string_lossy(),
+            )
+            .args([
+                "--instance",
+                instance,
+                "--profile",
+                name,
+                "--mode",
+                &format!("{policy}").to_lowercase(),
+            ])?
+            .env("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
+            .env("XDG_RUNTIME_DIR", RUNTIME_DIR.to_string_lossy())?
+            .mode(user::Mode::Existing);
             if audit {
                 handle.arg_i("--audit")?;
             }

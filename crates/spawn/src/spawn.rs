@@ -2,7 +2,7 @@
 //! UID/GID, and File Stream handling.
 #![allow(dead_code)]
 
-use crate::{Stream, handle::Handle};
+use crate::{Stream, format_iter, handle::Handle};
 use log::trace;
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
@@ -19,7 +19,6 @@ use std::{
     process::exit,
     str::FromStr,
 };
-use which::which;
 
 #[cfg(feature = "seccomp")]
 use seccomp::filter::Filter;
@@ -703,13 +702,7 @@ impl<'a> Spawner {
         // Launch with pkexec if we're elevated.
         #[cfg(feature = "elevate")]
         if self.elevate {
-            let polkit = CString::new(
-                which("pkexec")
-                    .map_err(|e| Error::Path(e.to_string()))?
-                    .as_bytes(),
-            )
-            .map_err(Error::Null)?;
-
+            let polkit = CString::new("/usr/bin/pkexec".to_string()).map_err(Error::Null)?;
             if cmd_c.is_none() {
                 cmd_c = Some(polkit.clone());
             }
@@ -766,15 +759,12 @@ impl<'a> Spawner {
 
         // Log if desired.
         if log::log_enabled!(log::Level::Trace) {
-            let formatted = args_c
-                .iter()
-                .filter_map(|s| s.to_str().ok())
-                .collect::<Vec<&str>>()
-                .join(" ");
-            if envs.is_empty() {
-                trace!("{formatted:?}");
+            let formatted = format_iter(args_c.iter().map(|e| e.to_string_lossy()));
+            if !envs.is_empty() {
+                let env_formatted = format_iter(envs.iter().map(|e| e.to_string_lossy()));
+                trace!("{env_formatted} {formatted}",);
             } else {
-                trace!("{envs:?} {formatted:?}");
+                trace!("{formatted}");
             }
         }
 
@@ -832,6 +822,7 @@ impl<'a> Spawner {
                     None
                 };
 
+                #[cfg(feature = "user")]
                 let mode = self.mode.unwrap_or(
                     user::current().map_err(|e| Error::Errno(Some(fork), "getresuid", e))?,
                 );

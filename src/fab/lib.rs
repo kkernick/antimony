@@ -135,7 +135,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     if !cache.starts_with(AT_HOME.as_path()) {
         let shared = cache.join("shared");
         if !shared.exists() {
-            debug!("Creating shared directory at {shared:?}");
+            debug!("Creating shared directory at {}", shared.display());
             fs::create_dir(&shared)?;
         }
     }

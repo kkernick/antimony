@@ -4,6 +4,7 @@ use super::profile::{Ipc, Namespace};
 use crate::shared::{
     Set, edit,
     env::{AT_HOME, PWD},
+    format_iter,
     profile::{Files, Hooks},
 };
 use console::style;
@@ -144,11 +145,11 @@ impl Feature {
 
         if verbose > 0 {
             if let Some(requires) = &self.requires {
-                println!("\t- Required Features: {requires:?}");
+                println!("\t- Required Features: {}", format_iter(requires.iter()));
             }
 
             if let Some(conflicts) = &self.conflicts {
-                println!("\t- Conflicting Features: {conflicts:?}");
+                println!("\t- Conflicting Features: {}", format_iter(conflicts.iter()));
             }
 
             if let Some(ipc) = &self.ipc {
@@ -156,14 +157,7 @@ impl Feature {
             }
 
             if let Some(namespaces) = &self.namespaces {
-                println!(
-                    "\t- Namespaces: {}",
-                    namespaces
-                        .iter()
-                        .map(|e| format!("{e:?}"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
+                println!("\t- Namespaces: {}", format_iter(namespaces.iter()));
             }
 
             if let Some(files) = &self.files {
