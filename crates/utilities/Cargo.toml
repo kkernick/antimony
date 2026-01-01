@@ -14,7 +14,7 @@ user = { path = "../user" }
 
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = {version = "1.0.100", default-features = false}
-clap = { version = "4.5.39", features = ["derive", "help", "usage", "std"], default-features = false }
+clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }
 clap_complete = { version = "4.5.63", default-features = false}
 dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }
 dbus = { version = "0.9.10", features = ["stdfd"] }

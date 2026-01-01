@@ -1,7 +1,6 @@
-use std::time::Duration;
-
 use clap::Parser;
 use notify::Error;
+use std::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(name = "Antimony Notify")]

@@ -42,9 +42,8 @@ sudo cp --remove-destination -v "target/$TARGET/$RECIPE/notify${SUFFIX}" "/usr/s
 echo "Setting SetUID"
 exec="/usr/bin/antimony"
 sudo chown antimony:antimony $exec
-sudo chmod ug+s $exec
+sudo chmod u+s $exec
 sudo chmod o+x $exec
-sudo setcap cap_fowner+ep /usr/bin/antimony
 
 echo "Removing old config"
 sudo rm -fr /usr/share/antimony/{features,profiles}

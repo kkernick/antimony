@@ -4,8 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-user = { path = "../user", features = ["sync"]}
-
-log = { version = "0.4.29", default-features = false }
-parking_lot = { version = "0.12.5", default-features = false }
+user = { path = "../user" }
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
