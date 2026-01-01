@@ -1,7 +1,8 @@
 use antimony::shared::{
-    env::AT_HOME,
+    self,
     path::user_dir,
     syscalls::{self, Notifier},
+    utility,
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -199,15 +200,11 @@ pub fn runner(args: RunArgs) -> Result<()> {
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-    let _handle = Spawner::abs(
-        AT_HOME
-            .join("utilities")
-            .join("antimony-dumper")
-            .to_string_lossy(),
-    )
-    .args(["attach", &sock_str])?
-    .preserve_env(true)
-    .spawn()?;
+    let _handle = Spawner::abs(utility("dumper"))
+        .args(["attach", &sock_str])?
+        .preserve_env(true)
+        .new_privileges(true)
+        .spawn()?;
 
     let mut buffer = [0; 1024];
     let _ = inotify.read_events_blocking(&mut buffer)?;
@@ -226,6 +223,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
 
 fn main() -> Result<()> {
     notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
     match Cli::parse().command {
         Command::Run(args) => runner(args)?,
         Command::Attach(args) => collection(args)?,

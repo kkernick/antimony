@@ -1,10 +1,14 @@
-use antimony::cli::{Run, run::as_symlink};
+use antimony::{
+    cli::{Run, run::as_symlink},
+    shared,
+};
 use anyhow::Result;
 use clap::Parser;
 
 fn main() -> Result<()> {
     rayon::ThreadPoolBuilder::new().build_global()?;
     notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
 
     // In most SetUID applications, The effective user is the privileged
     // one (Usually root), but in Antimony its the opposite. The user

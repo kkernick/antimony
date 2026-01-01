@@ -6,15 +6,16 @@ use dbus::{
     channel::MatchingReceiver,
     message::MatchRule,
 };
-use inflector::Inflector;
+use heck::ToTitleCase;
+use log::{Level, Record};
 use nix::errno;
 use parking_lot::{Mutex, ReentrantMutex};
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{Write, stdout},
+    io::{IsTerminal, Write, stdout},
     sync::{
-        Arc, LazyLock,
+        Arc, LazyLock, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -48,7 +49,10 @@ static LOGGER: NotifyLogger = NotifyLogger::new();
 
 static LOCK: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
 
+static NOTIFIER: OnceLock<Box<Notifier>> = OnceLock::new();
+
 type VariantMap<'a> = HashMap<&'a str, Variant<Box<dyn dbus::arg::RefArg>>>;
+type Notifier = dyn Fn(&Record, Level) -> bool + Send + Sync + 'static;
 
 #[derive(Debug)]
 pub enum Error {
@@ -57,6 +61,7 @@ pub enum Error {
     Errno(errno::Errno),
     Connection,
     Init,
+    Set,
 }
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
@@ -76,6 +81,7 @@ impl std::fmt::Display for Error {
             Self::Connection => write!(f, "User Bus connection error"),
             Self::Errno(e) => write!(f, "Failed to switch user mode: {e}"),
             Self::Init => write!(f, "Failed to initialize logger"),
+            Self::Set => write!(f, "Could not set the notifier"),
         }
     }
 }
@@ -116,9 +122,9 @@ impl Urgency {
 impl std::fmt::Display for Urgency {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Urgency::Low => write!(f, "Low"),
-            Urgency::Normal => write!(f, "Normal"),
-            Urgency::Critical => write!(f, "Critical"),
+            Urgency::Low => write!(f, "low"),
+            Urgency::Normal => write!(f, "normal"),
+            Urgency::Critical => write!(f, "critical"),
         }
     }
 }
@@ -241,9 +247,8 @@ pub fn notify(
         Ok(())
     };
 
-    if let Err(e) = result() {
+    if result().is_err() {
         let _lock = LOCK.lock();
-        println!("Failed to prompt normally: {e}. Falling back to console");
         println!("{}", console_msg(&title, &body, urgency))
     }
     Ok(())
@@ -328,9 +333,8 @@ pub fn action(
     };
     match result() {
         Ok(result) => Ok(result),
-        Err(e) => {
+        Err(_) => {
             let _lock = LOCK.lock();
-            println!("Failed to prompt normally: {e}. Falling back to console");
             let response = console_actions(
                 &title,
                 &body,
@@ -349,40 +353,40 @@ pub fn action(
     }
 }
 
+pub fn level_color(level: log::Level) -> StyledObject<&'static str> {
+    match level {
+        log::Level::Error => style("ERROR").red().bold().blink(),
+        log::Level::Warn => style("WARN").yellow().bold(),
+        log::Level::Info => style("INFO").green().bold(),
+        log::Level::Debug => style("DEBUG").blue().bold(),
+        log::Level::Trace => style("TRACE").cyan().bold(),
+    }
+}
+
+pub fn level_name(level: log::Level) -> &'static str {
+    match level {
+        log::Level::Error => "Error",
+        log::Level::Warn => "Warning",
+        log::Level::Info => "Info",
+        log::Level::Debug => "Debug",
+        log::Level::Trace => "Trace",
+    }
+}
+
+pub fn level_urgency(level: log::Level) -> Urgency {
+    match level {
+        log::Level::Error => Urgency::Critical,
+        log::Level::Warn => Urgency::Normal,
+        log::Level::Info => Urgency::Low,
+        log::Level::Debug => Urgency::Low,
+        log::Level::Trace => Urgency::Low,
+    }
+}
+
 struct NotifyLogger {}
 impl NotifyLogger {
     const fn new() -> Self {
         Self {}
-    }
-
-    fn level_color(level: log::Level) -> StyledObject<&'static str> {
-        match level {
-            log::Level::Error => style("ERROR").red().bold().blink(),
-            log::Level::Warn => style("WARN").yellow().bold(),
-            log::Level::Info => style("INFO").green().bold(),
-            log::Level::Debug => style("DEBUG").blue().bold(),
-            log::Level::Trace => style("TRACE").cyan().bold(),
-        }
-    }
-
-    fn level_name(level: log::Level) -> &'static str {
-        match level {
-            log::Level::Error => "Error",
-            log::Level::Warn => "Warning",
-            log::Level::Info => "Info",
-            log::Level::Debug => "Debug",
-            log::Level::Trace => "Trace",
-        }
-    }
-
-    fn level_urgency(level: log::Level) -> Urgency {
-        match level {
-            log::Level::Error => Urgency::Critical,
-            log::Level::Warn => Urgency::Normal,
-            log::Level::Info => Urgency::Low,
-            log::Level::Debug => Urgency::Low,
-            log::Level::Trace => Urgency::Low,
-        }
     }
 }
 impl log::Log for NotifyLogger {
@@ -400,7 +404,7 @@ impl log::Log for NotifyLogger {
         let mut msg = String::new();
         msg.push_str(&format!(
             "[{} {}] {}",
-            Self::level_color(record.level()),
+            level_color(record.level()),
             style(record.target()).bold().italic(),
             record.args()
         ));
@@ -416,13 +420,19 @@ impl log::Log for NotifyLogger {
 
         if let Some(prompt) = *PROMPT_LEVEL
             && level <= prompt
+            && !stdout().is_terminal()
         {
-            let _ = notify(
-                format!("{}: {}", Self::level_name(level), record.target()),
-                format!("{}", record.args()),
-                None,
-                Some(Self::level_urgency(level)),
-            );
+            if let Some(cb) = NOTIFIER.get()
+                && cb(record, record.level())
+            {
+            } else {
+                let _ = notify(
+                    format!("{}: {}", level_name(level), record.target()),
+                    format!("{}", record.args()),
+                    None,
+                    Some(level_urgency(level)),
+                );
+            }
         }
     }
 
@@ -433,6 +443,10 @@ pub fn init() -> Result<(), Error> {
     log::set_logger(&LOGGER).map_err(|_| Error::Init)?;
     log::set_max_level(log::LevelFilter::Trace);
     Ok(())
+}
+
+pub fn set_notifier(function: Box<Notifier>) -> Result<(), Error> {
+    NOTIFIER.set(function).map_err(|_| Error::Set)
 }
 
 #[cfg(test)]

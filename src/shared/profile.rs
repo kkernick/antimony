@@ -680,7 +680,10 @@ impl Profile {
             }
 
             if let Some(conflicts) = &self.conflicts {
-                println!("\t- Conflicting Features: {}", format_iter(conflicts.iter()));
+                println!(
+                    "\t- Conflicting Features: {}",
+                    format_iter(conflicts.iter())
+                );
             }
 
             if let Some(home) = &self.home {
@@ -877,6 +880,10 @@ pub struct Hook {
 
     /// If the Hook can fail. If false, an error will abort the program.
     pub can_fail: Option<bool>,
+
+    /// Allow the hook to obtain new privileges. Needed if the binary/script
+    /// requires privilege antimony does not have.
+    pub new_privileges: Option<bool>,
 }
 impl Hook {
     pub fn process(
@@ -900,6 +907,10 @@ impl Hook {
         handle.mode_i(user::Mode::Real);
         handle.output_i(StreamMode::Log(log::Level::Debug));
         handle.error_i(StreamMode::Log(log::Level::Error));
+
+        if self.new_privileges.unwrap_or(false) {
+            handle.new_privileges_i(true);
+        }
 
         if let Some(args) = self.args {
             handle.args_i(args)?;

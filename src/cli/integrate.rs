@@ -5,7 +5,7 @@ use crate::shared::{
 };
 use anyhow::{Context, Result};
 use clap::ValueEnum;
-use inflector::Inflector;
+use heck::ToTitleCase;
 use log::{debug, info, warn};
 use std::{
     borrow::Cow,

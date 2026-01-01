@@ -8,6 +8,38 @@ pub mod syscalls;
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 
+pub fn utility(util: &str) -> String {
+    AT_HOME
+        .join("utilities")
+        .join(format!("antimony-{util}"))
+        .to_string_lossy()
+        .into_owned()
+}
+
+pub fn logger(record: &Record, level: Level) -> bool {
+    let result = || -> anyhow::Result<()> {
+        let code = Spawner::abs(utility("notify"))
+            .mode(user::Mode::Real)
+            .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+            .args([
+                "--title",
+                &format!("{}: {}", level_name(level), record.target()),
+                "--body",
+                &format!("{}", record.args()),
+                "--urgency",
+                &format!("{}", level_urgency(level)),
+            ])?
+            .spawn()?
+            .wait()?;
+        if code != 0 {
+            Err(anyhow::anyhow!("Failed to notify"))
+        } else {
+            Ok(())
+        }
+    }();
+    result.is_ok()
+}
+
 pub fn format_iter<T, V>(iter: T) -> String
 where
     T: Iterator<Item = V>,
@@ -49,4 +81,9 @@ macro_rules! timer {
 }
 use std::fmt::Display;
 
+use log::{Level, Record};
+use notify::{level_name, level_urgency};
+use spawn::Spawner;
 pub use timer;
+
+use crate::shared::env::AT_HOME;

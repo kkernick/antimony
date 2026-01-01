@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use crate::shared::{env::AT_HOME, profile::SeccompPolicy, syscalls};
+use crate::shared::{profile::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use log::debug;
 use spawn::{Handle, Spawner};
@@ -21,27 +21,22 @@ pub fn install_filter(
 
         if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
             debug!("Spawning SECCOMP Monitor");
-            let mut handle = Spawner::abs(
-                AT_HOME
-                    .join("utilities")
-                    .join("antimony-monitor")
-                    .to_string_lossy(),
-            )
-            .name("monitor")
-            .args([
-                "--instance",
-                instance,
-                "--profile",
-                name,
-                "--mode",
-                &format!("{policy}").to_lowercase(),
-            ])?
-            .pass_env("XDG_DATA_HOME")?
-            .pass_env("XDG_RUNTIME_DIR")?
-            .pass_env("DBUS_SESSION_BUS_ADDRESS")?
-            .output(spawn::StreamMode::Log(log::Level::Info))
-            .new_privileges(true)
-            .mode(user::Mode::Original);
+            let mut handle = Spawner::abs(utility("monitor"))
+                .name("monitor")
+                .args([
+                    "--instance",
+                    instance,
+                    "--profile",
+                    name,
+                    "--mode",
+                    &format!("{policy}").to_lowercase(),
+                ])?
+                .pass_env("XDG_DATA_HOME")?
+                .pass_env("XDG_RUNTIME_DIR")?
+                .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                .output(spawn::StreamMode::Log(log::Level::Info))
+                .new_privileges(true)
+                .mode(user::Mode::Original);
 
             if audit {
                 handle.arg_i("--audit")?;

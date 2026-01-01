@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "Inflector"
-version = "0.11.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
-
-[[package]]
 name = "addr2line"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -89,7 +83,6 @@ dependencies = [
 name = "antimony"
 version = "3.0.0"
 dependencies = [
- "Inflector",
  "ahash",
  "anyhow",
  "caps",
@@ -98,6 +91,7 @@ dependencies = [
  "dashmap",
  "dbus",
  "dialoguer 0.11.0",
+ "heck",
  "indicatif",
  "inotify",
  "log",
@@ -109,7 +103,6 @@ dependencies = [
  "seccomp",
  "serde",
  "signal-hook",
- "smallvec",
  "spawn",
  "temp",
  "toml",
@@ -584,11 +577,11 @@ dependencies = [
 name = "notify"
 version = "0.1.0"
 dependencies = [
- "Inflector",
  "clap",
  "console 0.16.2",
  "dbus",
  "dialoguer 0.12.0",
+ "heck",
  "log",
  "nix",
  "parking_lot",
@@ -983,7 +976,6 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 name = "utilities"
 version = "0.1.0"
 dependencies = [
- "Inflector",
  "ahash",
  "antimony",
  "anyhow",
@@ -993,6 +985,7 @@ dependencies = [
  "dashmap",
  "dbus",
  "dialoguer 0.12.0",
+ "heck",
  "inotify",
  "log",
  "nix",

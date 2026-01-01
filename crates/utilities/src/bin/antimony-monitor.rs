@@ -7,17 +7,13 @@
 
 use ahash::RandomState;
 use antimony::shared::{
-    Set,
-    env::{AT_HOME, DATA_HOME, RUNTIME_DIR},
-    format_iter,
-    profile::SeccompPolicy,
-    syscalls,
+    self, Set, env::{DATA_HOME, RUNTIME_DIR}, format_iter, profile::SeccompPolicy, syscalls, utility
 };
 use anyhow::{Context, Result};
 use clap::Parser;
 use common::receive_fd;
 use dashmap::{DashMap, mapref::one::RefMut};
-use inflector::Inflector;
+use heck::ToTitleCase;
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
@@ -251,12 +247,7 @@ pub fn audit_reader(
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
 
-    let out = Spawner::abs(
-        AT_HOME
-            .join("utilities")
-            .join("antimony-notify")
-            .to_string_lossy(),
-    )
+    let out = Spawner::abs(utility("notify"))
     .args([
         "--title",
         &format!(
@@ -471,6 +462,7 @@ pub fn notify_reader(
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
     user::set(user::Mode::Real)?;
 
     let monitor_path = RUNTIME_DIR

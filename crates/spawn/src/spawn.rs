@@ -506,7 +506,7 @@ impl<'a> Spawner {
         });
     }
 
-    pub fn new_privileges_i(mut self, allow: bool) {
+    pub fn new_privileges_i(&mut self, allow: bool) {
         self.no_new_privileges = !allow;
     }
 

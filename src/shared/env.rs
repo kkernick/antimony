@@ -28,12 +28,15 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 /// THe Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
-    let writeable = if !cache_dir.exists() {
-        as_effective!(fs::create_dir(&cache_dir).is_ok())
-    } else {
-        as_effective!({ fs::File::create(cache_dir.join(".test")).is_ok() })
-    }
-    .expect("Failed to create cache dir");
+    let writeable = match env::var("AT_FORCE_TMP") {
+        Ok(result) => result != "1",
+        Err(_) => if !cache_dir.exists() {
+            as_effective!(fs::create_dir(&cache_dir).is_ok())
+        } else {
+            as_effective!({ fs::File::create(cache_dir.join(".test")).is_ok() })
+        }
+        .expect("Failed to create cache dir"),
+    };
 
     if !writeable {
         debug!("Cache dir not-writable. Pivoting to /tmp");

@@ -6,14 +6,14 @@ use crate::{
     shared::{
         env::RUNTIME_DIR,
         profile::{FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
+        utility,
     },
     timer,
 };
 use anyhow::{Result, anyhow};
-use inflector::Inflector;
+use heck::ToTitleCase;
 use log::{debug, error};
 use nix::errno::Errno;
-use notify::Urgency;
 use spawn::{Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
 use user::Mode;
@@ -300,14 +300,13 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         if code != 0 {
             // Alert the user.
             let error_name = Errno::from_raw(-code);
-            let actions = match &log {
-                Some(_) => vec![("Open".to_string(), "Open Error Log".to_string())],
-                None => Vec::new(),
-            };
-
-            let action = notify::action(
-                format!("Sandbox Error: {}", info.name.to_title_case()),
-                format!(
+            let handle = Spawner::abs(utility("notify")).mode(user::Mode::Real).    pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                .output(StreamMode::Pipe)
+                .args([
+                "--title",
+                &format!("Sandbox Error: {}", info.name.to_title_case()),
+                "--body",
+                &format!(
                     "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
                     if error_name != Errno::UnknownErrno {
                         format!("{error_name}")
@@ -315,16 +314,20 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         format!("exit code: {code}")
                     }
                 ),
-                Some(Duration::from_secs(5)),
-                Some(Urgency::Critical),
-                actions,
-            )?;
+                "--timeout", "5000",
+                "--urgency", "critical",
+            ])?;
+
+            if log.is_some() {
+                handle.args_i(["--action", "Open=Open Error Log"])?;
+            }
+            let action = handle.spawn()?.output_all()?;
 
             // If we want to open, use xdg-open.
             if let Some(log) = log
                 && action.starts_with("Open")
             {
-                Spawner::new("xdg-open")?
+                Spawner::new(utility("open"))?
                     .arg(log.to_string_lossy())?
                     .preserve_env(true)
                     .mode(Mode::Real)

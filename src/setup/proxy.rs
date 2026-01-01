@@ -58,7 +58,7 @@ pub fn run(
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"), Some(&cache))?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Borrowed(library), &cache, "/usr"))?;
+                .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache, "/usr"))?;
         });
     }
 

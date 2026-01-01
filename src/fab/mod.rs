@@ -18,7 +18,6 @@ use crate::{
 use anyhow::Result;
 use log::debug;
 use parking_lot::Mutex;
-use smallvec::SmallVec;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -31,7 +30,7 @@ use std::{
 use temp::Temp;
 use user::{as_effective, as_real};
 
-type Cache = SmallVec<[String; 8]>;
+type Cache = Vec<String>;
 
 /// A lock for initializing LIB_ROOTS
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));

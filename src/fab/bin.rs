@@ -5,11 +5,10 @@ use crate::{
         localize_path,
     },
     shared::{
-        Set,
-        env::AT_HOME,
-        format_iter,
+        Set, format_iter,
         path::direct_path,
         profile::{FileMode, Profile},
+        utility,
     },
     timer,
 };
@@ -293,18 +292,14 @@ fn parse(
                     .into_iter()
                     .any(|shell| header.contains(shell))
                 {
-                    let out = Spawner::abs(
-                        AT_HOME
-                            .join("utilities")
-                            .join("antimony-dumper")
-                            .to_string_lossy(),
-                    )
-                    .args(["run", "--path", &resolved, "--instance", instance])?
-                    .output(StreamMode::Pipe)
-                    .preserve_env(true)
-                    .mode(user::Mode::Real)
-                    .spawn()?
-                    .output_all()?;
+                    let out = Spawner::abs(utility("dumper"))
+                        .args(["run", "--path", &resolved, "--instance", instance])?
+                        .output(StreamMode::Pipe)
+                        .preserve_env(true)
+                        .new_privileges(true)
+                        .mode(user::Mode::Real)
+                        .spawn()?
+                        .output_all()?;
 
                     let out = out.lines().map(String::from);
                     trace!("{resolved} => {}", format_iter(binaries.iter()));

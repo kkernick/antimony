@@ -24,6 +24,8 @@ ENCRYPT_ROOT="$(dirname $ANTIMONY_HOME)/.gocryptfs/$(basename $ANTIMONY_HOME)"
 kdialog --password "Enter the password" | gocryptfs "${ENCRYPT_ROOT}" "${ANTIMONY_HOME}"
 """
 env = true
+new_privileges = true
 
 [[hooks.post]]
 content = 'umount "${ANTIMONY_HOME}"'
+new_privileges = true

@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use antimony::shared;
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use dialoguer::Input;
@@ -132,6 +133,7 @@ fn cooldown(sensor: &Option<String>, target: &Option<u64>, inspect: bool) -> Res
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
 
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])?
@@ -144,6 +146,8 @@ fn main() -> Result<()> {
     let _cache = if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
         unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
+        unsafe { env::set_var("AT_FORCE_TMP", "1") }
+
         Some(
             temp::Builder::new()
                 .name("cache")
@@ -155,7 +159,6 @@ fn main() -> Result<()> {
     };
 
     let term = Arc::new(AtomicBool::new(false));
-
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
     if let Some(checkout) = &cli.checkout {
