@@ -42,6 +42,11 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     path
 });
 
+pub static SYSTEM_MODE: LazyLock<bool> = LazyLock::new(|| match std::env::var("AT_SYSTEM_MODE") {
+    Ok(value) => value != "0",
+    Err(_) => false,
+});
+
 /// An error for issues around Profiles.
 #[derive(Debug)]
 pub enum Error {
@@ -259,6 +264,9 @@ pub struct Profile {
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<Hooks>,
 
+    /// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+    pub new_privileges: Option<bool>,
+
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
     pub sandbox_args: Option<Vec<String>>,
@@ -309,9 +317,11 @@ impl Profile {
         }
 
         // Try and load user-configured profile from AT_HOME
-        let user = Self::user_profile(name);
-        if user.exists() {
-            return Ok(user);
+        if !*SYSTEM_MODE {
+            let user = Self::user_profile(name);
+            if user.exists() {
+                return Ok(user);
+            }
         }
 
         // Try and load the system profile from AT_HOME
@@ -346,6 +356,7 @@ impl Profile {
             seccomp: args.seccomp.take(),
             arguments: args.passthrough.take(),
             sandbox_args: args.sandbox_args.take(),
+            new_privileges: args.new_privileges.take(),
             ..Default::default()
         };
 
@@ -443,7 +454,7 @@ impl Profile {
             let to_inherit: BTreeSet<String> = match &profile.inherits {
                 Some(i) => i.clone(),
                 None => {
-                    if Profile::default_profile().exists() {
+                    if Profile::default_profile().exists() && !*SYSTEM_MODE {
                         BTreeSet::from_iter(["default".to_string()])
                     } else {
                         BTreeSet::new()
@@ -538,6 +549,10 @@ impl Profile {
 
         if self.seccomp.is_none() {
             self.seccomp = profile.seccomp;
+        }
+
+        if self.new_privileges.is_none() {
+            self.new_privileges = profile.new_privileges;
         }
 
         if let Some(home) = profile.home {

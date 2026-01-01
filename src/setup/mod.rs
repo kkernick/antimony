@@ -175,7 +175,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     // Start the command.
     #[rustfmt::skip]
-    let handle = Spawner::abs("/usr/bin/bwrap")
+    let mut handle = Spawner::abs("/usr/bin/bwrap")
         .name(&args.profile)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",
@@ -191,6 +191,10 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
             "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
         ])?
         .mode(user::Mode::Real);
+
+    if profile.new_privileges.unwrap_or(false) {
+        handle.new_privileges_i(true);
+    }
 
     debug!("Initializing inotify handle");
     let inotify = Mutex::new(as_real!(Inotify::init())??);

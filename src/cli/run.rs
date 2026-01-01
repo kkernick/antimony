@@ -148,6 +148,9 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
 
+    #[arg(long)]
+    pub new_privileges: Option<bool>,
+
     /// Arguments to pass to bubblewrap/wrapper
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub sandbox_args: Option<Vec<String>>,
@@ -275,6 +278,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             }
         }
 
+        log::trace!("Spawning");
         let mut handle = info.handle.spawn()?;
         let code = handle.wait()?;
 
@@ -327,7 +331,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             if let Some(log) = log
                 && action.starts_with("Open")
             {
-                Spawner::new(utility("open"))?
+                Spawner::abs(utility("open"))
                     .arg(log.to_string_lossy())?
                     .preserve_env(true)
                     .mode(Mode::Real)

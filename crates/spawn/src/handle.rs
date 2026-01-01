@@ -235,7 +235,6 @@ impl Stream {
     /// This function is blocking.
     pub fn read_all(&mut self) -> Result<String, Error> {
         self.wait()?;
-
         let mut state = self.shared.state.lock();
         Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
     }
@@ -407,6 +406,24 @@ impl Handle {
         Ok(self.exit)
     }
 
+    pub fn wait_blocking(&mut self) -> Result<i32, Error> {
+        if let Some(pid) = self.alive()? {
+            'outer: loop {
+                match waitpid(pid, None) {
+                    Ok(status) => {
+                        self.child = None;
+                        if let WaitStatus::Exited(_, code) = status {
+                            self.exit = code;
+                            break 'outer;
+                        }
+                    }
+                    Err(e) => return Err(Error::Comm(e)),
+                }
+            }
+        }
+        Ok(self.exit)
+    }
+
     /// Check if the process is still alive, non-blocking.
     pub fn alive(&mut self) -> Result<Option<Pid>, Error> {
         if let Some(pid) = self.child {
@@ -517,7 +534,7 @@ impl Handle {
 
     /// Waits for the child to terminate, then returns its entire standard error.
     pub fn error_all(mut self) -> Result<String, Error> {
-        self.wait()?;
+        self.wait_blocking()?;
         if let Some(mut error) = self.stderr.take() {
             error.read_all()
         } else {
@@ -539,7 +556,7 @@ impl Handle {
     /// Waits for the child to terminate, then returns its entire standard output.
     /// If you need the exit code, use wait() first.
     pub fn output_all(mut self) -> Result<String, Error> {
-        self.wait()?;
+        self.wait_blocking()?;
         if let Some(mut output) = self.stdout.take() {
             output.read_all()
         } else {
@@ -561,7 +578,7 @@ impl Drop for Handle {
     fn drop(&mut self) {
         if let Ok(pid) = self.alive() {
             if let Some(pid) = pid {
-                match self.signal(Signal::SIGTERM) {
+                match self.signal(Signal::SIGKILL) {
                     Ok(_) => {
                         let _ = waitpid(pid, None);
                     }

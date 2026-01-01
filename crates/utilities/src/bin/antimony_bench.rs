@@ -155,6 +155,7 @@ fn main() -> Result<()> {
                 .create::<temp::Directory>()?,
         )
     } else {
+        unsafe { env::set_var("AT_SYSTEM_MODE", "1") }
         None
     };
 
@@ -260,6 +261,7 @@ fn main() -> Result<()> {
                     .args(args.clone())?
                     .arg(command.join(" "))?
                     .preserve_env(true)
+                    .new_privileges(true)
                     .spawn()?
                     .wait()?;
 
@@ -279,6 +281,7 @@ fn main() -> Result<()> {
                     .args(args.clone())?
                     .arg(command.join(" "))?
                     .preserve_env(true)
+                    .new_privileges(true)
                     .spawn()?
                     .wait()?;
 
@@ -305,6 +308,7 @@ fn main() -> Result<()> {
                     .args(args.clone())?
                     .arg(command.join(" "))?
                     .preserve_env(true)
+                    .new_privileges(true)
                     .spawn()?
                     .wait()?;
             }
@@ -316,6 +320,7 @@ fn main() -> Result<()> {
                 .args(args)?
                 .arg(format!("{antimony} refresh"))?
                 .preserve_env(true)
+                .new_privileges(true)
                 .spawn()?
                 .wait()?;
         }

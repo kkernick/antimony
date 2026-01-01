@@ -75,13 +75,22 @@ impl ParseReturn {
         }
     }
 
-    fn merge(global: &Mutex<Self>, cache: Self) {
-        let mut global = global.lock();
-        global.elf.par_extend(cache.elf);
-        global.scripts.par_extend(cache.scripts);
-        global.files.par_extend(cache.files);
-        global.directories.par_extend(cache.directories);
-        global.symlinks.par_extend(cache.symlinks);
+    fn merge(global: &Self, cache: Self) {
+        for elf in cache.elf {
+            global.elf.insert(elf);
+        }
+        for script in cache.scripts {
+            global.scripts.insert(script);
+        }
+        for file in cache.files {
+            global.files.insert(file);
+        }
+        for dir in cache.directories {
+            global.directories.insert(dir);
+        }
+        for (k, v) in cache.symlinks {
+            global.symlinks.insert(k, v);
+        }
     }
 
     /// Get cached definitions if they exist.
@@ -179,7 +188,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 fn parse(
     path: &str,
     instance: &str,
-    global: &Mutex<ParseReturn>,
+    global: &ParseReturn,
     cache: &Path,
     done: Arc<DashSet<String>>,
     mut include_self: bool,
@@ -201,7 +210,6 @@ fn parse(
 
     let ret = ParseReturn::new(cache);
 
-    trace!("Parsing: {path}");
     let dest = run_as!(user::Mode::Real, Result<String>, {
         let dest = fs::read_link(resolved.as_ref())?;
         let canon = Path::new(resolved.as_ref())
@@ -227,7 +235,6 @@ fn parse(
                     }
                 };
             }
-
             parse(&dest, instance, global, cache, done.clone(), true)?;
             Type::Link
         } else {
@@ -319,6 +326,7 @@ fn parse(
             }
         }
     };
+
     ret.write(path)?;
     ParseReturn::merge(global, ret);
     Ok(t)
@@ -342,7 +350,7 @@ fn handle_localize(
     instance: &str,
     home: bool,
     include_self: bool,
-    parsed: &Mutex<ParseReturn>,
+    parsed: &ParseReturn,
     done: Arc<DashSet<String>>,
     cache: &Path,
 ) -> Result<()> {
@@ -353,14 +361,14 @@ fn handle_localize(
         } else {
             match parse(&src, instance, parsed, cache, done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
-                    parsed.lock().localized.insert(src.into_owned(), dst);
+                    parsed.localized.insert(src.into_owned(), dst);
                 }
 
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
                     handle_localize(&ldst, instance, home, false, parsed, done.clone(), cache)?;
-                    parsed.lock().symlinks.insert(dst, ldst);
+                    parsed.symlinks.insert(dst, ldst);
                 }
                 _ => warn!("Excluding localization for {file}"),
             }
@@ -376,7 +384,7 @@ pub fn collect(
     profile: &Mutex<Profile>,
     name: &str,
     instance: &str,
-    parsed: &Mutex<ParseReturn>,
+    parsed: &ParseReturn,
     cache: &Path,
 ) -> Result<()> {
     let resolved = Arc::new(DashSet::new());
@@ -452,7 +460,7 @@ pub fn collect(
     timer!("::collect::localization", {
         Arc::into_inner(resolved)
             .unwrap()
-            .into_par_iter()
+            .into_iter()
             .try_for_each(|binary| {
                 handle_localize(
                     binary.as_str(),
@@ -490,7 +498,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     let parsed = match ParseReturn::cache("bin.cache", info.sys_dir)? {
         Some(parsed) => parsed,
         None => {
-            let parsed = Mutex::new(ParseReturn::new(info.sys_dir));
+            let parsed = ParseReturn::new(info.sys_dir);
             timer!(
                 "::collect",
                 collect(
@@ -502,8 +510,8 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
                 )
             )?;
 
-            parsed.lock().write("bin.cache")?;
-            parsed.into_inner()
+            parsed.write("bin.cache")?;
+            parsed
         }
     };
 

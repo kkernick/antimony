@@ -7,7 +7,11 @@
 
 use ahash::RandomState;
 use antimony::shared::{
-    self, Set, env::{DATA_HOME, RUNTIME_DIR}, format_iter, profile::SeccompPolicy, syscalls, utility
+    self, Set,
+    env::{DATA_HOME, RUNTIME_DIR},
+    format_iter,
+    profile::SeccompPolicy,
+    syscalls, utility,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -469,6 +473,12 @@ fn main() -> Result<()> {
         .join("antimony")
         .join(&cli.instance)
         .join(format!("monitor-{}", cli.profile));
+
+    if let Some(parent) = monitor_path.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
     let listener = UnixListener::bind(&monitor_path)?;
 
     // We dispatch requests to a thread pool for performance.

@@ -187,7 +187,7 @@ impl Pair {
         // Ensure the request is still valid.
         let valid = unsafe { raw::seccomp_notify_id_valid(fd, req.id) };
         if valid != 0 {
-            return Err(Error::InvalidId);
+            return Ok(());
         }
 
         // Set the ID.
@@ -199,7 +199,11 @@ impl Pair {
         // Send response
         let respond_ret = unsafe { raw::seccomp_notify_respond(fd.as_raw_fd(), self.resp) };
         if respond_ret < 0 {
-            Err(Error::Respond(Errno::from_raw(-respond_ret)))
+            let errno = Errno::from_raw(-respond_ret);
+            match errno {
+                Errno::ECANCELED => Ok(()),
+                e => Err(Error::Respond(e)),
+            }
         } else {
             Ok(())
         }

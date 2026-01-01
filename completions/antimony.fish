@@ -94,6 +94,8 @@ net\t'Use the network feature instead'
 uts\t''
 c-group\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l new-privileges -r -f -a "true\t''
+false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s l -l log -d 'Collect output from the sandbox, and output it to a log file'
