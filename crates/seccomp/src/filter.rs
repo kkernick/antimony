@@ -1,4 +1,7 @@
 //! A wrapper around a SECCOMP context.
+#[cfg(feature = "notify")]
+use crate::notify::Notifier;
+
 use super::{action::Action, attribute::Attribute, raw, syscall::Syscall};
 use nix::errno::Errno;
 use std::{
@@ -36,6 +39,10 @@ pub enum Error {
     /// Failed to send the SECCOMP FD to the monitor.
     #[cfg(feature = "notify")]
     Send,
+
+    /// Failed to prepare notifier
+    #[cfg(feature = "notify")]
+    Prepare(String),
 }
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
@@ -70,47 +77,12 @@ impl fmt::Display for Error {
             Self::Send => {
                 write!(f, "Failed to send notify FD",)
             }
+            #[cfg(feature = "notify")]
+            Self::Prepare(msg) => {
+                write!(f, "Failed to prepare notifier: {msg}")
+            }
         }
     }
-}
-
-/// A trait for transmitting a SECCOMP Notify FD to a Monitor.
-///
-///  When `Filter::load()` is called, the Filter will execute the following
-/// actions in the following order:
-///
-/// 1. Call `Notifier::exempt()`
-/// 2. Call `Notifier::prepare()`
-/// 3. Call `seccomp_load()`
-/// 4. Call `Notifier::handle()`
-///
-/// Then, you should call `execve()`.
-/// See `antimony::shared::syscalls::Notifier` for a socket implementation.
-#[cfg(feature = "notify")]
-pub trait Notifier: Send + 'static {
-    /// Return the list of syscalls that are used by the Notifier itself
-    /// in order to transmit the SECCOMP FD. These syscalls will be used
-    /// between `seccomp_load()` and `execve()`. For example, if sending
-    /// the FD across a socket, you should pass `sendmsg`.
-    ///
-    /// The action should NOT be Notify, as that will cause a deadlock.
-    /// Instead, either Allow, or Log.
-    fn exempt(&self) -> Vec<(Action, Syscall)> {
-        Vec::new()
-    }
-
-    /// Prepare for `seccomp_load`. This function is the last thing run
-    /// before `seccomp_load`, and as such is the last time you will
-    /// not be confined by the Filter. This can be used, for example,
-    /// to wait for a socket, then connect to it.
-    fn prepare(&mut self) {}
-
-    /// Handle the SECCOMP FD. This function runs under the confined
-    /// SECCOMP Filter, and should transmit the OwnedFD to the
-    /// Notify Monitor. The more you do here, the more syscalls
-    /// you will need; consider moving as much as possible to
-    /// `prepare()`
-    fn handle(&mut self, fd: OwnedFd);
 }
 
 /// The Filter is a wrapper around a SECCOMP Context.
@@ -199,7 +171,7 @@ impl Filter {
         }
 
         if let Some(notifier) = &mut self.notifier {
-            notifier.prepare();
+            notifier.prepare().map_err(Error::Prepare)?;
         }
         Ok(())
     }
@@ -220,8 +192,9 @@ impl Filter {
     }
 
     #[cfg(not(feature = "notify"))]
-    pub fn load(mut self) {
-        if let Err(e) = unsafe { raw::seccomp_load(self.ctx) } {
+    pub fn load(self) {
+        let errno = unsafe { raw::seccomp_load(self.ctx) };
+        if errno != 0 {
             panic!("Failed to set filter: {errno}");
         }
     }

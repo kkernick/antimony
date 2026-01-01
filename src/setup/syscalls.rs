@@ -1,10 +1,6 @@
 use std::{collections::BTreeSet, sync::Arc};
 
-use crate::shared::{
-    env::{AT_HOME, DATA_HOME, RUNTIME_DIR},
-    profile::SeccompPolicy,
-    syscalls,
-};
+use crate::shared::{env::AT_HOME, profile::SeccompPolicy, syscalls};
 use anyhow::Result;
 use log::debug;
 use spawn::{Handle, Spawner};
@@ -40,10 +36,12 @@ pub fn install_filter(
                 "--mode",
                 &format!("{policy}").to_lowercase(),
             ])?
-            .env("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
-            .env("XDG_RUNTIME_DIR", RUNTIME_DIR.to_string_lossy())?
+            .pass_env("XDG_DATA_HOME")?
+            .pass_env("XDG_RUNTIME_DIR")?
+            .pass_env("DBUS_SESSION_BUS_ADDRESS")?
             .output(spawn::StreamMode::Log(log::Level::Info))
-            .mode(user::Mode::Existing);
+            .new_privileges(true)
+            .mode(user::Mode::Original);
 
             if audit {
                 handle.arg_i("--audit")?;

@@ -7,8 +7,8 @@ use crate::{
     shared::{
         Set,
         env::AT_HOME,
-        path::direct_path,
         format_iter,
+        path::direct_path,
         profile::{FileMode, Profile},
     },
     timer,
@@ -109,18 +109,14 @@ impl ParseReturn {
             ret.scripts.par_extend(next()?);
             ret.files.par_extend(next()?);
             ret.directories.par_extend(next()?);
-            ret.symlinks.par_extend(
-                next()?
-                    .into_par_iter()
-                    .filter_map(|e| {
-                        if let Some((key, value)) = e.split_once("=") {
-                            Some((key.to_string(), value.to_string()))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<DashMap<_, _>>(),
-            );
+            ret.symlinks
+                .par_extend(next()?.into_par_iter().filter_map(|e| {
+                    if let Some((key, value)) = e.split_once("=") {
+                        Some((key.to_string(), value.to_string()))
+                    } else {
+                        None
+                    }
+                }));
             Ok(Some(ret))
         } else {
             Ok(None)

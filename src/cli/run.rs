@@ -301,7 +301,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             // Alert the user.
             let error_name = Errno::from_raw(-code);
             let actions = match &log {
-                Some(_) => vec![("Open", "Open Error Log")],
+                Some(_) => vec![("Open".to_string(), "Open Error Log".to_string())],
                 None => Vec::new(),
             };
 

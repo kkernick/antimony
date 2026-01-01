@@ -7,9 +7,8 @@ use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
 use nix::{
-    errno::{self, Errno},
-    poll::{PollFd, PollFlags, PollTimeout},
-    sys::socket::{self, ControlMessage, ControlMessageOwned, MsgFlags, recvmsg},
+    errno,
+    sys::socket::{self, ControlMessage, MsgFlags},
 };
 use parking_lot::{Mutex, MutexGuard};
 use rusqlite::{Connection, Transaction};
@@ -20,10 +19,10 @@ use std::{
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
-    io::{self, IoSlice, IoSliceMut},
+    io::{self, IoSlice},
     os::{
-        fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd, OwnedFd, RawFd},
-        unix::net::{UnixListener, UnixStream},
+        fd::{AsRawFd, IntoRawFd, OwnedFd},
+        unix::net::UnixStream,
     },
     path::PathBuf,
     sync::{Arc, LazyLock},
@@ -47,9 +46,10 @@ fn new_connection() -> Result<Connection, Error> {
 pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
     LazyLock::new(|| {
         let init = || -> anyhow::Result<()> {
-            let conn = new_connection()?;
-            conn.execute_batch(
-                "
+            as_effective!(anyhow::Result<()>, {
+                let conn = new_connection()?;
+                conn.execute_batch(
+                    "
             PRAGMA foreign_keys = ON;
             CREATE TABLE IF NOT EXISTS binaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,8 +82,9 @@ pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
                 FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
             );
             ",
-            )?;
-            Ok(())
+                )?;
+                Ok(())
+            })?
         };
 
         if init().is_ok() {
@@ -237,7 +238,7 @@ impl Notifier {
         }
     }
 }
-impl seccomp::filter::Notifier for Notifier {
+impl seccomp::notify::Notifier for Notifier {
     /// The Notifier needs sendmsg.
     fn exempt(&self) -> Vec<(Action, Syscall)> {
         vec![(
@@ -247,8 +248,8 @@ impl seccomp::filter::Notifier for Notifier {
     }
 
     /// Setup the UnixStream. We wait for the Monitor to setup the socket.
-    fn prepare(&mut self) {
-        as_real!({
+    fn prepare(&mut self) -> Result<(), String> {
+        if let Err(e) = as_real!({
             if !self.path.exists() {
                 if let Some(mut notify) = self.notify.take() {
                     let mut buffer = [0; 1024];
@@ -259,9 +260,18 @@ impl seccomp::filter::Notifier for Notifier {
                     }
                 }
             }
-            self.stream = Some(UnixStream::connect(&self.path).expect("Failed to connect"))
-        })
-        .expect("Failed to get monitor socket");
+            match UnixStream::connect(&self.path) {
+                Ok(stream) => {
+                    self.stream = Some(stream);
+                    Ok(())
+                }
+                Err(e) => Err(format!("Failed to connect to stream: {e}")),
+            }
+        }) {
+            Err(format!("Failed to get monitor socket: {e}"))
+        } else {
+            Ok(())
+        }
     }
 
     /// Send the FD to the Monitor.
@@ -375,17 +385,13 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(
-    name: &str,
-    p_binaries: &Option<BTreeSet<String>>,
-) -> Result<Option<PolicyPair>, Error> {
+pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> PolicyPair {
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
     if let Ok(mut conn) = get_connection() {
-        let tx = conn.transaction()?;
-
-        let binaries = || -> Result<Set<String>, Error> {
+        let query_result = || -> Result<(), Error> {
+            let tx = conn.transaction()?;
             let profile_id = insert_profile(&tx, name)?;
 
             let mut stmt = tx.prepare(
@@ -408,28 +414,29 @@ pub fn get_calls(
                     binaries.insert(b.clone());
                 }
             }
-            Ok(binaries)
-        }()?;
+            binaries.iter().for_each(|bin| {
+                if let Err(e) = extend(
+                    &tx,
+                    bin,
+                    if bin.ends_with("bwrap") {
+                        &mut bwrap
+                    } else {
+                        &mut syscalls
+                    },
+                ) {
+                    warn!("Failed to extend syscalls for binary {bin}: {e}");
+                }
+            });
+            Ok(())
+        }();
 
-        binaries.iter().for_each(|bin| {
-            if let Err(e) = extend(
-                &tx,
-                bin,
-                if bin.ends_with("bwrap") {
-                    &mut bwrap
-                } else {
-                    &mut syscalls
-                },
-            ) {
-                warn!("Failed to extend syscalls for binary {bin}: {e}");
-            }
-        });
+        if let Err(e) = query_result {
+            warn!("Could not query the SECCOMP Database: {e}. Filter is incomplete");
+        }
+
         bwrap = bwrap.difference(&syscalls).cloned().collect();
-    } else {
-        log::error!("Could not initialize connection to SECCOMP Database!");
-        return Ok(None);
     }
-    Ok(Some((syscalls, bwrap)))
+    (syscalls, bwrap)
 }
 
 /// Return a new Policy
@@ -439,129 +446,65 @@ pub fn new(
     policy: SeccompPolicy,
     binaries: &Option<BTreeSet<String>>,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
-    if let Some((mut syscalls, bwrap)) = timer!("::get_calls", get_calls(name, binaries)?) {
-        let mut filter =
-            if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
-                let mut filter = Filter::new(Action::Notify)?;
-                filter.set_notifier(Notifier::new(
-                    user_dir(instance).join(format!("monitor-{name}")),
-                    name.to_string(),
-                ));
+    let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
+    let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
+        let mut filter = Filter::new(Action::Notify)?;
+        filter.set_notifier(Notifier::new(
+            user_dir(instance).join(format!("monitor-{name}")),
+            name.to_string(),
+        ));
 
-                filter
-            } else {
-                Filter::new(Action::KillProcess)?
-            };
+        filter
+    } else {
+        Filter::new(Action::KillProcess)?
+    };
 
-        filter.set_attribute(Attribute::NoNewPrivileges(true))?;
-        filter.set_attribute(Attribute::ThreadSync(true))?;
-        filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
+    filter.set_attribute(Attribute::NoNewPrivileges(true))?;
+    filter.set_attribute(Attribute::ThreadSync(true))?;
+    filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
-        for required in ["execve", "wait4", "exit"] {
-            syscalls.insert(Syscall::from_name(required)?.get_number());
+    for required in ["execve", "wait4", "exit"] {
+        syscalls.insert(Syscall::from_name(required)?.get_number());
+    }
+
+    let audit = !syscalls.contains(&get_name("sendmsg"));
+
+    let syscalls = syscalls.into_iter().collect::<Vec<_>>();
+    timer!("::add_rules", {
+        for syscall in &syscalls {
+            filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
+        }
+    });
+
+    let fd = if policy == SeccompPolicy::Enforcing {
+        let mut s = DefaultHasher::new();
+        syscalls.hash(&mut s);
+        let hash = format!("{}", s.finish());
+
+        debug!("Enforcing BPF");
+        let bpf = AT_HOME
+            .join("cache")
+            .join(".seccomp")
+            .join(format!("{hash}.bpf"));
+
+        if let Some(parent) = bpf.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
         }
 
-        let audit = !syscalls.contains(&get_name("sendmsg"));
-
-        let syscalls = syscalls.into_iter().collect::<Vec<_>>();
-        timer!("::add_rules", {
-            for syscall in &syscalls {
-                filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
-            }
-        });
-
-        let fd = if policy == SeccompPolicy::Enforcing {
-            let mut s = DefaultHasher::new();
-            syscalls.hash(&mut s);
-            let hash = format!("{}", s.finish());
-
-            debug!("Enforcing BPF");
-            let bpf = AT_HOME
-                .join("cache")
-                .join(".seccomp")
-                .join(format!("{hash}.bpf"));
-
-            if let Some(parent) = bpf.parent()
-                && !parent.exists()
-            {
-                fs::create_dir_all(parent)?;
-            }
-
-            Some(if !bpf.exists() {
-                debug!("Writing filter...");
-                filter.write(&bpf)?
-            } else {
-                File::open(&bpf)?.into()
-            })
+        Some(if !bpf.exists() {
+            debug!("Writing filter...");
+            filter.write(&bpf)?
         } else {
-            None
-        };
-
-        for syscall in bwrap {
-            filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
-        }
-        Ok(Some((filter, fd, audit)))
+            File::open(&bpf)?.into()
+        })
     } else {
-        warn!("Failed to get syscall information. No filter installed");
-        Ok(None)
+        None
+    };
+
+    for syscall in bwrap {
+        filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
     }
-}
-
-/// Poll on Accept, Timing out after timeout.
-fn accept_with_timeout(
-    listener: &UnixListener,
-    timeout: PollTimeout,
-) -> Result<Option<UnixStream>, Error> {
-    listener.set_nonblocking(true)?;
-
-    let fd = listener.as_fd();
-    let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
-
-    let res = nix::poll::poll(&mut fds, timeout)?;
-
-    if res == 0 {
-        // Timed out
-        Ok(None)
-    } else {
-        // Ready to accept
-        match listener.accept() {
-            Ok((stream, _addr)) => Ok(Some(stream)),
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-/// Receive a file descriptor from a Unix socket as an `OwnedFd`.
-pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, Error> {
-    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
-    if let Some(stream) = stream {
-        let mut buf = [0u8; 256];
-        let pair = || -> Result<Option<(OwnedFd, usize)>, Errno> {
-            let raw_fd = stream.as_raw_fd();
-
-            let mut io = [IoSliceMut::new(&mut buf)];
-            let mut msg_space = nix::cmsg_space!([RawFd; 1]);
-
-            let msg = recvmsg::<()>(raw_fd, &mut io, Some(&mut msg_space), MsgFlags::empty())?;
-
-            for cmsg in msg.cmsgs()? {
-                if let ControlMessageOwned::ScmRights(fds) = cmsg
-                    && let Some(fd) = fds.first()
-                {
-                    let owned_fd = unsafe { OwnedFd::from_raw_fd(*fd) };
-                    return Ok(Some((owned_fd, msg.bytes)));
-                }
-            }
-            Ok(None)
-        }()?;
-
-        if let Some((fd, bytes)) = pair {
-            let name = String::from_utf8_lossy(&buf[..bytes])
-                .trim_end_matches(char::from(0))
-                .to_string();
-            return Ok(Some((fd, name)));
-        }
-    }
-    Ok(None)
+    Ok(Some((filter, fd, audit)))
 }

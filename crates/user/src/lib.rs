@@ -80,9 +80,14 @@ pub enum Mode {
     /// to `USER.effective`, while saving Real to Saved.
     Effective,
 
-    /// Revert to the original UID/GID, with Real, Effective, and Saved
-    /// returning to their initial values.
+    /// The current operating mode. This is functionally a no-op except for
+    /// in drop, where it drops whatever the current mode happens to be.
     Existing,
+
+    /// Revert to the program's original operating mode. For set, this
+    /// mode is functionally identical to using revert(). For drop, it
+    /// acts as user::revert().
+    Original,
 }
 
 /// Set the Mode.
@@ -96,6 +101,13 @@ pub enum Mode {
 /// ```rust
 /// user::set(user::Mode::Real).unwrap();
 /// ```
+///
+/// ## Notes
+///
+/// * user::set(Mode::Original) is functionally identical to user::revert()
+/// * user::set(Mode::Existing) is a no-op.
+///
+///
 pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
     if !*SETUID {
         return Ok((*USER, *GROUP));
@@ -113,7 +125,8 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
             setresuid(USER.effective, USER.effective, USER.real)?;
             setresgid(GROUP.effective, GROUP.effective, GROUP.real)?;
         }
-        Mode::Existing => revert()?,
+        Mode::Original => revert()?,
+        Mode::Existing => {}
     }
 
     Ok((uid, gid))
@@ -150,6 +163,8 @@ pub fn revert() -> Result<(), Errno> {
 ///     user::set(user::Mode::Effective).expect_err("Cannot return!");
 /// }
 /// ```
+///
+/// ### Notes
 pub fn drop(mode: Mode) -> Result<(), Errno> {
     match mode {
         Mode::Real => {
@@ -160,7 +175,12 @@ pub fn drop(mode: Mode) -> Result<(), Errno> {
             setresuid(USER.effective, USER.effective, USER.effective)?;
             setresgid(GROUP.effective, GROUP.effective, GROUP.effective)
         }
-        Mode::Existing => revert(),
+        Mode::Original => revert(),
+        Mode::Existing => {
+            let (user, group) = (getresuid()?, getresgid()?);
+            setresuid(user.real, user.real, user.real)?;
+            setresgid(group.real, group.real, group.real)
+        }
     }
 }
 
@@ -211,7 +231,6 @@ impl Sync {
         let (thread_lock, mutex, cvar) = &*sem;
 
         if thread_lock.is_owned_by_current_thread() {
-            log::trace!("Already owned by current thread. Stepping past.");
             return None;
         }
 

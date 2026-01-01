@@ -187,7 +187,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             wildcards.into_par_iter().for_each(|w| {
                 if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
                     cards.into_par_iter().for_each(|card| {
-                        resolved.insert(Cow::Owned(card));
+                        resolved.insert(Cow::Owned(card.clone()));
                     });
                 }
             });

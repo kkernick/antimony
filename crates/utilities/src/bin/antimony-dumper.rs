@@ -5,6 +5,7 @@ use antimony::shared::{
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use common::receive_fd;
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use nix::{
@@ -72,8 +73,8 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
 
     let mut read = |arg: u64| -> Result<String> {
         mem_file.seek(io::SeekFrom::Start(arg))?;
-        let mut buffer = vec![0u8; 256];
-        let bytes_read = mem_file.read(&mut buffer)?;
+        let buffer = &mut [0u8; 256];
+        let bytes_read = mem_file.read(&mut buffer[..])?;
         let end_pos = buffer.iter().position(|&b| b == 0).unwrap_or(bytes_read);
         let string = str::from_utf8(&buffer[..end_pos])?;
         if Path::new(string).exists() {
@@ -165,7 +166,7 @@ pub fn collection(args: AttachArgs) -> Result<()> {
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
     while !term.load(Ordering::Relaxed) {
-        match syscalls::receive_fd(&listener) {
+        match receive_fd(&listener) {
             Ok(Some((fd, _))) => {
                 let term_clone = term.clone();
                 thread::spawn(move || reader(term_clone, fd));

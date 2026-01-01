@@ -112,12 +112,9 @@ impl super::Run for Args {
                                 "Could not initialize connection to SECCOMP Database"
                             ));
                         }
-                    } else if let Some((syscalls, _)) = syscalls::get_calls(&name, &None)? {
-                        syscalls.into_iter().collect()
                     } else {
-                        return Err(anyhow::anyhow!(
-                            "Could not initialize connection to SECCOMP Database"
-                        ));
+                        let (syscalls, _) = syscalls::get_calls(&name, &None);
+                        syscalls.into_iter().collect()
                     };
 
                     if self.verbosity > 0 {

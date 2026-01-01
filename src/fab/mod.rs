@@ -18,6 +18,7 @@ use crate::{
 use anyhow::Result;
 use log::debug;
 use parking_lot::Mutex;
+use smallvec::SmallVec;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -29,6 +30,8 @@ use std::{
 };
 use temp::Temp;
 use user::{as_effective, as_real};
+
+type Cache = SmallVec<[String; 8]>;
 
 /// A lock for initializing LIB_ROOTS
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
@@ -53,7 +56,7 @@ pub struct FabInfo<'a> {
 
 /// Get cached definitions.
 #[inline]
-fn get_cache(name: &str, cache: &Path) -> Result<Option<Vec<String>>> {
+fn get_cache(name: &str, cache: &Path) -> Result<Option<Cache>> {
     let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
     if let Ok(file) = File::open(&cache_file) {
         let reader = BufReader::new(file);
@@ -65,7 +68,7 @@ fn get_cache(name: &str, cache: &Path) -> Result<Option<Vec<String>>> {
 
 /// Write the cache file.
 #[inline]
-fn write_cache(name: &str, list: &Vec<String>, cache: &Path) -> Result<()> {
+fn write_cache(name: &str, list: &Cache, cache: &Path) -> Result<()> {
     let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
     as_effective!(Result<()>, {
         let mut file = File::create(&cache_file)?;
@@ -88,14 +91,14 @@ fn elf_filter(path: &str) -> Option<String> {
 }
 
 /// Get all executable files in a directory.
-pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Vec<String>> {
+pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Cache> {
     if let Some(cache) = cache
         && let Some(libraries) = get_cache(dir, cache)?
     {
         return Ok(libraries);
     }
 
-    let libraries: Vec<String> = Spawner::abs("/usr/bin/find")
+    let libraries: Cache = Spawner::abs("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
@@ -111,8 +114,8 @@ pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Vec<String>> {
     Ok(libraries)
 }
 
-pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<Vec<String>> {
-    let run = |dir: &str, base: &str| -> Result<Vec<String>> {
+pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<Cache> {
+    let run = |dir: &str, base: &str| -> Result<Cache> {
         Ok(Spawner::abs("/usr/bin/find")
             .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base])?
             .output(StreamMode::Pipe)
@@ -134,7 +137,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<V
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
-        let mut libraries = Vec::new();
+        let mut libraries = Cache::new();
         for root in LIB_ROOTS.get().unwrap() {
             debug!("Checking {root}");
             libraries.extend(run(root, pattern)?);
@@ -152,7 +155,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<V
 }
 
 /// LDD a path.
-pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Vec<String>> {
+pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> {
     let libraries = if let Some(cache) = cache
         && let Some(libraries) = get_cache(&path, cache)?
     {

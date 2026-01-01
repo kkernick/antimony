@@ -8,13 +8,14 @@
 use ahash::RandomState;
 use antimony::shared::{
     Set,
-    env::{DATA_HOME, RUNTIME_DIR},
+    env::{AT_HOME, DATA_HOME, RUNTIME_DIR},
     format_iter,
     profile::SeccompPolicy,
-    syscalls::{self, receive_fd},
+    syscalls,
 };
 use anyhow::{Context, Result};
 use clap::Parser;
+use common::receive_fd;
 use dashmap::{DashMap, mapref::one::RefMut};
 use inflector::Inflector;
 use nix::{
@@ -52,7 +53,6 @@ use std::{
     thread,
     time::Duration,
 };
-use user::Mode;
 
 #[derive(Debug)]
 pub enum Error {
@@ -226,7 +226,6 @@ pub fn audit_reader(
 
                     // If everything is valid, log it.
                     if let Ok(syscall) = syscall {
-                        
                         if let Some(entry) = allow.get(&exe)
                             && entry.contains(&syscall)
                         {
@@ -251,26 +250,37 @@ pub fn audit_reader(
 
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
-    Ok(notify::action(
-        format!(
+
+    let out = Spawner::abs(
+        AT_HOME
+            .join("utilities")
+            .join("antimony-notify")
+            .to_string_lossy(),
+    )
+    .args([
+        "--title",
+        &format!(
             "Syscall Request: {} => {}",
             profile.to_title_case(),
             name.to_title_case()
         ),
-        format!(
+        "--body",
+        &format!(
             "The program <i>{}</i> attempted to use the syscall <b>{name}</b> within profile {profile}, which is not registered in its policy. What would you like to do?",
             path.to_string_lossy()
         ),
-        Some(Duration::from_secs(30)),
-        None,
-        vec![
-            ("All", "Save All"),
-            ("Save", "Save"),
-            ("Allow", "Allow"),
-            ("Deny", "Deny"),
-            ("Kill", "Kill"),
-        ],
-    )?)
+        "--timeout", "30000",
+        "--action", "All=Save All",
+        "--action", "Save",
+        "--action", "Allow",
+        "--action", "Deny",
+        "--action", "Kill"
+    ])?
+    .mode(user::Mode::Real)
+    .output(StreamMode::Pipe)
+    .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+    .spawn()?.output_all()?;
+    Ok(String::from(&out[..out.len() - 1]))
 }
 
 pub fn notify_reader(
@@ -350,7 +360,7 @@ pub fn notify_reader(
                                             resp.flags = 1;
 
                                             if !result.is_empty() {
-                                                match &result[..result.len() - 1] {
+                                                match result.as_str() {
                                                     "All" => {
                                                         commit = true;
                                                         ask_clone.store(false, Ordering::Relaxed);
@@ -460,8 +470,9 @@ pub fn notify_reader(
 /// Receive and Respond to Notify Requests.
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    notify::init()?;
+    user::set(user::Mode::Real)?;
 
-    user::set(Mode::Real)?;
     let monitor_path = RUNTIME_DIR
         .join("antimony")
         .join(&cli.instance)
@@ -523,7 +534,8 @@ fn main() -> Result<()> {
                     )
                 }));
             }
-            Ok(None) | Err(syscalls::Error::Errno(Errno::EINTR)) => continue,
+            Ok(None) => continue,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => {
                 println!("Failed to received fd: {e}");
                 break;
@@ -537,12 +549,9 @@ fn main() -> Result<()> {
         }
     }
 
-    user::set(Mode::Effective)?;
-
     // Once we're done, move to Effective to save the information.
-    if !stats.is_empty()
-        && let Ok(mut conn) = syscalls::get_connection()
-    {
+    if !stats.is_empty() {
+        let mut conn = syscalls::get_connection()?;
         println!("Storing syscall data.");
         let tx = conn.transaction()?;
 

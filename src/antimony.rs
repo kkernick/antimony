@@ -1,5 +1,4 @@
 use antimony::cli::{Run, run::as_symlink};
-/// The main antimony binary
 use anyhow::Result;
 use clap::Parser;
 

@@ -8,17 +8,22 @@ default = []
 fd = []
 elevate = []
 cache = []
-
+fork = ["serde", "postcard", "common", "temp"]
 
 [dependencies]
-seccomp = { path = "../seccomp", optional = true }
+common = { path = "../common", optional = true }
+seccomp = { path = "../seccomp", optional = true, features = ["notify"] }
+temp = { path = "../temp", optional = true }
 user = { path = "../user", optional = true}
 which = { path = "../which" }
 
 log = { version = "0.4.27", default-features = false }
 nix = { version = "0.30.1", features = ["fs", "signal"], default-features = false }
 parking_lot = { version = "0.12.5", default-features = false }
+serde = {version = "1.0.228", default-features = false, optional = true }
 signal-hook = { version = "0.3.18", features = ["iterator"], default-features = false }
+postcard = {version = "1.1.3", features = ["alloc"], optional = true, default-features = false}
+caps = "0.5.6"
 
 [dev-dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace", "std"] }

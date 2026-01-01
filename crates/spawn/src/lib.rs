@@ -5,6 +5,15 @@
 mod handle;
 mod spawn;
 
+#[cfg(feature = "fork")]
+mod fork;
+
+#[cfg(feature = "fork")]
+pub use fork::Error as ForkError;
+
+#[cfg(feature = "fork")]
+pub use fork::Fork;
+
 pub use handle::Error as HandleError;
 pub use handle::Handle;
 pub use handle::Stream;

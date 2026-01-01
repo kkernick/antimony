@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 antimony = { path = "../../" }
+common = { path = "../common" }
 notify = { path = "../notify" }
 seccomp = { path = "../seccomp" }
 spawn = { path = "../spawn", features = ["elevate"] }

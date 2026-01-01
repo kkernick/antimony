@@ -13,6 +13,7 @@ members = [
     "crates/which",
     "crates/temp",
     "crates/utilities",
+    "crates/common",
 ]
 
 [[bin]]
@@ -29,7 +30,7 @@ which = { path = "crates/which" }
 
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
 anyhow = { version = "1.0.98", features = ["std"], default-features = false }
-clap = { version = "4.5.39", features = ["derive", "help", "usage", "std"], default-features = false }
+clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }
 console = { version = "0.16.0", default-features = false }
 dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }
 dbus = { version = "0.9.10", features = ["stdfd"], default-features = false }
@@ -38,13 +39,15 @@ indicatif = { version = "0.18.0", default-features = false }
 Inflector = { version = "0.11.4", default-features = false }
 inotify = { version = "0.11.0", default-features = false }
 log = { version = "0.4.27", default-features = false }
-nix = { version = "0.30.1", features = ["poll", "socket", "uio"], default-features = false }
+nix = { version = "0.30.1", default-features = false }
 parking_lot = { version = "0.12.5", default-features = false }
 rayon = { version = "1.10.0", default-features = false }
 rusqlite = { version = "0.37.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive"], default-features = false }
 signal-hook = { version = "0.3.18", default-features = false }
 toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
+smallvec = { version = "1.15.1", default-features = false }
+caps = "0.5.6"
 
 [dev-dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace", "std"] }

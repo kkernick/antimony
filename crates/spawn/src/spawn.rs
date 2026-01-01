@@ -3,7 +3,8 @@
 #![allow(dead_code)]
 
 use crate::{Stream, format_iter, handle::Handle};
-use log::trace;
+use caps::{CapSet, Capability, CapsHashSet};
+use log::{trace, warn};
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
     unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork, pipe},
@@ -171,6 +172,12 @@ pub struct Spawner {
     /// Clear the environment before spawning the child.
     preserve_env: bool,
 
+    /// Don't clear privileges.
+    no_new_privileges: bool,
+
+    /// Whitelisted capabilities.
+    whitelist: CapsHashSet,
+
     /// Environment variables
     env: HashMap<CString, CString>,
 
@@ -219,6 +226,8 @@ impl<'a> Spawner {
             error: StreamMode::Share,
 
             preserve_env: false,
+            no_new_privileges: true,
+            whitelist: CapsHashSet::new(),
             env: HashMap::new(),
 
             associated: Vec::new(),
@@ -323,6 +332,23 @@ impl<'a> Spawner {
     /// This function is not thread safe.
     pub fn preserve_env(mut self, preserve: bool) -> Self {
         self.preserve_env_i(preserve);
+        self
+    }
+
+    pub fn cap(mut self, cap: Capability) -> Self {
+        self.whitelist.insert(cap);
+        self
+    }
+
+    pub fn caps(mut self, caps: impl IntoIterator<Item = Capability>) -> Self {
+        caps.into_iter().for_each(|cap| {
+            self.whitelist.insert(cap);
+        });
+        self
+    }
+
+    pub fn new_privileges(mut self, allow: bool) -> Self {
+        self.no_new_privileges = !allow;
         self
     }
 
@@ -468,6 +494,20 @@ impl<'a> Spawner {
     /// This function is not thread safe.
     pub fn preserve_env_i(&mut self, preserve: bool) {
         self.preserve_env = preserve;
+    }
+
+    pub fn cap_i(&mut self, cap: Capability) {
+        self.whitelist.insert(cap);
+    }
+
+    pub fn caps_i(&mut self, caps: impl IntoIterator<Item = Capability>) {
+        caps.into_iter().for_each(|cap| {
+            self.whitelist.insert(cap);
+        });
+    }
+
+    pub fn new_privileges_i(mut self, allow: bool) {
+        self.no_new_privileges = !allow;
     }
 
     /// Sets an environment variable to the child process.
@@ -768,6 +808,9 @@ impl<'a> Spawner {
             }
         }
 
+        let all = caps::all();
+        let diff: CapsHashSet = all.difference(&self.whitelist).copied().collect();
+
         #[cfg(feature = "seccomp")]
         let filter = {
             let mut filter = self.seccomp.into_inner();
@@ -861,8 +904,18 @@ impl<'a> Spawner {
 
                 // Drop modes
                 #[cfg(feature = "user")]
-                if let Some(mode) = self.mode {
-                    let _ = user::drop(mode);
+                if let Some(mode) = self.mode
+                    && let Err(e) = user::drop(mode)
+                {
+                    warn!("Failed to drop user: {e}")
+                }
+
+                clear_capabilities(diff);
+
+                if self.no_new_privileges
+                    && let Err(e) = prctl::set_no_new_privs()
+                {
+                    warn!("Could not set NO_NEW_PRIVS: {e}");
                 }
 
                 // Apply SECCOMP.
@@ -883,9 +936,26 @@ impl<'a> Spawner {
     }
 }
 
+/// Clears the capabilities of the current thread.
+pub(crate) fn clear_capabilities(diff: CapsHashSet) {
+    for set in [
+        CapSet::Ambient,
+        CapSet::Ambient,
+        CapSet::Effective,
+        CapSet::Inheritable,
+        CapSet::Permitted,
+    ] {
+        for cap in &diff {
+            if let Err(e) = caps::drop(None, set, *cap) {
+                warn!("Could not drop {cap}: {e}");
+            }
+        }
+    }
+}
+
 /// Conditionally create a pipe.
 /// Returns either a set of `None`, or the result of `pipe()`
-fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
+pub(crate) fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
     match cond {
         StreamMode::Pipe => match pipe() {
             Ok((r, w)) => Ok(Some((r, w))),
@@ -958,7 +1028,7 @@ mod tests {
             .output(StreamMode::Pipe)
             .spawn()?;
 
-        let bytes = handle.output()?.read_bytes(string.len())?;
+        let bytes = handle.output()?.read_bytes(Some(string.len()))?;
         let output = String::from_utf8_lossy(&bytes);
         assert!(output.trim() == string);
         Ok(())

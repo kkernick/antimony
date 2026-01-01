@@ -58,7 +58,7 @@ pub fn run(
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"), Some(&cache))?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Borrowed(&library), &cache, "/usr"))?;
+                .try_for_each(|library| add_sof(&sof, Cow::Borrowed(library), &cache, "/usr"))?;
         });
     }
 
@@ -245,6 +245,11 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
 
             as_real!(Result<()>, {
                 debug!("Creating flatpak info");
+                if let Some(parent) = info.parent()
+                    && !parent.exists()
+                {
+                    fs::create_dir_all(parent)?;
+                }
                 let out = fs::File::create_new(&info)?;
                 write!(&out, "{}", info_contents.join("\n"))?;
                 Ok(())

@@ -1,20 +1,19 @@
-use rand::{RngCore, SeedableRng, rngs::SmallRng};
 use std::{
     env::temp_dir,
+    iter::repeat_with,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
 
 fn unique(dir: &Path) -> String {
-    let mut rng = SmallRng::from_os_rng();
+    let mut rng = fastrand::Rng::new();
     loop {
-        let mut bytes = [0; 8];
-        rng.fill_bytes(&mut bytes);
-        let instance = bytes
-            .iter()
+        let mut instance = String::with_capacity(16);
+        repeat_with(|| rng.u8(..))
+            .take(8)
             .map(|byte| format!("{byte:02x?}"))
-            .collect::<Vec<String>>()
-            .join("");
+            .for_each(|byte| instance.push_str(&byte));
+
         if !dir.join(&instance).exists() {
             break instance;
         }
@@ -45,7 +44,11 @@ impl Object for File {
         std::fs::File::create_new(self.parent.join(&self.name)).map(|_| ())
     }
     fn remove(&self) -> Result<(), std::io::Error> {
-        std::fs::remove_file(self.parent.join(&self.name)).map(|_| ())
+        let path = self.parent.join(&self.name);
+        if path.exists() {
+            std::fs::remove_file(path).map(|_| ())?;
+        }
+        Ok(())
     }
 
     fn path(&self) -> &Path {
@@ -76,7 +79,11 @@ impl Object for Directory {
     }
 
     fn remove(&self) -> Result<(), std::io::Error> {
-        std::fs::remove_dir_all(self.path.join(&self.name)).map(|_| ())
+        let path = self.path.join(&self.name);
+        if path.exists() {
+            std::fs::remove_dir_all(path).map(|_| ())?;
+        }
+        Ok(())
     }
 
     fn path(&self) -> &Path {
@@ -158,6 +165,7 @@ pub struct Builder {
     path: Option<PathBuf>,
     extension: Option<String>,
     mode: Option<user::Mode>,
+    make: bool,
 }
 impl Builder {
     pub fn new() -> Self {
@@ -184,6 +192,11 @@ impl Builder {
         self
     }
 
+    pub fn make(mut self, make_object: bool) -> Self {
+        self.make = make_object;
+        self
+    }
+
     pub fn create<T: BuilderCreate + Object + 'static>(self) -> Result<Temp, std::io::Error> {
         let parent = self.path.unwrap_or(temp_dir());
         let mut name = self.name.unwrap_or(unique(&parent));
@@ -194,7 +207,9 @@ impl Builder {
         }
 
         let object = T::new(parent, name);
-        user::run_as!(mode, object.create())??;
+        if self.make {
+            user::run_as!(mode, object.create())??;
+        }
         Ok(Temp {
             object: Box::new(object),
             associated: Vec::new(),

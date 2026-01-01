@@ -15,6 +15,7 @@ use nix::{
     },
     unistd::Pid,
 };
+use parking_lot::{Condvar, Mutex, MutexGuard};
 use signal_hook::{consts::signal, iterator::Signals};
 use std::{
     collections::VecDeque,
@@ -22,7 +23,7 @@ use std::{
     fs::File,
     io::{self, Read, Write},
     os::fd::OwnedFd,
-    sync::{Arc, Condvar, Mutex, MutexGuard},
+    sync::Arc,
     thread::{self, JoinHandle, sleep},
     time::Duration,
 };
@@ -69,10 +70,7 @@ impl fmt::Display for Error {
                 "There was an error communicating to the child: {}",
                 e.desc()
             ),
-            Self::NoFile => write!(
-                f,
-                "The requested File Handle does not exist. Ensure --capture and --input are established during spawn()"
-            ),
+            Self::NoFile => write!(f, "The requested File Handle does not exist."),
             Self::Signal => write!(f, "Parent received a termination signal."),
             Self::Child => write!(f, "The child process terminated prematurely"),
             Self::Input => write!(f, "Cannot read input, as child has already terminated!"),
@@ -164,14 +162,14 @@ impl Stream {
                     if n == 0 {
                         break;
                     }
-                    let mut state = thread_shared.state.lock().expect("Stream poisoned!");
+                    let mut state = thread_shared.state.lock();
                     state.buffer.extend(&buf[..n]);
                     thread_shared.condvar.notify_all();
                 }
                 Ok(())
             })();
 
-            let mut state = thread_shared.state.lock().expect("Stream poisoned!");
+            let mut state = thread_shared.state.lock();
             state.finished = true;
             thread_shared.condvar.notify_all();
         });
@@ -200,7 +198,7 @@ impl Stream {
     /// This function is blocking, and will wait until a full line has been
     /// written to the stream. The line will then be removed from the Handle.
     pub fn read_line(&self) -> Option<String> {
-        let mut state = self.shared.state.lock().expect("Lock poisoned");
+        let mut state = self.shared.state.lock();
         loop {
             if let Some(pos) = state.buffer.iter().position(|&b| b == b'\n') {
                 let line = String::from_utf8_lossy(&self.drain(&mut state, Some(pos))).into_owned();
@@ -215,21 +213,18 @@ impl Stream {
                     return None;
                 }
             }
-            state = self.shared.condvar.wait(state).expect("Lock poisoned");
+            self.shared.condvar.wait(&mut state);
         }
     }
 
     /// Read the exact amount of bytes specified, or else throw an error.
     /// This function is blocking.
-    pub fn read_bytes(&self, bytes: usize) -> Result<Vec<u8>, Error> {
-        let mut state = self.shared.state.lock().expect("Lock poisoned!");
-        if state.finished {
-            return Err(Error::NoFile);
-        }
-        let mut res = self.drain(&mut state, Some(bytes));
+    pub fn read_bytes(&self, bytes: Option<usize>) -> Result<Vec<u8>, Error> {
+        let mut state = self.shared.state.lock();
+        let mut res = self.drain(&mut state, bytes);
         while res.is_empty() {
-            state = self.shared.condvar.wait(state).expect("Lock poisoned!");
-            res = self.drain(&mut state, Some(bytes));
+            self.shared.condvar.wait(&mut state);
+            res = self.drain(&mut state, bytes);
         }
         Ok(res)
     }
@@ -241,7 +236,7 @@ impl Stream {
     pub fn read_all(&mut self) -> Result<String, Error> {
         self.wait()?;
 
-        let mut state = self.shared.state.lock().expect("Lock poisoned!");
+        let mut state = self.shared.state.lock();
         Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
     }
 
@@ -408,12 +403,8 @@ impl Handle {
                     }
                 }
             }
-
-            // Collect the error code and return
-            self.wait()
-        } else {
-            Ok(self.exit)
         }
+        Ok(self.exit)
     }
 
     /// Check if the process is still alive, non-blocking.
