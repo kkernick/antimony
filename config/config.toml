@@ -1,0 +1,13 @@
+# This file contains global configuration for Antimony itself.
+
+# For the use of /tmp as the SOF backing store.
+# Can be set at runtime by setting AT_FORCE_TEMP to anything besides 0
+# force_temp = false
+
+# Disregard user configurations and ignore the command line.
+# Can be set at runtime by setting AT_SYSTEM_MODE to anything besides 0
+# system_mode = false
+
+# A set of user names that do not need to validate privilege via Polkit for
+# privileged operations (IE modifying the feature set, seccomp, or this file)
+# privileged_users = []

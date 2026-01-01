@@ -3,6 +3,7 @@ use crate::{
     timer,
 };
 use ahash::HashSetExt;
+use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
@@ -94,19 +95,18 @@ pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
         }
     });
 
-pub fn get_connection() -> Result<MutexGuard<'static, Connection>, Error> {
-    if let Some(pool) = POOL.as_ref() {
-        let id = std::thread::current().id();
+static CONNECTION_CACHE: CacheStatic<ThreadId, Mutex<Connection>> = LazyLock::new(DashMap::default);
+pub static CONNECTIONS: LazyLock<cache::Cache<ThreadId, Mutex<Connection>>> =
+    LazyLock::new(|| cache::Cache::new(&CONNECTION_CACHE));
 
-        if !pool.contains_key(&id) {
-            pool.insert(id, Arc::new(Mutex::new(new_connection()?)));
+pub fn get_connection() -> Result<MutexGuard<'static, Connection>, Error> {
+    let id = std::thread::current().id();
+    match CONNECTIONS.get(&id) {
+        Some(connection) => Ok(connection.lock()),
+        None => {
+            CONNECTIONS.insert(id, Mutex::new(new_connection()?));
+            Ok(CONNECTIONS.get(&id).unwrap().lock())
         }
-        let arc = pool.get(&id).unwrap().value().clone();
-        let raw_ptr = Arc::into_raw(arc);
-        let static_ref = unsafe { &*raw_ptr };
-        Ok(static_ref.lock())
-    } else {
-        Err(Error::Pool)
     }
 }
 

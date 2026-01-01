@@ -6,7 +6,7 @@ use crate::{
     spawn::{clear_capabilities, cond_pipe},
 };
 use caps::{Capability, CapsHashSet};
-use common::receive_fd;
+use common::stream::receive_fd;
 use core::fmt;
 use log::warn;
 use nix::{
@@ -215,7 +215,9 @@ impl Fork {
         F: FnOnce() -> R + UnwindSafe,
         R: serde::Serialize + serde::de::DeserializeOwned,
     {
-        let (read, write) = cond_pipe(&StreamMode::Pipe)?.unwrap();
+        let (read, write) = cond_pipe(&StreamMode::Pipe)?;
+        let read = read.unwrap();
+        let write = write.unwrap();
 
         #[cfg(feature = "seccomp")]
         let filter = {

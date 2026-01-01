@@ -24,6 +24,7 @@
 ./config/default.toml=/usr/share/antimony/config/default.toml
 ./config/feature.toml=/usr/share/antimony/config/feature.toml
 ./config/new.toml=/usr/share/antimony/config/new.toml
+./config/config.toml=/usr/share/antimony/config/config.toml
 
 ./completions/antimony.bash=/usr/share/bash-completion/completions/antimony
 ./completions/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish

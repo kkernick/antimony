@@ -10,6 +10,7 @@ mod wait;
 use crate::{
     cli::run::mounted,
     shared::{
+        config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
     },
@@ -65,14 +66,18 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
             Err(e) => {
                 debug!("No profile: {name}: {e}, assuming binary");
                 Profile {
-                    path: Some(which::which(name.clone())?.to_string()),
+                    path: Some(which::which(&name)?.to_string()),
                     ..Default::default()
                 }
             }
         };
 
-        let cmd_profile = Profile::from_args(args)?;
-        profile.base(cmd_profile)
+        if !CONFIG_FILE.system_mode() {
+            let cmd_profile = Profile::from_args(args)?;
+            profile.base(cmd_profile)
+        } else {
+            Ok(profile)
+        }
     })?;
 
     let hash = profile.hash_str();

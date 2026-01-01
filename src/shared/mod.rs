@@ -1,3 +1,4 @@
+pub mod config;
 pub mod edit;
 pub mod env;
 pub mod feature;
@@ -7,6 +8,29 @@ pub mod syscalls;
 
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
+
+pub fn privileged() -> anyhow::Result<bool> {
+    if CONFIG_FILE.is_privileged() {
+        Ok(true)
+    } else {
+        Ok(as_real!(anyhow::Result<i32>, {
+            Ok(Spawner::abs("/usr/bin/pkcheck")
+                .args([
+                    "--action-id",
+                    "org.freedesktop.policykit.exec",
+                    "--allow-user-interaction",
+                    "--process",
+                    &format!("{}", getpid().as_raw()),
+                ])?
+                .mode(user::Mode::Real)
+                .preserve_env(true)
+                .error(spawn::StreamMode::Discard)
+                .output(spawn::StreamMode::Discard)
+                .spawn()?
+                .wait()?)
+        })?? == 0)
+    }
+}
 
 pub fn utility(util: &str) -> String {
     AT_HOME
@@ -82,8 +106,10 @@ macro_rules! timer {
 use std::fmt::Display;
 
 use log::{Level, Record};
+use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
 use spawn::Spawner;
 pub use timer;
+use user::as_real;
 
-use crate::shared::env::AT_HOME;
+use crate::shared::{config::CONFIG_FILE, env::AT_HOME};

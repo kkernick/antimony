@@ -1,13 +1,8 @@
 //! Edit an existing profile.
-use std::fs;
-
+use crate::shared::{env::AT_HOME, feature::Feature, privileged, profile};
 use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
-use nix::unistd::getpid;
-use spawn::Spawner;
-use user::as_real;
-
-use crate::shared::{env::AT_HOME, feature::Feature, profile};
+use std::fs;
 
 #[derive(clap::Args, Debug, Default)]
 pub struct Args {
@@ -21,22 +16,9 @@ pub struct Args {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        let result = as_real!(Result<i32>, {
-            Ok(Spawner::abs("/usr/bin/pkcheck")
-                .args([
-                    "--action-id",
-                    "org.freedesktop.policykit.exec",
-                    "--allow-user-interaction",
-                    "--process",
-                    &format!("{}", getpid().as_raw()),
-                ])?
-                .spawn()?
-                .wait()?)
-        })??;
-
-        if result != 0 {
+        if !privileged()? {
             return Err(anyhow!(
-                "Administrative privilege and Polkit is required to modify the system feature set!"
+                "Modifying the system feature set is a privileged operation"
             ));
         } else {
             user::set(user::Mode::Effective)?;

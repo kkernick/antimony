@@ -7,7 +7,7 @@ use caps::{CapSet, Capability, CapsHashSet};
 use log::{trace, warn};
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
-    unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork, pipe},
+    unistd::{ForkResult, close, dup, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork, pipe},
 };
 use parking_lot::Mutex;
 use std::{
@@ -16,9 +16,10 @@ use std::{
     error,
     ffi::{CString, NulError, OsString},
     fmt,
-    os::fd::OwnedFd,
+    os::fd::{AsFd, OwnedFd},
     process::exit,
     str::FromStr,
+    sync::LazyLock,
 };
 
 #[cfg(feature = "seccomp")]
@@ -32,6 +33,12 @@ use {
 
 #[cfg(feature = "cache")]
 use std::{fs, path::Path};
+
+static NULL: LazyLock<OwnedFd> = LazyLock::new(|| {
+    std::fs::File::open("/dev/null")
+        .expect("Failed to open /dev/null")
+        .into()
+});
 
 /// Errors related to the Spawner.
 #[derive(Debug)]
@@ -50,7 +57,7 @@ pub enum Error {
     Errno(Option<ForkResult>, &'static str, nix::errno::Errno),
 
     /// Errors resolving binary paths.
-    Path(String),
+    Path(which::Error),
 
     /// An error when trying to fork.
     Fork(nix::errno::Errno),
@@ -121,6 +128,9 @@ pub enum StreamMode {
 
     /// Send the output to the system logger at the provided level.
     Log(log::Level),
+
+    /// Send output to /dev/null.
+    Discard,
 }
 
 /// Spawn a child.
@@ -211,7 +221,7 @@ impl<'a> Spawner {
     /// *cmd* will be resolved from **PATH**.
     pub fn new(cmd: impl Into<String>) -> Result<Self, Error> {
         let cmd = cmd.into();
-        let path = which::which(&cmd).map_err(|_| Error::Path(cmd))?;
+        let path = which::which(&cmd).map_err(Error::Path)?;
         Ok(Self::abs(path))
     }
 
@@ -830,36 +840,39 @@ impl<'a> Spawner {
                 };
 
                 // Set the relevant pipes.
-                let stdin = if let Some((read, write)) = stdin {
+                let stdin = if let (Some(read), write) = stdin {
                     close(read).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
-                    Some(write)
+                    write
                 } else {
                     None
                 };
 
-                let stdout = if let Some((read, write)) = stdout {
+                let stdout = if let (read, Some(write)) = stdout {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
-
                     if let StreamMode::Log(log) = self.output {
                         let name = name.clone();
-                        std::thread::spawn(move || logger(log, read, name));
+                        if let Some(read) = read {
+                            std::thread::spawn(move || logger(log, read, name));
+                        }
                         None
                     } else {
-                        Some(read)
+                        read
                     }
                 } else {
                     None
                 };
 
-                let stderr = if let Some((read, write)) = stderr {
+                let stderr = if let (read, Some(write)) = stderr {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
 
                     if let StreamMode::Log(log) = self.error {
                         let name = name.clone();
-                        std::thread::spawn(move || logger(log, read, name));
+                        if let Some(read) = read {
+                            std::thread::spawn(move || logger(log, read, name));
+                        }
                         None
                     } else {
-                        Some(read)
+                        read
                     }
                 } else {
                     None
@@ -885,19 +898,25 @@ impl<'a> Spawner {
             }
 
             ForkResult::Child => {
-                // Setup the pipes.
-                if let Some((read, write)) = stdout {
-                    let _ = close(read);
+                if let (Some(read), write) = stdin {
+                    if let Some(write) = write {
+                        let _ = close(write);
+                    }
+                    let _ = dup2_stdin(read);
+                }
+
+                if let (read, Some(write)) = stdout {
+                    if let Some(read) = read {
+                        let _ = close(read);
+                    }
                     let _ = dup2_stdout(write);
                 }
 
-                if let Some((read, write)) = stderr {
-                    let _ = close(read);
+                if let (read, Some(write)) = stderr {
+                    if let Some(read) = read {
+                        let _ = close(read);
+                    }
                     let _ = dup2_stderr(write);
-                }
-                if let Some((read, write)) = stdin {
-                    let _ = close(write);
-                    let _ = dup2_stdin(read);
                 }
 
                 let _ = prctl::set_pdeathsig(SIGTERM);
@@ -953,25 +972,30 @@ pub(crate) fn clear_capabilities(diff: CapsHashSet) {
     }
 }
 
+pub fn dup_null() -> Result<OwnedFd, Error> {
+    dup(NULL.as_fd()).map_err(|e| Error::Errno(None, "dup", e))
+}
+
 /// Conditionally create a pipe.
 /// Returns either a set of `None`, or the result of `pipe()`
-pub(crate) fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, Error> {
+pub(crate) fn cond_pipe(cond: &StreamMode) -> Result<(Option<OwnedFd>, Option<OwnedFd>), Error> {
     match cond {
         StreamMode::Pipe => match pipe() {
-            Ok((r, w)) => Ok(Some((r, w))),
+            Ok((r, w)) => Ok((Some(r), Some(w))),
             Err(e) => Err(Error::Errno(None, "pipe", e)),
         },
         StreamMode::Log(e) => {
             if log::log_enabled!(*e) {
                 match pipe() {
-                    Ok((r, w)) => Ok(Some((r, w))),
+                    Ok((r, w)) => Ok((Some(r), Some(w))),
                     Err(e) => Err(Error::Errno(None, "pipe", e)),
                 }
             } else {
-                Ok(None)
+                Ok((None, Some(dup_null()?)))
             }
         }
-        StreamMode::Share => Ok(None),
+        StreamMode::Share => Ok((None, None)),
+        StreamMode::Discard => Ok((None, Some(dup_null()?))),
     }
 }
 

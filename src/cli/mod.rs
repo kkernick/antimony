@@ -1,4 +1,5 @@
 /// Antimony's CLI.
+pub mod config;
 pub mod create;
 pub mod default;
 pub mod edit;
@@ -93,6 +94,9 @@ pub enum Command {
 
     /// Import user profiles.
     Import(import::Args),
+
+    /// Import user profiles.
+    Config(config::Args),
 }
 impl Run for Command {
     fn run(self) -> Result<()> {
@@ -110,6 +114,7 @@ impl Run for Command {
             Command::Seccomp(args) => args.run(),
             Command::Export(args) => args.run(),
             Command::Import(args) => args.run(),
+            Command::Config(args) => args.run(),
         }
     }
 }

@@ -1,12 +1,12 @@
 //! Modify the SECCOMP Database.
 use crate::shared::{
     env::{AT_HOME, DATA_HOME},
-    syscalls,
+    privileged, syscalls,
 };
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
 use dialoguer::Confirm;
-use nix::unistd::{getcwd, getpid};
+use nix::unistd::getcwd;
 use rusqlite::params;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -46,24 +46,9 @@ pub enum Operation {
 
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        let result = as_real!(Result<i32>, {
-            Ok(Spawner::abs("/usr/bin/pkcheck")
-                .args([
-                    "--action-id",
-                    "org.freedesktop.policykit.exec",
-                    "--allow-user-interaction",
-                    "--process",
-                    &format!("{}", getpid().as_raw()),
-                ])?
-                .mode(user::Mode::Real)
-                .preserve_env(true)
-                .spawn()?
-                .wait()?)
-        })??;
-
-        if result != 0 {
+        if !privileged()? {
             Err(anyhow!(
-                "Administrative privilege and Polkit is required to modify the SECCOMP database!"
+                "Modifying the SECCOMP database is a privileged operation"
             ))
         } else {
             user::set(user::Mode::Effective)?;

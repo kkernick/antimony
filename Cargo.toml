@@ -21,6 +21,7 @@ name = "antimony"
 path = "src/antimony.rs"
 
 [dependencies]
+common = { path = "crates/common" }
 notify = { path = "crates/notify" }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
 spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }

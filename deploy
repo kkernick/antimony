@@ -59,6 +59,7 @@ sudo cp -r config/profiles /usr/share/antimony
 sudo cp config/default.toml /usr/share/antimony/config
 sudo cp config/feature.toml /usr/share/antimony/config
 sudo cp config/new.toml /usr/share/antimony/config
+sudo cp config/config.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
 sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor

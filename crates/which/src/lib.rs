@@ -1,10 +1,11 @@
+use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
     env,
     path::{Path, PathBuf},
-    sync::{Arc, LazyLock},
+    sync::LazyLock,
 };
 
 #[derive(Debug)]
@@ -31,38 +32,30 @@ pub static PATH: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
         .collect::<Vec<_>>()
 });
 
-static CACHE: LazyLock<DashMap<String, Arc<str>, ahash::RandomState>> =
-    LazyLock::new(DashMap::default);
+static CACHE: CacheStatic<String, Cow<'static, str>> = LazyLock::new(DashMap::default);
 
-pub fn which<'a>(path: impl Into<Cow<'a, str>>) -> Result<&'static str, Error> {
-    let path = path.into();
+pub static WHICH: LazyLock<cache::Cache<String, Cow<'static, str>>> =
+    LazyLock::new(|| cache::Cache::new(&CACHE));
 
-    // Insert if missing
-    if !CACHE.contains_key(path.as_ref()) {
-        let resolved = if Path::new(path.as_ref()).exists() {
-            path.to_string()
-        } else {
-            PATH.par_iter()
-                .find_map_any(|root: &PathBuf| {
-                    let candidate = root.join(path.as_ref());
-                    if candidate.exists() {
-                        Some(candidate.to_string_lossy().into_owned())
-                    } else {
-                        None
-                    }
-                })
-                .ok_or(Error::NotFound(path.clone().into_owned()))?
-        };
-        CACHE.insert(path.to_string(), Arc::from(resolved));
+pub fn which(path: &str) -> Result<&'static str, Error> {
+    match WHICH.get(path) {
+        Some(resolved) => Ok(resolved),
+        None => {
+            let resolved = if Path::new(path).exists() {
+                path.to_string()
+            } else {
+                PATH.par_iter()
+                    .find_map_any(|root: &PathBuf| {
+                        let candidate = root.join(path);
+                        if candidate.exists() {
+                            Some(candidate.to_string_lossy().into_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .ok_or(Error::NotFound(path.to_string()))?
+            };
+            Ok(WHICH.insert(path.to_string(), Cow::Owned(resolved)))
+        }
     }
-
-    // Get the arc
-    let arc = CACHE.get(path.as_ref()).unwrap().value().clone();
-
-    // Consume it to get the data.
-    let raw_ptr: *const str = Arc::into_raw(arc);
-
-    // Cast it to static--the content will stay alive safely.
-    let static_ref: &'static str = unsafe { &*raw_ptr };
-    Ok(static_ref)
 }

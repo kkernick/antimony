@@ -43,6 +43,7 @@ dependencies = [
  "anyhow",
  "caps",
  "clap",
+ "common",
  "console 0.16.2",
  "dashmap",
  "dbus",
@@ -190,6 +191,8 @@ dependencies = [
 name = "common"
 version = "0.1.0"
 dependencies = [
+ "ahash",
+ "dashmap",
  "nix",
 ]
 
@@ -1000,6 +1003,7 @@ name = "which"
 version = "0.1.0"
 dependencies = [
  "ahash",
+ "common",
  "dashmap",
  "rayon",
 ]

@@ -4,7 +4,9 @@ use crate::{
     cli,
     fab::{self, get_wildcards, resolve},
     shared::{
-        Set, edit,
+        Set,
+        config::CONFIG_FILE,
+        edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
         format_iter,
     },
@@ -40,11 +42,6 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         as_effective!(fs::create_dir_all(&path).unwrap()).expect("Failed to create profile cache");
     }
     path
-});
-
-pub static SYSTEM_MODE: LazyLock<bool> = LazyLock::new(|| match std::env::var("AT_SYSTEM_MODE") {
-    Ok(value) => value != "0",
-    Err(_) => false,
 });
 
 /// An error for issues around Profiles.
@@ -317,7 +314,7 @@ impl Profile {
         }
 
         // Try and load user-configured profile from AT_HOME
-        if !*SYSTEM_MODE {
+        if !CONFIG_FILE.system_mode() {
             let user = Self::user_profile(name);
             if user.exists() {
                 return Ok(user);
@@ -454,7 +451,7 @@ impl Profile {
             let to_inherit: BTreeSet<String> = match &profile.inherits {
                 Some(i) => i.clone(),
                 None => {
-                    if Profile::default_profile().exists() && !*SYSTEM_MODE {
+                    if Profile::default_profile().exists() && !CONFIG_FILE.system_mode() {
                         BTreeSet::from_iter(["default".to_string()])
                     } else {
                         BTreeSet::new()
@@ -498,7 +495,7 @@ impl Profile {
             // Try and lookup the path. If it doesn't work, then the corresponding application
             // isn't installed. This is fine, as long as the user doesn't try and run the profile.
             if !name.ends_with(".toml") && profile.path.is_none() {
-                profile.path = Some(which::which(profile.app_path(name))?.to_string());
+                profile.path = Some(which::which(&profile.app_path(name))?.to_string());
             }
 
             debug!("Fabricating features");

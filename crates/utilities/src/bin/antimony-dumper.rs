@@ -6,7 +6,7 @@ use antimony::shared::{
 };
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use common::receive_fd;
+use common::stream::receive_fd;
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use nix::{

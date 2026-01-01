@@ -15,7 +15,7 @@ use antimony::shared::{
 };
 use anyhow::{Context, Result};
 use clap::Parser;
-use common::receive_fd;
+use common::stream::receive_fd;
 use dashmap::{DashMap, mapref::one::RefMut};
 use heck::ToTitleCase;
 use nix::{

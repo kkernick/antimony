@@ -206,6 +206,12 @@ _arguments "${_arguments_options[@]}" : \
 ':profile -- The path of the profile. Can also be a directory, which will import all files within:_default' \
 && ret=0
 ;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_antimony__help_commands" \
@@ -270,6 +276,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -299,9 +309,15 @@ _antimony_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
+'config:Import user profiles' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony commands' commands "$@"
+}
+(( $+functions[_antimony__config_commands] )) ||
+_antimony__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony config commands' commands "$@"
 }
 (( $+functions[_antimony__create_commands] )) ||
 _antimony__create_commands() {
@@ -344,9 +360,15 @@ _antimony__help_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
+'config:Import user profiles' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony help commands' commands "$@"
+}
+(( $+functions[_antimony__help__config_commands] )) ||
+_antimony__help__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help config commands' commands "$@"
 }
 (( $+functions[_antimony__help__create_commands] )) ||
 _antimony__help__create_commands() {

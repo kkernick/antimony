@@ -11,6 +11,8 @@ use std::{
 use user::as_effective;
 use which::which;
 
+use crate::shared::config::CONFIG_FILE;
+
 /// Antimony's home folder is where configuration is stored
 pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = PathBuf::from(env::var("AT_HOME").unwrap_or("/usr/share/antimony".to_string()));
@@ -28,14 +30,16 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 /// THe Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
-    let writeable = match env::var("AT_FORCE_TMP") {
-        Ok(result) => result != "1",
-        Err(_) => if !cache_dir.exists() {
+
+    let writeable = if CONFIG_FILE.force_temp() {
+        false
+    } else {
+        if !cache_dir.exists() {
             as_effective!(fs::create_dir(&cache_dir).is_ok())
         } else {
             as_effective!({ fs::File::create(cache_dir.join(".test")).is_ok() })
         }
-        .expect("Failed to create cache dir"),
+        .expect("Failed to create cache dir")
     };
 
     if !writeable {
@@ -119,7 +123,7 @@ pub static CONFIG_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static EDITOR: LazyLock<String> = LazyLock::new(|| {
     let editor = {
         if let Ok(editor) = env::var("EDITOR") {
-            which(editor).expect("Could not get path for editor!")
+            which(&editor).expect("Could not get path for editor!")
         } else if let Ok(vim) = which("vim") {
             vim
         } else if let Ok(vi) = which("vi") {
