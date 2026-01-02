@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Benchmark"],"fn":["cooldown","main"],"struct":["Cli"]};

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Mode"],"fn":["current","drop","obtain_lock","restore","revert","set"],"macro":["as_effective","as_real","run_as"],"static":["GROUP","SETUID","USER"],"struct":["Error","Sync"]};

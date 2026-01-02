@@ -8,7 +8,10 @@ use std::{
 use user::as_real;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
-    if let Some(home) = &args.profile.lock().home.take() {
+    if let Some(home) = &args.profile.lock().home.take()
+        && let Some(policy) = home.policy
+        && policy != HomePolicy::None
+    {
         let home_dir = home.path(&args.name);
         debug!("Home directory at {}", home_dir.display());
 
@@ -39,48 +42,42 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             }
         }
 
-        match home.policy.unwrap_or_default() {
-            HomePolicy::None => Ok(None),
-            policy => {
-                let home_str = home_dir.to_string_lossy();
-                if !home_dir.exists() {
-                    as_real!(fs::create_dir_all(&home_dir))??;
-                }
+        let home_str = home_dir.to_string_lossy();
+        if !home_dir.exists() {
+            as_real!(fs::create_dir_all(&home_dir))??;
+        }
 
-                let dest = match &home.path {
-                    Some(path) => path,
-                    None => "/home/antimony",
-                };
+        let dest = match &home.path {
+            Some(path) => path,
+            None => "/home/antimony",
+        };
 
-                match policy {
-                    HomePolicy::Enabled => {
-                        args.handle.args_i(["--bind", &home_str, dest])?;
-                    }
-                    _ => {
-                        if policy == HomePolicy::Overlay {
-                            #[rustfmt::skip]
+        match policy {
+            HomePolicy::Enabled => {
+                args.handle.args_i(["--bind", &home_str, dest])?;
+            }
+            _ => {
+                if policy == HomePolicy::Overlay {
+                    #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &home_str,
                                     "--tmp-overlay", dest,
                                 ])?;
-                        } else {
-                            let work = args.sys_dir.join("work");
-                            let work_str = work.to_string_lossy();
-                            fs::create_dir_all(&work)?;
+                } else {
+                    let work = args.sys_dir.join("work");
+                    let work_str = work.to_string_lossy();
+                    fs::create_dir_all(&work)?;
 
-                            #[rustfmt::skip]
+                    #[rustfmt::skip]
                                 args.handle.args_i([
                                     "--overlay-src", &work_str,
                                     "--overlay-src", &home_str,
                                     "--ro-overlay", dest,
                                 ])?;
-                        }
-                    }
                 }
-
-                Ok(Some(home_str.into_owned()))
             }
         }
+        Ok(Some(home_str.into_owned()))
     } else {
         Ok(None)
     }

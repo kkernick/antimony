@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["add_sof","fabricate","get_sof_path","in_lib"]};

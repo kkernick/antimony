@@ -1,15 +1,16 @@
+//! This file contains various utilities dealing with Sockets and Streams.
+
+use nix::{
+    errno::Errno,
+    poll::{PollFd, PollFlags, PollTimeout},
+    sys::socket::{ControlMessageOwned, MsgFlags, recvmsg},
+};
 use std::{
     io::IoSliceMut,
     os::{
         fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
         unix::net::{UnixListener, UnixStream},
     },
-};
-
-use nix::{
-    errno::Errno,
-    poll::{PollFd, PollFlags, PollTimeout},
-    sys::socket::{ControlMessageOwned, MsgFlags, recvmsg},
 };
 
 /// Poll on Accept, Timing out after timeout.

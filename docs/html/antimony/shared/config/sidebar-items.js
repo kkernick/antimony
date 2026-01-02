@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"static":["CONFIG_FILE"],"struct":["ConfigFile"]};

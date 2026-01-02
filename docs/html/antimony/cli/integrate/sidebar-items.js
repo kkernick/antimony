@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConfigMode"],"fn":["integrate","remove"],"struct":["Args"]};

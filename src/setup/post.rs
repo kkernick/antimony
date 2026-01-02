@@ -1,4 +1,7 @@
-use crate::shared::{env::HOME, profile::FileMode};
+use crate::shared::{
+    env::{HOME, PWD},
+    profile::FileMode,
+};
 use anyhow::Result;
 use log::debug;
 use std::{fs, path::Path};
@@ -25,9 +28,14 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
         };
 
         for arg in &mut post_args {
-            if as_real!(Path::new(arg).exists())? || arg.starts_with("file://") {
-                debug!("File passthrough: {arg}");
-                let file = arg.strip_prefix("file://").unwrap_or(arg);
+            let abs_arg = if as_real!(PWD.join(&arg).exists())? {
+                PWD.join(&arg).to_string_lossy().into_owned()
+            } else {
+                arg.to_string()
+            };
+
+            if as_real!(Path::new(&abs_arg).exists())? || abs_arg.starts_with("file://") {
+                let file = arg.strip_prefix("file://").unwrap_or(&abs_arg);
                 let dest = file.replace(HOME.as_str(), "/home/antimony");
                 match operation {
                     FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest])?,

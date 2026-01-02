@@ -143,20 +143,12 @@ fn main() -> Result<()> {
     let root = &root[..root.len() - 1];
     chdir(root)?;
 
-    let _cache = if cli.recipe.is_some() {
+    if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
         unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
-        unsafe { env::set_var("AT_FORCE_TMP", "1") }
-
-        Some(
-            temp::Builder::new()
-                .name("cache")
-                .within(Path::new(root).join("config"))
-                .create::<temp::Directory>()?,
-        )
+        unsafe { env::set_var("AT_FORCE_TEMP", "1") }
     } else {
         unsafe { env::set_var("AT_SYSTEM_MODE", "1") }
-        None
     };
 
     let term = Arc::new(AtomicBool::new(false));

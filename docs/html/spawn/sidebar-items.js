@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["HandleError","SpawnError","StreamMode"],"struct":["Handle","Spawner","Stream"]};
