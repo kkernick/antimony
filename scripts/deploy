@@ -1,0 +1,50 @@
+#!/bin/bash
+set -e
+
+echo "Compiling Bench Script"
+cargo build --package utilities
+
+DIR=$(../target/debug/antimony_build $@)
+
+echo "Copying binaries"
+if [[ ! -d /usr/share/antimony/utilities ]]; then
+  sudo mkdir -p /usr/share/antimony/utilities
+fi
+
+sudo cp --remove-destination -v "$DIR/antimony" "/usr/bin/antimony"
+sudo cp --remove-destination -v "$DIR/antimony-spawn" "/usr/share/antimony/utilities/antimony-spawn"
+sudo cp --remove-destination -v "$DIR/antimony-monitor" "/usr/share/antimony/utilities/antimony-monitor"
+sudo cp --remove-destination -v "$DIR/antimony-dumper" "/usr/share/antimony/utilities/antimony-dumper"
+sudo cp --remove-destination -v "$DIR/antimony-open" "/usr/share/antimony/utilities/antimony-open"
+sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/antimony-notify"
+
+echo "Setting SetUID"
+exec="/usr/bin/antimony"
+sudo chown antimony:antimony $exec
+sudo chmod u+s $exec
+sudo chmod o+x $exec
+
+echo "Removing old config"
+sudo rm -fr /usr/share/antimony/{features,profiles}
+
+echo "Setting up config"
+if [[ ! -d /usr/share/antimony/config ]]; then
+  sudo mkdir /usr/share/antimony/config
+fi
+
+sudo cp -r ../config/features /usr/share/antimony
+sudo cp -r ../config/profiles /usr/share/antimony
+
+sudo cp ../config/default.toml /usr/share/antimony/config
+sudo cp ../config/feature.toml /usr/share/antimony/config
+sudo cp ../config/new.toml /usr/share/antimony/config
+sudo cp ../config/config.toml /usr/share/antimony/config
+
+sudo chown -R antimony:antimony /usr/share/antimony
+sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
+sudo setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
+
+"${DIR}/antimony_completions"
+sudo cp ../completions/antimony.bash /usr/share/bash-completion/completions
+sudo cp ../completions/antimony.fish /usr/share/fish/vendor_completions.d
+sudo cp ../completions/_antimony /usr/share/zsh/site-functions

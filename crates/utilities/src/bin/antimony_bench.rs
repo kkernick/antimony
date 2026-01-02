@@ -147,9 +147,7 @@ fn main() -> Result<()> {
         // Set AT_HOME to our current config.
         unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
         unsafe { env::set_var("AT_FORCE_TEMP", "1") }
-    } else {
-        unsafe { env::set_var("AT_SYSTEM_MODE", "1") }
-    };
+    }
 
     let term = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
@@ -289,6 +287,7 @@ fn main() -> Result<()> {
                     command.extend(add.clone());
                 }
                 command.push("--features=dry".to_string());
+                command.push("--home-policy=none".to_string());
 
                 Spawner::new("hyperfine")?
                     .args([

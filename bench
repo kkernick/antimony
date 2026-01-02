@@ -1,4 +1,0 @@
-#!/bin/bash
-
-cargo build --package utilities
-./target/debug/antimony_bench $@

@@ -1,12 +1,21 @@
 use clap::CommandFactory;
 use clap_complete::{generate, shells};
-use std::{fs, io::Error, path::Path};
+use spawn::Spawner;
+use std::{fs, path::Path};
 
-fn main() -> Result<(), Error> {
+fn main() -> anyhow::Result<()> {
     let mut cli = antimony::cli::Cli::command();
-    let path = Path::new("completions");
+
+    let root = Spawner::new("git")?
+        .args(["rev-parse", "--show-toplevel"])?
+        .output(spawn::StreamMode::Pipe)
+        .spawn()?
+        .output_all()?;
+    let root = &root[..root.len() - 1];
+
+    let path = Path::new(root).join("completions");
     if !path.exists() {
-        fs::create_dir(path)?;
+        fs::create_dir(&path)?;
     }
 
     let mut out = fs::File::create(path.join("antimony.bash"))?;
