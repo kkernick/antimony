@@ -9,7 +9,6 @@ pub mod refresh;
 pub mod reset;
 pub mod run;
 pub mod seccomp;
-pub mod trace;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -70,9 +69,6 @@ pub enum Command {
 
     /// Reset a profile back to the system-defined profile.
     Reset(reset::Args),
-
-    /// Trace a profile for missing syscalls or files.
-    Trace(trace::Args),
 
     /// List installed profiles and features
     Info(info::Args),

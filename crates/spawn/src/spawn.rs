@@ -110,7 +110,7 @@ impl error::Error for Error {
 }
 
 /// How to handle the standard input/out/error streams
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default)]
 pub enum StreamMode {
     /// Collect the stream contents in a Stream object via a
     /// pipe that can be retrieved in the `spawn::Handle`
@@ -127,6 +127,10 @@ pub enum StreamMode {
 
     /// Send output to /dev/null.
     Discard,
+
+    #[cfg(feature = "fd")]
+    /// Send the output to the provided File Descriptor.
+    Fd(OwnedFd),
 }
 
 /// Spawn a child.
@@ -245,7 +249,7 @@ impl<'a> Spawner {
             cache_index: Mutex::new(None),
 
             #[cfg(feature = "fd")]
-            fds: Mutex::new(vec![]),
+            fds: Mutex::default(),
 
             #[cfg(feature = "user")]
             mode: Mutex::default(),
@@ -868,23 +872,34 @@ impl<'a> Spawner {
                 if let Some((read, write)) = stdin {
                     let _ = close(write);
                     let _ = dup2_stdin(read);
-                } else if stdin_mode == StreamMode::Discard {
+                } else if let StreamMode::Discard = stdin_mode {
                     let _ = dup2_stdin(dup_null().unwrap());
+                }
+                #[cfg(feature = "fd")]
+                if let StreamMode::Fd(fd) = stdin_mode {
+                    let _ = dup2_stdin(fd);
                 }
 
                 if let Some((read, write)) = stdout {
                     let _ = close(read);
-
                     let _ = dup2_stdout(write);
-                } else if stdout_mode == StreamMode::Discard {
+                } else if let StreamMode::Discard = stdout_mode {
                     let _ = dup2_stdout(dup_null().unwrap());
+                }
+                #[cfg(feature = "fd")]
+                if let StreamMode::Fd(fd) = stdout_mode {
+                    let _ = dup2_stdout(fd);
                 }
 
                 if let Some((read, write)) = stderr {
                     let _ = close(read);
                     let _ = dup2_stderr(write);
-                } else if stderr_mode == StreamMode::Discard {
+                } else if let StreamMode::Discard = stderr_mode {
                     let _ = dup2_stderr(dup_null().unwrap());
+                }
+                #[cfg(feature = "fd")]
+                if let StreamMode::Fd(fd) = stderr_mode {
+                    let _ = dup2_stderr(fd);
                 }
 
                 let _ = prctl::set_pdeathsig(SIGTERM);

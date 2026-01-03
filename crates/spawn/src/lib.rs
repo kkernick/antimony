@@ -74,18 +74,11 @@ fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, SpawnError
             Ok((r, w)) => Ok(Some((r, w))),
             Err(e) => Err(SpawnError::Errno(None, "pipe", e)),
         },
-        StreamMode::Log(e) => {
-            if log::log_enabled!(*e) {
-                match pipe() {
-                    Ok((r, w)) => Ok(Some((r, w))),
-                    Err(e) => Err(SpawnError::Errno(None, "pipe", e)),
-                }
-            } else {
-                Ok(None)
-            }
-        }
-        StreamMode::Share => Ok(None),
-        StreamMode::Discard => Ok(None),
+        StreamMode::Log(e) if log::log_enabled!(*e) => match pipe() {
+            Ok((r, w)) => Ok(Some((r, w))),
+            Err(e) => Err(SpawnError::Errno(None, "pipe", e)),
+        },
+        _ => Ok(None),
     }
 }
 

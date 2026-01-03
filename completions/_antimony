@@ -130,19 +130,6 @@ _arguments "${_arguments_options[@]}" : \
 '::name -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
 && ret=0
 ;;
-(trace)
-_arguments "${_arguments_options[@]}" : \
-'*--trace-args=[Arguments to pass to strace directly]:TRACE_ARGS:_default' \
-'-r[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
-'--report[Collect the trace log and list files that the sandbox tried to access, and feature they are available in]' \
-'-h[Print help (see more with '\''--help'\'')]' \
-'--help[Print help (see more with '\''--help'\'')]' \
-':profile -- The name of the profile:_default' \
-':mode -- What to trace:((errors\:"Only trace syscalls that return errors"
-all\:"Trace all syscalls, even those that succeed. Useful to see the context in which an error occurred"))' \
-'*::passthrough -- Run arguments:_default' \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 '*-v[The verbosity of information]' \
@@ -222,10 +209,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(trace)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -267,7 +250,6 @@ _antimony_commands() {
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
-'trace:Trace a profile for missing syscalls or files' \
 'info:List installed profiles and features' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
@@ -300,7 +282,6 @@ _antimony__help_commands() {
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
-'trace:Trace a profile for missing syscalls or files' \
 'info:List installed profiles and features' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
@@ -365,11 +346,6 @@ _antimony__help__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help seccomp commands' commands "$@"
 }
-(( $+functions[_antimony__help__trace_commands] )) ||
-_antimony__help__trace_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help trace commands' commands "$@"
-}
 (( $+functions[_antimony__import_commands] )) ||
 _antimony__import_commands() {
     local commands; commands=()
@@ -404,11 +380,6 @@ _antimony__run_commands() {
 _antimony__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony seccomp commands' commands "$@"
-}
-(( $+functions[_antimony__trace_commands] )) ||
-_antimony__trace_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony trace commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_antimony" ]; then

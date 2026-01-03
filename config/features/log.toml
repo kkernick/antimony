@@ -1,0 +1,10 @@
+name = "log"
+description = "Dump errors to a temporary file."
+
+[hooks.parent]
+name = "logger"
+content = """
+cat > /tmp/antimony-$ANTIMONY_NAME-log.txt
+echo "Log written to /tmp/antimony-$ANTIMONY_NAME-log.txt"
+"""
+capture_error = true

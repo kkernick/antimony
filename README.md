@@ -31,7 +31,6 @@ Antimony relies on the following runtime-dependencies:
 * `glibc`
 * `findutils`
 * `bubblewrap`
-* `strace`
 * `xdg-dbus-proxy`
 * `sqlite3`
 * `libseccomp`

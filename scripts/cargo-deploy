@@ -17,6 +17,8 @@ sudo cp --remove-destination -v "$DIR/antimony-spawn" "/usr/share/antimony/utili
 sudo cp --remove-destination -v "$DIR/antimony-monitor" "/usr/share/antimony/utilities/antimony-monitor"
 sudo cp --remove-destination -v "$DIR/antimony-dumper" "/usr/share/antimony/utilities/antimony-dumper"
 sudo cp --remove-destination -v "$DIR/antimony-open" "/usr/share/antimony/utilities/antimony-open"
+sudo cp --remove-destination -v "$DIR/antimony-tracer" "/usr/share/antimony/utilities/antimony-tracer"
+
 sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/antimony-notify"
 
 echo "Setting SetUID"

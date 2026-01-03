@@ -2,7 +2,7 @@
 //! to function properly.
 use crate::{
     cli,
-    fab::{self, get_wildcards, resolve},
+    fab::{self, get_wildcards, resolve, resolve_env},
     shared::{
         Set,
         config::CONFIG_FILE,
@@ -15,6 +15,7 @@ use ahash::{HashSetExt, RandomState};
 use clap::ValueEnum;
 use console::style;
 use log::debug;
+use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
 use std::{
@@ -790,6 +791,9 @@ pub enum HookError {
 
     /// Error for the Parent not being provided the correct handle
     Parent,
+
+    /// Misc system errors.
+    Errno(errno::Errno),
 }
 impl fmt::Display for HookError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -800,6 +804,7 @@ impl fmt::Display for HookError {
             Self::Spawn(e) => write!(f, "Error spawning hook: {e}"),
             Self::Handle(e) => write!(f, "Error handling the hook: {e}"),
             Self::Parent => write!(f, "Parent is missing sandbox handle!"),
+            Self::Errno(e) => write!(f, "System error: {e}"),
         }
     }
 }
@@ -808,6 +813,7 @@ impl error::Error for HookError {
         match self {
             Self::Spawn(e) => Some(e),
             Self::Handle(e) => Some(e),
+            Self::Errno(e) => Some(e),
             _ => None,
         }
     }
@@ -820,6 +826,11 @@ impl From<SpawnError> for HookError {
 impl From<HandleError> for HookError {
     fn from(value: HandleError) -> Self {
         Self::Handle(value)
+    }
+}
+impl From<errno::Errno> for HookError {
+    fn from(value: errno::Errno) -> Self {
+        Self::Errno(value)
     }
 }
 
@@ -873,6 +884,9 @@ impl Hooks {
 #[derive(Debug, Hash, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Hook {
+    /// An optional name to identify the process.
+    pub name: Option<String>,
+
     /// The path to a binary
     pub path: Option<String>,
 
@@ -896,6 +910,16 @@ pub struct Hook {
     /// Allow the hook to obtain new privileges. Needed if the binary/script
     /// requires privilege antimony does not have.
     pub new_privileges: Option<bool>,
+
+    /// Capture the sandbox's STDOUT and provide it to the Hook via
+    /// STDIN. Only one of capture_output and capture_error can be
+    /// set. If both are set, capture_error is used.
+    pub capture_output: Option<bool>,
+
+    /// Capture the sandbox's STDERR and provide it to the Hook via
+    /// STDIN. Only one of capture_output and capture_error can be
+    /// set. If both are set, capture_error is used.
+    pub capture_error: Option<bool>,
 }
 impl Hook {
     pub fn process(
@@ -907,12 +931,14 @@ impl Hook {
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
         let handle = if let Some(path) = self.path {
-            Spawner::new(path)?
+            Spawner::new(resolve_env(Cow::Owned(path)))?
         } else if let Some(content) = self.content {
             Spawner::abs("/usr/bin/bash").args(["-c", content.as_str()])?
         } else {
             return Err(HookError::Missing);
-        };
+        }
+        .name(&self.name.unwrap_or("hook".to_string()));
+
         handle.preserve_env_i(self.env.unwrap_or(false));
         handle.env_i("ANTIMONY_NAME", name)?;
         handle.env_i("ANTIMONY_CACHE", cache)?;
@@ -934,6 +960,18 @@ impl Hook {
 
         if parent {
             if let Some(main) = main {
+                if self.capture_output.unwrap_or(false) {
+                    let pipe = pipe()?;
+                    handle.input_i(StreamMode::Fd(pipe.0));
+                    main.output_i(StreamMode::Fd(pipe.1));
+                }
+
+                if self.capture_error.unwrap_or(false) {
+                    let pipe = pipe()?;
+                    handle.input_i(StreamMode::Fd(pipe.0));
+                    main.error_i(StreamMode::Fd(pipe.1));
+                }
+
                 handle.associate(main.spawn()?);
                 Ok(Some(handle))
             } else {

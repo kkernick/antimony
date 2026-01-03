@@ -24,7 +24,7 @@ path = "src/antimony.rs"
 common = { path = "crates/common", features = ["stream"] }
 notify = { path = "crates/notify" }
 seccomp = { path = "crates/seccomp", features = ["notify"] }
-spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
+spawn = { path = "crates/spawn", features = ["cache", "elevate", "fd", "seccomp", "user", "fork"] }
 temp = { path = "crates/temp", features = ["user"]}
 user = { path = "crates/user" }
 which = { path = "crates/which" }

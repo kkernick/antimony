@@ -1,0 +1,10 @@
+name = "trace"
+description = "Run the application underneath strace"
+conditional = "command -v /usr/bin/strace"
+sandbox_args = ["strace", "-ffyY", "-v", "-s", "256"]
+binaries = ["strace"]
+
+[hooks.parent]
+name = "tracer"
+path = "$AT_HOME/utilities/antimony-tracer"
+capture_error = true

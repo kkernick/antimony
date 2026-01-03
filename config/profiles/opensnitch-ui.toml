@@ -9,4 +9,5 @@ policy = "Enabled"
 ReadWrite = ["/tmp"]
 
 [[hooks.pre]]
+name = "sleep"
 content = "sleep 0.5"
