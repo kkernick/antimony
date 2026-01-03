@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use rayon::prelude::*;
@@ -8,8 +10,10 @@ use std::{
     sync::LazyLock,
 };
 
+/// Errors when trying to resolve a path.
 #[derive(Debug)]
 pub enum Error {
+    /// If path couldn't be found.
     NotFound(String),
 }
 impl std::fmt::Display for Error {
@@ -32,11 +36,18 @@ pub static PATH: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
         .collect::<Vec<_>>()
 });
 
+/// The cache store.
 static CACHE: CacheStatic<String, Cow<'static, str>> = LazyLock::new(DashMap::default);
 
-pub static WHICH: LazyLock<cache::Cache<String, Cow<'static, str>>> =
+/// The underlying cache, storing path -> resolved path lookups.
+static WHICH: LazyLock<cache::Cache<String, Cow<'static, str>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
+/// Resolve the provided path in the environment's PATH variable.
+/// Note that this implementation will return a path as-is if it exists,
+/// which means that if binary exists in the current folder, it will
+/// be resolved to that. It will also just return absolute paths as-is,
+/// even if they aren't executable.
 pub fn which(path: &str) -> Result<&'static str, Error> {
     match WHICH.get(path) {
         Some(resolved) => Ok(resolved),

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["collect_paths","collection","main","reader","runner"],"static":["SELF"],"struct":["AttachArgs","Cli","RunArgs"]};

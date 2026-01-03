@@ -13,7 +13,7 @@ use inotify::WatchMask;
 use log::debug;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use spawn::{Handle, Spawner, StreamMode};
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
@@ -62,7 +62,7 @@ pub fn run(
         });
     }
 
-    let mut proxy = timer!("::spawner", {
+    let proxy = timer!("::spawner", {
         #[rustfmt::skip]
         let proxy = Spawner::abs("/usr/bin/bwrap")
         .name("proxy")
@@ -103,11 +103,7 @@ pub fn run(
     // Setup SECCOMP.
     if !dry && let Some(policy) = profile.lock().seccomp {
         timer!("::seccomp", {
-            if let Some(handle) =
-                syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, &proxy)?
-            {
-                proxy.associate(handle);
-            }
+            syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, &proxy)?
         })
     }
 
@@ -178,7 +174,7 @@ pub fn run(
     Ok(proxy)
 }
 
-pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, str>>)>> {
+pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     // Run the proxy
     let ipc = {
         let lock = args.profile.lock();
@@ -332,7 +328,9 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<(Handle, Vec<Cow<'static, 
                 )?);
                 Ok(())
             })??;
-            return Ok(Some((proxy.spawn()?, arguments)));
+
+            args.handle.associate(proxy.spawn()?);
+            return Ok(Some(arguments));
         }
     }
 

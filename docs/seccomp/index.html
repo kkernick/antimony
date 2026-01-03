@@ -1,4 +1,94 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A wrapper for `libseccomp`."><title>seccomp - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="seccomp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (21cf7fb3f 2025-12-28)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate seccomp</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../seccomp/index.html">seccomp</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>seccomp</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/seccomp/lib.rs.html#1-153">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A wrapper for <code>libseccomp</code>.</p>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="SECCOMP"><title>seccomp - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="seccomp" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (21cf7fb3f 2025-12-28)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate seccomp</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../seccomp/index.html">seccomp</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#seccomp" title="SECCOMP">SECCOMP</a><ul><li><a href="#overview" title="Overview">Overview</a></li><li><a href="#actions" title="Actions">Actions</a></li><li><a href="#attributes" title="Attributes">Attributes</a></li><li><a href="#syscalls" title="Syscalls">Syscalls</a></li><li><a href="#filters" title="Filters">Filters</a></li><li><a href="#features" title="Features">Features</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#enums" title="Enums">Enums</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>seccomp</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/seccomp/lib.rs.html#1-153">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="seccomp"><a class="doc-anchor" href="#seccomp">§</a>SECCOMP</h2>
+<p>This crate allows for the creation and enforcement of SECCOMP filters. It is a wrapper on the C <code>libseccomp</code> library, and as such you will need the library installed at build-time. Though built for Antimony, this crate can be used in other projects.</p>
+<p>For most intents and purposes, you’ll be interacting with this crate via <code>Filter</code>, which handles initialization, configuration, and enforcement of SECCOMP policies. For example:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>seccomp::{filter::Filter, action::Action, attribute::Attribute, syscall::Syscall};
+
+<span class="comment">// Create a new filter that kills the process by default
+</span><span class="kw">let </span><span class="kw-2">mut </span>filter = Filter::new(Action::KillProcess).unwrap();
+
+<span class="comment">// Deny new privileges
+</span>filter.set_attribute(Attribute::NoNewPrivileges(<span class="bool-val">true</span>)).unwrap();
+
+<span class="comment">// Allow execve.
+</span>filter.add_rule(Action::Allow, Syscall::from_name(<span class="string">"execve"</span>).unwrap());
+
+<span class="comment">// Load the policy, effective immediately
+</span>filter.load();</code></pre></div>
+<p>The <code>notify</code> feature can be optionally enabled to support the Notify framework in SECCOMP. You’ll want to look at Antimony’s implementation for more details.</p>
+<h3 id="overview"><a class="doc-anchor" href="#overview">§</a>Overview</h3>
+<p>SECCOMP is a security mechanism within the Linux Kernel that allows for a process to voluntarily restrict the syscalls that it can use. A SECCOMP policy persists through <code>execve</code> calls, and as such the typical usage of SECCOMP is:</p>
+<ol>
+<li>Define a policy for a child process in a parent handler.</li>
+<li><code>fork</code></li>
+<li>Call <code>seccomp_load</code> in the child clone.</li>
+<li>Call <code>execve</code>.</li>
+</ol>
+<p>The child will then be governed by that profile.</p>
+<p>Note: The parent is still confined by the profile between <code>load</code> and <code>execve</code>, so unless the process is creating a filter for itself, a policy will require <code>execve</code> and other syscalls necessary for the parent to execute the child.</p>
+<h3 id="actions"><a class="doc-anchor" href="#actions">§</a>Actions</h3>
+<p><em>Actions</em> are what the Kernel performs when it runs into a given syscall. When you create a new <em>Filter</em>, you must supply a default action for if a syscall is requested that does not have an associated rule. Unless you have good reason, its generally best to adopt a whitelisting approach where the default action is something like <em>Kill Process</em>, and then the Filter explicitly allows a subset of syscalls in. This crate exposes all supported actions, including:</p>
+<ul>
+<li><em>Kill Process</em>: Kill the entire process</li>
+<li><em>Kill Thread</em>: Kill the offending thread.</li>
+<li><em>Trap</em>: Raise a <code>SIGTRAP</code> signal. This crate does not provide signal handling.</li>
+<li><em>Log</em>: Log to the <code>audit</code> log.</li>
+<li><em>Allow</em>: Allow the syscall.</li>
+<li><em>Notify</em>: Send the request to a notifier (Requires the <code>notify</code> feature and additional work)</li>
+<li><em>Error</em>: Send a <code>errno</code> code back to the caller. Most programs do not expect syscalls to fail, so this often causes the program to terminate.</li>
+</ul>
+<p>Actions are also supplied via <code>Filter::add_rule</code></p>
+<h3 id="attributes"><a class="doc-anchor" href="#attributes">§</a>Attributes</h3>
+<p><em>Attributes</em> are values that you can configure for a given Filter that modify its behavior. You can set Attributes via <code>Filter::set_attribute</code>. This includes:</p>
+<ul>
+<li><em>Bad Arch Action</em>: The <em>Action</em> to perform when a syscall is from an architecture that filter did not expect (Filters are not architecture specific, though this crate largely operates under the assumption the Filter will be used for the native architecture).</li>
+<li><em>No New Privileges</em>: This denies the possibility of a process re-enabling privileges, such as through creating and loading a more permissive policy. Unless you are cooperatively creating a profile for a willing application, you should turn this on.</li>
+<li><em>Thread Sync</em>: Force all threads to synchronize when the policy is loaded. This ensures that the policy will be enforced across all threads immediately.</li>
+<li><em>Negative Syscalls</em>: Allow negative syscalls. I do not know why you would want this.</li>
+<li><em>Log</em>: Log all decisions to <code>audit</code>, regardless of whether the Action is <em>Log</em>.</li>
+<li><em>Disable SSB</em>:  Disables security mitigation.</li>
+<li><em>Optimize</em>: Define how rules are structured within the Filter. Choices include <em>Binary Tree</em> and <em>Priority + Complexity</em>. Note that because this crate does not expose the rule arguments (Instead only allowing an <em>Action</em>), these will make little difference, as the rules are not particularly complicated.</li>
+<li><em>Return System Return Codes</em>: What it says on the tin.</li>
+</ul>
+<h3 id="syscalls"><a class="doc-anchor" href="#syscalls">§</a>Syscalls</h3>
+<p><em>Syscalls</em> are privileged operations that are performed in kernel-space, such as reading files, forking the process, etc. SECCOMP deals with these operations, and enforces rules on how the kernel should act when specific syscalls are requested.</p>
+<p>Internally, syscalls are 32 bit numbers. However, they also have names, such as <code>execve</code>, <code>fork</code>, and <code>fread</code> The mapping between numbers and names are not consistent between architectures. This crate exposes these operations in the <code>Syscall</code> object.</p>
+<p>A syscall can be defined either through an explicit numerical value for the native architecture via <code>Syscall::from_number</code>, through a name on the native architecture via <code>Syscall::from_name</code>, or through a name on a desired architecture via <code>Syscall::with_arch</code>. You can then query the number through <code>Syscall::get_number</code>, the name through <code>Syscall::get_name</code>, or the name with a desired architecture via <code>Syscall::get_name_arch</code>.</p>
+<p>Syscalls are used in the <code>Filter::add_rule</code> function.</p>
+<h3 id="filters"><a class="doc-anchor" href="#filters">§</a>Filters</h3>
+<p><em>Filters</em> are the programs that contain <em>Rules</em> and <em>Attributes</em> for a particular SECCOMP policy. They can be enforced immediately, or written as a BPF file. Filters are the primary means of interacting with both SECCOMP as a whole, and this crate in particular.</p>
+<p>A Filter is firstly created through <code>Filter::new</code>, which takes a default action. From there, Attributes can be set via <code>Filter::set_attribute</code>, and Rules can be added via <code>Filter::add_rule</code>. This crate only exposes a subset of Rules, taking only a Syscall, and an Action for that Syscall.</p>
+<p>The Filter can then be written in BPF format via <code>Filter::write</code>, or consumed and immediately loaded for the current program via <code>Filter::load</code>.</p>
+<h3 id="features"><a class="doc-anchor" href="#features">§</a>Features</h3><h4 id="notify"><a class="doc-anchor" href="#notify">§</a><code>notify</code></h4>
+<p>With the <code>notify</code> feature, Filters can also take advantage of the Notify feature of <code>libseccomp</code>. To use this, use <code>set_notify</code> on the filter to provide an object that implements the <code>Notifier</code> trait. Whenever a <code>Action::Notify</code> rule is hit, the Kernel will suspend the calling process, and send a packet across the FD to a monitoring process, which the kernel will then wait for. The monitor can then analyze the syscall, and return instructions for what the Kernel can do.</p>
+<p>Antimony uses this feature in the <code>antimony-monitor</code> process. It uses Notify to log Syscalls, and also prompt the user on what action should be taken for a given Syscall.</p>
+<p>Notify is incredibly powerful, but requires extra effort on your part. There are two challenges:</p>
+<ol>
+<li>Because the FD is provided on <code>seccomp_load</code>, getting the FD to the monitor is difficult. Because SECCOMP applies across threads, creating the monitor within the confined process can cause deadlock—where a Syscall requested by the monitor itself causes the process to suspend as the kernel waits for a response. This leaves you with two options:
+<ol>
+<li>Create your monitor such that you know exactly what syscalls it uses, and carve those out in your policy, and run the monitor in the same process. This has the advantage of not needing to transmit the FD, but suffers in that it reduces the efficacy of the policy.</li>
+<li>Send the FD across a socket to a dedicated, unconfined monitoring process. This requires carving out the needed syscalls for transmitting the FD (<code>sendmsg</code>), but ensures the monitor is not confined by its own notifying policy.</li>
+</ol>
+</li>
+<li>You are expected to talk to the Kernel via the FD, and must make decisions for <em>every</em> Syscall to which the Notify rule applies. This can be a lot of Syscalls, and can cause performance to slow to a crawl.</li>
+</ol>
+<p><code>antimony-monitor</code> is an excellent reference for using this feature, both in the context of this crate, and SECCOMP as a whole. In the case of the former:</p>
+<ol>
+<li>You’ll want to create structure that implements the <code>Notifier</code> trait. This abstracts away most of the above problems. In it, you need to define three functions:
+<ol>
+<li><code>exempt</code> returns a list of Syscalls that your Notifier needs to transmit the FD to the monitor. This could be <code>sendmsg</code> for a socket.</li>
+<li><code>prepare</code> is called immediately before <code>seccomp_load</code>. You’ll use this to make any preparations needed to transmit the FD. This could include creating the socket, spawning auxiliary processes, etc.</li>
+<li><code>handle</code> is called immediately after <code>seccomp_load</code>, where you actually transmit the FD.</li>
+</ol>
+</li>
+</ol>
+<p>Once defined, you can pass an instance of the <em>Notifier</em> in the <code>Filter::set_notifier</code> function. If you’re using <code>spawn</code>, simply pass the Filter to <code>seccomp</code>. Otherwise, you’ll want to call:</p>
+<ol>
+<li>Call <code>Filter::prepare</code> to run your preparation and exemption functions</li>
+<li>Call <code>seccomp_load</code></li>
+<li>Call <code>Filter::handle</code></li>
+<li>Return.</li>
+</ol>
 </div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="action/index.html" title="mod seccomp::action">action</a></dt><dd>Wrapper for SCMP_ACT.</dd><dt><a class="mod" href="attribute/index.html" title="mod seccomp::attribute">attribute</a></dt><dd>A wrapper on SCMP_FLTATR.</dd><dt><a class="mod" href="filter/index.html" title="mod seccomp::filter">filter</a></dt><dd>A wrapper around a SECCOMP context.</dd><dt><a class="mod" href="notify/index.html" title="mod seccomp::notify">notify</a></dt><dd>A wrapper for the SECCOMP Notify interface.</dd><dt><a class="mod" href="raw/index.html" title="mod seccomp::raw">raw</a></dt><dd>The raw FFI to libseccomp.
 This is all unsafe. Use it only if you understand what values should be returned,
 what objects you need to manage, etc.</dd><dt><a class="mod" href="syscall/index.html" title="mod seccomp::syscall">syscall</a></dt><dd>Helper functions wrapper the seccomp crate.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Error.html" title="enum seccomp::Error">Error</a></dt><dd>An error for all aspects of the SECCOMP crate.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.get_architecture.html" title="fn seccomp::get_architecture">get_<wbr>architecture</a></dt><dd>Get the current architecture.</dd></dl></section></div></main></body></html>

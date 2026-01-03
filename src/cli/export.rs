@@ -1,9 +1,8 @@
 //! Export user-profiles
-use std::{fs, path::PathBuf};
-
-use anyhow::{Result, anyhow};
 
 use crate::shared::env::{AT_HOME, PWD, USER_NAME};
+use anyhow::{Result, anyhow};
+use std::{fs, path::PathBuf};
 
 #[derive(clap::Args, Debug)]
 pub struct Args {

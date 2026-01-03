@@ -1,3 +1,5 @@
+//! A simple implementation of xdg-open, without requiring Bash.
+
 use ahash::{HashMap, HashMapExt};
 use anyhow::{Result, anyhow};
 use dbus::{

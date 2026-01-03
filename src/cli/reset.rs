@@ -1,7 +1,12 @@
 //! Reset a user profile back to the system default.
-use crate::shared::{
-    env::{AT_HOME, USER_NAME},
-    profile::Profile,
+
+use crate::{
+    cli,
+    shared::{
+        env::{AT_HOME, USER_NAME},
+        privileged,
+        profile::Profile,
+    },
 };
 use anyhow::{Result, anyhow};
 use dialoguer::Confirm;
@@ -10,11 +15,46 @@ use std::fs;
 #[derive(clap::Args, Debug)]
 pub struct Args {
     /// The name of the profile. If absent, resets profiles that are identical to the system.
-    pub profile: Option<String>,
+    pub name: Option<String>,
+
+    /// Target a feature, rather than a profile. Requires privilege.
+    #[arg(long)]
+    pub feature: bool,
 }
-impl super::Run for Args {
+impl cli::Run for Args {
     fn run(self) -> Result<()> {
-        if let Some(name) = self.profile {
+        if self.feature {
+            if !privileged()? {
+                Err(anyhow::anyhow!(
+                    "Modifying the system feature set is a privileged operation"
+                ))
+            } else if let Some(name) = &self.name {
+                user::set(user::Mode::Effective)?;
+
+                // Edit the feature
+                let feature = AT_HOME.join("features").join(name).with_extension("toml");
+
+                let new = !feature.exists();
+                if new {
+                    if let Some(parent) = feature.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::copy(AT_HOME.join("config").join("feature.toml"), &feature)?;
+                }
+
+                let confirm = Confirm::new()
+                    .with_prompt(format!("Are you sure you want to delete {}?", name))
+                    .interact()?;
+                if confirm {
+                    println!("Deleting {}", feature.display());
+                    fs::remove_file(&feature)?;
+                }
+
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("Specify a feature!"))
+            }
+        } else if let Some(name) = self.name {
             let dest = Profile::user_profile(&name);
             if dest.exists() {
                 let system = Profile::system_profile(&name);

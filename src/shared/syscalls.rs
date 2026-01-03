@@ -26,7 +26,7 @@ use std::{
         unix::net::UnixStream,
     },
     path::PathBuf,
-    sync::{Arc, LazyLock},
+    sync::LazyLock,
     thread::{ThreadId, sleep},
     time::Duration,
 };
@@ -44,13 +44,11 @@ fn new_connection() -> Result<Connection, Error> {
     })?
 }
 
-pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
-    LazyLock::new(|| {
-        let init = || -> anyhow::Result<()> {
-            as_effective!(anyhow::Result<()>, {
-                let conn = new_connection()?;
-                conn.execute_batch(
-                    "
+pub static POOL: LazyLock<anyhow::Result<()>> = LazyLock::new(|| {
+    as_effective!(anyhow::Result<()>, {
+        let conn = new_connection()?;
+        conn.execute_batch(
+            "
             PRAGMA foreign_keys = ON;
             CREATE TABLE IF NOT EXISTS binaries (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,29 +81,26 @@ pub static POOL: LazyLock<Option<DashMap<ThreadId, Arc<Mutex<Connection>>>>> =
                 FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
             );
             ",
-                )?;
-                Ok(())
-            })?
-        };
-
-        if init().is_ok() {
-            Some(DashMap::new())
-        } else {
-            None
-        }
-    });
+        )?;
+        Ok(())
+    })?
+});
 
 static CONNECTION_CACHE: CacheStatic<ThreadId, Mutex<Connection>> = LazyLock::new(DashMap::default);
 pub static CONNECTIONS: LazyLock<cache::Cache<ThreadId, Mutex<Connection>>> =
     LazyLock::new(|| cache::Cache::new(&CONNECTION_CACHE));
 
 pub fn get_connection() -> Result<MutexGuard<'static, Connection>, Error> {
-    let id = std::thread::current().id();
-    match CONNECTIONS.get(&id) {
-        Some(connection) => Ok(connection.lock()),
-        None => {
-            CONNECTIONS.insert(id, Mutex::new(new_connection()?));
-            Ok(CONNECTIONS.get(&id).unwrap().lock())
+    if POOL.is_err() {
+        Err(Error::Pool)
+    } else {
+        let id = std::thread::current().id();
+        match CONNECTIONS.get(&id) {
+            Some(connection) => Ok(connection.lock()),
+            None => {
+                CONNECTIONS.insert(id, Mutex::new(new_connection()?));
+                Ok(CONNECTIONS.get(&id).unwrap().lock())
+            }
         }
     }
 }
@@ -450,7 +445,7 @@ pub fn new(
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
         let mut filter = Filter::new(Action::Notify)?;
         filter.set_notifier(Notifier::new(
-            user_dir(instance).join(format!("monitor-{name}")),
+            user_dir(instance).join("monitor"),
             name.to_string(),
         ));
 

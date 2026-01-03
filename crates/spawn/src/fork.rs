@@ -1,10 +1,29 @@
 //! This file contains a highly experimental interface that runs Rust closures
 //! within new processes.
+//!
+//! For all intents and purposes, you probably shouldn't use this. If you need
+//! to run native rust code, you're better using a thread. If you need to run
+//! in a separate process, you're probably better writing a separate binary
+//! and launching it via a `Spawner`.
+//!
+//! This file exists mostly as a proof-of-concept, as the original use is
+//! no longer required. It serves the niche use case where:
+//!
+//! * You need to run native code, but without the privilege of the process.
+//! * You want to run native, untrusted code under a SECCOMP policy.
+//! * You're SetUID and need to drop privilege for a function.
+//!
+//! This was originally designed for the `notify` crate, where when running
+//! underneath Antimony, its SetUID privilege was causing the User Bus
+//! to refuse a connection. This functionality allowed the Connection code
+//! to be run after `user::drop`. However, Antimony pivoted toward just
+//! using a binary due to the unsafe nature of this functionality.
+//!
+//! Chiefly, you're only allowed to run async-safe functions within a fork,
+//! and are not allowed to make any allocations. That severely restricts
+//! the kinds of things you can do with this.
 
-use crate::{
-    HandleError, SpawnError, Stream, StreamMode,
-    spawn::{clear_capabilities, cond_pipe},
-};
+use crate::{HandleError, SpawnError, Stream, StreamMode, clear_capabilities, cond_pipe};
 use caps::{Capability, CapsHashSet};
 use common::stream::receive_fd;
 use core::fmt;
@@ -33,11 +52,19 @@ use std::{
 #[cfg(feature = "seccomp")]
 use {parking_lot::Mutex, seccomp::filter::Filter};
 
+/// Errors related to Fork
 #[derive(Debug)]
 pub enum Error {
+    /// Errors preparing the fork
     Spawn(SpawnError),
+
+    /// Errors communicating with the fork
     Handle(HandleError),
+
+    /// Errors serializing the return data.
     Postcard(postcard::Error),
+
+    /// Generic IO errors.
     Io(std::io::Error),
 }
 impl fmt::Display for Error {
@@ -81,6 +108,14 @@ impl From<std::io::Error> for Error {
     }
 }
 
+/// A `Spawner`-like structure that executes a closure instead of another process. Specifically,
+/// it forks the current caller, runs the closure within the child, then serializes and returns
+/// the result to the parent via a pipe.
+///
+/// Your return type, if one exists, must implement Serialize + Deserialize from `serde`, as the
+/// closure is run under a separate process (the child). This means that "returning" the result
+/// requires serializing the result and sending it back to the parent. This operates identically
+/// to how standard Input/Output/Error is captured in Spawn.
 #[derive(Default)]
 pub struct Fork {
     /// The User to run the program under.
@@ -98,58 +133,32 @@ pub struct Fork {
     whitelist: CapsHashSet,
 }
 impl Fork {
+    /// Construct a new fork instance.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Drop privilege to the provided user mode on the child,
-    /// immediately after the fork. This does not affected the parent
-    /// process, but prevents the the child from changing outside
-    /// of the assigned UID.
-    ///
-    /// If is set to *Existing*, the child is launched with the exact
-    /// same operating set as the parent, persisting SetUID privilege.
-    ///
-    /// If mode is not set, it adopts whatever operating set the parent
-    /// is in when spawn() is called.
-    ///
-    /// If the parent is not SetUID, this parameter is a no-op
-    /// This function is not thread safe.
-    ///
-    /// If drop is set to true, the handle will switch to this
-    /// mode when tearing down to avoid permission errors.
-    /// Note that drop does not function in a multi-threaded
-    /// environment, as multiple teardowns can change the mode
-    /// between saving and restoring.
+    /// See `Spawner::mode`
     #[cfg(feature = "user")]
     pub fn mode(mut self, mode: user::Mode) -> Self {
         self.mode_i(mode);
         self
     }
 
-    /// Move a *SECCOMP* filter to the `Spawner`, loading in the child after forking.
-    /// *SECCOMP* is the last operation applied. This has several consequences:
-    ///
-    /// 1.  The child will be running under the assigned operating set mode,
-    ///     and said operating set must have permission to load the filter.
-    ///  2.  If using Notify, the path to the monitor socket must
-    ///      be accessible by the operating set mode.
-    ///  3.  Your *SECCOMP* filter must permit `execve` to launch the application.
-    ///      This does not have to be ALLOW. See the caveats to Notify if
-    ///      you are using it.
-    ///
-    /// This function is thread safe.
+    /// See `Spawner::seccomp`
     #[cfg(feature = "seccomp")]
     pub fn seccomp(self, seccomp: Filter) -> Self {
         self.seccomp_i(seccomp);
         self
     }
 
+    /// See `Spawner::cap`
     pub fn cap(mut self, cap: Capability) -> Self {
         self.whitelist.insert(cap);
         self
     }
 
+    /// See `Spawner::caps`
     pub fn caps(mut self, caps: impl IntoIterator<Item = Capability>) -> Self {
         caps.into_iter().for_each(|cap| {
             self.whitelist.insert(cap);
@@ -157,46 +166,49 @@ impl Fork {
         self
     }
 
+    /// See `Spawner::new_privileges`
     pub fn new_privileges(mut self, allow: bool) -> Self {
         self.no_new_privileges = !allow;
         self
     }
 
-    /// Set the user mode without consuming the `Spawner`.
-    /// This function is not thread safe.
-    ///
-    /// If drop is set to true, the handle will switch to this
-    /// mode when tearing down to avoid permission errors.
-    /// Note that drop does not function in a multi-threaded
-    /// environment, as multiple teardowns can change the mode
-    /// between saving and restoring.
+    /// See `Spawner::mode_i`
     #[cfg(feature = "user")]
     pub fn mode_i(&mut self, mode: user::Mode) {
         self.mode = Some(mode);
     }
 
-    /// Set a *SECCOMP* filter without consuming the `Spawner`.
-    /// This function is thread safe.
+    /// See `Spawner::seccomp_i`
     #[cfg(feature = "seccomp")]
     pub fn seccomp_i(&self, seccomp: Filter) {
         *self.seccomp.lock() = Some(seccomp)
     }
 
+    /// See `Spawner::cap_i`
     pub fn cap_i(&mut self, cap: Capability) {
         self.whitelist.insert(cap);
     }
 
+    /// See `Spawner::caps_i`
     pub fn caps_i(&mut self, caps: impl IntoIterator<Item = Capability>) {
         caps.into_iter().for_each(|cap| {
             self.whitelist.insert(cap);
         });
     }
 
+    /// See `Spawner::new_privileges_i`
     pub fn new_privileges_i(mut self, allow: bool) {
         self.no_new_privileges = !allow;
     }
 
     /// Run a closure within a fork.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// let result = unsafe { spawn::Fork::new().fork(|| 1) }.unwrap();
+    /// assert!(result == 1);
+    /// ```
     ///
     /// ## Safety
     ///
@@ -209,16 +221,26 @@ impl Fork {
     /// 2.  If you had a signal handler installed, this tries and drops
     ///     all of them. Other such primitives may fail at any point, and
     ///     should not be relied upon.
+    ///
+    /// ***
+    ///
+    /// If your closure returns a value, it must implement Serialize, as the
+    /// closure is running under a separate process, and must be transmitted
+    /// to the parent through a pipe.
+    ///
+    ///
     #[allow(dead_code)]
     pub unsafe fn fork<F, R>(self, op: F) -> Result<R, Error>
     where
         F: FnOnce() -> R + UnwindSafe,
         R: serde::Serialize + serde::de::DeserializeOwned,
     {
-        let (read, write) = cond_pipe(&StreamMode::Pipe)?;
-        let read = read.unwrap();
-        let write = write.unwrap();
+        // Get a pipe to transmit the return value
+        let (read, write) = cond_pipe(&StreamMode::Pipe)?.unwrap();
+        let all = caps::all();
+        let diff: CapsHashSet = all.difference(&self.whitelist).copied().collect();
 
+        // Prepare the filter.
         #[cfg(feature = "seccomp")]
         let filter = {
             let mut filter = self.seccomp.into_inner();
@@ -231,6 +253,7 @@ impl Fork {
         let fork = unsafe { nix::unistd::fork() }.map_err(SpawnError::Fork)?;
         match fork {
             ForkResult::Parent { child: _child } => {
+                // The parent reads from the pipe, then deserializes the bytes.
                 close(write).map_err(|e| SpawnError::Errno(Some(fork), "close write", e))?;
                 let stream = Stream::new(read);
                 let bytes = stream.read_bytes(None)?;
@@ -238,6 +261,7 @@ impl Fork {
             }
 
             ForkResult::Child => {
+                // Prepare signals.
                 let _ = prctl::set_pdeathsig(signal::SIGTERM);
                 for sig in Signal::iterator() {
                     unsafe {
@@ -251,8 +275,8 @@ impl Fork {
                     let _ = user::drop(mode);
                 }
 
-                clear_capabilities(self.whitelist);
-
+                // Drop capabilities and privileges
+                clear_capabilities(diff);
                 if self.no_new_privileges
                     && let Err(e) = prctl::set_no_new_privs()
                 {
@@ -260,15 +284,12 @@ impl Fork {
                 }
 
                 // Apply SECCOMP.
-                // Because we can't just trust the application is able/willing to
-                // apply a SECCOMP filter on it's own, we have to do it before the execve
-                // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
-                // or some other mechanism to let the process to spawn.
                 #[cfg(feature = "seccomp")]
                 if let Some(filter) = filter {
                     filter.load();
                 }
 
+                // Execute the closure, send the serialized result to the parent.
                 if std::panic::catch_unwind(|| {
                     close(read).expect("Failed to close read");
                     let result = op();
@@ -287,9 +308,12 @@ impl Fork {
         }
     }
 
-    /// Run a closure returning a File Descriptor within a fork.
+    /// This is a specialized version of fork() that uses the SCM-Rights of a
+    /// Unix Socket to transmit a FD to the parent. This could be used to open a file
+    /// under one operating mode, and send the FD to the parent under another
+    /// operating mode.
     ///
-    /// ### Safety
+    /// ## Safety
     ///
     /// See fork()
     #[allow(dead_code)]
@@ -350,10 +374,6 @@ impl Fork {
                 let stream = UnixStream::connect(socket_path.full())?;
 
                 // Apply SECCOMP.
-                // Because we can't just trust the application is able/willing to
-                // apply a SECCOMP filter on it's own, we have to do it before the execve
-                // call. That means the SECCOMP filter needs to either Allow, Log, Notify,
-                // or some other mechanism to let the process to spawn.
                 #[cfg(feature = "seccomp")]
                 if let Some(filter) = filter {
                     filter.load();
@@ -382,10 +402,9 @@ impl Fork {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
-
     use super::*;
     use anyhow::Result;
+    use std::io::Read;
 
     #[test]
     fn number() -> Result<()> {
@@ -397,7 +416,7 @@ mod tests {
     #[test]
     fn string() -> Result<()> {
         let str = "This is a test!".to_string();
-        let result = unsafe { Fork::new().fork(|| str.clone()) }?;
+        let result = unsafe { crate::Fork::new().fork(|| str.clone()) }?;
         assert!(result == str);
         Ok(())
     }
@@ -407,7 +426,7 @@ mod tests {
         let path = "/tmp/test";
         let str = "Hello, world!";
         let mut file: std::fs::File = unsafe {
-            Fork::new().fork_fd(|| {
+            crate::Fork::new().fork_fd(|| {
                 let mut file = std::fs::File::create(path).expect("Failed to create temp");
                 writeln!(file, "{}", str).expect("Failed to write file");
                 drop(file);

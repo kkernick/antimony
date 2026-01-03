@@ -1,7 +1,11 @@
 //! Integrate a profile into the DE.
-use crate::shared::{
-    env::{CONFIG_HOME, DATA_HOME, HOME_PATH},
-    profile::Profile,
+
+use crate::{
+    cli,
+    shared::{
+        env::{CONFIG_HOME, DATA_HOME, HOME_PATH},
+        profile::Profile,
+    },
 };
 use anyhow::{Context, Result};
 use clap::ValueEnum;
@@ -56,7 +60,7 @@ pub enum ConfigMode {
     File,
 }
 
-impl super::Run for Args {
+impl cli::Run for Args {
     fn run(self) -> Result<()> {
         user::drop(user::Mode::Real)?;
         if self.remove {

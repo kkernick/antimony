@@ -1,6 +1,7 @@
 //! Run a profile.
+
 use crate::{
-    cli::Run,
+    cli::{self, Run},
     fab::localize_home,
     setup::setup,
     shared::{
@@ -159,7 +160,7 @@ pub struct Args {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }
-impl super::Run for Args {
+impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {

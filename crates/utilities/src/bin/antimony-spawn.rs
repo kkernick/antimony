@@ -18,6 +18,7 @@
 //!
 //! --watch-bus is a no-op: antimony-spawn will either exit if the child
 //! it runs does, or if it is hit with SIGTERM or SIGINT.
+
 use anyhow::Result;
 use clap::Parser;
 use nix::unistd::chdir;
@@ -114,7 +115,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
 
-        let mut info = antimony::setup::setup(Cow::Owned(cli.command), &mut args)?;
+        let info = antimony::setup::setup(Cow::Owned(cli.command), &mut args)?;
 
         // Forward FDs.
         if let Some(fds) = cli.forward_fd {
@@ -141,7 +142,7 @@ fn main() -> Result<()> {
         info.handle.spawn()?
     } else {
         // If --host, or no --sandbox, just spawn the command.
-        let mut handle = Spawner::new(cli.command)?;
+        let handle = Spawner::new(cli.command)?;
         if let Some(passthrough) = cli.passthrough {
             handle.args_i(passthrough)?;
         }

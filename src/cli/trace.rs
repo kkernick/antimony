@@ -1,6 +1,7 @@
 //! Run the sandbox under strace to locate missing files.
+
 use crate::{
-    cli::run_vec,
+    cli::{self, run, run_vec},
     fab::{get_wildcards, localize_home, resolve},
     setup::setup,
     shared::{Set, env::AT_HOME, feature::Feature, profile::FileMode},
@@ -53,14 +54,14 @@ pub struct Args {
     pub passthrough: Option<Vec<String>>,
 }
 
-impl super::Run for Args {
+impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
 
         let mut args = if let Some(passthrough) = self.passthrough.take() {
             run_vec(&self.profile, passthrough)
         } else {
-            Box::new(crate::cli::run::Args::default())
+            run::Args::default()
         };
 
         args.binaries

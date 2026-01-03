@@ -1,0 +1,10 @@
+#!/bin/bash
+
+
+ROOT=$(git rev-parse --show-toplevel)
+
+echo "Compiling Bench Script"
+cargo build --package utilities --bin antimony_bench
+
+echo "Benchmarking"
+$ROOT/target/debug/antimony_bench "${@:2}"

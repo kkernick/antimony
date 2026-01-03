@@ -15,8 +15,11 @@
 --after-upgrade hooks/after_upgrade.sh
 
 ./target/release/antimony=/usr/bin/antimony
-./target/release/antimony-monitor=/usr/bin/antimony-monitor
-./target/release/antimony-spawn=/usr/bin/antimony-spawn
+./target/release/antimony-monitor=/usr/share/antimony/utilities/antimony-monitor
+./target/release/antimony-dumper=/usr/share/antimony/utilities/antimony-dumper
+./target/release/antimony-spawn=/usr/share/antimony/utilities/antimony-spawn
+./target/release/antimony-open=/usr/share/antimony/utilities/antimony-open
+./target/release/notify=/usr/share/antimony/utilities/antimony-notify
 
 ./config/profiles=/usr/share/antimony
 ./config/features=/usr/share/antimony

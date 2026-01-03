@@ -1,8 +1,8 @@
+#![cfg(feature = "notify")]
 //! A wrapper around a SECCOMP context.
-#[cfg(feature = "notify")]
-use crate::notify::Notifier;
 
 use super::{action::Action, attribute::Attribute, raw, syscall::Syscall};
+use crate::notify::Notifier;
 use nix::errno::Errno;
 use std::{
     error, fmt,
@@ -129,8 +129,8 @@ impl Filter {
         }
     }
 
-    /// Set a notifier monitor process. See the Notifier trait for more information.
     #[cfg(feature = "notify")]
+    /// Set a notifier monitor process. See the Notifier trait for more information.
     pub fn set_notifier(&mut self, f: impl Notifier) {
         self.notifier = Some(Box::new(f))
     }
@@ -162,6 +162,8 @@ impl Filter {
         }
     }
 
+    /// Execute the notifier's setup functions. This is necessary
+    /// to call before calling load().
     #[cfg(feature = "notify")]
     pub fn setup(&mut self) -> Result<(), Error> {
         if let Some(notifier) = &mut self.notifier {
@@ -176,10 +178,12 @@ impl Filter {
         Ok(())
     }
 
-    /// Loads the policy, optionally executing a Notifier function.
     #[cfg(feature = "notify")]
+    /// Loads the policy, optionally executing a Notifier function.
+    ///
+    /// Note that this function treats failure as fatal. It will panic
+    /// the program if the policy cannot be loaded.
     pub fn load(mut self) {
-        #[cfg(feature = "notify")]
         if let Some(mut notifier) = self.notifier.take() {
             match unsafe { raw::seccomp_load(self.ctx) } {
                 0 => {
@@ -192,6 +196,10 @@ impl Filter {
     }
 
     #[cfg(not(feature = "notify"))]
+    /// Loads the policy.
+    ///
+    /// Note that this function treats failure as fatal. It will panic
+    /// the program if the policy cannot be loaded.
     pub fn load(self) {
         let errno = unsafe { raw::seccomp_load(self.ctx) };
         if errno != 0 {

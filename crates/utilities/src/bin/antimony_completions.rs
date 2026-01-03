@@ -1,3 +1,5 @@
+//! Generate shell completions for Antimony.
+
 use clap::CommandFactory;
 use clap_complete::{generate, shells};
 use spawn::Spawner;

@@ -1,3 +1,14 @@
+//! A SECCOMP Notify application that reads the paths to `execve` to determine
+//! binaries called by the application.
+//!
+//! The `attach` sub-command is used internally. You should call this like:
+//!
+//! ```bash
+//! antimony-dumper run my-program 12345
+//! ```
+//!
+//! Or whatever instance value you have.
+
 use antimony::shared::{
     self,
     path::user_dir,
@@ -5,6 +16,7 @@ use antimony::shared::{
     utility,
 };
 use anyhow::Result;
+use caps::Capability;
 use clap::{Parser, Subcommand};
 use common::stream::receive_fd;
 use dashmap::DashMap;
@@ -36,37 +48,48 @@ use std::{
 #[command(version)]
 #[command(about = "Dump information about binaries")]
 pub struct Cli {
+    /// What to do
     #[command(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Run the program under a dumper.
     Run(RunArgs),
 
+    /// Attach a dumper to an existing instance.
     Attach(AttachArgs),
 }
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct RunArgs {
+    /// The path to the binary to monitor
     #[arg(long)]
     path: String,
 
+    /// The instance ID, for localizing the socket. This can be any value.
     #[arg(long)]
     instance: String,
 
+    /// Do not enforce a timeout on the application.
     #[arg(long, default_value_t = false)]
     no_timeout: bool,
 }
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct AttachArgs {
+    /// The path to the socket established by `run`.
     socket: String,
 }
 
-pub static SELF: LazyLock<PathBuf> =
+/// The current process, to allow all syscalls coming from it.
+static SELF: LazyLock<PathBuf> =
     LazyLock::new(|| fs::read_link("/proc/self/exe").expect("Failed to get self"));
 
+/// Collect all paths from a syscall.
+/// This is a naive approach that simply checks each argument for a valid
+/// path.
 pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
     let path = PathBuf::from(format!("/proc/{pid}/mem"));
     let mut mem_file = File::open(path)?;
@@ -96,6 +119,7 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
     Ok(ret)
 }
 
+/// Listen on the Kernel FD and find paths.
 pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
     let found = Arc::new(DashMap::<u32, Vec<String>>::new());
 
@@ -117,6 +141,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                         return;
                     }
 
+                    // We only care about exec.
                     if call == syscalls::get_name("execve")
                         && let Ok(paths) = collect_paths(pid, &args)
                         && !paths.is_empty()
@@ -128,6 +153,9 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                                 local_found.push(path);
                             }
                         }
+
+                    // We bail on these syscalls, since they're seen
+                    // as the program falling into a steady-state.
                     } else if call == syscalls::get_name("ppoll")
                         || call == syscalls::get_name("wait4")
                     {
@@ -159,6 +187,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
     Ok(())
 }
 
+/// Collect syscall information from Kernel FDs.
 pub fn collection(args: AttachArgs) -> Result<()> {
     let listener = UnixListener::bind(args.socket)?;
 
@@ -179,6 +208,7 @@ pub fn collection(args: AttachArgs) -> Result<()> {
     Ok(())
 }
 
+/// Run the application under a monitor.
 pub fn runner(args: RunArgs) -> Result<()> {
     let name = match args.path.rfind('/') {
         Some(i) => &args.path[i + 1..],
@@ -194,21 +224,26 @@ pub fn runner(args: RunArgs) -> Result<()> {
     let mut inotify = Inotify::init()?;
     inotify.watches().add(&path, WatchMask::CREATE)?;
 
+    // Setup the filter.
     let mut filter = Filter::new(Action::Notify)?;
     filter.set_notifier(Notifier::new(socket, name.to_string()));
     filter.set_attribute(Attribute::NoNewPrivileges(true))?;
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
+    // Create an attached version to listen.
     let _handle = Spawner::abs(utility("dumper"))
         .args(["attach", &sock_str])?
         .preserve_env(true)
         .new_privileges(true)
+        .cap(Capability::CAP_SYS_PTRACE)
         .spawn()?;
 
+    // Wait for it to be ready.
     let mut buffer = [0; 1024];
     let _ = inotify.read_events_blocking(&mut buffer)?;
 
+    // Spawn the program under our Notify policy.
     Spawner::new(args.path)?
         .preserve_env(true)
         .output(spawn::StreamMode::Pipe)

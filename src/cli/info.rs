@@ -14,7 +14,7 @@ use std::{fs, path::Path};
 
 /// What to get information on.
 #[derive(ValueEnum, Clone, Debug)]
-pub enum What {
+pub enum Target {
     /// A Profile
     Profile,
 
@@ -28,7 +28,7 @@ pub enum What {
 #[derive(clap::Args, Debug)]
 pub struct Args {
     /// What to get info on.
-    pub what: What,
+    pub target: Target,
 
     /// Profile/Feature/Binary name.
     pub name: Option<String>,
@@ -39,8 +39,8 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        match self.what {
-            What::Profile => {
+        match self.target {
+            Target::Profile => {
                 // Print information on a profile.
                 let print = |path: &str, verbosity: u8| -> Result<()> {
                     let name = if let Some(i) = path.rfind('/') {
@@ -85,7 +85,7 @@ impl super::Run for Args {
             }
 
             // Feature information.
-            What::Feature => match self.name {
+            Target::Feature => match self.name {
                 Some(profile) => Feature::new(&profile)?.info(self.verbosity + 1),
                 None => {
                     let features = Path::new(AT_HOME.as_path()).join("features");
@@ -97,7 +97,7 @@ impl super::Run for Args {
             },
 
             // SECCOMP Info.
-            What::Seccomp => match self.name {
+            Target::Seccomp => match self.name {
                 // Get Profile/Binary information depending on a path.
                 Some(name) => {
                     print!("{name}: ");

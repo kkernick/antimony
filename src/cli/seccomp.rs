@@ -1,4 +1,5 @@
 //! Modify the SECCOMP Database.
+
 use crate::shared::{
     env::{AT_HOME, DATA_HOME},
     privileged, syscalls,

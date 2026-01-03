@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 use console::{StyledObject, style};
 use dbus::{
     Message, MessageType,
@@ -18,9 +20,10 @@ use std::{
         Arc, LazyLock, OnceLock,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
+/// The current log level, set by the RUST_LOG environment variable
 pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_LOG") {
     Ok(e) => match e.to_lowercase().as_str() {
         "trace" => log::Level::Trace,
@@ -32,6 +35,10 @@ pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("R
     Err(_) => log::Level::Error,
 });
 
+/// The current level to which messages should be notified. By
+/// default, only errors cause prompts. This is controlled via the
+/// NOTIFY environment variable, and can be set to none to only log
+/// to the terminal.
 pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> =
     LazyLock::new(|| match std::env::var("NOTIFY") {
         Ok(e) => match e.to_lowercase().as_str() {
@@ -45,22 +52,42 @@ pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> =
         Err(_) => Some(log::Level::Error),
     });
 
+/// The global Logger
 static LOGGER: NotifyLogger = NotifyLogger::new();
 
+/// A lock to ensure only a single thread can log at a time.
 static LOCK: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
 
+/// A custom Notifier that the LOGGER will use, if set.
 static NOTIFIER: OnceLock<Box<Notifier>> = OnceLock::new();
 
+/// A DBus Map
 type VariantMap<'a> = HashMap<&'a str, Variant<Box<dyn dbus::arg::RefArg>>>;
+
+/// A Notifier function, which accepts the Record and Level of each Log, and
+/// returns whether the logging was successful.
 type Notifier = dyn Fn(&Record, Level) -> bool + Send + Sync + 'static;
 
+/// Errors for the NotifyLogger.
 #[derive(Debug)]
 pub enum Error {
+    /// Errors for when the console-fallback fails to receive
+    /// user input for an action.
     Dialog(dialoguer::Error),
+
+    /// Errors with the dbus crate.
     Dbus(dbus::Error),
+
+    /// Miscellaneous errors returning an Errno.
     Errno(errno::Errno),
+
+    /// Errors communicating to the User Bus.
     Connection,
+
+    /// Errors initializing the Logger.
     Init,
+
+    /// Errors setting the Notifier.
     Set,
 }
 impl std::error::Error for Error {
@@ -101,6 +128,9 @@ impl From<dialoguer::Error> for Error {
     }
 }
 
+/// The urgency level of a Notification.
+/// The Desktop Environment is free to interpret this as it wants.
+/// This should, therefore, be seen as a suggestion.
 #[derive(Default, Clone, Copy, Debug, clap::ValueEnum)]
 pub enum Urgency {
     Low,
@@ -111,6 +141,7 @@ pub enum Urgency {
     Critical,
 }
 impl Urgency {
+    /// Get the Byte for this Urgency Level, to send across the Bus.
     fn byte(&self) -> u8 {
         match self {
             Urgency::Low => 0,
@@ -129,6 +160,7 @@ impl std::fmt::Display for Urgency {
     }
 }
 
+/// Format a message so it can be displayed on the console.
 fn console_msg(title: &str, body: &str, urgency: Option<Urgency>) -> String {
     let msg = format!(
         "{}: {body}",
@@ -142,6 +174,7 @@ fn console_msg(title: &str, body: &str, urgency: Option<Urgency>) -> String {
     console_format(&msg)
 }
 
+/// Convert the HTML tags defined by the Notification Spec to console formatting.
 fn style_tag<F>(mut msg: String, open: &str, close: &str, style: F) -> String
 where
     F: Fn(&str) -> StyledObject<&str>,
@@ -157,6 +190,7 @@ where
     msg
 }
 
+/// Format style tags.
 fn console_format(content: &str) -> String {
     let mut content = content.to_string();
     content = style_tag(content, "<b>", "</b>", |tag: &str| style(tag).bold());
@@ -164,6 +198,7 @@ fn console_format(content: &str) -> String {
     content
 }
 
+/// Get actions from the console.
 fn console_actions(
     title: &str,
     body: &str,
@@ -180,6 +215,7 @@ fn console_actions(
     Ok(actions[result].clone())
 }
 
+/// Construct a Message to send across the User Bus.
 fn get_msg(
     title: &str,
     body: &str,
@@ -231,6 +267,9 @@ fn get_msg(
     }))
 }
 
+/// Send a stateless Notification across the User Bus.
+/// If there is a failure sending the message, it will be sent
+/// to the terminal.
 pub fn notify(
     title: impl Into<Cow<'static, str>>,
     body: impl Into<Cow<'static, str>>,
@@ -254,6 +293,11 @@ pub fn notify(
     Ok(())
 }
 
+/// Send a Notification across the User Bus with a set of Actions.
+/// The selected Action, if the user choose one, is returned.
+///
+/// Should an error preventing sending a Notification, the dialoguer
+/// crate will be used to prompt from the terminal.
 pub fn action(
     title: impl Into<Cow<'static, str>>,
     body: impl Into<Cow<'static, str>>,
@@ -264,6 +308,7 @@ pub fn action(
     let title = title.into();
     let body = body.into();
 
+    // Format.
     let mut a = Vec::<String>::new();
     for (key, value) in actions.clone() {
         a.push(key);
@@ -271,6 +316,7 @@ pub fn action(
     }
 
     let result = || -> Result<String, Error> {
+        // Get a connection, and send the notification.
         let connection = LocalConnection::new_session()?;
         let msg = get_msg(&title, &body, &timeout, &urgency, Some(&a))?;
         let response = connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
@@ -279,6 +325,8 @@ pub fn action(
             None => return Err(Error::Connection),
         };
 
+        // The Bus will Broadcast the response through an ActionInvoked Member,
+        // with a pair containing the response, and the ID we got from the original call.
         let found = Arc::<AtomicBool>::new(AtomicBool::new(false));
         let action = Arc::<Mutex<String>>::default();
         let found_clone = found.clone();
@@ -289,6 +337,7 @@ pub fn action(
             .with_member("ActionInvoked")
             .with_type(MessageType::Signal);
 
+        // Monitor the Bus.
         let monitor = LocalConnection::new_session()?;
         let proxy = monitor.with_proxy(
             "org.freedesktop.DBus",
@@ -301,6 +350,7 @@ pub fn action(
             (vec![rule.match_str()], 0u32),
         )?;
 
+        // Watch the Bus for our desired notification.
         monitor.start_receive(
             MatchRule::new(),
             Box::new(move |msg: Message, _conn: &LocalConnection| -> bool {
@@ -325,12 +375,16 @@ pub fn action(
             }),
         );
 
-        while !found.load(Ordering::Relaxed) {
+        // Wait until the callback fires.
+        let timeout = timeout.unwrap_or(Duration::from_secs(10));
+        let start = Instant::now();
+        while !found.load(Ordering::Relaxed) && start.elapsed() < timeout {
             monitor.process(Duration::from_secs(1))?;
         }
-
         Ok(Arc::into_inner(action).unwrap().into_inner())
     };
+
+    // If we couldn't get a response, ask on the terminal, instead.
     match result() {
         Ok(result) => Ok(result),
         Err(_) => {
@@ -353,6 +407,7 @@ pub fn action(
     }
 }
 
+/// Get the color that should be used for particular log level.
 pub fn level_color(level: log::Level) -> StyledObject<&'static str> {
     match level {
         log::Level::Error => style("ERROR").red().bold().blink(),
@@ -363,6 +418,7 @@ pub fn level_color(level: log::Level) -> StyledObject<&'static str> {
     }
 }
 
+/// Get the pretty name of a log level.
 pub fn level_name(level: log::Level) -> &'static str {
     match level {
         log::Level::Error => "Error",
@@ -373,6 +429,7 @@ pub fn level_name(level: log::Level) -> &'static str {
     }
 }
 
+/// Get the recommended notification urgency for each level.
 pub fn level_urgency(level: log::Level) -> Urgency {
     match level {
         log::Level::Error => Urgency::Critical,
@@ -383,6 +440,8 @@ pub fn level_urgency(level: log::Level) -> Urgency {
     }
 }
 
+/// A log::Log implementation that is controlled by RUST_LOG for console logs,
+/// and NOTIFY for which of those should be promoted to Notifications.
 struct NotifyLogger {}
 impl NotifyLogger {
     const fn new() -> Self {
@@ -439,12 +498,17 @@ impl log::Log for NotifyLogger {
     fn flush(&self) {}
 }
 
+/// Initialize the NotifyLogger as the program's Logger.
 pub fn init() -> Result<(), Error> {
     log::set_logger(&LOGGER).map_err(|_| Error::Init)?;
     log::set_max_level(log::LevelFilter::Trace);
     Ok(())
 }
 
+/// Set an optional Notifier function that is called instead of the
+/// notify() function defined here, such as to run the binary compiled
+/// by this crate in cases of SetUID, where we cannot communicate
+/// to the User Bus in this process.
 pub fn set_notifier(function: Box<Notifier>) -> Result<(), Error> {
     NOTIFIER.set(function).map_err(|_| Error::Set)
 }

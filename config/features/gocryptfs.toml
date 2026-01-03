@@ -16,6 +16,7 @@ if [[ ! -d "${ENCRYPT_ROOT}" ]]; then
 fi
 """
 env = true
+new_privileges = true
 
 [[hooks.pre]]
 content = """

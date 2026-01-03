@@ -1,4 +1,4 @@
-//! A wrapper for `libseccomp`.
+#![doc = include_str!("../README.md")]
 
 use std::{error, fmt};
 pub mod action;

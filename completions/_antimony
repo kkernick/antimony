@@ -85,35 +85,12 @@ c-group\:""))' \
 '*::passthrough -- Arguments to pass to the profile application:_default' \
 && ret=0
 ;;
-(create)
-_arguments "${_arguments_options[@]}" : \
-'-b[Provide an empty file, rather than a documented one]' \
-'--blank[Provide an empty file, rather than a documented one]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':profile -- The name of the profile:_default' \
-&& ret=0
-;;
 (edit)
 _arguments "${_arguments_options[@]}" : \
+'--feature[Target a feature, rather than a profile. Requires privilege]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':profile -- The name of the profile:_default' \
-&& ret=0
-;;
-(default)
-_arguments "${_arguments_options[@]}" : \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
-(feature)
-_arguments "${_arguments_options[@]}" : \
-'-d[Delete a feature. It cannot be recovered. DANGEROUS!]' \
-'--delete[Delete a feature. It cannot be recovered. DANGEROUS!]' \
-'-h[Print help]' \
-'--help[Print help]' \
-':feature -- The name of the feature:_default' \
+':name -- The object to edit:_default' \
 && ret=0
 ;;
 (refresh)
@@ -147,9 +124,10 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 ;;
 (reset)
 _arguments "${_arguments_options[@]}" : \
+'--feature[Target a feature, rather than a profile. Requires privilege]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::profile -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
+'::name -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
 && ret=0
 ;;
 (trace)
@@ -171,7 +149,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--verbosity[The verbosity of information]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':what -- What to get info on:((profile\:"A Profile"
+':target -- What to get info on:((profile\:"A Profile"
 feature\:"A Feature"
 seccomp\:"Query the SECCOMP database"))' \
 '::name -- Profile/Feature/Binary name:_default' \
@@ -228,19 +206,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(create)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (edit)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(default)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-(feature)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -297,10 +263,7 @@ esac
 _antimony_commands() {
     local commands; commands=(
 'run:Run a profile' \
-'create:Create a new profile' \
 'edit:Edit an existing profile' \
-'default:Edit the default profile' \
-'feature:Modify the system features' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -319,16 +282,6 @@ _antimony__config_commands() {
     local commands; commands=()
     _describe -t commands 'antimony config commands' commands "$@"
 }
-(( $+functions[_antimony__create_commands] )) ||
-_antimony__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony create commands' commands "$@"
-}
-(( $+functions[_antimony__default_commands] )) ||
-_antimony__default_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony default commands' commands "$@"
-}
 (( $+functions[_antimony__edit_commands] )) ||
 _antimony__edit_commands() {
     local commands; commands=()
@@ -339,19 +292,11 @@ _antimony__export_commands() {
     local commands; commands=()
     _describe -t commands 'antimony export commands' commands "$@"
 }
-(( $+functions[_antimony__feature_commands] )) ||
-_antimony__feature_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony feature commands' commands "$@"
-}
 (( $+functions[_antimony__help_commands] )) ||
 _antimony__help_commands() {
     local commands; commands=(
 'run:Run a profile' \
-'create:Create a new profile' \
 'edit:Edit an existing profile' \
-'default:Edit the default profile' \
-'feature:Modify the system features' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'reset:Reset a profile back to the system-defined profile' \
@@ -370,16 +315,6 @@ _antimony__help__config_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help config commands' commands "$@"
 }
-(( $+functions[_antimony__help__create_commands] )) ||
-_antimony__help__create_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help create commands' commands "$@"
-}
-(( $+functions[_antimony__help__default_commands] )) ||
-_antimony__help__default_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help default commands' commands "$@"
-}
 (( $+functions[_antimony__help__edit_commands] )) ||
 _antimony__help__edit_commands() {
     local commands; commands=()
@@ -389,11 +324,6 @@ _antimony__help__edit_commands() {
 _antimony__help__export_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help export commands' commands "$@"
-}
-(( $+functions[_antimony__help__feature_commands] )) ||
-_antimony__help__feature_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help feature commands' commands "$@"
 }
 (( $+functions[_antimony__help__help_commands] )) ||
 _antimony__help__help_commands() {

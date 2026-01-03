@@ -1,9 +1,144 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Process Spawning supporting asynchronous input/output/error capturing, FD passthrough, SetUID mode dropping, SECCOMP filters, and privileged launching."><title>spawn - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="spawn" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (21cf7fb3f 2025-12-28)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate spawn</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../spawn/index.html">spawn</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>spawn</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/spawn/lib.rs.html#1-32">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Process Spawning supporting asynchronous input/output/error capturing,
-FD passthrough, SetUID mode dropping, SECCOMP filters, and privileged
-launching.</p>
-</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Handle.html" title="struct spawn::Handle">Handle</a></dt><dd>A handle to a child process created via <code>Spawner::spawn()</code>
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Spawn"><title>spawn - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-80aa586b.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="spawn" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.0-nightly (21cf7fb3f 2025-12-28)" data-channel="nightly" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../static.files/storage-e2aeef58.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate spawn</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../spawn/index.html">spawn</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#spawn" title="Spawn">Spawn</a><ul><li><a href="#spawner" title="Spawner">Spawner</a></li><li><a href="#handle" title="Handle">Handle</a></li><li><a href="#association" title="Association">Association</a></li><li><a href="#features" title="Features">Features</a></li></ul></li></ul><h3><a href="#structs">Crate Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>spawn</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/spawn/lib.rs.html#1-98">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="spawn"><a class="doc-anchor" href="#spawn">§</a>Spawn</h2>
+<p>This crate is used to spawn and manage processes. It is conceptually similar to <code>std::process::Command</code>, but deviates in that:</p>
+<ol>
+<li>It is Linux specific.</li>
+<li>It asynchronously manages the process via a <code>Handle</code>.</li>
+<li>It treats the processes’ standard output and error as a <code>Stream</code> which can be asynchronously retrieved.</li>
+<li>It supports SetUID and SECCOMP.</li>
+<li>It supports passing File Descriptors.</li>
+<li>It supports in-place calls, such as <code>mode</code> to consume and return the object, and also <code>mode_i</code> to modify it in-place without consuming it.</li>
+<li>It supports caching.</li>
+</ol>
+<h3 id="spawner"><a class="doc-anchor" href="#spawner">§</a>Spawner</h3>
+<p>Setting up a process is done via the <code>Spawner</code> object. The name of the process is defined in <code>Spawner::new</code>, and the process can be configured before launching. This includes:</p>
+<ul>
+<li><code>input/input_i</code>: Control how Standard Input is handled.</li>
+<li><code>output/output_i</code>: Control how Standard Output is handled.</li>
+<li><code>error/error_i</code> Control how Standard Error is handled.</li>
+</ul>
+<p>These three options take a <code>StreamMode</code> value, which can be:</p>
+<ul>
+<li><code>Pipe</code>: Collect the contents in a buffer that can be asynchronously queried by the parent.</li>
+<li><code>Share</code>: Use the parent’s stream (IE child output will be displayed on the parent’s Standard Out)</li>
+<li><code>Log(level)</code>: Send the stream to the program <code>log::Log</code> implementation. If the log level is lower than the level specified, the stream is discarded.</li>
+<li><code>Discard</code>: Send the contents to <code>/dev/null</code>.</li>
+</ul>
+<p>Other options include (With a <code>_i</code> variant for a non-consuming version):</p>
+<ul>
+<li><code>mode</code> (Requires <code>user</code> feature): Set the user mode of the child process. The Spawner utilizes <code>user::drop</code> to ensure the child cannot revert their user mode.</li>
+<li><code>elevate</code> (Requires <code>elevate</code> feature): Call the process with <code>pkexec</code> to prompt and provide administrative privilege.</li>
+<li><code>preserve_env</code>: Preserve the parent’s environment with the child.</li>
+<li><code>env</code>: Pass a key-pair to the child for its environment.</li>
+<li><code>pass_env</code>: Pass the environment variable as defined in the environment.</li>
+<li><code>seccomp</code> (Requires <code>seccomp</code> feature): Run the child under a specific SECCOMP Policy.</li>
+<li><code>fd</code> (Requires <code>fd</code> feature): Give ownership of a FD, or FD-like object, to the Spawner, and provide it to the Child.</li>
+<li><code>associate</code>: Associate another process <code>Handle</code> to the <code>Spawner</code>, such that they are dropped together.</li>
+<li><code>cap</code>: Permit a capability in the child</li>
+<li><code>caps:</code> Permit a capability set for the child.</li>
+<li><code>new_privileges</code>: Allow the child to assume new privileges.</li>
+</ul>
+<p>And finally:</p>
+<ul>
+<li><code>cache_start/cache_write/cache_read</code> (Requires <code>cache</code> feature): Record arguments, save them to a file, then restore them on subsequent usage.</li>
+</ul>
+<p>Arguments can be passed via three methods (With <code>_i</code> options):</p>
+<ul>
+<li><code>arg</code> passes a single C-String-like value.</li>
+<li><code>args</code> passes a list of C-String-like values.</li>
+<li><code>fd_arg</code> passes a FD-like object, a C-String-like value, and passes the string <code>arg FD</code> to the child.</li>
+</ul>
+<p>The in-place and consuming variants of these functions can be used interchangeably. For example:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">let </span>proxy = spawn::Spawner::abs(<span class="string">"/usr/bin/bwrap"</span>)
+.name(<span class="string">"proxy"</span>)
+.mode(user::Mode::Real).args([
+		<span class="string">"--new-session"</span>,
+		<span class="string">"--ro-bind"</span>, <span class="string">"/usr/bin/xdg-dbus-proxy"</span>, <span class="string">"/usr/bin/xdg-dbus-proxy"</span>,
+]).unwrap();
+
+<span class="kw">let </span>sof_str = <span class="string">"sof"</span>;
+proxy.args_i([<span class="string">"--ro-bind-try"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{sof_str}/lib"</span>), <span class="string">"/usr/lib"</span>]).unwrap();
+<span class="kw">let </span>path = <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{sof_str}/lib64"</span>);
+<span class="kw">if </span>std::path::Path::new(path).exists() {
+		proxy.args_i([<span class="string">"--ro-bind-try"</span>, path, <span class="string">"/usr/lib64"</span>]).unwrap();
+} <span class="kw">else </span>{
+		proxy.args_i([<span class="string">"--symlink"</span>, <span class="string">"/usr/lib"</span>, <span class="string">"/usr/lib64"</span>]).unwrap();
+}</code></pre></div>
+<p>Once a process is ready to launch, <code>Spawner::spawn()</code> will consume the structure and return a <code>Handle</code>.</p>
+<h3 id="handle"><a class="doc-anchor" href="#handle">§</a>Handle</h3>
+<p>The <code>Handle</code> object represents a running or finished process, defined by the <code>Spawner</code> that created it. Internally, a Handle is composed of three primary values:</p>
+<ol>
+<li>The PID of the child.</li>
+<li>A <code>Stream</code> for each file stream enabled in the <code>Spawner</code> via <code>output/error</code>.</li>
+<li>A <code>File</code> for Standard Input, if defined via <code>Spawner::input</code></li>
+</ol>
+<h4 id="stream"><a class="doc-anchor" href="#stream">§</a>Stream</h4>
+<p>The <code>Stream</code> object represents either the Standard Output or Standard Error of a child. You can interact with it in two ways, and only if you set the corresponding flag to <code>Pipe</code> on the <code>Spawner</code>:</p>
+<ul>
+<li>Retrieve the <code>Stream</code> directly via <code>Handle::output</code> or <code>Handle::error</code>.</li>
+<li>Block until the child exits, then return the full contents of the <code>Stream</code> via <code>Handle::error_all</code> and <code>Handle::output_all</code>.</li>
+</ul>
+<p>Retrieving the <code>Stream</code> directly allows asynchronous, direct communication with the read end of the Pipe. This includes:</p>
+<ul>
+<li><code>Stream::read_line</code>: Collect a single line from the child. It’s only blocking if a full line is not yet available.</li>
+<li><code>Stream::read_bytes</code>: Collect the specified amount of bytes from the child. It’s only blocking if the required amount is not available.</li>
+<li><code>Stream::read_all</code>: Block and collect all bytes until the child closes their end of the Pipe.</li>
+<li><code>Stream::wait</code>: Wait for the child to close their end. This does not consume the object.</li>
+</ul>
+<h4 id="input"><a class="doc-anchor" href="#input">§</a>Input</h4>
+<p>The <code>Handle</code> exposes a child’s Standard Input as a simple <code>File</code>. It also implements the <code>Write</code> trait, which means you can call <code>write!</code> directly on the <code>Handle</code> to write to the child’s input, such as:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>std::io::Write;
+<span class="kw">let </span><span class="kw-2">mut </span>handle = spawn::Spawner::new(<span class="string">"cat"</span>).unwrap()
+		.input(spawn::StreamMode::Pipe)
+		.output(spawn::StreamMode::Pipe)
+		.spawn().unwrap();
+
+<span class="kw">let </span>string = <span class="string">"Hello, World!"</span>;
+<span class="macro">write!</span>(handle, <span class="string">"{string}"</span>).unwrap();
+handle.close().unwrap();
+
+<span class="kw">let </span>output = handle.output().unwrap().read_all().unwrap();
+<span class="macro">assert!</span>(output.trim() == string);</code></pre></div>
+<p>The <code>Handle::close</code> function will close the Standard Input pipe, which is necessary as many programs will continue to listen on the Pipe until it closes.</p>
+<h4 id="communication"><a class="doc-anchor" href="#communication">§</a>Communication</h4>
+<p>Communicating with the process can be done with the following methods:</p>
+<ul>
+<li><code>Handle::wait</code>: Wait for the child to exit (Or the parent was interrupted by a signal), and return the exit code. This is blocking. You can also use <code>wait_blocking</code> for signal-unsafe settings, and <code>wait_timeout</code> for a timeout option.</li>
+<li><code>Handle:alive</code>: Check if the child is still alive. This function is non-blocking.</li>
+<li><code>Handle::signal</code>: Send the specified signal to the child.</li>
+</ul>
+<h4 id="management"><a class="doc-anchor" href="#management">§</a>Management</h4>
+<p>The <code>Handle</code> itself can be managed in several ways:</p>
+<ul>
+<li><code>Handle::name</code> will return the name of the child.</li>
+<li><code>Handle::pid</code> will return the PID.</li>
+<li><code>Handle::detach</code> will consume the <code>Handle</code> and return the PID without performing any cleanup. Usually, when the <code>Handle</code> falls out of scope, it will send <code>SIGTERM</code> to the child, and wait for it to exit. This function detaches the child entirely, which means it will not block cleanup, and requires manual management.</li>
+</ul>
+<h3 id="association"><a class="doc-anchor" href="#association">§</a>Association</h3>
+<p>A <code>Handle</code> can be <em>associated</em> with another <code>Handle</code>, such that they will be dropped and cleaned up together. This can be useful for managing a group of processes. The process is as follows:</p>
+<ol>
+<li>Use <code>Spawner::associate</code> to move a <code>Handle</code> into the <code>Spawner</code>.</li>
+<li>Use either <code>Spawner::get_associate</code> or <code>Handle::get_associate</code> after <code>Spawner::spawn</code> to get a mutable reference to the associated <code>Handle</code>, allowing you to modify it as you would normally.</li>
+<li>When the main <code>Handle</code> drops, its associated processes are cleaned up with it.</li>
+</ol>
+<p>A <code>Handle</code> can be given a unique, memorable name via <code>Spawner::name</code>, which is used in the <code>get_associate</code> of both objects. If no such name is provided, the string passed to <code>Spawner::new</code> is used instead (IE the path will not be resolved).</p>
+<h3 id="features"><a class="doc-anchor" href="#features">§</a>Features</h3><h4 id="fd"><a class="doc-anchor" href="#fd">§</a><code>fd</code></h4>
+<p>The FD feature gates access to the <code>Spawner::fd</code>, <code>Spawner::fds</code>, and <code>Spawner::fd_arg</code> functions, along with their in-place versions. These functions allow you to pass a select set of File Descriptors to the child, ensuring that they will remain open and mapped to the same number.</p>
+<h4 id="elevate"><a class="doc-anchor" href="#elevate">§</a><code>elevate</code></h4>
+<p>The Elevate feature gates the <code>Spawner::elevate</code> function, which preprends the command with <code>pkexec</code> to run it with administrative privilege. The program must be run under a user that can authorize such privilege via Pol-Kit.</p>
+<h4 id="cache"><a class="doc-anchor" href="#cache">§</a><code>cache</code></h4>
+<p>The Cache feature gates control to the <code>Spawner::cache_read</code>, <code>Spawner::cache_write</code> and <code>Spawner::cache_init</code> functions for caching the arguments passed to the <code>Spawner</code>, such that they can be reused on subsequent runs.</p>
+<h4 id="user"><a class="doc-anchor" href="#user">§</a><code>user</code></h4>
+<p>The User feature gates control of the <code>Spawner::mode</code> function, which allows the child to be run under a specific operating mode for SetUID applications, while also ensuring that cleanup and signal works within this privileged context.</p>
+<p>If you are not using SetUID, this feature is useless.</p>
+<h4 id="fork"><a class="doc-anchor" href="#fork">§</a><code>fork</code></h4>
+<p>The Fork feature gates the highly dangerous and unsafe <code>Fork</code> structure for running Rust closures within the child, rather than calling <code>execve</code>.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Fork.html" title="struct spawn::Fork">Fork</a></dt><dd>A <code>Spawner</code>-like structure that executes a closure instead of another process. Specifically,
+it forks the current caller, runs the closure within the child, then serializes and returns
+the result to the parent via a pipe.</dd><dt><a class="struct" href="struct.Handle.html" title="struct spawn::Handle">Handle</a></dt><dd>A handle to a child process created via <code>Spawner::spawn()</code>
 If input/output/error redirection were setup in the Spawner,
 you can use their related functions to access them.</dd><dt><a class="struct" href="struct.Spawner.html" title="struct spawn::Spawner">Spawner</a></dt><dd>Spawn a child.</dd><dt><a class="struct" href="struct.Stream.html" title="struct spawn::Stream">Stream</a></dt><dd>A handle on a process’ Output or Error streams.
 The Handle can either be used asynchronously to read content as it is filled by the child,
 or synchronously by calling <code>read_all</code>, which will wait until the child terminates, then
-collect all output. For async, you can use <code>read_line</code>, or <code>read</code> for an exact byte count.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.HandleError.html" title="enum spawn::HandleError">Handle<wbr>Error</a></dt><dd>Errors related to a ProcessHandle</dd><dt><a class="enum" href="enum.SpawnError.html" title="enum spawn::SpawnError">Spawn<wbr>Error</a></dt><dd>Errors related to the Spawner.</dd><dt><a class="enum" href="enum.StreamMode.html" title="enum spawn::StreamMode">Stream<wbr>Mode</a></dt><dd>How to handle the standard input/out/error streams</dd></dl></section></div></main></body></html>
+collect all output. For async, you can use <code>read_line</code>, or <code>read</code> for an exact byte count.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.ForkError.html" title="enum spawn::ForkError">Fork<wbr>Error</a></dt><dd>Errors related to Fork</dd><dt><a class="enum" href="enum.HandleError.html" title="enum spawn::HandleError">Handle<wbr>Error</a></dt><dd>Errors related to a ProcessHandle</dd><dt><a class="enum" href="enum.SpawnError.html" title="enum spawn::SpawnError">Spawn<wbr>Error</a></dt><dd>Errors related to the Spawner.</dd><dt><a class="enum" href="enum.StreamMode.html" title="enum spawn::StreamMode">Stream<wbr>Mode</a></dt><dd>How to handle the standard input/out/error streams</dd></dl></section></div></main></body></html>

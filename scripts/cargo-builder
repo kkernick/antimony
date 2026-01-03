@@ -1,0 +1,9 @@
+#!/bin/bash
+
+ROOT=$(git rev-parse --show-toplevel)
+
+echo "Compiling Build Script"
+cargo build --package utilities --bin antimony_build
+
+echo "Building"
+$ROOT/target/debug/antimony_build "${@:2}"

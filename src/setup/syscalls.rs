@@ -2,26 +2,29 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crate::shared::{profile::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
+use caps::Capability;
 use log::debug;
-use spawn::{Handle, Spawner};
+use spawn::Spawner;
 
 pub fn install_filter(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
     binaries: Option<BTreeSet<String>>,
-    handle: &Spawner,
-) -> Result<Option<Handle>> {
+    main: &Spawner,
+) -> Result<()> {
     if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, &binaries)? {
-        handle.seccomp_i(filter);
+        main.seccomp_i(filter);
 
         if let Some(fd) = fd {
-            handle.fd_arg_i("--seccomp", fd)?;
+            main.fd_arg_i("--seccomp", fd)?;
         }
 
-        if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
+        if main.get_associate("monitor").is_none()
+            && (policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying)
+        {
             debug!("Spawning SECCOMP Monitor");
-            let mut handle = Spawner::abs(utility("monitor"))
+            let handle = Spawner::abs(utility("monitor"))
                 .name("monitor")
                 .args([
                     "--instance",
@@ -36,6 +39,7 @@ pub fn install_filter(
                 .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                 .output(spawn::StreamMode::Log(log::Level::Info))
                 .new_privileges(true)
+                .cap(Capability::CAP_AUDIT_READ)
                 .mode(user::Mode::Original);
 
             if audit {
@@ -44,13 +48,13 @@ pub fn install_filter(
             if log::log_enabled!(log::Level::Info) {
                 handle.pass_env_i("RUST_LOG")?
             }
-            return Ok(Some(handle.spawn()?));
+            main.associate(handle.spawn()?);
         }
     }
-    Ok(None)
+    Ok(())
 }
 
-pub fn setup(args: &Arc<super::Args>) -> Result<Option<Handle>> {
+pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     debug!("Setting up SECCOMP");
     // SECCOMP uses the elf binaries populated by the binary fabricator.
     let seccomp = {
@@ -67,15 +71,15 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<Handle>> {
                     lock.binaries.take()
                 };
 
-                return install_filter(
+                install_filter(
                     &args.name,
                     args.instance.name(),
                     policy,
                     binaries,
                     &args.handle,
-                );
+                )?;
             }
         }
     }
-    Ok(None)
+    Ok(())
 }

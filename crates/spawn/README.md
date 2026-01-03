@@ -22,41 +22,50 @@ These three options take a `StreamMode` value, which can be:
 
 * `Pipe`: Collect the contents in a buffer that can be asynchronously queried by the parent.
 * `Share`: Use the parent’s stream (IE child output will be displayed on the parent’s Standard Out)
+* `Log(level)`: Send the stream to the program `log::Log` implementation. If the log level is lower than the level specified, the stream is discarded.
 * `Discard`: Send the contents to `/dev/null`.
 
-Other options include:
+Other options include (With a `_i` variant for a non-consuming version):
 
-* `mode/mode_i` (Requires `user` feature): Set the user mode of the child process. The Spawner utilizes `user::drop` to ensure the child cannot revert their user mode.
-* `elevate_i` (Requires `elevate` feature): Call the process with `pkexec` to prompt and provide administrative privilege. 
-* `preserve_env/preserve_env_i`: Preserve the parent’s environment with the child.
-* `env/env_i` pass a `KEY=VALUE` string to the child for its environment. 
-* `seccomp/seccomp_i` (Requires `seccomp` feature): Run the child under a specific SECCOMP Policy.
-* `fd/fd_i` (Requires `fd` feature): Give ownership of a FD, or FD-like object, to the Spawner, and provide it to the Child.
-* `cache_start/cache_write/cache_read` (Requires `cache` feature): Record arguments, save them to a file, then restore them on subsequent usage.
+* `mode` (Requires `user` feature): Set the user mode of the child process. The Spawner utilizes `user::drop` to ensure the child cannot revert their user mode.
+* `elevate` (Requires `elevate` feature): Call the process with `pkexec` to prompt and provide administrative privilege. 
+* `preserve_env`: Preserve the parent’s environment with the child.
+* `env`: Pass a key-pair to the child for its environment. 
+* `pass_env`: Pass the environment variable as defined in the environment.
+* `seccomp` (Requires `seccomp` feature): Run the child under a specific SECCOMP Policy.
+* `fd` (Requires `fd` feature): Give ownership of a FD, or FD-like object, to the Spawner, and provide it to the Child.
+* `associate`: Associate another process `Handle` to the `Spawner`, such that they are dropped together.
+* `cap`: Permit a capability in the child
+* `caps:` Permit a capability set for the child.
+* `new_privileges`: Allow the child to assume new privileges.
 
-Arguments can be passed via three methods:
+And finally: 
 
-* `arg/arg_i` passes a single C-String-like value.
-* `args/args_i` passes a list of C-String-like values.
-* `fd_arg/fd_arg_i` passes a FD-like object, a C-String-like value, and passes the string `arg FD` to the child.
+ * `cache_start/cache_write/cache_read` (Requires `cache` feature): Record arguments, save them to a file, then restore them on subsequent usage.
+
+Arguments can be passed via three methods (With `_i` options):
+
+* `arg` passes a single C-String-like value.
+* `args` passes a list of C-String-like values.
+* `fd_arg` passes a FD-like object, a C-String-like value, and passes the string `arg FD` to the child.
 
 The in-place and consuming variants of these functions can be used interchangeably. For example:
 
 ```rust
-let proxy = Spawner::abs("/usr/bin/bwrap")
+let proxy = spawn::Spawner::abs("/usr/bin/bwrap")
 .name("proxy")
 .mode(user::Mode::Real).args([
 		"--new-session",
 		"--ro-bind", "/usr/bin/xdg-dbus-proxy", "/usr/bin/xdg-dbus-proxy",
-])?;
+]).unwrap();
 
-let sof_str = sof.to_string_lossy();
-proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
+let sof_str = "sof";
+proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"]).unwrap();
 let path = &format!("{sof_str}/lib64");
-if Path::new(path).exists() {
-		proxy.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
+if std::path::Path::new(path).exists() {
+		proxy.args_i(["--ro-bind-try", path, "/usr/lib64"]).unwrap();
 } else {
-		proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
+		proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"]).unwrap();
 }
 ```
 
@@ -89,16 +98,17 @@ Retrieving the `Stream` directly allows asynchronous, direct communication with 
 The `Handle` exposes a child’s Standard Input as a simple `File`. It also implements the `Write` trait, which means you can call `write!` directly on the `Handle` to write to the child’s input, such as:
 
 ```rust
-let mut handle = Spawner::new("cat")
-		.input(StreamMode::Pipe)
-		.output(StreamMode::Pipe)
-		.spawn()?;
+use std::io::Write;
+let mut handle = spawn::Spawner::new("cat").unwrap()
+		.input(spawn::StreamMode::Pipe)
+		.output(spawn::StreamMode::Pipe)
+		.spawn().unwrap();
 
 let string = "Hello, World!";
-write!(handle, "{string}")?;
-handle.close()?;
+write!(handle, "{string}").unwrap();
+handle.close().unwrap();
 
-let output = handle.output()?.read_all()?;
+let output = handle.output().unwrap().read_all().unwrap();
 assert!(output.trim() == string);
 ```
 
@@ -108,7 +118,7 @@ The `Handle::close` function will close the Standard Input pipe, which is necess
 
 Communicating with the process can be done with the following methods:
 
-* `Handle::wait`: Wait for the child to exit (Or the parent was interrupted by a signal), and return the exit code. This is blocking.
+* `Handle::wait`: Wait for the child to exit (Or the parent was interrupted by a signal), and return the exit code. This is blocking. You can also use `wait_blocking` for signal-unsafe settings, and `wait_timeout` for a timeout option.
 * `Handle:alive`: Check if the child is still alive. This function is non-blocking.
 * `Handle::signal`: Send the specified signal to the child.
 
@@ -120,7 +130,6 @@ The `Handle` itself can be managed in several ways:
 * `Handle::pid` will return the PID.
 * `Handle::detach` will consume the `Handle` and return the PID without performing any cleanup. Usually, when the `Handle` falls out of scope, it will send `SIGTERM` to the child, and wait for it to exit. This function detaches the child entirely, which means it will not block cleanup, and requires manual management.
 
-
 ## Association
 
 A `Handle` can be *associated* with another `Handle`, such that they will be dropped and cleaned up together. This can be useful for managing a group of processes. The process is as follows:
@@ -130,3 +139,27 @@ A `Handle` can be *associated* with another `Handle`, such that they will be dro
 3. When the main `Handle` drops, its associated processes are cleaned up with it.
 
 A `Handle` can be given a unique, memorable name via `Spawner::name`, which is used in the `get_associate` of both objects. If no such name is provided, the string passed to `Spawner::new` is used instead (IE the path will not be resolved).
+
+## Features
+
+### `fd`
+
+The FD feature gates access to the `Spawner::fd`, `Spawner::fds`, and `Spawner::fd_arg` functions, along with their in-place versions. These functions allow you to pass a select set of File Descriptors to the child, ensuring that they will remain open and mapped to the same number.
+
+### `elevate`
+
+The Elevate feature gates the `Spawner::elevate` function, which preprends the command with `pkexec` to run it with administrative privilege. The program must be run under a user that can authorize such privilege via Pol-Kit.
+
+### `cache`
+
+The Cache feature gates control to the `Spawner::cache_read`, `Spawner::cache_write` and `Spawner::cache_init` functions for caching the arguments passed to the `Spawner`, such that they can be reused on subsequent runs.
+
+### `user`
+
+The User feature gates control of the `Spawner::mode` function, which allows the child to be run under a specific operating mode for SetUID applications, while also ensuring that cleanup and signal works within this privileged context. 
+
+If you are not using SetUID, this feature is useless. 
+
+### `fork`
+
+The Fork feature gates the highly dangerous and unsafe `Fork` structure for running Rust closures within the child, rather than calling `execve`. 

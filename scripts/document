@@ -1,8 +1,0 @@
-#!/bin/bash
-
-DOC_GEN="../target/doc"
-DOC_OUT="../docs"
-rm -r "${DOC_GEN}" "${DOC_OUT}"
-
-RUSTDOCFLAGS="-Zunstable-options --enable-index-page" cargo +nightly doc --no-deps --workspace
-mv $DOC_GEN $DOC_OUT

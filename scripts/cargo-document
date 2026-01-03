@@ -1,0 +1,10 @@
+#!/bin/bash
+
+ROOT=$(git rev-parse --show-toplevel)
+
+DOC_GEN="$ROOT/target/doc"
+DOC_OUT="$ROOT/docs"
+rm -r "${DOC_GEN}" "${DOC_OUT}"
+
+RUSTDOCFLAGS="-Zunstable-options --enable-index-page" cargo +nightly doc --no-deps --workspace --all-features --exclude utilities
+mv $DOC_GEN $DOC_OUT

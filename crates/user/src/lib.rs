@@ -1,17 +1,11 @@
-//! Helper utilities for switching modes in SetUID applications.
+#![doc = include_str!("../README.md")]
 
+use common::singleton::Singleton;
 use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
 };
-use parking_lot::{
-    Condvar, Mutex, MutexGuard, RawMutex, RawThreadId, ReentrantMutex,
-    lock_api::ReentrantMutexGuard,
-};
-use std::{
-    error, fmt,
-    sync::{Arc, LazyLock},
-};
+use std::{error, fmt, sync::LazyLock};
 
 /// The Real, Effective, and Saved UID of the application.
 pub static USER: LazyLock<ResUid> = LazyLock::new(|| getresuid().expect("Failed to get UID!"));
@@ -22,14 +16,6 @@ pub static GROUP: LazyLock<ResGid> = LazyLock::new(|| getresgid().expect("Failed
 /// Whether the system is actually running under SetUid. If false, all functions here
 /// are no-ops.
 pub static SETUID: LazyLock<bool> = LazyLock::new(|| USER.effective != USER.real);
-
-/// The global semaphore controls which thread is allowed to change users.
-static SEMAPHORE: LazyLock<Semaphore> =
-    LazyLock::new(|| Arc::new((ReentrantMutex::new(()), Mutex::new(false), Condvar::new())));
-
-type Semaphore = Arc<(ReentrantMutex<()>, Mutex<bool>, Condvar)>;
-type Guard = MutexGuard<'static, bool>;
-type ThreadGuard = ReentrantMutexGuard<'static, RawMutex, RawThreadId, ()>;
 
 /// An error when trying to change UID/GID.
 #[derive(Debug)]
@@ -95,7 +81,7 @@ pub enum Mode {
 /// from returning to the original, or any other mode.
 /// This function returns an error if the mode could not be
 /// changed. Otherwise, it returns the old mode for use in
-/// `restore()`
+/// `restore()`.
 ///
 /// ## Examples
 /// ```rust
@@ -107,7 +93,12 @@ pub enum Mode {
 /// * user::set(Mode::Original) is functionally identical to user::revert()
 /// * user::set(Mode::Existing) is a no-op.
 ///
+/// ## Thread Safety
 ///
+/// This function is not thread safe. Multiple threads can change the state
+/// using this function. If you need to ensure that everything executed between
+/// a `set()` and `restore()` block is run under the desired user, use `run_as` or
+/// its mode-specific variants.
 pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
     if !*SETUID {
         return Ok((*USER, *GROUP));
@@ -133,6 +124,10 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
 }
 
 /// Get the current user mode
+/// Note that this is not thread-safe, and your program can suffer
+/// from TOC-TOU problems if you assume this value will remain the same
+/// when you actually need to perform a privileged operation in a multi-threaded
+/// environment.
 pub fn current() -> Result<Mode, Errno> {
     let uid = getresuid()?.real;
     if uid == USER.real {
@@ -163,8 +158,6 @@ pub fn revert() -> Result<(), Errno> {
 ///     user::set(user::Mode::Effective).expect_err("Cannot return!");
 /// }
 /// ```
-///
-/// ### Notes
 pub fn drop(mode: Mode) -> Result<(), Errno> {
     match mode {
         Mode::Real => {
@@ -201,74 +194,18 @@ pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
     setresgid(gid.real, gid.effective, gid.saved)
 }
 
-/// A synchronization primitive.
-/// Only one thread will ever have a Sync object. When the Sync object
-/// drops, control is relinquished to another thread.
-///
-/// Though this object is designed with this crate in mind, there's nothing
-/// implementation-specific to this object; you could use it for any logic
-/// that requires something along the following:
-///
-/// ```rust
-/// let lock = Sync::new();
-/// // Do things
-/// drop(lock);
-/// ```
-///
-///
-/// Note that the lock automatically relinquishes control on drop, or when
-/// falling out of scope.
-pub struct Sync {
-    sem: Semaphore,
-    guard: Guard,
-    _thread_guard: ThreadGuard,
-}
-impl Sync {
-    /// Take ownership of the shared semaphore.
-    /// This function is blocking.
-    pub fn new() -> Option<Self> {
-        let sem = Arc::clone(&SEMAPHORE);
-        let (thread_lock, mutex, cvar) = &*sem;
-
-        if thread_lock.is_owned_by_current_thread() {
-            return None;
-        }
-
-        let mut guard: Guard = unsafe {
-            let tmp_guard = mutex.lock();
-            std::mem::transmute::<MutexGuard<'_, bool>, Guard>(tmp_guard)
-        };
-        while *guard {
-            cvar.wait(&mut guard);
-        }
-
-        let _thread_guard: ThreadGuard = unsafe {
-            let tmp_guard = thread_lock.lock();
-            std::mem::transmute::<ReentrantMutexGuard<'_, RawMutex, RawThreadId, ()>, ThreadGuard>(
-                tmp_guard,
-            )
-        };
-
-        *guard = true;
-        Some(Self {
-            sem,
-            guard,
-            _thread_guard,
-        })
-    }
-}
-impl Drop for Sync {
-    fn drop(&mut self) {
-        *self.guard = false;
-        let (_, _, cvar) = &*self.sem;
-        cvar.notify_one();
+pub fn obtain_lock() -> Option<Singleton> {
+    if *crate::SETUID {
+        Singleton::new()
+    } else {
+        None
     }
 }
 
-pub fn obtain_lock() -> Option<Sync> {
-    if *crate::SETUID { Sync::new() } else { None }
-}
-
+/// This is a thread-safe wrapper that sets the mode, runs the closure/expression,
+/// then returns to the mode before the call. You can use this in multi-threaded
+/// environments, and it is guaranteed the content of the closure/expression will
+/// be run under the requested Mode.
 #[macro_export]
 macro_rules! run_as {
     ($mode:path, $ret:ty, $body:block) => {{
@@ -311,6 +248,7 @@ macro_rules! run_as {
     }};
 }
 
+/// Run the block/expression as the Real User. This is thread safe.
 #[macro_export]
 macro_rules! as_real {
     ($ret:ty, $body:block) => {{ user::run_as!(user::Mode::Real, $ret, $body) }};
@@ -318,6 +256,7 @@ macro_rules! as_real {
     ($expr:expr) => {{ user::run_as!(user::Mode::Real, { $expr }) }};
 }
 
+/// Run the block/expression as the Effective User. This is thread safe.
 #[macro_export]
 macro_rules! as_effective {
     ($ret:ty, $body:block) => {{ user::run_as!(user::Mode::Effective, $ret, $body) }};

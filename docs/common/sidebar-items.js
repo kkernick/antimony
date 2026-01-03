@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["cache","stream"]};
+window.SIDEBAR_ITEMS = {"mod":["cache","singleton","stream"]};

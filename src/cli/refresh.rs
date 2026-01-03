@@ -1,6 +1,9 @@
 //! Refresh installed profiles.
+
 use crate::{
-    cli::{self, run_vec},
+    cli::{
+        self, run_vec, {integrate, run},
+    },
     shared::env::{CACHE_DIR, HOME_PATH},
 };
 use anyhow::Result;
@@ -31,7 +34,7 @@ pub struct Args {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }
-impl super::Run for Args {
+impl cli::Run for Args {
     fn run(self) -> Result<()> {
         user::set(user::Mode::Effective)?;
 
@@ -56,7 +59,7 @@ impl super::Run for Args {
             let mut args = if let Some(passthrough) = self.passthrough {
                 run_vec(&profile, passthrough)
             } else {
-                Box::new(cli::run::Args::default())
+                run::Args::default()
             };
 
             args.refresh = true;
@@ -65,7 +68,7 @@ impl super::Run for Args {
             args.run()?;
 
             if self.integrate {
-                cli::integrate::integrate(cli::integrate::Args {
+                integrate::integrate(integrate::Args {
                     profile,
                     ..Default::default()
                 })?;
@@ -107,7 +110,7 @@ impl super::Run for Args {
                 .try_for_each(|name| -> Result<()> {
                     pb.set_message(format!("Refreshing {name}"));
 
-                    let args = cli::run::Args {
+                    let args = run::Args {
                         profile: name.clone(),
                         dry: true,
                         refresh: true,
@@ -121,7 +124,7 @@ impl super::Run for Args {
                         debug!("Integrating {name}");
                         pb.set_message(format!("Integrating {name}"));
                         user::set(user::Mode::Real)?;
-                        cli::integrate::integrate(cli::integrate::Args {
+                        integrate::integrate(integrate::Args {
                             profile: name,
                             ..Default::default()
                         })?;

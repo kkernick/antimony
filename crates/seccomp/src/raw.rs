@@ -1,7 +1,7 @@
+#![allow(non_camel_case_types)]
 //! The raw FFI to libseccomp.
 //! This is all unsafe. Use it only if you understand what values should be returned,
 //! what objects you need to manage, etc.
-#![allow(non_camel_case_types)]
 
 use std::ffi::{c_char, c_int, c_uint, c_void};
 

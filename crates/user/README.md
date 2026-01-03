@@ -4,30 +4,65 @@ This crate is for management of the Real and Effective Users of a SetUID program
 
 * `Real` mandates the Real User, or the user launching the process.
 * `Effective` mandates the Effective User, or the user that owns the program.
-* `Existing` means different things for different functions.
+* `Original` mandates the Operating Mode the program was launched with
+* `Existing` mandates whatever Mode is currently in use.
 
 These values can be directly queried via the `USER` and `GROUP` static values.
 
-## Non-Sync
+You can interact with these modes with the following functions:
 
-The following functions are available in `user::`:
+* `set()` will set the Operating Mode to the one selected, and return what the Mode was prior to the call.
+* `current()` returns the current Operating Mode.
+* `revert()` will set the Operating Mode to `Original`
+* `restore() `will return the Operating Mode to the value returned by `set()`.
 
-* `user::set` will set the operating mode to the desired mode. `Existing` will set the value to `USER` (IE restore to the original value). The existing mode will be returned.
-* `user::revert` will set the operating mode back to the original value. This is typically used after `user::set`, when the desired operation for the given mode has been performed.
-* `user::restore` returns the operating mode to the value prior to a `user::set` call.
-* `user::drop` destructively sets the operating mode to the desired mode by overwriting the Saved User. The program will be unable to return to dual privileges.
+## Dropping
 
-On top of these primitive functions, a pair of macros exist which simplify usage:
+`drop()` differs from the above operations in that it destructively sets the Saved UID to the desired mode as well. This means that the program will be unable to return to the dropped mode (IE Calling `drop(Real)` will prevent you from ever returning to Effective, and vice versa.
 
-* `user::run_as!` will execute the block of code under the desired user, then return to the user was in use prior to the macro call. If an error occurs on setting modes, the program aborts.
-* `user::try_run_as!` operates identically to `run_as!`, but will throw an `Err` on user errors, and wrap the return value in `Ok`. This function can only be used in functions that return a `Result`.
+This is useful in `fork+exec` semantics, where the child can have its privileges dropped to the desired User, rather than allowing it to continue running under the dual SetUID mode of the parent.
 
-## Synchronous
+## Thread Safety
 
-The User Mode of a program affects all threads. This can cause many issues in a multi-threaded program, as one thread can switch the mode from under another, to which a operation that would allowed under the prior mode (Such as creating a file) now causes an error. This issue is exasperated when all the threads are changing mode, as it can cause the mode to change between the `user::set` and `user::restore`.
+None of the above functions are thread-safe. If you have multiple threads that are all changing the current Operating Mode, it is entirely possible that the code between a `set` and `restore` call can change from the desired Mode, causing unpredictable and erroneous behavior. For example:
 
-If your program requires synchronization between multiple threads for switching users, the `sync` feature provides a synchronization mechanism in the `user::sync` namespace. These are available via the `run_as!`, and `user::sync_try_run_as!` macros. There are two caveats to using these variants:
+```rust
+fn worker(name: &str) {
+	let _ = user::as_effective!({
+		std::fs::File::create(format!("/tmp/{name}"));
+		std::fs::remove_file(format!("/tmp/{name}"));
+	});
+}
 
-1. These macros guarantee that the block will be executed in the provided mode *only* if all threads use the `sync` variants. If another thread uses a regular `user::` function, this guarantee breaks.
-2. These macros cannot be nested. Doing so will cause a deadlock. These macros hold a global mutex at the start of the macro, and release it at the end. If the block tries to take ownership of that mutex, it will hang forever.
+for name in ["t1", "t2", "t3"] {
+	std::thread::spawn(|| worker(name));
+}
 
+user::set(user::Mode::Real);
+std::fs::File::create("/tmp/parent");
+std::fs::remove_file("/tmp/parent");
+```
+
+There is no guarantee that the parent’s call to `File::create` will run as the Real User, as the detached threads may have changed the mode between `set` and `create`. Additionally, the file may not be removed as the Real user for the same reason, which could cause a Permission Error.
+
+For these kinds of situations, the `run_as` macro (And the `as_effective` and `as_real` wrappers) is required. They utilized a Synchronization Singleton to ensure that only a single thread using these functions can set the user mode at any one time. When the macro finishes, the Singleton is dropped, and another thread can acquire it to change modes. If you don’t need the added overhead of synchronization, such as in single threaded environments, or where you set the mode in the parent before spawning the threads, you can safely use the functions directly.
+
+A safe implementation of the above the example would be:
+
+```rust
+fn worker(name: &str) {
+	let _ = user::as_effective!({
+		std::fs::File::create(format!("/tmp/{name}"));
+		std::fs::remove_file(format!("/tmp/{name}"));
+	});
+}
+
+for name in ["t1", "t2", "t3"] {
+	std::thread::spawn(|| worker(name));
+}
+
+user::as_real!({
+	std::fs::File::create("/tmp/parent");
+	std::fs::remove_file("/tmp/parent");
+});
+```

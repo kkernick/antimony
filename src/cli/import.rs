@@ -1,16 +1,15 @@
 //! Import user-profiles
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
-
-use anyhow::{Result, anyhow};
-use dialoguer::Confirm;
-use log::warn;
 
 use crate::shared::{
     env::{AT_HOME, USER_NAME},
     profile::Profile,
+};
+use anyhow::{Result, anyhow};
+use dialoguer::Confirm;
+use log::warn;
+use std::{
+    fs,
+    path::{Path, PathBuf},
 };
 
 #[derive(clap::Args, Debug)]

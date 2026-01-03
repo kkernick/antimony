@@ -37,7 +37,7 @@ jobs:
 
     - name: Run package script
       run: |
-        ./package ${{ steps.extract_version.outputs.version }}
+        ./scripts/cargo-package ${{ steps.extract_version.outputs.version }}
 
     - name: Release
       uses: softprops/action-gh-release@v2

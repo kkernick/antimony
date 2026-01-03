@@ -26,7 +26,7 @@ use dbus::{
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
 use parking_lot::Mutex;
-use spawn::{Handle, Spawner};
+use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs,
@@ -180,7 +180,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     // Start the command.
     #[rustfmt::skip]
-    let mut handle = Spawner::abs("/usr/bin/bwrap")
+    let handle = Spawner::abs("/usr/bin/bwrap")
         .name(&args.profile)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",
@@ -218,35 +218,31 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         args,
     });
 
-    let (proxy, pair) = timer!(
+    let (proxy, home) = timer!(
         "::setup_total",
         rayon::join(
             || timer!("::proxy", proxy::setup(Arc::clone(&a))),
-            || -> Result<(Option<String>, Option<Handle>)> {
+            || -> Result<Option<String>> {
                 timer!("::setup_rest", {
                     let a = Arc::clone(&a);
                     let home = timer!("::home", home::setup(&a))?;
                     timer!("::file", files::setup(&a))?;
                     timer!("::env", env::setup(&a));
                     timer!("::fab", fab::setup(&a))?;
-                    let monitor = timer!("::syscalls", syscalls::setup(&a))?;
-                    Ok((home, monitor))
+                    timer!("::syscalls", syscalls::setup(&a))?;
+                    Ok(home)
                 })
             },
         )
     );
 
-    let (home, monitor) = pair?;
+    let home = home?;
+
     let mut a = Arc::into_inner(a).expect("Failed to unwrap fabricator");
 
-    if let Some((proxy, arguments)) = proxy? {
-        a.handle.associate(proxy);
+    if let Some(arguments) = proxy? {
         a.handle.args_i(arguments)?;
     }
-    if let Some(monitor) = monitor {
-        a.handle.associate(monitor);
-    }
-
     let post = timer!("::post", post::setup(&mut a))?;
 
     timer!(

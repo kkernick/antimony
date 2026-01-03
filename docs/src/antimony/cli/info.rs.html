@@ -14,7 +14,7 @@
 <a href=#14 id=14 data-nosnippet>14</a>
 <a href=#15 id=15 data-nosnippet>15</a><span class="doccomment">/// What to get information on.
 <a href=#16 id=16 data-nosnippet>16</a></span><span class="attr">#[derive(ValueEnum, Clone, Debug)]
-<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub enum </span>What {
+<a href=#17 id=17 data-nosnippet>17</a></span><span class="kw">pub enum </span>Target {
 <a href=#18 id=18 data-nosnippet>18</a>    <span class="doccomment">/// A Profile
 <a href=#19 id=19 data-nosnippet>19</a>    </span>Profile,
 <a href=#20 id=20 data-nosnippet>20</a>
@@ -28,7 +28,7 @@
 <a href=#28 id=28 data-nosnippet>28</a><span class="attr">#[derive(clap::Args, Debug)]
 <a href=#29 id=29 data-nosnippet>29</a></span><span class="kw">pub struct </span>Args {
 <a href=#30 id=30 data-nosnippet>30</a>    <span class="doccomment">/// What to get info on.
-<a href=#31 id=31 data-nosnippet>31</a>    </span><span class="kw">pub </span>what: What,
+<a href=#31 id=31 data-nosnippet>31</a>    </span><span class="kw">pub </span>target: Target,
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a>    <span class="doccomment">/// Profile/Feature/Binary name.
 <a href=#34 id=34 data-nosnippet>34</a>    </span><span class="kw">pub </span>name: <span class="prelude-ty">Option</span>&lt;String&gt;,
@@ -39,8 +39,8 @@
 <a href=#39 id=39 data-nosnippet>39</a>}
 <a href=#40 id=40 data-nosnippet>40</a><span class="kw">impl </span><span class="kw">super</span>::Run <span class="kw">for </span>Args {
 <a href=#41 id=41 data-nosnippet>41</a>    <span class="kw">fn </span>run(<span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">match </span><span class="self">self</span>.what {
-<a href=#43 id=43 data-nosnippet>43</a>            What::Profile =&gt; {
+<a href=#42 id=42 data-nosnippet>42</a>        <span class="kw">match </span><span class="self">self</span>.target {
+<a href=#43 id=43 data-nosnippet>43</a>            Target::Profile =&gt; {
 <a href=#44 id=44 data-nosnippet>44</a>                <span class="comment">// Print information on a profile.
 <a href=#45 id=45 data-nosnippet>45</a>                </span><span class="kw">let </span>print = |path: <span class="kw-2">&amp;</span>str, verbosity: u8| -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
 <a href=#46 id=46 data-nosnippet>46</a>                    <span class="kw">let </span>name = <span class="kw">if let </span><span class="prelude-val">Some</span>(i) = path.rfind(<span class="string">'/'</span>) {
@@ -85,7 +85,7 @@
 <a href=#85 id=85 data-nosnippet>85</a>            }
 <a href=#86 id=86 data-nosnippet>86</a>
 <a href=#87 id=87 data-nosnippet>87</a>            <span class="comment">// Feature information.
-<a href=#88 id=88 data-nosnippet>88</a>            </span>What::Feature =&gt; <span class="kw">match </span><span class="self">self</span>.name {
+<a href=#88 id=88 data-nosnippet>88</a>            </span>Target::Feature =&gt; <span class="kw">match </span><span class="self">self</span>.name {
 <a href=#89 id=89 data-nosnippet>89</a>                <span class="prelude-val">Some</span>(profile) =&gt; Feature::new(<span class="kw-2">&amp;</span>profile)<span class="question-mark">?</span>.info(<span class="self">self</span>.verbosity + <span class="number">1</span>),
 <a href=#90 id=90 data-nosnippet>90</a>                <span class="prelude-val">None </span>=&gt; {
 <a href=#91 id=91 data-nosnippet>91</a>                    <span class="kw">let </span>features = Path::new(AT_HOME.as_path()).join(<span class="string">"features"</span>);
@@ -97,7 +97,7 @@
 <a href=#97 id=97 data-nosnippet>97</a>            },
 <a href=#98 id=98 data-nosnippet>98</a>
 <a href=#99 id=99 data-nosnippet>99</a>            <span class="comment">// SECCOMP Info.
-<a href=#100 id=100 data-nosnippet>100</a>            </span>What::Seccomp =&gt; <span class="kw">match </span><span class="self">self</span>.name {
+<a href=#100 id=100 data-nosnippet>100</a>            </span>Target::Seccomp =&gt; <span class="kw">match </span><span class="self">self</span>.name {
 <a href=#101 id=101 data-nosnippet>101</a>                <span class="comment">// Get Profile/Binary information depending on a path.
 <a href=#102 id=102 data-nosnippet>102</a>                </span><span class="prelude-val">Some</span>(name) =&gt; {
 <a href=#103 id=103 data-nosnippet>103</a>                    <span class="macro">print!</span>(<span class="string">"{name}: "</span>);

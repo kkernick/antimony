@@ -12,7 +12,7 @@
 <a href=#12 id=12 data-nosnippet>12</a>    handle: <span class="kw-2">&amp;mut </span>Spawner,
 <a href=#13 id=13 data-nosnippet>13</a>    dry: bool,
 <a href=#14 id=14 data-nosnippet>14</a>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(proxy) = handle.get_associate(<span class="string">"proxy"</span>)
+<a href=#15 id=15 data-nosnippet>15</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>proxy) = handle.get_associate(<span class="string">"proxy"</span>)
 <a href=#16 id=16 data-nosnippet>16</a>        &amp;&amp; proxy.alive()<span class="question-mark">?</span>.is_none()
 <a href=#17 id=17 data-nosnippet>17</a>    {
 <a href=#18 id=18 data-nosnippet>18</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">anyhow!</span>(<span class="string">"Proxy died!"</span>));

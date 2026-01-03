@@ -12,7 +12,7 @@ pub fn setup(
     handle: &mut Spawner,
     dry: bool,
 ) -> Result<()> {
-    if let Some(proxy) = handle.get_associate("proxy")
+    if let Some(mut proxy) = handle.get_associate("proxy")
         && proxy.alive()?.is_none()
     {
         return Err(anyhow!("Proxy died!"));

@@ -1,4 +1,5 @@
-//! Edit the default profile
+//! Edit the configuration file
+
 use crate::shared::{config::ConfigFile, env::AT_HOME, privileged};
 use anyhow::Result;
 use log::{error, trace};

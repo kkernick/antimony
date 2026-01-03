@@ -1,3 +1,5 @@
+//! This file compiles into an interface to the Notification Portal.
+
 use clap::Parser;
 use notify::Error;
 use std::time::Duration;

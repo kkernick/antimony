@@ -1,3 +1,11 @@
+//! For internal use only. Benchmark Antimony, with support for checking out
+//! earlier versions.
+//!
+//! Note that early versions did not support non system installations very well,
+//! and thus may fail when running in this benchmark, as it is only run
+//! in user-mode. You can manually checkout the repo at that particular point,
+//! and run the benchmarker at that iteration--it should work.
+
 use std::{
     borrow::Cow,
     env,

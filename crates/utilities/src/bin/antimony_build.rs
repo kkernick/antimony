@@ -1,3 +1,6 @@
+//! Build antimony.
+//! This is just a cargo wrapper that uses predefined values.
+
 use antimony::shared::env::HOME_PATH;
 use anyhow::Result;
 use clap::Parser;
@@ -21,10 +24,6 @@ pub struct Cli {
     /// Build with native CPU Flags
     #[arg(long, default_value_t = false)]
     pub native: bool,
-
-    /// Checkout a specific state of the git tree, such as tags/1.0.0, or a commit ID.
-    #[arg(long)]
-    pub checkout: Option<String>,
 }
 
 fn main() -> Result<()> {

@@ -35,8 +35,6 @@ Antimony relies on the following runtime-dependencies:
 * `xdg-dbus-proxy`
 * `sqlite3`
 * `libseccomp`
-* `libnotify`
-* `xdg-open`
 * `libdbus`
 
 ### Compiling

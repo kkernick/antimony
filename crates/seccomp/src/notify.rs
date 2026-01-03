@@ -1,3 +1,4 @@
+#![cfg(feature = "notify")]
 //! A wrapper for the SECCOMP Notify interface.
 //!
 //! ## Implementation
@@ -15,11 +16,8 @@
 //!   processes. See `antimony-monitor`, and Antimony as a whole, to see how you can
 //!   notify safely (Hint: Notify all Syscalls except those needed to send FD, which are
 //!   instead logged on Audit, with a separate thread for reading the log).
-#![cfg(feature = "notify")]
 
-use crate::{action::Action, syscall::Syscall};
-
-use super::raw;
+use crate::{action::Action, raw, syscall::Syscall};
 use nix::errno::Errno;
 use std::{
     error, fmt,
@@ -64,16 +62,16 @@ impl fmt::Display for Error {
 
 /// A trait for transmitting a SECCOMP Notify FD to a Monitor.
 ///
-///  When `Filter::load()` is called, the Filter will execute the following
-/// actions in the following order:
+/// Executors, such as `spawn`, should perform the following actions
+/// from the Filter.
 ///
 /// 1. Call `Notifier::exempt()`
 /// 2. Call `Notifier::prepare()`
 /// 3. Call `seccomp_load()`
 /// 4. Call `Notifier::handle()`
 ///
-/// Then, you should call `execve()`.
-/// See `antimony::shared::syscalls::Notifier` for a socket implementation.
+/// Then, call `execve()`.
+/// See Antimony for a socket implementation.
 pub trait Notifier: Send + 'static {
     /// Return the list of syscalls that are used by the Notifier itself
     /// in order to transmit the SECCOMP FD. These syscalls will be used

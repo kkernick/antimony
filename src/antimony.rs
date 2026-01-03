@@ -1,3 +1,5 @@
+//! The main Antimony executable.
+
 use antimony::{
     cli::{Run, run::as_symlink},
     shared,

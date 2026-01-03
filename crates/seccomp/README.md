@@ -8,16 +8,16 @@ For most intents and purposes, you’ll be interacting with this crate via `Filt
 use seccomp::{filter::Filter, action::Action, attribute::Attribute, syscall::Syscall};
 
 // Create a new filter that kills the process by default
-let mut filter = Filter::new(Action::KillProcess)?;
+let mut filter = Filter::new(Action::KillProcess).unwrap();
 
 // Deny new privileges
-filter.set_attribute(Attribute::NoNewPrivileges(true))?;
+filter.set_attribute(Attribute::NoNewPrivileges(true)).unwrap();
 
 // Allow execve.
-filter.add_rule(Action::Allow, Syscall::from_name("execve")?;
+filter.add_rule(Action::Allow, Syscall::from_name("execve").unwrap());
 
 // Load the policy, effective immediately
-filter.load()?;
+filter.load();
 ```
 
 The `notify` feature can be optionally enabled to support the Notify framework in SECCOMP. You’ll want to look at Antimony’s implementation for more details.
@@ -33,8 +33,7 @@ SECCOMP is a security mechanism within the Linux Kernel that allows for a proces
 
 The child will then be governed by that profile.
 
->[!note]
->The parent is still confined by the profile between `load` and `execve`, so unless the process is creating a filter for itself, a policy will require `execve` and other syscalls necessary for the parent to execute the child.
+Note: The parent is still confined by the profile between `load` and `execve`, so unless the process is creating a filter for itself, a policy will require `execve` and other syscalls necessary for the parent to execute the child.
 
 ## Actions
 
@@ -81,9 +80,11 @@ A Filter is firstly created through `Filter::new`, which takes a default action.
 
 The Filter can then be written in BPF format via `Filter::write`, or consumed and immediately loaded for the current program via `Filter::load`.
 
-### Notify
+## Features
 
-With the `notify` feature, Filters can also take advantage of the Notify feature of `libseccomp`. If any Rule in a Filter (Including the default one) specifies *Notify*, the Kernel will return a FD on `seccomp_load`. Whenever these rules are hit, the Kernel will suspend the calling process, and send a packet across the FD to a monitoring process, which the kernel will then wait for. The monitor can then analyze the syscall, and return instructions for what the Kernel can do.
+### `notify`
+
+With the `notify` feature, Filters can also take advantage of the Notify feature of `libseccomp`. To use this, use `set_notify` on the filter to provide an object that implements the `Notifier` trait. Whenever a `Action::Notify` rule is hit, the Kernel will suspend the calling process, and send a packet across the FD to a monitoring process, which the kernel will then wait for. The monitor can then analyze the syscall, and return instructions for what the Kernel can do.
 
 Antimony uses this feature in the `antimony-monitor` process. It uses Notify to log Syscalls, and also prompt the user on what action should be taken for a given Syscall.
 
@@ -96,19 +97,14 @@ Notify is incredibly powerful, but requires extra effort on your part. There are
 
 `antimony-monitor` is an excellent reference for using this feature, both in the context of this crate, and SECCOMP as a whole. In the case of the former:
 
-1. You’ll want to create structure that implements the `seccomp::filter::Notifier` trait. This abstracts away most of the above problems. In it, you need to define three functions:
+1. You’ll want to create structure that implements the `Notifier` trait. This abstracts away most of the above problems. In it, you need to define three functions:
 	1. `exempt` returns a list of Syscalls that your Notifier needs to transmit the FD to the monitor. This could be `sendmsg` for a socket.
 	2. `prepare` is called immediately before `seccomp_load`. You’ll use this to make any preparations needed to transmit the FD. This could include creating the socket, spawning auxiliary processes, etc.
 	3. `handle` is called immediately after `seccomp_load`, where you actually transmit the FD.
 
-Once defined, you can pass an instance of the *Notifier* in the `Filter::set_notifier` function. After that, `Filter::load` will:
+Once defined, you can pass an instance of the *Notifier* in the `Filter::set_notifier` function. If you're using `spawn`, simply pass the Filter to `seccomp`. Otherwise, you'll want to call:
 
-1. Add all the `exempt` rules to your policy
-2. Call `prepare`
-3. Call `seccomp_load`
-4. Call `handle`
-5. Return.
-
-Antimony derives a *Notifier* in `shared::syscalls`, utilizing a socket-based approach.
-
-
+1. Call `Filter::prepare` to run your preparation and exemption functions
+2. Call `seccomp_load`
+3. Call `Filter::handle`
+4. Return.

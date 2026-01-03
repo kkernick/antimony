@@ -906,7 +906,7 @@ impl Hook {
         home: &Option<String>,
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
-        let mut handle = if let Some(path) = self.path {
+        let handle = if let Some(path) = self.path {
             Spawner::new(path)?
         } else if let Some(content) = self.content {
             Spawner::abs("/usr/bin/bash").args(["-c", content.as_str()])?
@@ -942,7 +942,7 @@ impl Hook {
         } else {
             let mut handle = handle.spawn()?;
             if self.attach.unwrap_or(false) {
-                if let Some(mut m) = main {
+                if let Some(m) = main {
                     m.associate(handle);
                     Ok(Some(m))
                 } else {

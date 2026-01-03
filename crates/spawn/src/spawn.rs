@@ -1,25 +1,25 @@
 //! Spawn subprocesses with more fine-grained control over File Descriptors,
 //! UID/GID, and File Stream handling.
-#![allow(dead_code)]
 
-use crate::{Stream, format_iter, handle::Handle};
-use caps::{CapSet, Capability, CapsHashSet};
+use crate::{clear_capabilities, cond_pipe, dup_null, format_iter, handle::Handle, logger};
+use caps::{Capability, CapsHashSet};
+use dashmap::{DashMap, DashSet, mapref::one::RefMut};
 use log::{trace, warn};
 use nix::{
     sys::{prctl, signal::Signal::SIGTERM},
-    unistd::{ForkResult, close, dup, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork, pipe},
+    unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork},
 };
 use parking_lot::Mutex;
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     error,
     ffi::{CString, NulError, OsString},
     fmt,
-    os::fd::{AsFd, OwnedFd},
+    os::fd::OwnedFd,
     process::exit,
     str::FromStr,
-    sync::LazyLock,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 #[cfg(feature = "seccomp")]
@@ -33,12 +33,6 @@ use {
 
 #[cfg(feature = "cache")]
 use std::{fs, path::Path};
-
-static NULL: LazyLock<OwnedFd> = LazyLock::new(|| {
-    std::fs::File::open("/dev/null")
-        .expect("Failed to open /dev/null")
-        .into()
-});
 
 /// Errors related to the Spawner.
 #[derive(Debug)]
@@ -65,8 +59,8 @@ pub enum Error {
     /// An error when the spawner fails to parse the environment.
     Environment,
 
-    /// An error trying to apply the *SECCOMP* Filter.
     #[cfg(feature = "seccomp")]
+    /// An error trying to apply the *SECCOMP* Filter.
     Seccomp(seccomp::filter::Error),
 }
 impl fmt::Display for Error {
@@ -109,13 +103,14 @@ impl error::Error for Error {
 
             #[cfg(feature = "seccomp")]
             Self::Seccomp(error) => Some(error),
+
             _ => None,
         }
     }
 }
 
 /// How to handle the standard input/out/error streams
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub enum StreamMode {
     /// Collect the stream contents in a Stream object via a
     /// pipe that can be retrieved in the `spawn::Handle`
@@ -126,7 +121,8 @@ pub enum StreamMode {
     #[default]
     Share,
 
-    /// Send the output to the system logger at the provided level.
+    /// Send the output to the system logger at the provided level. If the log
+    /// level is below this, output is discarded.
     Log(log::Level),
 
     /// Send output to /dev/null.
@@ -134,10 +130,10 @@ pub enum StreamMode {
 }
 
 /// Spawn a child.
+///
 /// ## Thread Safety
-/// Calls to the Spawner's arguments and file descriptors are
-/// thread safe, and their order is guaranteed. All other functions are not
-/// thread safe.
+///
+/// This entire object is safe to pass and construct across multiple threads.
 ///
 /// ## Examples
 /// Launch bash in a child, inheriting the parent's input/output/error:
@@ -164,36 +160,36 @@ pub struct Spawner {
     cmd: String,
 
     /// A unique name for the process, to be used to reference it by the Handle.
-    unique_name: Option<String>,
+    unique_name: Mutex<Option<String>>,
 
     /// Arguments
     args: Mutex<Vec<CString>>,
 
     /// Whether to pipe **STDIN**. This lets you call `Handle::write()` to
     /// the process handle to send any Display value to the child.
-    input: StreamMode,
+    input: Mutex<StreamMode>,
 
     /// Capture the child's **STDOUT**.
-    output: StreamMode,
+    output: Mutex<StreamMode>,
 
     /// Capture the child's **STDERR**.
-    error: StreamMode,
+    error: Mutex<StreamMode>,
 
     /// Clear the environment before spawning the child.
-    preserve_env: bool,
+    preserve_env: AtomicBool,
 
     /// Don't clear privileges.
-    no_new_privileges: bool,
+    no_new_privileges: AtomicBool,
 
     /// Whitelisted capabilities.
-    whitelist: CapsHashSet,
+    whitelist: DashSet<Capability>,
 
     /// Environment variables
-    env: HashMap<CString, CString>,
+    env: DashMap<CString, CString>,
 
     /// A list of other Pids that the eventual Handle should be responsible for,
     /// attached to the main child.
-    associated: Vec<Handle>,
+    associated: DashMap<String, Handle>,
 
     /// An index to cache parts of the command line
     #[cfg(feature = "cache")]
@@ -206,11 +202,11 @@ pub struct Spawner {
 
     /// The User to run the program under.
     #[cfg(feature = "user")]
-    mode: Option<user::Mode>,
+    mode: Mutex<Option<user::Mode>>,
 
     /// Use `pkexec` to elevate via *Polkit*.
     #[cfg(feature = "elevate")]
-    elevate: bool,
+    elevate: AtomicBool,
 
     /// An optional *SECCOMP* policy to load on the child.
     #[cfg(feature = "seccomp")]
@@ -225,22 +221,25 @@ impl<'a> Spawner {
         Ok(Self::abs(path))
     }
 
+    /// Construct a `Spanwner` to spawn *cmd*.
+    /// This function treats *cmd* as an absolute
+    /// path. No resolution is performed.
     pub fn abs(cmd: impl Into<String>) -> Self {
         Self {
             cmd: cmd.into(),
-            unique_name: None,
-            args: Mutex::new(vec![]),
+            unique_name: Mutex::new(None),
+            args: Mutex::default(),
 
-            input: StreamMode::Share,
-            output: StreamMode::Share,
-            error: StreamMode::Share,
+            input: Mutex::new(StreamMode::Share),
+            output: Mutex::new(StreamMode::Share),
+            error: Mutex::new(StreamMode::Share),
 
-            preserve_env: false,
-            no_new_privileges: true,
-            whitelist: CapsHashSet::new(),
-            env: HashMap::new(),
+            preserve_env: AtomicBool::new(false),
+            no_new_privileges: AtomicBool::new(true),
+            whitelist: DashSet::new(),
+            env: DashMap::new(),
 
-            associated: Vec::new(),
+            associated: DashMap::new(),
 
             #[cfg(feature = "cache")]
             cache_index: Mutex::new(None),
@@ -249,10 +248,10 @@ impl<'a> Spawner {
             fds: Mutex::new(vec![]),
 
             #[cfg(feature = "user")]
-            mode: None,
+            mode: Mutex::default(),
 
             #[cfg(feature = "elevate")]
-            elevate: false,
+            elevate: AtomicBool::new(false),
 
             #[cfg(feature = "seccomp")]
             seccomp: Mutex::new(None),
@@ -260,68 +259,56 @@ impl<'a> Spawner {
     }
 
     /// Control whether to hook the child's standard input.
-    /// This function is not thread safe.
-    pub fn input(mut self, input: StreamMode) -> Self {
+    pub fn input(self, input: StreamMode) -> Self {
         self.input_i(input);
         self
     }
 
     /// Control whether to hook the child's standard output.
-    /// This function is not thread safe.
-    pub fn output(mut self, output: StreamMode) -> Self {
+    pub fn output(self, output: StreamMode) -> Self {
         self.output_i(output);
         self
     }
 
     /// Control whether to hook the child's standard error.
-    /// This function is not thread safe.
-    pub fn error(mut self, error: StreamMode) -> Self {
+    pub fn error(self, error: StreamMode) -> Self {
         self.error_i(error);
         self
     }
 
     /// Give a unique name to the process, so you can refer to the Handle.
     /// If no name is set, the string passed to Spawn::new() will be used
-    pub fn name(mut self, name: &str) -> Self {
-        self.unique_name = Some(name.to_string());
+    pub fn name(self, name: &str) -> Self {
+        *self.unique_name.lock() = Some(name.to_string());
         self
     }
 
     /// Attach another process that is attached to the main child, and should be killed
     /// when the eventual Handle goes out of scope.
-    pub fn associate(&mut self, process: Handle) {
-        self.associated.push(process);
+    pub fn associate(&self, process: Handle) {
+        self.associated.insert(process.name().to_string(), process);
     }
 
     /// Returns a mutable reference to an associate within the Handle, if it exists.
     /// The associate is another Handle instance.
-    pub fn get_associate(&mut self, name: &str) -> Option<&mut Handle> {
-        self.associated
-            .iter_mut()
-            .find(|handle| handle.name == name)
+    pub fn get_associate<'b>(&'b self, name: &str) -> Option<RefMut<'b, String, Handle>> {
+        self.associated.get_mut(name)
     }
 
     /// Drop privilege to the provided user mode on the child,
     /// immediately after the fork. This does not affected the parent
-    /// process, but prevents the the child from changing outside
+    /// process, but prevents the child from changing outside
     /// of the assigned UID.
     ///
-    /// If is set to *Existing*, the child is launched with the exact
+    /// If is set to *Original*, the child is launched with the exact
     /// same operating set as the parent, persisting SetUID privilege.
     ///
-    /// If mode is not set, it adopts whatever operating set the parent
-    /// is in when spawn() is called.
+    /// If mode is not set, or set to *Existing*, it adopts whatever operating
+    /// set the parent is in when spawn() is called. This is ill-advised.
     ///
     /// If the parent is not SetUID, this parameter is a no-op
-    /// This function is not thread safe.
-    ///
-    /// If drop is set to true, the handle will switch to this
-    /// mode when tearing down to avoid permission errors.
-    /// Note that drop does not function in a multi-threaded
-    /// environment, as multiple teardowns can change the mode
-    /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode(mut self, mode: user::Mode) -> Self {
+    pub fn mode(self, mode: user::Mode) -> Self {
         self.mode_i(mode);
         self
     }
@@ -330,48 +317,53 @@ impl<'a> Spawner {
     /// `pkexec` must exist, and must be in path.
     /// The operating set of the child must ensure the real user can
     /// authorize via *PolKit*.
-    /// This function is not thread safe.
     #[cfg(feature = "elevate")]
-    pub fn elevate(mut self, elevate: bool) -> Self {
+    pub fn elevate(self, elevate: bool) -> Self {
         self.elevate_i(elevate);
         self
     }
 
     /// Preserve the environment of the parent when launching the child.
     /// `Spawner` defaults to clearing the environment.
-    /// This function is not thread safe.
-    pub fn preserve_env(mut self, preserve: bool) -> Self {
+    pub fn preserve_env(self, preserve: bool) -> Self {
         self.preserve_env_i(preserve);
         self
     }
 
-    pub fn cap(mut self, cap: Capability) -> Self {
+    /// Add a capability to the child's capability set.
+    /// Note that this function cannot grant capability the program
+    /// does not possess, it merely prevents existing capabilities from
+    /// being cleared.
+    pub fn cap(self, cap: Capability) -> Self {
         self.whitelist.insert(cap);
         self
     }
 
-    pub fn caps(mut self, caps: impl IntoIterator<Item = Capability>) -> Self {
+    /// Add capabilities to the child's capability set.
+    /// Note that this function cannot grant capability the program
+    /// does not possess, it merely prevents existing capabilities from
+    /// being cleared.
+    pub fn caps(self, caps: impl IntoIterator<Item = Capability>) -> Self {
         caps.into_iter().for_each(|cap| {
             self.whitelist.insert(cap);
         });
         self
     }
 
-    pub fn new_privileges(mut self, allow: bool) -> Self {
-        self.no_new_privileges = !allow;
+    /// Control whether the child is allowed new privileges.
+    /// Note that this function cannot grant privilege the program
+    /// does not already have, but merely allows it access to existing privileges
+    /// not shared by the parent.
+    pub fn new_privileges(self, allow: bool) -> Self {
+        self.new_privileges_i(allow);
         self
     }
 
-    /// Sets an environment variable to pass to the process. If the string contains
-    /// a keypair (USER=user), the provided value will be passed, if only a key is
-    /// passed (USER) it will be looked up from the caller's environment.
-    ///
-    /// Returns an error if the variable contains NULL, or the key doesn't exist
-    /// in the parent environment
-    ///
-    /// This function is not thread safe.
+    /// Sets an environment variable to pass to the process.
+    /// Note that if preserve_env is set to true, this value will
+    /// overwrite the existing value, if it exists.
     pub fn env(
-        mut self,
+        self,
         key: impl Into<Cow<'a, str>>,
         var: impl Into<Cow<'a, str>>,
     ) -> Result<Self, Error> {
@@ -379,11 +371,14 @@ impl<'a> Spawner {
         Ok(self)
     }
 
-    pub fn pass_env(mut self, key: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
+    /// Passes the value of the provided environment variable to the child.
+    /// If preserve_env is true, this is functionally a no-op.
+    pub fn pass_env(self, key: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
         self.pass_env_i(key)?;
         Ok(self)
     }
 
+    #[cfg(feature = "seccomp")]
     /// Move a *SECCOMP* filter to the `Spawner`, loading in the child after forking.
     /// *SECCOMP* is the last operation applied. This has several consequences:
     ///
@@ -394,9 +389,6 @@ impl<'a> Spawner {
     ///  3.  Your *SECCOMP* filter must permit `execve` to launch the application.
     ///      This does not have to be ALLOW. See the caveats to Notify if
     ///      you are using it.
-    ///
-    /// This function is thread safe.
-    #[cfg(feature = "seccomp")]
     pub fn seccomp(self, seccomp: Filter) -> Self {
         self.seccomp_i(seccomp);
         self
@@ -405,8 +397,6 @@ impl<'a> Spawner {
     /// Move a new argument to the argument vector.
     /// This function is guaranteed to append to the end of the current argument
     /// vector.
-    /// This function is thread safe.
-    /// This function will fail if the argument contains a NULL byte.
     pub fn arg(self, arg: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
         self.arg_i(arg)?;
         Ok(self)
@@ -414,9 +404,7 @@ impl<'a> Spawner {
 
     /// Move a new FD to the `Spawner`.
     /// FD's will be shared to the child under the same value.
-    /// Any FD's in the parent not explicitly passed, which includes
-    /// this function, and the input/output/error functions, will be dropped.
-    /// This function is thread safe.
+    /// Any FD's in the parent not explicitly passed will be dropped.
     #[cfg(feature = "fd")]
     pub fn fd(self, fd: impl Into<OwnedFd>) -> Self {
         self.fd_i(fd);
@@ -425,13 +413,12 @@ impl<'a> Spawner {
 
     /// Move a FD to the `Spawner`, and attach it to an argument to ensure the
     /// value is identical.
-    /// This function is thread safe.
-    /// This function will fail if the argument contains a NULL byte.
     ///
     /// ## Example
     /// Bubblewrap supports the --file flag, which accepts a FD and destination.
     /// If you want to ensure you don't accidentally mismatch FDs, you can
     /// commit both the FD and argument in the same transaction:
+    ///
     /// ```rust
     /// let file = std::fs::File::create("file.txt").unwrap();
     /// spawn::Spawner::new("bwrap").unwrap()
@@ -451,9 +438,8 @@ impl<'a> Spawner {
     }
 
     /// Move an iterator of arguments into the `Spawner`.
-    /// This function is thread safe, and guarantees that the arguments
+    /// It is guaranteed that the arguments
     /// in the iterator will appear sequentially, and in the same order.
-    /// This function will fail if an argument contains a NULL byte.
     pub fn args<I, S>(self, args: I) -> Result<Self, Error>
     where
         I: IntoIterator<Item = S>,
@@ -464,7 +450,6 @@ impl<'a> Spawner {
     }
 
     /// Move an iterator of FD's to the `Spawner`.
-    /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fds<I, S>(self, fds: I) -> Self
     where
@@ -476,54 +461,51 @@ impl<'a> Spawner {
     }
 
     /// Set the input flag without consuming the `Spawner`.
-    /// This function is not thread safe.
-    pub fn input_i(&mut self, input: StreamMode) {
-        self.input = input;
+    pub fn input_i(&self, input: StreamMode) {
+        *self.input.lock() = input;
     }
 
     /// Set the output flag without consuming the `Spawner`.
-    /// This function is not thread safe.
-    pub fn output_i(&mut self, output: StreamMode) {
-        self.output = output;
+    pub fn output_i(&self, output: StreamMode) {
+        *self.output.lock() = output;
     }
 
     /// Set the error flag without consuming the `Spawner`.
-    /// This function is not thread safe.
-    pub fn error_i(&mut self, error: StreamMode) {
-        self.error = error
+    pub fn error_i(&self, error: StreamMode) {
+        *self.error.lock() = error
     }
 
-    /// Set the elevate flag without consuming the `Spawner`.
-    /// This function is not thread safe.
     #[cfg(feature = "elevate")]
-    pub fn elevate_i(&mut self, elevate: bool) {
-        self.elevate = elevate
+    /// Set the elevate flag without consuming the `Spawner`.
+    pub fn elevate_i(&self, elevate: bool) {
+        self.elevate.store(elevate, Ordering::Relaxed)
     }
 
     /// Set the preserve environment flag without consuming the `Spawner`.
-    /// This function is not thread safe.
-    pub fn preserve_env_i(&mut self, preserve: bool) {
-        self.preserve_env = preserve;
+    pub fn preserve_env_i(&self, preserve: bool) {
+        self.preserve_env.store(preserve, Ordering::Relaxed);
     }
 
+    /// Add a capability without consuming the `Spawner`.
     pub fn cap_i(&mut self, cap: Capability) {
         self.whitelist.insert(cap);
     }
 
+    /// Adds a capability set without consuming the `Spawner`.
     pub fn caps_i(&mut self, caps: impl IntoIterator<Item = Capability>) {
         caps.into_iter().for_each(|cap| {
             self.whitelist.insert(cap);
         });
     }
 
-    pub fn new_privileges_i(&mut self, allow: bool) {
-        self.no_new_privileges = !allow;
+    /// Set the NO_NEW_PRIVS flag without consuming the `Spawner`.
+    pub fn new_privileges_i(&self, allow: bool) {
+        self.no_new_privileges.store(!allow, Ordering::Relaxed)
     }
 
-    /// Sets an environment variable to the child process.
-    /// Fails if the key doesn't exist, or the var contains a NULL byte.
+    /// Sets an environment variable to the child process without consuming the `Spawner`.
     pub fn env_i(
-        &mut self,
+        &self,
         key: impl Into<Cow<'a, str>>,
         value: impl Into<Cow<'a, str>>,
     ) -> Result<(), Error> {
@@ -534,7 +516,8 @@ impl<'a> Spawner {
         Ok(())
     }
 
-    pub fn pass_env_i(&mut self, key: impl Into<Cow<'a, str>>) -> Result<(), Error> {
+    /// Pass an environment variable to the child process without consuming the `Spawner`.
+    pub fn pass_env_i(&self, key: impl Into<Cow<'a, str>>) -> Result<(), Error> {
         let key = key.into();
         let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
         if let Ok(env) = std::env::var(&os_key) {
@@ -549,28 +532,18 @@ impl<'a> Spawner {
     }
 
     /// Set the user mode without consuming the `Spawner`.
-    /// This function is not thread safe.
-    ///
-    /// If drop is set to true, the handle will switch to this
-    /// mode when tearing down to avoid permission errors.
-    /// Note that drop does not function in a multi-threaded
-    /// environment, as multiple teardowns can change the mode
-    /// between saving and restoring.
     #[cfg(feature = "user")]
-    pub fn mode_i(&mut self, mode: user::Mode) {
-        self.mode = Some(mode);
+    pub fn mode_i(&self, mode: user::Mode) {
+        *self.mode.lock() = Some(mode);
     }
 
     /// Set a *SECCOMP* filter without consuming the `Spawner`.
-    /// This function is thread safe.
     #[cfg(feature = "seccomp")]
     pub fn seccomp_i(&self, seccomp: Filter) {
         *self.seccomp.lock() = Some(seccomp)
     }
 
     /// Move an argument to the `Spawner` in-place.
-    /// This function is thread safe.
-    /// This argument will fail if the argument contains a NULL byte.
     pub fn arg_i(&self, arg: impl Into<Cow<'a, str>>) -> Result<(), Error> {
         self.args
             .lock()
@@ -579,14 +552,12 @@ impl<'a> Spawner {
     }
 
     /// Move a FD to the `Spawner` in-place.
-    /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fd_i(&self, fd: impl Into<OwnedFd>) {
         self.fds.lock().push(fd.into());
     }
 
     /// Move FDs to the `Spawner` in-place, passing it as an argument.
-    /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fd_arg_i(
         &self,
@@ -600,7 +571,6 @@ impl<'a> Spawner {
     }
 
     /// Move an iterator of FDs to the `Spawner` in-place.
-    /// This function is thread safe.
     #[cfg(feature = "fd")]
     pub fn fds_i<I, S>(&self, fds: I)
     where
@@ -611,9 +581,7 @@ impl<'a> Spawner {
     }
 
     /// Move an iterator of arguments to the `Spawner` in-place.
-    /// This function is thread safe, and both sequence and order
-    /// are guaranteed.
-    /// This function will fail if any argument contains a NULL byte.
+    /// Both sequence and order are guaranteed.
     pub fn args_i<I, S>(&self, args: I) -> Result<(), Error>
     where
         I: IntoIterator<Item = S>,
@@ -633,15 +601,14 @@ impl<'a> Spawner {
     /// be cached to the file provided to cache_write.
     /// On future runs, `cache_read` can be used to append those cached
     /// contents to the `Spawner`'s arguments.
-    /// This function is thread safe.
     /// This function fails if cache_start is called twice without having
     /// first called cache_write.
     ///
     /// ## Examples
     ///
-    /// ```rust
+    /// ```rust,ignore
     /// let cache = std::path::PathBuf::from("cmd.cache");
-    /// let mut handle = spawn::Spawner::new("bash").unwrap();
+    /// let mut handle = spawn::Spawner::abs("/usr/bin/bash");
     /// if cache.exists() {
     ///     handle.cache_read(&cache).unwrap();
     /// } else {
@@ -671,7 +638,6 @@ impl<'a> Spawner {
 
     /// Write all arguments added to the `Spawner` since `cache_start`
     /// was called to the file provided.
-    /// This function is thread safe.
     /// This function will fail if `cache_start` was not called,
     /// or if there are errors writing to the provided path.
     #[cfg(feature = "cache")]
@@ -700,7 +666,6 @@ impl<'a> Spawner {
 
     /// Read from the cache file, adding its contents to the `Spawner`'s
     /// arguments.
-    /// This function is thread safe.
     /// This function will fail if there is an error reading the file,
     /// or if the contents contain strings will NULL bytes.
     #[cfg(feature = "cache")]
@@ -733,15 +698,19 @@ impl<'a> Spawner {
     /// * A user mode has been set, but dropping to it fails.
     /// * A *SECCOMP* filter is set, but it fails to set.
     /// * `execve` Fails.
-    #[allow(unused_mut)]
     pub fn spawn(mut self) -> Result<Handle, Error> {
         // Create our pipes based on whether we need t
         // hem.
         // Because we use these conditionals later on when using them,
         // we can unwrap() with impunity.
-        let stdout = cond_pipe(&self.output)?;
-        let stderr = cond_pipe(&self.error)?;
-        let stdin = cond_pipe(&self.input)?;
+
+        let stdout_mode = self.output.into_inner();
+        let stderr_mode = self.error.into_inner();
+        let stdin_mode = self.input.into_inner();
+
+        let stdout = cond_pipe(&stdout_mode)?;
+        let stderr = cond_pipe(&stderr_mode)?;
+        let stdin = cond_pipe(&stdin_mode)?;
 
         #[cfg(feature = "fd")]
         let fds = self.fds.into_inner();
@@ -751,7 +720,7 @@ impl<'a> Spawner {
 
         // Launch with pkexec if we're elevated.
         #[cfg(feature = "elevate")]
-        if self.elevate {
+        if self.elevate.load(Ordering::Relaxed) {
             let polkit = CString::new("/usr/bin/pkexec".to_string()).map_err(Error::Null)?;
             if cmd_c.is_none() {
                 cmd_c = Some(polkit.clone());
@@ -776,7 +745,7 @@ impl<'a> Spawner {
                 .map_err(|e| Error::Errno(None, "fnctl fd", e))?;
         }
 
-        if self.preserve_env {
+        if self.preserve_env.load(Ordering::Relaxed) {
             let environment: HashMap<_, _> = std::env::vars_os()
                 .filter_map(|(key, value)| {
                     if let Some(key) = key.to_str()
@@ -819,7 +788,8 @@ impl<'a> Spawner {
         }
 
         let all = caps::all();
-        let diff: CapsHashSet = all.difference(&self.whitelist).copied().collect();
+        let set: HashSet<Capability> = self.whitelist.into_iter().collect();
+        let diff: CapsHashSet = all.difference(&set).copied().collect();
 
         #[cfg(feature = "seccomp")]
         let filter = {
@@ -833,55 +803,52 @@ impl<'a> Spawner {
         let fork = unsafe { fork() }.map_err(Error::Fork)?;
         match fork {
             ForkResult::Parent { child } => {
-                let name = if let Some(name) = self.unique_name {
+                let name = if let Some(name) = self.unique_name.into_inner() {
                     name
                 } else {
                     self.cmd
                 };
 
                 // Set the relevant pipes.
-                let stdin = if let (Some(read), write) = stdin {
+                let stdin = if let Some((read, write)) = stdin {
                     close(read).map_err(|e| Error::Errno(Some(fork), "close input", e))?;
-                    write
+                    Some(write)
                 } else {
                     None
                 };
 
-                let stdout = if let (read, Some(write)) = stdout {
+                let stdout = if let Some((read, write)) = stdout {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
-                    if let StreamMode::Log(log) = self.output {
+                    if let StreamMode::Log(log) = stdout_mode {
                         let name = name.clone();
-                        if let Some(read) = read {
-                            std::thread::spawn(move || logger(log, read, name));
-                        }
+                        std::thread::spawn(move || logger(log, read, name));
                         None
                     } else {
-                        read
+                        Some(read)
                     }
                 } else {
                     None
                 };
 
-                let stderr = if let (read, Some(write)) = stderr {
+                let stderr = if let Some((read, write)) = stderr {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
-
-                    if let StreamMode::Log(log) = self.error {
+                    if let StreamMode::Log(log) = stderr_mode {
                         let name = name.clone();
-                        if let Some(read) = read {
-                            std::thread::spawn(move || logger(log, read, name));
-                        }
+                        std::thread::spawn(move || logger(log, read, name));
                         None
                     } else {
-                        read
+                        Some(read)
                     }
                 } else {
                     None
                 };
 
                 #[cfg(feature = "user")]
-                let mode = self.mode.unwrap_or(
+                let mode = self.mode.into_inner().unwrap_or(
                     user::current().map_err(|e| Error::Errno(Some(fork), "getresuid", e))?,
                 );
+
+                let associated: Vec<Handle> = self.associated.into_iter().map(|(_, v)| v).collect();
 
                 // Return.
                 let handle = Handle::new(
@@ -892,38 +859,39 @@ impl<'a> Spawner {
                     stdin,
                     stdout,
                     stderr,
-                    self.associated,
+                    associated,
                 );
                 Ok(handle)
             }
 
             ForkResult::Child => {
-                if let (Some(read), write) = stdin {
-                    if let Some(write) = write {
-                        let _ = close(write);
-                    }
+                if let Some((read, write)) = stdin {
+                    let _ = close(write);
                     let _ = dup2_stdin(read);
+                } else if stdin_mode == StreamMode::Discard {
+                    let _ = dup2_stdin(dup_null().unwrap());
                 }
 
-                if let (read, Some(write)) = stdout {
-                    if let Some(read) = read {
-                        let _ = close(read);
-                    }
+                if let Some((read, write)) = stdout {
+                    let _ = close(read);
+
                     let _ = dup2_stdout(write);
+                } else if stdout_mode == StreamMode::Discard {
+                    let _ = dup2_stdout(dup_null().unwrap());
                 }
 
-                if let (read, Some(write)) = stderr {
-                    if let Some(read) = read {
-                        let _ = close(read);
-                    }
+                if let Some((read, write)) = stderr {
+                    let _ = close(read);
                     let _ = dup2_stderr(write);
+                } else if stderr_mode == StreamMode::Discard {
+                    let _ = dup2_stderr(dup_null().unwrap());
                 }
 
                 let _ = prctl::set_pdeathsig(SIGTERM);
 
                 // Drop modes
                 #[cfg(feature = "user")]
-                if let Some(mode) = self.mode
+                if let Some(mode) = self.mode.into_inner()
                     && let Err(e) = user::drop(mode)
                 {
                     warn!("Failed to drop user: {e}")
@@ -931,7 +899,7 @@ impl<'a> Spawner {
 
                 clear_capabilities(diff);
 
-                if self.no_new_privileges
+                if self.no_new_privileges.load(Ordering::Relaxed)
                     && let Err(e) = prctl::set_no_new_privs()
                 {
                     warn!("Could not set NO_NEW_PRIVS: {e}");
@@ -952,58 +920,6 @@ impl<'a> Spawner {
                 exit(-1);
             }
         }
-    }
-}
-
-/// Clears the capabilities of the current thread.
-pub(crate) fn clear_capabilities(diff: CapsHashSet) {
-    for set in [
-        CapSet::Ambient,
-        CapSet::Ambient,
-        CapSet::Effective,
-        CapSet::Inheritable,
-        CapSet::Permitted,
-    ] {
-        for cap in &diff {
-            if let Err(e) = caps::drop(None, set, *cap) {
-                warn!("Could not drop {cap}: {e}");
-            }
-        }
-    }
-}
-
-pub fn dup_null() -> Result<OwnedFd, Error> {
-    dup(NULL.as_fd()).map_err(|e| Error::Errno(None, "dup", e))
-}
-
-/// Conditionally create a pipe.
-/// Returns either a set of `None`, or the result of `pipe()`
-pub(crate) fn cond_pipe(cond: &StreamMode) -> Result<(Option<OwnedFd>, Option<OwnedFd>), Error> {
-    match cond {
-        StreamMode::Pipe => match pipe() {
-            Ok((r, w)) => Ok((Some(r), Some(w))),
-            Err(e) => Err(Error::Errno(None, "pipe", e)),
-        },
-        StreamMode::Log(e) => {
-            if log::log_enabled!(*e) {
-                match pipe() {
-                    Ok((r, w)) => Ok((Some(r), Some(w))),
-                    Err(e) => Err(Error::Errno(None, "pipe", e)),
-                }
-            } else {
-                Ok((None, Some(dup_null()?)))
-            }
-        }
-        StreamMode::Share => Ok((None, None)),
-        StreamMode::Discard => Ok((None, Some(dup_null()?))),
-    }
-}
-
-/// Log all activity from the child at the desired level.
-pub fn logger(level: log::Level, fd: OwnedFd, name: String) {
-    let stream = Stream::new(fd);
-    while let Some(line) = stream.read_line() {
-        log::log!(level, "{name}: {line}");
     }
 }
 

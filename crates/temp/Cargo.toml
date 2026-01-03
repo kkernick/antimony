@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-user = { path = "../user" }
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
+user = { path = "../user", optional = true}

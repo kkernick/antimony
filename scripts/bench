@@ -1,8 +1,0 @@
-#!/bin/bash
-
-
-echo "Compiling Bench Script"
-cargo build --package utilities
-
-echo "Benchmarking"
-../target/debug/antimony_bench $@

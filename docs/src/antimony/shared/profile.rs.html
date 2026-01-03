@@ -906,7 +906,7 @@
 <a href=#906 id=906 data-nosnippet>906</a>        home: <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span>&lt;String&gt;,
 <a href=#907 id=907 data-nosnippet>907</a>        parent: bool,
 <a href=#908 id=908 data-nosnippet>908</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Spawner&gt;, HookError&gt; {
-<a href=#909 id=909 data-nosnippet>909</a>        <span class="kw">let </span><span class="kw-2">mut </span>handle = <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = <span class="self">self</span>.path {
+<a href=#909 id=909 data-nosnippet>909</a>        <span class="kw">let </span>handle = <span class="kw">if let </span><span class="prelude-val">Some</span>(path) = <span class="self">self</span>.path {
 <a href=#910 id=910 data-nosnippet>910</a>            Spawner::new(path)<span class="question-mark">?
 <a href=#911 id=911 data-nosnippet>911</a>        </span>} <span class="kw">else if let </span><span class="prelude-val">Some</span>(content) = <span class="self">self</span>.content {
 <a href=#912 id=912 data-nosnippet>912</a>            Spawner::abs(<span class="string">"/usr/bin/bash"</span>).args([<span class="string">"-c"</span>, content.as_str()])<span class="question-mark">?
@@ -942,7 +942,7 @@
 <a href=#942 id=942 data-nosnippet>942</a>        } <span class="kw">else </span>{
 <a href=#943 id=943 data-nosnippet>943</a>            <span class="kw">let </span><span class="kw-2">mut </span>handle = handle.spawn()<span class="question-mark">?</span>;
 <a href=#944 id=944 data-nosnippet>944</a>            <span class="kw">if </span><span class="self">self</span>.attach.unwrap_or(<span class="bool-val">false</span>) {
-<a href=#945 id=945 data-nosnippet>945</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">mut </span>m) = main {
+<a href=#945 id=945 data-nosnippet>945</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(m) = main {
 <a href=#946 id=946 data-nosnippet>946</a>                    m.associate(handle);
 <a href=#947 id=947 data-nosnippet>947</a>                    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(m))
 <a href=#948 id=948 data-nosnippet>948</a>                } <span class="kw">else </span>{

@@ -1,10 +1,7 @@
-//!
 //! The Spawn Handle is produced after consuming a Spawner via `spawn()`. It
 //! mediates access to the child's input, output, error (As long as the
 //! Spawner was configured to hook such descriptors), as well as mediating
 //! signal handling and teardown.
-//!
-//!
 
 use log::warn;
 use nix::{
@@ -154,6 +151,7 @@ impl Stream {
 
         let thread_shared = Arc::clone(&shared);
 
+        // Spawn the worker thread.
         let handle = thread::spawn(move || {
             let _ = (|| -> io::Result<()> {
                 let mut buf = [0u8; 4096];
@@ -265,17 +263,19 @@ impl Drop for Stream {
 ///
 /// Additionally, if there are other associated handles (Such as an auxiliary
 /// task to the one launched by the handle), you can delegate them as associates
-/// and allow the caller to manage their lifetimes; this allows you to only manage
+/// and allow the caller to manage their lifetimes. This allows you to only manage
 /// a single handle, with all its associates being cleanup when it does.
 ///
 /// You should never construct a Handle yourself, it should always be returned through
 /// a Spawner.
 pub struct Handle {
     /// The name of the spawned binary.
-    pub(super) name: String,
+    name: String,
 
     /// The child PID. Once wait has been called, it is set to None
     child: Option<Pid>,
+
+    /// The exit code, if the child has exited.
     exit: i32,
 
     /// A list of other Pids that the Handle should be responsible for,
@@ -326,10 +326,16 @@ impl Handle {
         &self.name
     }
 
+    /// Get the pid of the child.
     pub fn pid(&self) -> &Option<Pid> {
         &self.child
     }
 
+    /// Wait for the child to exit, with a timeout in case of no activity.
+    ///
+    /// Note that this function uses a signal handler to ensure it does not
+    /// hang the process, as well as efficiently wait the timeout. You cannot
+    /// use this function in multi-threaded environments.
     pub fn wait_timeout(&mut self, timeout: Duration) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([
@@ -376,6 +382,10 @@ impl Handle {
         }
     }
 
+    /// Wait for the child to exit.
+    ///
+    /// Note that this function uses a signal handler to ensure it does not
+    /// hang the process. You cannot use this function in multi-threaded environments.
     pub fn wait(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])
@@ -406,6 +416,10 @@ impl Handle {
         Ok(self.exit)
     }
 
+    /// Wait for the child without signal handlers.
+    ///
+    /// This function is a thread-safe version of wait, but
+    /// means that signals will not be caught.
     pub fn wait_blocking(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             'outer: loop {
@@ -454,6 +468,8 @@ impl Handle {
         }
     }
 
+    /// Terminate the process with a SIGTERM request, but
+    /// do not consume the Handle.
     pub fn terminate(&mut self) -> Result<(), Error> {
         if let Some(pid) = self.alive()? {
             match self.signal(Signal::SIGTERM) {
@@ -467,7 +483,6 @@ impl Handle {
     }
 
     /// Send a signal to the child.
-    /// If the child no longer exists, this returns an `Err`.
     pub fn signal(&mut self, sig: Signal) -> Result<(), Error> {
         if let Some(pid) = self.alive()? {
             #[cfg(feature = "user")]
@@ -497,18 +512,19 @@ impl Handle {
     /// When the Handle falls out of scope, it will not have a Pid to terminate, so the
     /// child process will linger.
     ///
-    /// `Spawner` sets Death Sig to **SIGTERM**, which means that when the parent dies,
-    /// its children are sent **SIGTERM**, so as long as your child responsibly
-    /// handles **SIGTERM**, it will not become an orphan. If you cannot guarantee
-    /// this, hold the `Pid` and manage it directly.
+    /// `Spawner` sets Death Sig to **SIGKILL**, which means that when the parent dies,
+    /// its children are sent **SIGKILL**. This means a detached thread should not
+    /// become a Zombie Process, even if the Pid is dropped on program exit.
     ///
     /// You therefore have three options on what to do with the return value of this
     /// function:
     ///
-    ///  1.  If there was no child to detach, you'll get a None, and do nothing.
-    ///  2.  If you want to manage the child yourself (Or associate it with another
-    ///      Handle), capture the value.
-    ///  3.  If you want to truly detach it, don't capture the return value.
+    ///  1. If there was no child to detach, you'll get a None, and do nothing.
+    ///  2. If you want to manage the child yourself (Or associate it with another
+    ///     Handle), capture the value.
+    ///  3. If you want to truly detach it, don't capture the return value. It will
+    ///     run in the background, and will be killed if its still running at
+    ///     program exit.
     pub fn detach(mut self) -> Option<Pid> {
         self.child.take()
     }
@@ -521,7 +537,7 @@ impl Handle {
             .find(|handle| handle.name == name)
     }
 
-    /// Return the Stream associate with the child's standard error, if it exists.
+    /// Return the Stream associated with the child's standard error, if it exists.
     /// Note that pulling from the Stream consumes the contents--calling `error_all`
     /// will only return the contents from when you last pulled from the Stream.
     pub fn error(&mut self) -> Result<&mut Stream, Error> {

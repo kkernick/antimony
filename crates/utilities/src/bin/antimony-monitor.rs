@@ -1,9 +1,5 @@
-//! This is a relatively simple implementation of a SECCOMP Notify Monitor.
-//! It doesn't do anything more than log syscalls, permitting them all.
-//!
-//! This utility is used while a profile is in *Permissive* mode. When in
-//! *Enforcing*, the logged syscalls are the only ones permitted, and the
-//! `Filter` is loaded immediately.
+//! A SECCOMP Notify application that stores syscall information in a SQLite3
+//! Database to be used for profile generation.
 
 use ahash::RandomState;
 use antimony::shared::{
@@ -33,7 +29,6 @@ use nix::{
     },
     unistd::Pid,
 };
-
 use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::{Spawner, StreamMode};
@@ -54,9 +49,13 @@ use std::{
     time::Duration,
 };
 
+/// Monitor Errors
 #[derive(Debug)]
 pub enum Error {
+    /// Errors relating to setting up the socket or reading/writing to the database.
     Io(std::io::Error),
+
+    /// Generic Errno errors.
     Errno(nix::errno::Errno),
 }
 impl Display for Error {
@@ -91,19 +90,26 @@ impl From<nix::errno::Errno> for Error {
 #[command(version)]
 #[command(about = "A SECCOMP-Notify application")]
 pub struct Cli {
+    /// The instance ID of the Antimony Profile
     #[arg(short, long)]
     pub instance: String,
 
+    /// The profile name
     #[arg(short, long)]
     pub profile: String,
 
+    /// What policy we're working under.
+    /// In Permissive Mode, all syscalls are saved immediately.
+    /// In Notify Mode, the `notify` crate is used to prompt the user.
     #[arg(short, long)]
     pub mode: SeccompPolicy,
 
+    /// Whether to spawn an auditor thread.
     #[arg(short, long, default_value_t = false)]
     pub audit: bool,
 }
 
+/// Update the syscalls used by a binary.
 fn update_binary<'a, T: Iterator<Item = &'a i32>>(
     tx: &Transaction,
     binary: &str,
@@ -125,6 +131,7 @@ fn update_binary<'a, T: Iterator<Item = &'a i32>>(
     Ok(())
 }
 
+/// Update the binaries used by a profile.
 fn update_profile<'a, T: Iterator<Item = &'a String>>(
     tx: &Transaction,
     profile: &str,
@@ -141,24 +148,33 @@ fn update_profile<'a, T: Iterator<Item = &'a String>>(
     Ok(())
 }
 
-pub fn commit_or_defer(
+/// Commit the new data immediately, or defer to process teardown.
+/// Note that if deferring, there is a chance that the process is
+/// killed before it can store the result.
+///
+/// This usually happens as a result of SetUID privilege mismatch.
+fn commit_or_defer(
     profile: &str,
     path: String,
     call: i32,
     mut entry: RefMut<'_, String, HashSet<i32, RandomState>>,
 ) {
-    if let Ok(mut conn) = syscalls::get_connection()
-        && let Ok(tx) = conn.transaction()
-        && update_binary(&tx, &path, [call].iter()).is_ok()
-        && update_profile(&tx, profile, [&path].into_iter()).is_ok()
-        && tx.commit().is_ok()
-    {
+    let commit = || -> anyhow::Result<()> {
+        let mut conn = syscalls::get_connection()?;
+        let tx = conn.transaction()?;
+        update_binary(&tx, &path, [call].iter())?;
+        update_profile(&tx, profile, [&path].into_iter())?;
+        tx.commit()?;
+
         println!(
             "{path} => {}",
             Syscall::get_name(call).unwrap_or(format!("{call}"))
         );
-    } else {
-        println!("Pending commit");
+        Ok(())
+    }();
+
+    if let Err(e) = commit {
+        println!("Pending commit (Direct commit failed with {e}");
         entry.insert(call);
     }
 }
@@ -248,6 +264,7 @@ pub fn audit_reader(
     Ok(())
 }
 
+/// Notify the user when a new syscall is used.
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
 
@@ -278,6 +295,8 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     Ok(String::from(&out[..out.len() - 1]))
 }
 
+/// A thread worker for listening on the Kernel FD, and storing data on used syscalls
+/// and binaries.
 pub fn notify_reader(
     term: Arc<AtomicBool>,
     stats: Arc<DashMap<String, Set<i32>>>,
@@ -285,12 +304,18 @@ pub fn notify_reader(
     name: String,
     ask: AtomicBool,
 ) -> Result<()> {
+    // Things the user has already denied, and which we shouldn't prompt again.
     let deny = Arc::new(DashMap::<String, Set<i32>>::new());
+
+    // Same for deny, but vice-versa.
     let allow = Arc::new(DashMap::<String, Set<i32>>::new());
+
+    // Whether we should ask the user via Notify, or just save them via Permissive.
+    // If the user selects "Save All," this mode can change during execution.
     let ask = Arc::new(ask);
 
     while !term.load(Ordering::Relaxed) {
-        // New pair for each loop, since we don't want to mediate access to one.
+        // New pair for each loop, since we don't want to mediate access.
         let pair = Pair::new()?;
         let stats_clone = Arc::clone(&stats);
 
@@ -320,6 +345,7 @@ pub fn notify_reader(
                             }
                         };
 
+                        // Get the name of the binary.
                         if let Some(exe_path) = exe_path {
                             let path = exe_path.to_string_lossy().into_owned();
 
@@ -327,6 +353,8 @@ pub fn notify_reader(
                             let call = req.data.nr;
                             let entry = log.entry(path.clone()).or_default();
 
+                            // Perform saved actions if the user has already encountered
+                            // it.
                             if let Some(value) = deny_clone.get(&path)
                                 && value.contains(&call)
                             {
@@ -378,7 +406,7 @@ pub fn notify_reader(
                                                             .insert(call);
                                                     }
                                                     "Kill" => {
-                                                        // Kill the offending process with recourse.
+                                                        // Kill the offending process without recourse.
                                                         let _ = kill(
                                                             Pid::from_raw(pid as i32),
                                                             SIGKILL,
@@ -469,10 +497,11 @@ fn main() -> Result<()> {
     notify::set_notifier(Box::new(shared::logger))?;
     user::set(user::Mode::Real)?;
 
+    // All binaries use the same monitor for a profile (IE proxy and sandbox)
     let monitor_path = RUNTIME_DIR
         .join("antimony")
         .join(&cli.instance)
-        .join(format!("monitor-{}", cli.profile));
+        .join("monitor");
 
     if let Some(parent) = monitor_path.parent()
         && !parent.exists()
@@ -514,6 +543,7 @@ fn main() -> Result<()> {
         }));
     }
 
+    // Loop and accept new FDs.
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
             Ok(Some((fd, name))) => {
@@ -525,13 +555,12 @@ fn main() -> Result<()> {
                     .or_insert_with(|| Arc::new(DashMap::new()))
                     .clone();
 
-                let profile_name = cli.profile.clone();
                 threads.push(thread::spawn(move || {
                     notify_reader(
                         term_clone,
                         profile,
                         fd,
-                        profile_name.clone(),
+                        name,
                         AtomicBool::new(cli.mode == SeccompPolicy::Notifying),
                     )
                 }));
@@ -545,14 +574,15 @@ fn main() -> Result<()> {
         }
     }
 
+    // Wait for threads to finish.
     for thread in threads {
         if thread.join().is_err() {
             println!("Failed to join worker thread!");
         }
     }
 
-    // Once we're done, move to Effective to save the information.
     if !stats.is_empty() {
+        // Grab a connection (Permission is handled via the call)
         let mut conn = syscalls::get_connection()?;
         println!("Storing syscall data.");
         let tx = conn.transaction()?;
@@ -624,6 +654,7 @@ fn main() -> Result<()> {
             }
         }
 
+        // Commit and flush.
         tx.commit()?;
         conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
             .with_context(|| "Flushing WAL")?;

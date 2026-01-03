@@ -1,7 +1,0 @@
-#!/bin/bash
-
-echo "Compiling Build Script"
-cargo build --package utilities
-
-echo "Building"
-../target/debug/antimony_build $@
