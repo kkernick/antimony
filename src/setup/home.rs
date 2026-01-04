@@ -8,7 +8,7 @@ use std::{
 use user::as_real;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
-    if let Some(home) = &args.profile.lock().home.take()
+    if let Some(home) = &args.profile.lock().home
         && let Some(policy) = home.policy
         && policy != HomePolicy::None
     {

@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{debug, trace, warn};
+use log::{trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -437,12 +437,6 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     };
 
     let elf_binaries = Arc::new(DashSet::<String>::new());
-
-    debug!("Creating Binary Folder");
-    let bin = info.sys_dir.join("bin");
-    if !bin.exists() {
-        fs::create_dir(&bin)?;
-    }
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.

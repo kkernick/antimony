@@ -650,17 +650,15 @@ impl<'a> Spawner {
         let mut index = self.cache_index.lock();
         if let Some(i) = *index {
             let args = self.args.lock();
-
             if let Some(parent) = path.parent()
                 && !parent.exists()
             {
                 fs::create_dir(parent).map_err(Error::Io)?;
             }
-
             let mut file = fs::File::create(path).map_err(Error::Io)?;
-            for arg in &args[i..] {
-                writeln!(file, "{}", arg.to_string_lossy()).map_err(Error::Io)?;
-            }
+            let bytes = postcard::to_stdvec(&args[i..])
+                .map_err(|_| Error::Cache("Failed to serialize cache"))?;
+            file.write_all(&bytes).map_err(Error::Io)?;
             *index = None;
             Ok(())
         } else {
@@ -676,9 +674,9 @@ impl<'a> Spawner {
     pub fn cache_read(&self, path: &Path) -> Result<(), Error> {
         let mut args = self.args.lock();
 
-        for arg in fs::read_to_string(path).map_err(Error::Io)?.lines() {
-            args.push(CString::new(arg).map_err(Error::Null)?);
-        }
+        let mut cached: Vec<CString> = postcard::from_bytes(&fs::read(path).map_err(Error::Io)?)
+            .map_err(|_| Error::Cache("Failed to decode cache"))?;
+        args.append(&mut cached);
         Ok(())
     }
 

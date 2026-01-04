@@ -2,7 +2,7 @@ use crate::{
     fab::localize_path,
     shared::{
         env::HOME,
-        profile::{FILE_MODES, FileMode},
+        profile::{FileMode, FILE_MODES},
     },
 };
 use anyhow::Result;
@@ -23,10 +23,10 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
-    if let Some(files) = info.profile.lock().files.take() {
-        let mut user_files = files.user;
+    if let Some(files) = &info.profile.lock().files {
+        let user_files = &files.user;
         for mode in FILE_MODES {
-            if let Some(files) = user_files.swap_remove(&mode) {
+            if let Some(files) = user_files.get(&mode) {
                 files
                     .into_par_iter()
                     .try_for_each(|file| {
@@ -42,22 +42,22 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             }
         }
 
-        let mut system = files.platform;
+        let system = &files.platform;
         for mode in FILE_MODES {
-            if let Some(files) = system.swap_remove(&mode) {
+            if let Some(files) = system.get(&mode) {
                 files
                     .into_par_iter()
-                    .try_for_each(|file| localize(mode, &file, false, info.handle, true))
+                    .try_for_each(|file| localize(mode, file, false, info.handle, true))
                     .ok();
             }
         }
 
-        let mut system = files.resources;
+        let system = &files.resources;
         for mode in FILE_MODES {
-            if let Some(files) = system.swap_remove(&mode) {
+            if let Some(files) = system.get(&mode) {
                 files
                     .into_par_iter()
-                    .try_for_each(|file| localize(mode, &file, false, info.handle, false))
+                    .try_for_each(|file| localize(mode, file, false, info.handle, false))
                     .ok();
             }
         }
