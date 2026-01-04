@@ -18,6 +18,3 @@ files.resources.ReadOnly = [
   "/usr/share/pki",
   "/usr/share/ssl",
 ]
-
-libraries = [
-"libnss*"]

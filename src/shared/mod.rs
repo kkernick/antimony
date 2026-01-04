@@ -6,16 +6,11 @@ pub mod path;
 pub mod profile;
 pub mod syscalls;
 
-pub fn deterministic_set<T>() -> Set<T> {
-    Set::with_hasher(ahash::RandomState::with_seed(0))
-}
-
-pub fn deterministic_map<K, V>() -> Map<K, V> {
-    Map::with_hasher(ahash::RandomState::with_seed(0))
-}
-
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
+
+pub type ISet<T> = IndexSet<T, ahash::RandomState>;
+pub type IMap<K, V> = IndexMap<K, V, ahash::RandomState>;
 
 pub fn privileged() -> anyhow::Result<bool> {
     if CONFIG_FILE.is_privileged() {
@@ -113,6 +108,7 @@ macro_rules! timer {
 }
 use std::fmt::Display;
 
+use indexmap::{IndexMap, IndexSet};
 use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};

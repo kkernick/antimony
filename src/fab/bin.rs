@@ -1,9 +1,5 @@
 use crate::{
-    fab::{
-        FabInfo, get_dir, get_wildcards,
-        lib::{add_sof, in_lib},
-        localize_path,
-    },
+    fab::{FabInfo, get_cache, get_dir, get_wildcards, lib::in_lib, localize_path, write_cache},
     shared::{
         Set, format_iter,
         path::direct_path,
@@ -14,16 +10,17 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{debug, error, trace, warn};
+use log::{debug, trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
 use user::{as_effective, as_real, run_as};
 
 use std::{
     borrow::Cow,
     fs::{self, File},
-    io::{self, BufRead, BufReader, Read, Seek, Write},
+    io::{self, BufRead, BufReader, Read, Seek},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -44,11 +41,8 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ParseReturn {
-    /// The location of the cache
-    cache: PathBuf,
-
     /// ELF files, to be passed to the library fabricator.
     pub elf: DashSet<String>,
 
@@ -68,11 +62,8 @@ pub struct ParseReturn {
     pub directories: DashSet<String>,
 }
 impl ParseReturn {
-    fn new(cache: &Path) -> Self {
-        Self {
-            cache: cache.to_path_buf(),
-            ..Default::default()
-        }
+    fn new() -> Self {
+        Self::default()
     }
 
     fn merge(global: &Self, cache: Self) {
@@ -91,73 +82,6 @@ impl ParseReturn {
         for (k, v) in cache.symlinks {
             global.symlinks.insert(k, v);
         }
-    }
-
-    /// Get cached definitions if they exist.
-    fn cache(name: &str, cache: &Path) -> Result<Option<Self>> {
-        let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
-        if cache_file.exists() {
-            let mut ret = Self::default();
-            let file = File::open(&cache_file)?;
-            let reader = BufReader::new(file);
-            let mut lines = reader.lines();
-
-            let mut next = || -> Result<DashSet<_>> {
-                Ok(lines
-                    .next()
-                    .ok_or(0)
-                    .map_err(|_| anyhow!("Corrupt cache!"))??
-                    .split(" ")
-                    .map(|e| e.to_string())
-                    .filter(|e| !e.is_empty())
-                    .collect())
-            };
-
-            ret.elf.extend(next()?);
-            ret.scripts.par_extend(next()?);
-            ret.files.par_extend(next()?);
-            ret.directories.par_extend(next()?);
-            ret.symlinks
-                .par_extend(next()?.into_par_iter().filter_map(|e| {
-                    if let Some((key, value)) = e.split_once("=") {
-                        Some((key.to_string(), value.to_string()))
-                    } else {
-                        None
-                    }
-                }));
-            Ok(Some(ret))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Write a cache file.
-    fn write(&self, name: &str) -> Result<()> {
-        let cache_file = self.cache.join(name.replace("/", ".").replace("*", "."));
-
-        as_effective!(Result<()>, {
-            let mut file = File::create(&cache_file)?;
-
-            let mut write = |dash: &DashSet<String>| -> Result<()> {
-                dash.iter()
-                    .try_for_each(|elf| write!(file, "{} ", elf.as_str()))?;
-                writeln!(file)?;
-                Ok(())
-            };
-
-            write(&self.elf)?;
-            write(&self.scripts)?;
-            write(&self.files)?;
-            write(&self.directories)?;
-            write(
-                &self
-                    .symlinks
-                    .iter()
-                    .map(|pair| format!("{}={}", pair.key(), pair.value()))
-                    .collect(),
-            )?;
-            Ok(())
-        })?
     }
 }
 
@@ -198,7 +122,7 @@ fn parse(
         return Ok(Type::Done);
     }
 
-    if let Some(cache) = ParseReturn::cache(path, cache)? {
+    if let Some(cache) = get_cache(path, cache)? {
         ParseReturn::merge(global, cache);
         return Ok(Type::None);
     }
@@ -208,7 +132,7 @@ fn parse(
         Err(_) => return Ok(Type::None),
     };
 
-    let ret = ParseReturn::new(cache);
+    let ret = ParseReturn::new();
 
     let dest = run_as!(user::Mode::Real, Result<String>, {
         let dest = fs::read_link(resolved.as_ref())?;
@@ -327,7 +251,7 @@ fn parse(
         }
     };
 
-    ret.write(path)?;
+    write_cache(path, cache, &ret)?;
     ParseReturn::merge(global, ret);
     Ok(t)
 }
@@ -485,15 +409,17 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         }
     }
 
+    info.handle.args_i(["--dir", "/usr/bin"])?;
+
     let cache = crate::shared::env::CACHE_DIR.join(".bin");
     if !cache.exists() {
         as_effective!({ std::fs::create_dir_all(&cache).expect("Failed to create binary cache") })?;
     }
 
-    let parsed = match ParseReturn::cache("bin.cache", info.sys_dir)? {
+    let parsed = match get_cache("bin.cache", info.sys_dir)? {
         Some(parsed) => parsed,
         None => {
-            let parsed = ParseReturn::new(info.sys_dir);
+            let parsed = ParseReturn::new();
             timer!(
                 "::collect",
                 collect(
@@ -505,7 +431,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
                 )
             )?;
 
-            parsed.write("bin.cache")?;
+            write_cache("bin.cache", info.sys_dir, &parsed)?;
             parsed
         }
     };
@@ -521,21 +447,19 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
     timer!("::elf", {
-        parsed.elf.into_par_iter().for_each(|elf| {
-            if let Err(e) = add_sof(&bin, Cow::Borrowed(&elf), &cache, "/usr/bin") {
-                error!("Failed to add {elf} to Bin: {e}")
-            }
+        parsed.elf.into_par_iter().try_for_each(|elf| {
+            info.handle.args_i(["--ro-bind", &elf, &elf])?;
             elf_binaries.insert(elf.to_string());
-        })
+            anyhow::Ok(())
+        })?;
     });
 
     // Scripts are consumed here, and are only bound to the sandbox.
     timer!("::scripts", {
-        parsed.scripts.into_par_iter().for_each(|script| {
-            if let Err(e) = add_sof(&bin, Cow::Borrowed(&script), &cache, "/usr/bin") {
-                error!("Failed to add {script} to Bin: {e}")
-            }
-        })
+        parsed
+            .scripts
+            .into_par_iter()
+            .try_for_each(|script| info.handle.args_i(["--ro-bind", &script, &script]))?;
     });
 
     timer!("::files", {
@@ -566,20 +490,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             .into_par_iter()
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
                 if !in_lib(&link) {
-                    if dest.starts_with("/usr/bin") {
-                        if let Err(e) = add_sof(&bin, Cow::Borrowed(&link), &cache, "/usr/bin") {
-                            error!("Failed to add {link} to SOF: {e}")
-                        }
-                    } else {
-                        info.handle.args_i([
-                            "--ro-bind",
-                            &dest,
-                            &dest,
-                            "--symlink",
-                            &dest,
-                            &link,
-                        ])?;
-                    }
+                    info.handle.args_i(["--ro-bind", &dest, &link])?;
                 }
                 Ok(())
             })
@@ -598,11 +509,8 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         })
     }
 
-    let bin_str = bin.to_string_lossy();
-
     #[rustfmt::skip]
     info.handle.args_i([
-        "--ro-bind-try", &bin_str, "/usr/bin",
         "--symlink", "/usr/bin", "/bin",
         "--symlink", "/usr/sbin", "/sbin"
 

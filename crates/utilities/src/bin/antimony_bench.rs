@@ -95,6 +95,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub inspect: bool,
 
+    /// Additional commands to pass to antimony_builder
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub builder_args: Option<Vec<String>>,
+
     /// Additional commands to pass to antimony
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub antimony_args: Option<Vec<String>>,
@@ -202,36 +206,16 @@ fn main() -> Result<()> {
         }
 
         let antimony = if let Some(recipe) = cli.recipe {
-            match recipe.as_str() {
-                "pgo" => {
-                    Spawner::abs(format!("{root}/pgo"))
-                        .preserve_env(true)
-                        .spawn()?
-                        .wait()?;
-                    format!("{root}/target/x86_64-unknown-linux-gnu/release/antimony")
-                }
-                "bolt" => {
-                    Spawner::abs(format!("{root}/bolt"))
-                        .preserve_env(true)
-                        .spawn()?
-                        .wait()?;
-                    format!(
-                        "{root}/target/x86_64-unknown-linux-gnu/release/antimony-bolt-optimized"
-                    )
-                }
-                recipe if recipe == "release" || recipe == "dev" => {
-                    Spawner::new("cargo")?
-                        .args(["build", "--profile", recipe])?
-                        .preserve_env(true)
-                        .spawn()?
-                        .wait()?;
-                    format!(
-                        "{root}/target/{}/antimony",
-                        if recipe == "dev" { "debug" } else { &recipe }
-                    )
-                }
-                path => path.to_string(),
-            }
+            println!("Building recipe");
+            let antimony = Spawner::abs(format!("{root}/target/debug/antimony_build"))
+                .args(["--recipe", &recipe])?
+                .args(cli.builder_args.unwrap_or_default())?
+                .preserve_env(true)
+                .output(spawn::StreamMode::Pipe)
+                .new_privileges(true)
+                .spawn()?
+                .output_all()?;
+            antimony[..antimony.len() - 1].to_string() + "/antimony"
         } else {
             "antimony".to_string()
         };
@@ -275,7 +259,12 @@ fn main() -> Result<()> {
                     command.extend(add.clone());
                 }
                 Spawner::new("hyperfine")?
-                    .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])?
+                    .args([
+                        "--command-name",
+                        &format!("Hot {profile}"),
+                        "--warmup",
+                        "10",
+                    ])?
                     .args(args.clone())?
                     .arg(command.join(" "))?
                     .preserve_env(true)
@@ -302,7 +291,7 @@ fn main() -> Result<()> {
                         "--command-name",
                         &format!("Real {profile}"),
                         "--warmup",
-                        "1",
+                        "10",
                     ])?
                     .args(args.clone())?
                     .arg(command.join(" "))?

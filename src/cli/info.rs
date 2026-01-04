@@ -1,6 +1,6 @@
 //! Get info about the installed configuration.
 use crate::shared::{
-    Set,
+    ISet, Set,
     env::AT_HOME,
     feature::Feature,
     profile::{self, Profile},
@@ -113,7 +113,7 @@ impl super::Run for Args {
                             ));
                         }
                     } else {
-                        let (syscalls, _) = syscalls::get_calls(&name, &Set::default());
+                        let (syscalls, _) = syscalls::get_calls(&name, &ISet::default());
                         syscalls.into_iter().collect()
                     };
 

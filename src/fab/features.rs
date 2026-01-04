@@ -1,7 +1,7 @@
 use crate::{
     fab::resolve,
     shared::{
-        Map, Set,
+        ISet, Map, Set,
         feature::Feature,
         profile::{FILE_MODES, Profile},
     },
@@ -110,7 +110,7 @@ fn resolve_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
     features: &mut Map<String, u32>,
-    blacklist: &mut Set<String>,
+    blacklist: &mut ISet<String>,
     searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
@@ -213,7 +213,7 @@ fn add_feature(
         let mut direct = files.direct;
         let p_direct = &mut p_files.direct;
         for mode in FILE_MODES {
-            if let Some(d_files) = direct.remove(&mode) {
+            if let Some(d_files) = direct.swap_remove(&mode) {
                 p_direct.entry(mode).or_default().extend(d_files);
             };
         }
@@ -221,7 +221,7 @@ fn add_feature(
         let mut system = files.platform;
         let p_sys = &mut p_files.platform;
         for mode in FILE_MODES {
-            if let Some(sys_files) = system.remove(&mode) {
+            if let Some(sys_files) = system.swap_remove(&mode) {
                 p_sys.entry(mode).or_default().extend(
                     sys_files
                         .into_iter()
@@ -233,7 +233,7 @@ fn add_feature(
         let mut system = files.resources;
         let p_sys = &mut p_files.resources;
         for mode in FILE_MODES {
-            if let Some(sys_files) = system.remove(&mode) {
+            if let Some(sys_files) = system.swap_remove(&mode) {
                 p_sys.entry(mode).or_default().extend(
                     sys_files
                         .into_iter()
@@ -246,7 +246,7 @@ fn add_feature(
         let p_user = &mut p_files.user;
 
         for mode in FILE_MODES {
-            if let Some(user_files) = user.remove(&mode) {
+            if let Some(user_files) = user.swap_remove(&mode) {
                 p_user.entry(mode).or_default().extend(
                     user_files
                         .into_iter()
@@ -306,7 +306,7 @@ fn add_feature(
             None => ipc.disable,
         };
 
-        let format_all = |ipc_list: Set<String>| -> Set<String> {
+        let format_all = |ipc_list: ISet<String>| -> ISet<String> {
             ipc_list
                 .into_iter()
                 .filter_map(|f| format(f, map).ok())

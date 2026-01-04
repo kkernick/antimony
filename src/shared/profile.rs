@@ -4,9 +4,9 @@ use crate::{
     cli,
     fab::{self, get_wildcards, resolve, resolve_env},
     shared::{
-        Map, Set,
+        IMap, ISet, Set,
         config::CONFIG_FILE,
-        deterministic_map, deterministic_set, edit,
+        edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
         format_iter,
     },
@@ -15,7 +15,6 @@ use crate::{
 use ahash::{HashSetExt, RandomState};
 use clap::ValueEnum;
 use console::style;
-use indexmap::{IndexMap, IndexSet};
 use log::debug;
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
@@ -135,6 +134,11 @@ impl From<crate::fab::features::Error> for Error {
         Error::Feature(val)
     }
 }
+impl From<postcard::Error> for Error {
+    fn from(val: postcard::Error) -> Self {
+        Error::Cache(val)
+    }
+}
 
 /// Append two things together. Used for Profile Merging.
 fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
@@ -148,7 +152,7 @@ fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
 }
 
 /// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &Set<String>, verbose: u8) {
+pub fn library_info(libraries: &ISet<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
@@ -167,7 +171,7 @@ pub fn library_info(libraries: &Set<String>, verbose: u8) {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -189,12 +193,11 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    #[serde(default = "deterministic_set")]
-    pub features: Set<String>,
+    pub features: ISet<String>,
 
     /// Features that should be excluded from running under the profile.
-    #[serde(default = "deterministic_set")]
-    pub conflicts: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub conflicts: ISet<String>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -215,7 +218,7 @@ pub struct Profile {
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    pub inherits: Option<Set<String>>,
+    pub inherits: Option<ISet<String>>,
 
     /// Configuration for the profile's home.
     pub home: Option<Home>,
@@ -231,34 +234,35 @@ pub struct Profile {
     pub files: Option<Files>,
 
     /// Binaries needed in the sandbox.
-    #[serde(default = "deterministic_set")]
-    pub binaries: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub binaries: ISet<String>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
     /// 2. Directories (eg /usr/lib/mylib) to which all contents will be resolved
     /// 3. Wildcards (eg lib*), which can match directories and files.
-    #[serde(default = "deterministic_set")]
-    pub libraries: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub libraries: ISet<String>,
 
     /// Devices needed in the sandbox, at /dev.
-    #[serde(default = "deterministic_set")]
-    pub devices: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub devices: ISet<String>,
 
     /// Namespaces, such as User and Net.
-    #[serde(default = "deterministic_set")]
-    pub namespaces: Set<Namespace>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub namespaces: ISet<Namespace>,
 
     /// Environment Variable Keypairs
-    #[serde(default = "deterministic_map")]
-    pub environment: Map<String, String>,
+    #[serde(skip_serializing_if = "IMap::is_empty")]
+    pub environment: IMap<String, String>,
 
     /// Arguments to pass to the sandboxed application directly.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    #[serde(default = "deterministic_map")]
-    pub configuration: Map<String, Profile>,
+    #[serde(skip_serializing_if = "IMap::is_empty")]
+    pub configuration: IMap<String, Profile>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<Hooks>,
@@ -268,6 +272,7 @@ pub struct Profile {
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sandbox_args: Vec<String>,
 }
 impl Profile {
@@ -456,18 +461,18 @@ impl Profile {
         if cache.exists() {
             debug!("Using direct cache");
             timer!("::load_cache", {
-                let bytes = fs::read(&cache).map_err(|e| Error::Io("read profile", e))?;
-                postcard::from_bytes(&bytes).map_err(Error::Cache)
+                let bytes = fs::read_to_string(&cache).map_err(|e| Error::Io("read profile", e))?;
+                Ok(toml::from_str(&bytes)?)
             })
         } else {
             debug!("No cache available");
-            let to_inherit: Set<String> = match &profile.inherits {
+            let to_inherit: ISet<String> = match &profile.inherits {
                 Some(i) => i.clone(),
                 None => {
                     if Profile::default_profile().exists() && !CONFIG_FILE.system_mode() {
-                        Set::from_iter(["default".to_string()])
+                        ISet::from_iter(["default".to_string()])
                     } else {
-                        Set::new()
+                        ISet::default()
                     }
                 }
             };
@@ -479,7 +484,7 @@ impl Profile {
             if let Some(config) = config {
                 debug!("Loading configuration");
                 if !profile.configuration.is_empty() {
-                    match profile.configuration.remove(&config) {
+                    match profile.configuration.swap_remove(&config) {
                         Some(conf) => {
                             profile = profile.base(conf)?;
                         }
@@ -515,7 +520,7 @@ impl Profile {
 
             let mut cache = File::create(cache).map_err(|e| Error::Io("write feature cache", e))?;
             cache
-                .write(&postcard::to_allocvec(&profile).map_err(Error::Cache)?)
+                .write(toml::to_string(&profile)?.as_bytes())
                 .map_err(|e| Error::Io("write cache", e))?;
             Ok(profile)
         }
@@ -658,13 +663,17 @@ impl Profile {
         }
     }
 
+    pub fn num_hash(&self) -> Result<u64, Error> {
+        timer!("::hash", {
+            Ok(RandomState::with_seed(0).hash_one(postcard::to_stdvec(&self)?))
+        })
+    }
+
     /// Get the Profile's hash.
     pub fn hash_str(&self) -> Result<String, Error> {
         timer!("::hash", {
             let s = RandomState::with_seed(0);
-            let str = toml::to_string(&self)?;
-            log::trace!("{str}");
-            Ok(format!("{}", s.hash_one(str)))
+            Ok(format!("{}", s.hash_one(postcard::to_stdvec(&self)?)))
         })
     }
 
@@ -758,31 +767,6 @@ impl Profile {
     /// Edit a profile.
     pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
         edit::edit::<Self>(path)
-    }
-}
-impl Default for Profile {
-    fn default() -> Self {
-        Self {
-            path: None,
-            id: None,
-            features: deterministic_set(),
-            conflicts: deterministic_set(),
-            inherits: None,
-            home: Default::default(),
-            seccomp: Default::default(),
-            ipc: Default::default(),
-            files: Default::default(),
-            binaries: deterministic_set(),
-            libraries: deterministic_set(),
-            devices: deterministic_set(),
-            namespaces: deterministic_set(),
-            environment: deterministic_map(),
-            arguments: Default::default(),
-            configuration: Default::default(),
-            hooks: Default::default(),
-            new_privileges: Default::default(),
-            sandbox_args: Default::default(),
-        }
     }
 }
 
@@ -1164,20 +1148,16 @@ pub struct Files {
     pub passthrough: Option<FileMode>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    #[serde(default = "deterministic_map")]
     pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    #[serde(default = "deterministic_map")]
     pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
-    #[serde(default = "deterministic_map")]
     pub resources: FileList,
 
     /// Direct files take a path, and file contents.
-    #[serde(default = "deterministic_map")]
-    pub direct: Map<FileMode, IndexMap<String, String>>,
+    pub direct: IMap<FileMode, IMap<String, String>>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -1189,10 +1169,10 @@ impl Files {
         let mut user = files.user;
         let s_user = &mut self.user;
         for mode in FILE_MODES {
-            if let Some(map) = user.remove(&mode) {
+            if let Some(map) = user.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut IndexSet::new())
+                    .get_or_insert(&mut ISet::default())
                     .extend(map);
             }
         }
@@ -1200,10 +1180,10 @@ impl Files {
         let mut sys = files.platform;
         let s_user = &mut self.platform;
         for mode in FILE_MODES {
-            if let Some(map) = sys.remove(&mode) {
+            if let Some(map) = sys.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut IndexSet::new())
+                    .get_or_insert(&mut ISet::default())
                     .extend(map);
             }
         }
@@ -1211,10 +1191,10 @@ impl Files {
         let mut sys = files.resources;
         let s_user = &mut self.resources;
         for mode in FILE_MODES {
-            if let Some(map) = sys.remove(&mode) {
+            if let Some(map) = sys.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut IndexSet::new())
+                    .get_or_insert(&mut ISet::default())
                     .extend(map);
             }
         }
@@ -1222,10 +1202,10 @@ impl Files {
         let mut direct = files.direct;
         let s_user = &mut self.direct;
         for mode in FILE_MODES {
-            if let Some(map) = direct.remove(&mode) {
+            if let Some(map) = direct.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut IndexMap::new())
+                    .get_or_insert(&mut IMap::default())
                     .extend(map);
             }
         }
@@ -1305,7 +1285,7 @@ impl Files {
 /// However, because Antimony provides file as bind mounts, this operation will fail.
 /// In such cases, use portals, put the file directly in the profile's home folder, or
 /// pass the parent folder.
-pub type FileList = Map<FileMode, IndexSet<String>>;
+pub type FileList = IMap<FileMode, ISet<String>>;
 
 #[derive(
     Hash,
@@ -1385,24 +1365,24 @@ pub struct Ipc {
     pub user_bus: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub portals: Set<Portal>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub portals: ISet<Portal>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub see: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub see: ISet<String>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub talk: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub talk: ISet<String>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub own: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub own: ISet<String>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub call: Set<String>,
+    #[serde(skip_serializing_if = "ISet::is_empty")]
+    pub call: ISet<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.

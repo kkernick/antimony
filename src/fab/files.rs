@@ -26,7 +26,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     if let Some(files) = info.profile.lock().files.take() {
         let mut user_files = files.user;
         for mode in FILE_MODES {
-            if let Some(files) = user_files.remove(&mode) {
+            if let Some(files) = user_files.swap_remove(&mode) {
                 files
                     .into_par_iter()
                     .try_for_each(|file| {
@@ -44,7 +44,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
 
         let mut system = files.platform;
         for mode in FILE_MODES {
-            if let Some(files) = system.remove(&mode) {
+            if let Some(files) = system.swap_remove(&mode) {
                 files
                     .into_par_iter()
                     .try_for_each(|file| localize(mode, &file, false, info.handle, true))
@@ -54,7 +54,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
 
         let mut system = files.resources;
         for mode in FILE_MODES {
-            if let Some(files) = system.remove(&mode) {
+            if let Some(files) = system.swap_remove(&mode) {
                 files
                     .into_par_iter()
                     .try_for_each(|file| localize(mode, &file, false, info.handle, false))

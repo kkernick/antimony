@@ -51,20 +51,20 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // Add direct files.
     if let Some(files) = &mut args.profile.lock().files {
         let user = &mut files.user;
-        if let Some(exe) = user.remove(&FileMode::Executable) {
+        if let Some(exe) = user.swap_remove(&FileMode::Executable) {
             exe.into_par_iter().try_for_each(|file| {
                 let (_, dest) = localize_path(&file, true)?;
                 get_x(&dest, &args.handle)
             })?;
         }
         let system = &mut files.platform;
-        if let Some(exe) = system.remove(&FileMode::Executable) {
+        if let Some(exe) = system.swap_remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(&file, &args.handle))?;
         }
 
         let system = &mut files.resources;
-        if let Some(exe) = system.remove(&FileMode::Executable) {
+        if let Some(exe) = system.swap_remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(&file, &args.handle))?;
         }

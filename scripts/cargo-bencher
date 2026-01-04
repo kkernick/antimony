@@ -4,7 +4,7 @@
 ROOT=$(git rev-parse --show-toplevel)
 
 echo "Compiling Bench Script"
-cargo build --package utilities --bin antimony_bench
+cargo build --package utilities --bin antimony_bench --bin antimony_build
 
 echo "Benchmarking"
 $ROOT/target/debug/antimony_bench "${@:2}"

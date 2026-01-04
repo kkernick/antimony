@@ -81,7 +81,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     })?;
 
     let hash = profile.hash_str()?;
-    debug!("Profile Hash: {hash}");
+    info!("Profile Hash: {hash}");
     let mut sys_dir = CACHE_DIR.join(&hash);
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.

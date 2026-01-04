@@ -18,12 +18,14 @@ use crate::{
 use anyhow::Result;
 use log::debug;
 use parking_lot::Mutex;
+use rayon::prelude::*;
+use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
-    fs::File,
-    io::{BufRead, BufReader, Read, Write},
+    fs::{self, File},
+    io::{Read, Write},
     path::Path,
     sync::{LazyLock, OnceLock},
 };
@@ -55,25 +57,23 @@ pub struct FabInfo<'a> {
 
 /// Get cached definitions.
 #[inline]
-fn get_cache(name: &str, cache: &Path) -> Result<Option<Cache>> {
+fn get_cache<T: DeserializeOwned>(name: &str, cache: &Path) -> Result<Option<T>> {
     let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
-    if let Ok(file) = File::open(&cache_file) {
-        let reader = BufReader::new(file);
-        return Ok(Some(reader.lines().map_while(|e| e.ok()).collect()));
+    if let Ok(bytes) = fs::read(&cache_file) {
+        Ok(Some(postcard::from_bytes(&bytes)?))
+    } else {
+        Ok(None)
     }
-
-    Ok(None)
 }
 
 /// Write the cache file.
 #[inline]
-fn write_cache(name: &str, list: &Cache, cache: &Path) -> Result<()> {
+fn write_cache<T: Serialize>(name: &str, cache: &Path, content: &T) -> Result<()> {
     let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
     as_effective!(Result<()>, {
+        let bytes = postcard::to_stdvec(content)?;
         let mut file = File::create(&cache_file)?;
-        for library in list {
-            writeln!(file, "{library}")?;
-        }
+        file.write_all(&bytes)?;
         Ok(())
     })?
 }
@@ -104,11 +104,12 @@ pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Cache> {
         .spawn()?
         .output_all()?
         .lines()
+        .par_bridge()
         .filter_map(elf_filter)
         .collect();
 
     if let Some(cache) = cache {
-        write_cache(dir, &libraries, cache)?;
+        write_cache(dir, cache, &libraries)?;
     }
     Ok(libraries)
 }
@@ -136,7 +137,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<C
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
     } else if lib {
-        let mut libraries = Cache::new();
+        let mut libraries = Cache::default();
         for root in LIB_ROOTS.get().unwrap() {
             debug!("Checking {root}");
             libraries.extend(run(root, pattern)?);
@@ -148,7 +149,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<C
     };
 
     if let Some(cache) = cache {
-        write_cache(pattern, &libraries, cache)?;
+        write_cache(pattern, cache, &libraries)?;
     }
     Ok(libraries)
 }
@@ -156,7 +157,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<C
 /// LDD a path.
 pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> {
     let libraries = if let Some(cache) = cache
-        && let Some(libraries) = get_cache(&path, cache)?
+        && let Some(libraries) = get_cache::<Cache>(&path, cache)?
     {
         libraries
     } else {
@@ -166,6 +167,7 @@ pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> 
             .spawn()?
             .output_all()?
             .lines()
+            .par_bridge()
             .filter_map(|e| {
                 if let Some(start) = e.find("=> /")
                     && let Some(end) = e.rfind(' ')
@@ -194,7 +196,7 @@ pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> 
             .collect();
 
         if let Some(cache) = cache {
-            write_cache(&path, &libraries, cache)?
+            write_cache(&path, cache, &libraries)?
         }
         libraries
     };

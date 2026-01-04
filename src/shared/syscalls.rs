@@ -1,5 +1,5 @@
 use crate::{
-    shared::{Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
+    shared::{ISet, Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
     timer,
 };
 use ahash::HashSetExt;
@@ -379,7 +379,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
+pub fn get_calls(name: &str, p_binaries: &ISet<String>) -> PolicyPair {
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
@@ -436,7 +436,7 @@ pub fn new(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &Set<String>,
+    binaries: &ISet<String>,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {

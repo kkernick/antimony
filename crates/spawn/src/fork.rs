@@ -293,7 +293,7 @@ impl Fork {
                 if std::panic::catch_unwind(|| {
                     close(read).expect("Failed to close read");
                     let result = op();
-                    let bytes = postcard::to_allocvec(&result).expect("Failed to serialize");
+                    let bytes = postcard::to_stdvec(&result).expect("Failed to serialize");
                     let mut file = std::fs::File::from(write);
                     file.write_all(&bytes).expect("Failed to write bytes");
                     file.flush().expect("Failed to flush write");

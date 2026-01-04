@@ -1,4 +1,4 @@
-use crate::shared::{Set, profile::SeccompPolicy, syscalls, utility};
+use crate::shared::{ISet, profile::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
@@ -9,7 +9,7 @@ pub fn install_filter(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &Set<String>,
+    binaries: &ISet<String>,
     main: &Spawner,
 ) -> Result<()> {
     if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, binaries)? {

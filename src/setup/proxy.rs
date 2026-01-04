@@ -2,7 +2,7 @@ use crate::{
     fab::{get_libraries, lib::add_sof},
     setup::syscalls,
     shared::{
-        Set,
+        ISet,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
         profile::{Namespace, Portal, Profile},
@@ -104,7 +104,7 @@ pub fn run(
     // Setup SECCOMP.
     if !dry && let Some(policy) = profile.lock().seccomp {
         timer!("::seccomp", {
-            syscalls::install_filter("xdg-dbus-proxy", instance, policy, &Set::default(), &proxy)?
+            syscalls::install_filter("xdg-dbus-proxy", instance, policy, &ISet::default(), &proxy)?
         })
     }
 

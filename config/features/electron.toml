@@ -3,5 +3,5 @@ description = "For Chromium/Electron applications"
 requires = ["gtk3"]
 
 devices = ["/dev/null", "/dev/urandom", "/dev/shm"]
-libraries = ["libsoftokn3*", "libfreeblpriv3*", "libsmime3*"]
+libraries = ["libsoftokn3*", "libfreeblpriv3*", "libsmime3*", "libnss*"]
 namespaces = ["User"]
