@@ -9,11 +9,7 @@ use crate::{
 use ahash::{HashMapExt, HashSetExt};
 use log::{debug, warn};
 use spawn::Spawner;
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
-    error, fmt,
-};
+use std::{borrow::Cow, error, fmt};
 
 /// Errors related to feature integration
 #[derive(Debug)]
@@ -42,7 +38,7 @@ impl error::Error for Error {
 }
 
 /// Replace {} names with the real values in the profile.
-fn format(mut str: String, map: &BTreeMap<&str, String>) -> Result<String, Error> {
+fn format(mut str: String, map: &Map<&str, String>) -> Result<String, Error> {
     for (key, val) in map {
         str = str.replace(key, val);
     }
@@ -114,7 +110,7 @@ fn resolve_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
     features: &mut Map<String, u32>,
-    blacklist: &mut BTreeSet<String>,
+    blacklist: &mut Set<String>,
     searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
@@ -159,25 +155,17 @@ fn resolve_features(
 ) -> Result<Set<String>, Error> {
     let mut features = Map::new();
     let mut searched = Set::new();
-    let mut blacklist = profile.conflicts.take().unwrap_or_default();
+    let blacklist = &mut profile.conflicts;
 
-    if let Some(feats) = &profile.features {
-        for feat in feats {
-            resolve_feature(
-                feat.as_str(),
-                db,
-                &mut features,
-                &mut blacklist,
-                &mut searched,
-            )?;
-        }
+    for feat in &profile.features {
+        resolve_feature(feat.as_str(), db, &mut features, blacklist, &mut searched)?;
     }
     Ok(features.into_keys().collect())
 }
 
 fn add_feature(
     profile: &mut Profile,
-    map: &BTreeMap<&str, String>,
+    map: &Map<&str, String>,
     feature: &mut Feature,
 ) -> Result<(), Error> {
     if let Some(condition) = feature.conditional.take() {
@@ -219,79 +207,72 @@ fn add_feature(
         debug!("Adding feature: {}", feature.name);
     }
 
-    if let Some(mut files) = feature.files.take() {
+    if let Some(files) = feature.files.take() {
         let p_files = profile.files.get_or_insert_default();
 
-        if let Some(mut direct) = files.direct.take() {
-            let p_direct = p_files.direct.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(d_files) = direct.remove(&mode) {
-                    p_direct.entry(mode).or_default().extend(d_files);
-                };
+        let mut direct = files.direct;
+        let p_direct = &mut p_files.direct;
+        for mode in FILE_MODES {
+            if let Some(d_files) = direct.remove(&mode) {
+                p_direct.entry(mode).or_default().extend(d_files);
+            };
+        }
+
+        let mut system = files.platform;
+        let p_sys = &mut p_files.platform;
+        for mode in FILE_MODES {
+            if let Some(sys_files) = system.remove(&mode) {
+                p_sys.entry(mode).or_default().extend(
+                    sys_files
+                        .into_iter()
+                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
+                );
             }
         }
 
-        if let Some(mut system) = files.platform.take() {
-            let p_sys = p_files.platform.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(sys_files) = system.remove(&mode) {
-                    p_sys.entry(mode).or_default().extend(
-                        sys_files
-                            .into_iter()
-                            .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                    );
-                }
+        let mut system = files.resources;
+        let p_sys = &mut p_files.resources;
+        for mode in FILE_MODES {
+            if let Some(sys_files) = system.remove(&mode) {
+                p_sys.entry(mode).or_default().extend(
+                    sys_files
+                        .into_iter()
+                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
+                );
             }
         }
 
-        if let Some(mut system) = files.resources.take() {
-            let p_sys = p_files.resources.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(sys_files) = system.remove(&mode) {
-                    p_sys.entry(mode).or_default().extend(
-                        sys_files
-                            .into_iter()
-                            .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                    );
-                }
-            }
-        }
+        let mut user = files.user;
+        let p_user = &mut p_files.user;
 
-        if let Some(mut user) = files.user.take() {
-            let p_user = p_files.user.get_or_insert_default();
-
-            for mode in FILE_MODES {
-                if let Some(user_files) = user.remove(&mode) {
-                    p_user.entry(mode).or_default().extend(
-                        user_files
-                            .into_iter()
-                            .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                    );
-                }
+        for mode in FILE_MODES {
+            if let Some(user_files) = user.remove(&mode) {
+                p_user.entry(mode).or_default().extend(
+                    user_files
+                        .into_iter()
+                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
+                );
             }
         }
     }
 
     if let Some(binaries) = feature.binaries.take() {
-        profile.binaries.get_or_insert_default().extend(binaries);
+        profile.binaries.extend(binaries);
     }
     if let Some(libraries) = feature.libraries.take() {
-        profile.libraries.get_or_insert_default().extend(libraries);
+        profile.libraries.extend(libraries);
     }
     if let Some(devices) = feature.devices.take() {
-        profile.devices.get_or_insert_default().extend(devices);
+        profile.devices.extend(devices);
     }
     if let Some(namespaces) = feature.namespaces.take() {
-        profile
-            .namespaces
-            .get_or_insert_default()
-            .extend(namespaces);
+        profile.namespaces.extend(namespaces);
     }
     if let Some(args) = feature.sandbox_args.take() {
-        profile.sandbox_args.get_or_insert_default().extend(args);
+        profile.sandbox_args.extend(args);
     }
 
-    if let Some(mut ipc) = feature.ipc.take() {
+    if let Some(ipc) = feature.ipc.take() {
         let p_ipc = profile.ipc.get_or_insert_default();
 
         // Features, as the name implies, *add* functionality. Antimony
@@ -325,7 +306,7 @@ fn add_feature(
             None => ipc.disable,
         };
 
-        let format_all = |ipc_list: BTreeSet<String>| -> BTreeSet<String> {
+        let format_all = |ipc_list: Set<String>| -> Set<String> {
             ipc_list
                 .into_iter()
                 .filter_map(|f| format(f, map).ok())
@@ -333,7 +314,7 @@ fn add_feature(
         };
 
         if !ipc.portals.is_empty() {
-            p_ipc.portals.append(&mut ipc.portals);
+            p_ipc.portals.extend(ipc.portals);
         }
         if !ipc.see.is_empty() {
             let formatted = format_all(ipc.see);
@@ -342,19 +323,19 @@ fn add_feature(
             }
         }
         if !ipc.talk.is_empty() {
-            let mut formatted = format_all(ipc.talk);
+            let formatted = format_all(ipc.talk);
             if !formatted.is_empty() {
-                p_ipc.talk.append(&mut formatted);
+                p_ipc.talk.extend(formatted);
             }
         }
         if !ipc.own.is_empty() {
-            let mut formatted = format_all(ipc.own);
+            let formatted = format_all(ipc.own);
             if !formatted.is_empty() {
-                p_ipc.own.append(&mut formatted);
+                p_ipc.own.extend(formatted);
             }
         }
         if !ipc.call.is_empty() {
-            p_ipc.call.append(&mut ipc.call);
+            p_ipc.call.extend(ipc.call);
         }
     }
 
@@ -362,7 +343,6 @@ fn add_feature(
         for (key, value) in env {
             profile
                 .environment
-                .get_or_insert_default()
                 .insert(key, resolve(Cow::Owned(value)).into_owned());
         }
     }
@@ -387,11 +367,9 @@ fn add_feature(
 }
 
 pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
-    #[rustfmt::skip]
-    let map = BTreeMap::from([
-        ("{name}", name.to_string()),
-        ("{desktop}", profile.desktop(name).to_string())
-    ]);
+    let mut map = Map::new();
+    map.insert("{name}", name.to_string());
+    map.insert("{desktop}", profile.desktop(name).to_string());
 
     let mut db = Map::new();
     for feature in resolve_features(profile, &mut db)? {

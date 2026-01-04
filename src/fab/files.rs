@@ -23,45 +23,42 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
-    if let Some(mut files) = info.profile.lock().files.take() {
-        if let Some(mut user_files) = files.user.take() {
-            for mode in FILE_MODES {
-                if let Some(files) = user_files.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| {
-                            localize(
-                                mode,
-                                &file.replace("~", HOME.as_str()),
-                                true,
-                                info.handle,
-                                true,
-                            )
-                        })
-                        .ok();
-                }
+    if let Some(files) = info.profile.lock().files.take() {
+        let mut user_files = files.user;
+        for mode in FILE_MODES {
+            if let Some(files) = user_files.remove(&mode) {
+                files
+                    .into_par_iter()
+                    .try_for_each(|file| {
+                        localize(
+                            mode,
+                            &file.replace("~", HOME.as_str()),
+                            true,
+                            info.handle,
+                            true,
+                        )
+                    })
+                    .ok();
             }
         }
 
-        if let Some(mut system) = files.platform.take() {
-            for mode in FILE_MODES {
-                if let Some(files) = system.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| localize(mode, &file, false, info.handle, true))
-                        .ok();
-                }
+        let mut system = files.platform;
+        for mode in FILE_MODES {
+            if let Some(files) = system.remove(&mode) {
+                files
+                    .into_par_iter()
+                    .try_for_each(|file| localize(mode, &file, false, info.handle, true))
+                    .ok();
             }
         }
 
-        if let Some(mut system) = files.resources.take() {
-            for mode in FILE_MODES {
-                if let Some(files) = system.remove(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| localize(mode, &file, false, info.handle, false))
-                        .ok();
-                }
+        let mut system = files.resources;
+        for mode in FILE_MODES {
+            if let Some(files) = system.remove(&mode) {
+                files
+                    .into_par_iter()
+                    .try_for_each(|file| localize(mode, &file, false, info.handle, false))
+                    .ok();
             }
         }
     }

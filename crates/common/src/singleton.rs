@@ -67,7 +67,6 @@ impl Singleton {
     /// return None. Otherwise, it will return an instance that, when dropped,
     /// will free the Singleton for another thread.
     pub fn new() -> Option<Self> {
-        
         // Get the semaphore.
         let sem = Arc::clone(&SEMAPHORE);
         let (thread_lock, mutex, cvar) = &*sem;
@@ -91,7 +90,7 @@ impl Singleton {
             let tmp_guard = thread_lock.lock();
             std::mem::transmute::<ReentrantMutexGuard<'_, ()>, ThreadGuard>(tmp_guard)
         };
-        
+
         // Notify that the Singleton is owned.
         *guard = true;
         Some(Self {

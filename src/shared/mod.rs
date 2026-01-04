@@ -6,6 +6,14 @@ pub mod path;
 pub mod profile;
 pub mod syscalls;
 
+pub fn deterministic_set<T>() -> Set<T> {
+    Set::with_hasher(ahash::RandomState::with_seed(0))
+}
+
+pub fn deterministic_map<K, V>() -> Map<K, V> {
+    Map::with_hasher(ahash::RandomState::with_seed(0))
+}
+
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 

@@ -2,6 +2,7 @@ use crate::{
     fab::{get_libraries, lib::add_sof},
     setup::syscalls,
     shared::{
+        Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
         profile::{Namespace, Portal, Profile},
@@ -103,7 +104,7 @@ pub fn run(
     // Setup SECCOMP.
     if !dry && let Some(policy) = profile.lock().seccomp {
         timer!("::seccomp", {
-            syscalls::install_filter("xdg-dbus-proxy", instance, policy, None, &proxy)?
+            syscalls::install_filter("xdg-dbus-proxy", instance, policy, &Set::default(), &proxy)?
         })
     }
 
@@ -233,9 +234,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                 "sockets=session-bus;system-bus;",
             ].into_iter().map(|e| e.to_string()).collect();
 
-            if let Some(ns) = namespaces
-                && (ns.contains(&Namespace::Net) || ns.contains(&Namespace::All))
-            {
+            if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
                 info_contents.push("shared=network;".to_string());
             }
 

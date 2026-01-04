@@ -84,17 +84,18 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
 
 /// Generate the libraries for a program.
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
-    if let Some(libraries) = &info.profile.lock().libraries
-        && libraries.contains("/usr/lib")
     {
-        #[rustfmt::skip]
+        let profile_libraries = &info.profile.lock().libraries;
+        if profile_libraries.contains("/usr/lib") {
+            #[rustfmt::skip]
         info.handle.args_i([
             "--ro-bind", "/usr/lib", "/usr/lib",
             "--ro-bind", "/usr/lib64", "/usr/lib64",
             "--symlink", "/usr/lib", "/lib",
             "--symlink", "/usr/lib64", "/lib64",
         ])?;
-        return Ok(());
+            return Ok(());
+        }
     }
 
     let cache = Arc::new(crate::shared::env::CACHE_DIR.join(".lib"));
@@ -117,7 +118,8 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     // I cannot think of any situation in which profile.binaries will be None, or empty. Profiles are
     // either elf binaries themselves, or they use an interpreter that is. We fallback to the current
     // program in emergencies.
-    if let Some(binaries) = &info.profile.lock().binaries {
+    {
+        let binaries = &info.profile.lock().binaries;
         timer!("::binaries", {
             binaries.par_iter().for_each(|binary| {
                 let dep = dependencies.clone();
@@ -130,7 +132,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                 }
             })
         });
-    };
+    }
 
     if !cache.starts_with(AT_HOME.as_path()) {
         let shared = cache.join("shared");
@@ -157,41 +159,41 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     }
 
     timer!("::wildcards", {
-        if let Some(libraries) = &info.profile.lock().libraries.take() {
-            // Separate the wildcards from the files/dirs.
-            let (wildcards, flat): (Set<_>, Set<_>) =
-                libraries.into_par_iter().partition(|e| e.contains('*'));
+        let profile_libraries = &info.profile.lock().libraries;
+        // Separate the wildcards from the files/dirs.
+        let (wildcards, flat): (Set<_>, Set<_>) = profile_libraries
+            .into_par_iter()
+            .partition(|e| e.contains('*'));
 
-            debug!("Formatting flat");
-            flat.into_par_iter().for_each(|e| {
-                if e.starts_with("/") {
-                    resolved.insert(Cow::Owned(e.to_string()));
-                } else if e.starts_with("~") {
-                    resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
-                } else if let Some(roots) = LIB_ROOTS.get() {
-                    for root in roots.iter() {
-                        let path = format!("{root}/{e}");
-                        if Path::new(&path).exists() {
-                            resolved.insert(Cow::Owned(path));
-                            return;
-                        }
+        debug!("Formatting flat");
+        flat.into_par_iter().for_each(|e| {
+            if e.starts_with("/") {
+                resolved.insert(Cow::Owned(e.to_string()));
+            } else if e.starts_with("~") {
+                resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
+            } else if let Some(roots) = LIB_ROOTS.get() {
+                for root in roots.iter() {
+                    let path = format!("{root}/{e}");
+                    if Path::new(&path).exists() {
+                        resolved.insert(Cow::Owned(path));
+                        return;
                     }
-                    warn!("Failed to find library: {e}");
                 }
-            });
+                warn!("Failed to find library: {e}");
+            }
+        });
 
-            // Parallelizing this causes deadlocks. Not sure why. The Spawn Handle does not
-            // call its drop because we call wait(), so its not contention on the user lock,
-            // and it does not seem to be contention on writing/reading the cache.
-            debug!("Resolving wildcards");
-            wildcards.into_par_iter().for_each(|w| {
-                if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
-                    cards.into_par_iter().for_each(|card| {
-                        resolved.insert(Cow::Owned(card.clone()));
-                    });
-                }
-            });
-        }
+        // Parallelizing this causes deadlocks. Not sure why. The Spawn Handle does not
+        // call its drop because we call wait(), so its not contention on the user lock,
+        // and it does not seem to be contention on writing/reading the cache.
+        debug!("Resolving wildcards");
+        wildcards.into_par_iter().for_each(|w| {
+            if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
+                cards.into_par_iter().for_each(|card| {
+                    resolved.insert(Cow::Owned(card.clone()));
+                });
+            }
+        });
     });
 
     let files = timer!("::directories", {

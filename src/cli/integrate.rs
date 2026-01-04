@@ -102,14 +102,12 @@ pub fn remove(cmd: Args) -> Result<()> {
         profile.desktop(name)
     };
 
-    if let Some(configs) = &profile.configuration {
-        for config in configs.keys() {
-            let config_desktop = DATA_HOME
-                .join("applications")
-                .join(format!("{name}-{config}.desktop"));
-            if config_desktop.exists() {
-                fs::remove_file(config_desktop)?;
-            }
+    for config in profile.configuration.keys() {
+        let config_desktop = DATA_HOME
+            .join("applications")
+            .join(format!("{name}-{config}.desktop"));
+        if config_desktop.exists() {
+            fs::remove_file(config_desktop)?;
         }
     }
 
@@ -149,48 +147,47 @@ fn manage_configurations(
     name: &str,
     local: &str,
 ) -> Result<()> {
-    if let Some(configs) = &profile.configuration {
-        match cmd.config_mode.unwrap_or_default() {
-            // Integrate each into one desktop file with actions.
-            ConfigMode::Action => {
-                contents.push("\n".into());
-                for config in configs.keys() {
-                    contents.push(format!(
-                        "[Desktop Action {config}]\n\
+    match cmd.config_mode.unwrap_or_default() {
+        // Integrate each into one desktop file with actions.
+        ConfigMode::Action => {
+            contents.push("\n".into());
+            for config in profile.configuration.keys() {
+                contents.push(format!(
+                    "[Desktop Action {config}]\n\
                         Name=Antimony {} Configuration \n\
                         Exec=antimony run {} --config {config} %U \n",
-                        config.to_title_case(),
-                        cmd.profile
-                    ));
-                }
+                    config.to_title_case(),
+                    cmd.profile
+                ));
             }
+        }
 
-            // Provide each configuration as a desktop file.
-            ConfigMode::File => {
-                for config in configs.keys() {
-                    let config_desktop = DATA_HOME
-                        .join("applications")
-                        .join(format!("{name}-{config}.desktop"));
+        // Provide each configuration as a desktop file.
+        ConfigMode::File => {
+            for config in profile.configuration.keys() {
+                let config_desktop = DATA_HOME
+                    .join("applications")
+                    .join(format!("{name}-{config}.desktop"));
 
-                    let mut contents = contents.clone();
-                    for line in &mut contents {
-                        // Point to the symlink
-                        if line.starts_with("Exec=") {
-                            fix_exec("Exec", local, line, Some(config.as_str()), cmd);
-                        }
-                        if line.starts_with("TryExec=") {
-                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
-                        }
-                        if line.starts_with("Name=") {
-                            line.push_str(&format!(" ({})", config.to_title_case()));
-                        }
+                let mut contents = contents.clone();
+                for line in &mut contents {
+                    // Point to the symlink
+                    if line.starts_with("Exec=") {
+                        fix_exec("Exec", local, line, Some(config.as_str()), cmd);
                     }
-
-                    write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
+                    if line.starts_with("TryExec=") {
+                        fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
+                    }
+                    if line.starts_with("Name=") {
+                        line.push_str(&format!(" ({})", config.to_title_case()));
+                    }
                 }
+
+                write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
             }
         }
     }
+
     Ok(())
 }
 
@@ -240,11 +237,10 @@ fn format_desktop(
 
     let desktop_actions = desktop.contains("Actions=");
     let append_actions = |line: &mut String| {
-        if let Some(configs) = &profile.configuration {
-            for name in configs.keys() {
-                line.push_str(&format!("{name};"));
-            }
+        for name in profile.configuration.keys() {
+            line.push_str(&format!("{name};"));
         }
+
         line.push_str("native;");
     };
 
@@ -352,10 +348,8 @@ pub fn integrate(cmd: Args) -> Result<()> {
         .collect();
 
         let mut actions = "Actions=native;".to_string();
-        if let Some(config) = &profile.configuration
-            && let Some(ConfigMode::Action) = cmd.config_mode
-        {
-            for config in config.keys() {
+        if let Some(ConfigMode::Action) = cmd.config_mode {
+            for config in profile.configuration.keys() {
                 actions.push_str(&format!("{config};"))
             }
         }

@@ -117,6 +117,7 @@ fn main() -> Result<()> {
             .preserve_env(true)
             .output(StreamMode::Discard)
             .error(StreamMode::Discard)
+            .env("CONST_RANDOM_SEED", "0")?
             .args(cargo_flags)?;
 
         #[rustfmt::skip]
@@ -138,6 +139,7 @@ fn main() -> Result<()> {
             .args(post_flags)?
             .output(StreamMode::Discard)
             .error(StreamMode::Discard)
+            .env("CONST_RANDOM_SEED", "0")?
             .spawn()?
             .wait()?;
     }

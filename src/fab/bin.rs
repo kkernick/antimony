@@ -390,7 +390,9 @@ pub fn collect(
     let resolved = Arc::new(DashSet::new());
     resolved.insert(profile.lock().app_path(name).to_string());
 
-    if let Some(binaries) = &profile.lock().binaries {
+    // Scope so the lock falls out of scope.
+    {
+        let binaries = &profile.lock().binaries;
         timer!("::collect::wildcard", {
             // Separate the wildcards from the files/dirs.
             let (wildcards, flat): (Set<_>, Set<_>) =
@@ -407,38 +409,30 @@ pub fn collect(
                     }
                 }
             })
-        })
-    };
+        });
+    }
 
     let done = Arc::new(DashSet::new());
 
     // Read direct files so we can determine dependencies.
     timer!("::collect::files", {
         if let Some(files) = &profile.lock().files {
-            if let Some(user) = &files.user
-                && let Some(x) = user.get(&FileMode::Executable)
-            {
+            if let Some(x) = files.user.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
                     handle_localize(file, instance, true, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(sys) = &files.resources
-                && let Some(x) = sys.get(&FileMode::Executable)
-            {
+            if let Some(x) = files.resources.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
                     handle_localize(file, instance, false, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(sys) = &files.platform
-                && let Some(x) = sys.get(&FileMode::Executable)
-            {
+            if let Some(x) = files.platform.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
                     handle_localize(file, instance, false, true, parsed, done.clone(), cache)
                 })?;
             }
-            if let Some(direct) = &files.direct
-                && let Some(x) = direct.get(&FileMode::Executable)
-            {
+            if let Some(x) = files.direct.get(&FileMode::Executable) {
                 x.iter().try_for_each(|(file, _)| {
                     let path = direct_path(file);
                     handle_localize(
@@ -477,17 +471,18 @@ pub fn collect(
 }
 
 pub fn fabricate(info: &FabInfo) -> Result<()> {
-    if let Some(binaries) = &info.profile.lock().binaries
-        && binaries.contains("/usr/bin")
     {
-        #[rustfmt::skip]
+        let binaries = &info.profile.lock().binaries;
+        if binaries.contains("/usr/bin") {
+            #[rustfmt::skip]
             info.handle.args_i([
                 "--ro-bind", "/usr/bin", "/usr/bin",
                 "--ro-bind", "/usr/sbin", "/usr/sbin",
                 "--symlink", "/usr/bin", "/bin",
                 "--symlink", "/usr/sbin", "/sbin",
             ])?;
-        return Ok(());
+            return Ok(());
+        }
     }
 
     let cache = crate::shared::env::CACHE_DIR.join(".bin");
@@ -562,11 +557,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     })?;
 
     timer!("::libraries", {
-        info.profile
-            .lock()
-            .libraries
-            .get_or_insert_default()
-            .extend(parsed.directories)
+        info.profile.lock().libraries.extend(parsed.directories)
     });
 
     timer!("::symlinks", {
@@ -617,11 +608,9 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
 
     ])?;
 
-    info.profile.lock().binaries = Some(
-        Arc::into_inner(elf_binaries)
-            .expect("Failed to get elf binaries")
-            .into_iter()
-            .collect(),
-    );
+    info.profile.lock().binaries = Arc::into_inner(elf_binaries)
+        .expect("Failed to get elf binaries")
+        .into_iter()
+        .collect();
     Ok(())
 }

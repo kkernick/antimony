@@ -11,9 +11,7 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
     let mut post_args = Vec::new();
 
-    if let Some(mut arguments) = args.profile.lock().arguments.take() {
-        post_args.append(&mut arguments);
-    }
+    post_args.append(&mut args.profile.lock().arguments);
     if let Some(passthrough) = &args.args.passthrough {
         post_args.extend(passthrough.iter().cloned());
     }

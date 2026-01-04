@@ -9,7 +9,6 @@ pub fn fabricate(info: &super::FabInfo) {
         info.profile
             .lock()
             .libraries
-            .get_or_insert_default()
             .insert(etc.to_string_lossy().into_owned());
     }
 
@@ -18,7 +17,6 @@ pub fn fabricate(info: &super::FabInfo) {
         info.profile
             .lock()
             .libraries
-            .get_or_insert_default()
             .insert(share.to_string_lossy().into_owned());
     }
 
@@ -27,7 +25,6 @@ pub fn fabricate(info: &super::FabInfo) {
         info.profile
             .lock()
             .libraries
-            .get_or_insert_default()
             .insert(opt.to_string_lossy().into_owned());
     }
 }

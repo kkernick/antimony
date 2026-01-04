@@ -50,38 +50,34 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     debug!("Setting up files");
     // Add direct files.
     if let Some(files) = &mut args.profile.lock().files {
-        if let Some(user) = &mut files.user
-            && let Some(exe) = user.remove(&FileMode::Executable)
-        {
+        let user = &mut files.user;
+        if let Some(exe) = user.remove(&FileMode::Executable) {
             exe.into_par_iter().try_for_each(|file| {
                 let (_, dest) = localize_path(&file, true)?;
                 get_x(&dest, &args.handle)
             })?;
         }
-        if let Some(system) = &mut files.platform
-            && let Some(exe) = system.remove(&FileMode::Executable)
-        {
+        let system = &mut files.platform;
+        if let Some(exe) = system.remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(&file, &args.handle))?;
         }
 
-        if let Some(system) = &mut files.resources
-            && let Some(exe) = system.remove(&FileMode::Executable)
-        {
+        let system = &mut files.resources;
+        if let Some(exe) = system.remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(&file, &args.handle))?;
         }
 
-        if let Some(direct) = &files.direct {
-            debug!("Creating direct files");
-            for mode in FILE_MODES {
-                if let Some(files) = direct.get(&mode) {
-                    files.into_par_iter().try_for_each(|(file, contents)| {
-                        add_file(&args.handle, file, contents.clone(), mode)
-                    })?;
-                }
+        let direct = &mut files.direct;
+        debug!("Creating direct files");
+        for mode in FILE_MODES {
+            if let Some(files) = direct.get(&mode) {
+                files.into_par_iter().try_for_each(|(file, contents)| {
+                    add_file(&args.handle, file, contents.clone(), mode)
+                })?;
             }
-        };
+        }
     }
     Ok(())
 }

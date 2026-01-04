@@ -113,7 +113,7 @@ impl super::Run for Args {
                             ));
                         }
                     } else {
-                        let (syscalls, _) = syscalls::get_calls(&name, &None);
+                        let (syscalls, _) = syscalls::get_calls(&name, &Set::default());
                         syscalls.into_iter().collect()
                     };
 

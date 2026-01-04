@@ -198,21 +198,22 @@ pub fn wait_for_doc() {
 }
 
 pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
-    let add_regular = if let Some(args) = info.profile.sandbox_args.take() {
+    let sandbox_args = &info.profile.sandbox_args;
+    let add_regular = if !sandbox_args.is_empty() {
         let mut add = true;
-        if args.iter().filter(|&e| *e == "#").count() > 1 {
+        if sandbox_args.iter().filter(|&e| *e == "#").count() > 1 {
             return Err(anyhow!("Conflicting features! Only one feature can use #"));
         }
 
-        let slice = match args.iter().position(|e| e == "#") {
+        let slice = match sandbox_args.iter().position(|e| e == "#") {
             Some(index) => {
-                if index < args.len() - 1 {
-                    &args[index + 1..]
+                if index < sandbox_args.len() - 1 {
+                    &sandbox_args[index + 1..]
                 } else {
-                    &args[..]
+                    &sandbox_args[..]
                 }
             }
-            None => &args[..],
+            None => &sandbox_args[..],
         };
 
         for arg in slice {

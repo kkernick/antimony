@@ -16,7 +16,6 @@ use rusqlite::{Connection, Transaction};
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
     borrow::Cow,
-    collections::BTreeSet,
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
@@ -380,7 +379,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> PolicyPair {
+pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
@@ -404,10 +403,8 @@ pub fn get_calls(name: &str, p_binaries: &Option<BTreeSet<String>>) -> PolicyPai
             }
 
             // Add extra binaries if passed
-            if let Some(extra_bins) = p_binaries {
-                for b in extra_bins {
-                    binaries.insert(b.clone());
-                }
+            for b in p_binaries {
+                binaries.insert(b.clone());
             }
             binaries.iter().for_each(|bin| {
                 if let Err(e) = extend(
@@ -439,7 +436,7 @@ pub fn new(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &Option<BTreeSet<String>>,
+    binaries: &Set<String>,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {

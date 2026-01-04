@@ -1,7 +1,7 @@
-use crate::shared::{edit, env::AT_HOME};
+use crate::shared::{Set, edit, env::AT_HOME};
 use nix::libc::getpwuid;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, ffi::CString, fs::read_to_string, path::Path, sync::LazyLock};
+use std::{ffi::CString, fs::read_to_string, path::Path, sync::LazyLock};
 use user::USER;
 
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
@@ -10,7 +10,7 @@ pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default
 pub struct ConfigFile {
     force_temp: Option<bool>,
     system_mode: Option<bool>,
-    privileged_users: Option<BTreeSet<String>>,
+    privileged_users: Option<Set<String>>,
 }
 impl ConfigFile {
     pub fn force_temp(&self) -> bool {
@@ -52,7 +52,9 @@ impl Default for ConfigFile {
             parsed
         } else {
             Self {
-                ..Default::default()
+                force_temp: None,
+                system_mode: None,
+                privileged_users: None,
             }
         };
 

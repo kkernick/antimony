@@ -2,7 +2,7 @@
 
 use super::profile::{Ipc, Namespace};
 use crate::shared::{
-    Set, edit,
+    Map, Set, edit,
     env::{AT_HOME, PWD},
     format_iter,
     profile::{Files, Hooks},
@@ -10,7 +10,6 @@ use crate::shared::{
 use console::style;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
     error, fmt, fs, io,
     path::{Path, PathBuf},
 };
@@ -93,13 +92,13 @@ pub struct Feature {
     pub binaries: Option<Set<String>>,
 
     /// Required libraries
-    pub libraries: Option<BTreeSet<String>>,
+    pub libraries: Option<Set<String>>,
 
     /// Required devices.
     pub devices: Option<Set<String>>,
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
-    pub environment: Option<BTreeMap<String, String>>,
+    pub environment: Option<Map<String, String>>,
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
@@ -149,7 +148,10 @@ impl Feature {
             }
 
             if let Some(conflicts) = &self.conflicts {
-                println!("\t- Conflicting Features: {}", format_iter(conflicts.iter()));
+                println!(
+                    "\t- Conflicting Features: {}",
+                    format_iter(conflicts.iter())
+                );
             }
 
             if let Some(ipc) = &self.ipc {

@@ -4,23 +4,24 @@ use crate::{
     cli,
     fab::{self, get_wildcards, resolve, resolve_env},
     shared::{
-        Set,
+        Map, Set,
         config::CONFIG_FILE,
-        edit,
+        deterministic_map, deterministic_set, edit,
         env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
         format_iter,
     },
+    timer,
 };
 use ahash::{HashSetExt, RandomState};
 use clap::ValueEnum;
 use console::style;
+use indexmap::{IndexMap, IndexSet};
 use log::debug;
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, BTreeSet},
     error, fmt,
     fs::{self, File},
     hash::Hash,
@@ -54,6 +55,9 @@ pub enum Error {
     /// When the profile cannot be Deserialized.
     Deserialize(toml::de::Error),
 
+    /// When the profile cannot be Deserialized.
+    Cache(postcard::Error),
+
     /// When the profile cannot be Serialized.
     Serialize(toml::ser::Error),
 
@@ -81,6 +85,7 @@ impl fmt::Display for Error {
                 Check the path, or create one with `antimony create`"
             ),
             Self::Deserialize(e) => write!(f, "Failed to read profile: {e}"),
+            Self::Cache(e) => write!(f, "Failed to parse the cache file: {e}"),
             Self::Serialize(e) => write!(f, "Failed to write profile: {e}"),
             Self::Io(what, e) => write!(f, "Failed to {what}: {e}"),
             Self::Errno(what, e) => write!(f, "{what} failed: {e}"),
@@ -100,6 +105,7 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Deserialize(e) => Some(e),
+            Self::Cache(e) => Some(e),
             Self::Serialize(e) => Some(e),
             Self::Io(_, e) => Some(e),
             Self::Errno(_, e) => Some(e),
@@ -141,21 +147,8 @@ fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
     }
 }
 
-fn extend<T>(s: &mut Option<BTreeSet<T>>, p: Option<BTreeSet<T>>)
-where
-    T: Ord,
-{
-    if let Some(source) = p {
-        if let Some(dest) = s {
-            dest.extend(source);
-        } else {
-            *s = Some(source);
-        }
-    }
-}
-
 /// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
+pub fn library_info(libraries: &Set<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
@@ -174,7 +167,7 @@ pub fn library_info(libraries: &BTreeSet<String>, verbose: u8) {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Debug, Hash, Deserialize, Serialize, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -196,10 +189,12 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    pub features: Option<BTreeSet<String>>,
+    #[serde(default = "deterministic_set")]
+    pub features: Set<String>,
 
     /// Features that should be excluded from running under the profile.
-    pub conflicts: Option<BTreeSet<String>>,
+    #[serde(default = "deterministic_set")]
+    pub conflicts: Set<String>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -220,7 +215,7 @@ pub struct Profile {
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    pub inherits: Option<BTreeSet<String>>,
+    pub inherits: Option<Set<String>>,
 
     /// Configuration for the profile's home.
     pub home: Option<Home>,
@@ -236,28 +231,34 @@ pub struct Profile {
     pub files: Option<Files>,
 
     /// Binaries needed in the sandbox.
-    pub binaries: Option<BTreeSet<String>>,
+    #[serde(default = "deterministic_set")]
+    pub binaries: Set<String>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
     /// 2. Directories (eg /usr/lib/mylib) to which all contents will be resolved
     /// 3. Wildcards (eg lib*), which can match directories and files.
-    pub libraries: Option<BTreeSet<String>>,
+    #[serde(default = "deterministic_set")]
+    pub libraries: Set<String>,
 
     /// Devices needed in the sandbox, at /dev.
-    pub devices: Option<BTreeSet<String>>,
+    #[serde(default = "deterministic_set")]
+    pub devices: Set<String>,
 
     /// Namespaces, such as User and Net.
-    pub namespaces: Option<BTreeSet<Namespace>>,
+    #[serde(default = "deterministic_set")]
+    pub namespaces: Set<Namespace>,
 
     /// Environment Variable Keypairs
-    pub environment: Option<BTreeMap<String, String>>,
+    #[serde(default = "deterministic_map")]
+    pub environment: Map<String, String>,
 
     /// Arguments to pass to the sandboxed application directly.
-    pub arguments: Option<Vec<String>>,
+    pub arguments: Vec<String>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    pub configuration: Option<BTreeMap<String, Profile>>,
+    #[serde(default = "deterministic_map")]
+    pub configuration: Map<String, Profile>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<Hooks>,
@@ -267,7 +268,7 @@ pub struct Profile {
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
-    pub sandbox_args: Option<Vec<String>>,
+    pub sandbox_args: Vec<String>,
 }
 impl Profile {
     /// Get where the profile's user location is.
@@ -352,45 +353,51 @@ impl Profile {
         let mut profile = Self {
             path: args.path.take(),
             seccomp: args.seccomp.take(),
-            arguments: args.passthrough.take(),
-            sandbox_args: args.sandbox_args.take(),
             new_privileges: args.new_privileges.take(),
             ..Default::default()
         };
 
-        if let Some(features) = args.features.take() {
-            profile.features = Some(features.into_iter().collect())
+        if let Some(mut arguments) = args.passthrough.take() {
+            profile.arguments.append(&mut arguments);
         }
 
-        if let Some(conflicts) = args.conflicts.take() {
-            profile.conflicts = Some(conflicts.into_iter().collect())
+        if let Some(mut sandbox_args) = args.sandbox_args.take() {
+            profile.sandbox_args.append(&mut sandbox_args);
+        }
+
+        if let Some(features) = args.features.take() {
+            profile.features.extend(features)
         }
 
         if let Some(inherits) = args.inherits.take() {
             profile.inherits = Some(inherits.into_iter().collect())
         }
 
+        if let Some(conflicts) = args.conflicts.take() {
+            profile.conflicts.extend(conflicts)
+        }
+
         if let Some(binaries) = args.binaries.take() {
-            profile.binaries = Some(binaries.into_iter().collect())
+            profile.binaries.extend(binaries)
         }
 
         if let Some(libraries) = args.libraries.take() {
-            profile.libraries = Some(libraries.into_iter().collect())
+            profile.libraries.extend(libraries)
         }
 
         if let Some(devices) = args.devices.take() {
-            profile.devices = Some(devices.into_iter().collect())
+            profile.devices.extend(devices)
         }
 
         if let Some(namespaces) = args.namespaces.take() {
-            profile.namespaces = Some(namespaces.into_iter().collect())
+            profile.namespaces.extend(namespaces)
         }
 
         profile.files = Files::from_args(args);
         profile.ipc = Ipc::from_args(args);
 
         if let Some(env) = args.env.take() {
-            let environment = profile.environment.get_or_insert_default();
+            let environment = &mut profile.environment;
             env.into_iter().for_each(|pair| {
                 if let Some((key, value)) = pair.split_once('=') {
                     environment.insert(key.to_string(), value.to_string());
@@ -418,6 +425,7 @@ impl Profile {
     /// Load a new profile from all supported locations.
     pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
         debug!("Loading {name}");
+
         if name == "default" {
             let path = Self::default_profile();
             if !path.exists() {
@@ -429,33 +437,37 @@ impl Profile {
             )?);
         }
 
-        let path = Profile::path(name)?;
+        let profile_str = timer!("::read", {
+            fs::read_to_string(Profile::path(name)?).map_err(|e| Error::Io("read profile", e))
+        })?;
+        let mut profile: Profile = timer!("::parsing", toml::from_str(profile_str.as_str()))?;
 
-        let file = path.to_string_lossy().replace("/", ".");
+        let hash = timer!("::hash", {
+            let s = RandomState::with_seed(0);
+            format!("{}", s.hash_one(&profile_str))
+        });
+
         let cache = if let Some(config) = &config {
-            CACHE_DIR.join(format!("{file}-{config}"))
+            CACHE_DIR.join(format!("{hash}-{config}"))
         } else {
-            CACHE_DIR.join(&file)
+            CACHE_DIR.join(hash)
         };
 
         if cache.exists() {
             debug!("Using direct cache");
-            Ok(toml::from_str(
-                &fs::read_to_string(&cache).map_err(|e| Error::Io("read profile", e))?,
-            )?)
+            timer!("::load_cache", {
+                let bytes = fs::read(&cache).map_err(|e| Error::Io("read profile", e))?;
+                postcard::from_bytes(&bytes).map_err(Error::Cache)
+            })
         } else {
             debug!("No cache available");
-            let profile = fs::read_to_string(Profile::path(name)?)
-                .map_err(|e| Error::Io("read profile", e))?;
-            let mut profile: Profile = toml::from_str(profile.as_str())?;
-
-            let to_inherit: BTreeSet<String> = match &profile.inherits {
+            let to_inherit: Set<String> = match &profile.inherits {
                 Some(i) => i.clone(),
                 None => {
                     if Profile::default_profile().exists() && !CONFIG_FILE.system_mode() {
-                        BTreeSet::from_iter(["default".to_string()])
+                        Set::from_iter(["default".to_string()])
                     } else {
-                        BTreeSet::new()
+                        Set::new()
                     }
                 }
             };
@@ -466,8 +478,8 @@ impl Profile {
 
             if let Some(config) = config {
                 debug!("Loading configuration");
-                match profile.configuration.take() {
-                    Some(mut configs) => match configs.remove(&config) {
+                if !profile.configuration.is_empty() {
+                    match profile.configuration.remove(&config) {
                         Some(conf) => {
                             profile = profile.base(conf)?;
                         }
@@ -477,13 +489,12 @@ impl Profile {
                                 Cow::Owned(format!("Configuration {config} does not exist")),
                             ));
                         }
-                    },
-                    None => {
-                        return Err(Error::NotFound(
-                            name.to_string(),
-                            Cow::Borrowed("Profile does not have any configurations"),
-                        ));
                     }
+                } else {
+                    return Err(Error::NotFound(
+                        name.to_string(),
+                        Cow::Borrowed("Profile does not have any configurations"),
+                    ));
                 }
             };
 
@@ -502,12 +513,10 @@ impl Profile {
             debug!("Fabricating features");
             fab::features::fabricate(&mut profile, name)?;
 
-            write!(
-                File::create(cache).map_err(|e| Error::Io("write feature cache", e))?,
-                "{}",
-                toml::to_string(&profile)?
-            )
-            .map_err(|e| Error::Io("write feature cache", e))?;
+            let mut cache = File::create(cache).map_err(|e| Error::Io("write feature cache", e))?;
+            cache
+                .write(&postcard::to_allocvec(&profile).map_err(Error::Cache)?)
+                .map_err(|e| Error::Io("write cache", e))?;
             Ok(profile)
         }
     }
@@ -540,7 +549,7 @@ impl Profile {
     ///
     /// Cache status is not inherited, neither is path, name,
     /// or desktop.
-    pub fn merge(&mut self, profile: Self) -> Result<(), Error> {
+    pub fn merge(&mut self, mut profile: Self) -> Result<(), Error> {
         if self.path.is_none() {
             self.path = profile.path;
         }
@@ -569,27 +578,11 @@ impl Profile {
             }
         }
 
-        if let Some(env) = profile.environment {
-            if let Some(s_env) = &mut self.environment {
-                s_env.extend(env)
-            } else {
-                self.environment = Some(env);
-            }
-        }
-
         if let Some(ipc) = profile.ipc {
             if let Some(s_ipc) = &mut self.ipc {
                 s_ipc.merge(ipc)
             } else {
                 self.ipc = Some(ipc);
-            }
-        }
-
-        if let Some(configs) = profile.configuration {
-            for (name, config) in configs {
-                self.configuration
-                    .get_or_insert_default()
-                    .insert(name, config);
             }
         }
 
@@ -601,14 +594,22 @@ impl Profile {
             }
         }
 
-        extend(&mut self.namespaces, profile.namespaces);
-        extend(&mut self.binaries, profile.binaries);
-        extend(&mut self.libraries, profile.libraries);
-        extend(&mut self.devices, profile.devices);
-        extend(&mut self.features, profile.features);
-        extend(&mut self.conflicts, profile.conflicts);
-        append(&mut self.arguments, profile.arguments);
-        append(&mut self.sandbox_args, profile.sandbox_args);
+        for (name, config) in profile.configuration {
+            self.configuration.insert(name, config);
+        }
+
+        for (key, val) in profile.environment {
+            self.environment.insert(key, val);
+        }
+
+        self.namespaces.extend(profile.namespaces);
+        self.binaries.extend(profile.binaries);
+        self.libraries.extend(profile.libraries);
+        self.devices.extend(profile.devices);
+        self.features.extend(profile.features);
+        self.conflicts.extend(profile.conflicts);
+        self.arguments.append(&mut profile.arguments);
+        self.sandbox_args.append(&mut profile.sandbox_args);
         Ok(())
     }
 
@@ -658,9 +659,13 @@ impl Profile {
     }
 
     /// Get the Profile's hash.
-    pub fn hash_str(&self) -> String {
-        let s = RandomState::with_seed(0);
-        format!("{}", s.hash_one(self))
+    pub fn hash_str(&self) -> Result<String, Error> {
+        timer!("::hash", {
+            let s = RandomState::with_seed(0);
+            let str = toml::to_string(&self)?;
+            log::trace!("{str}");
+            Ok(format!("{}", s.hash_one(str)))
+        })
     }
 
     /// Get information about a profile.
@@ -670,9 +675,7 @@ impl Profile {
             style(name).bold(),
             style(self.app_path(name)).italic()
         );
-        if let Some(args) = &self.arguments {
-            print!("{} ", args.join(" "))
-        }
+        print!("{} ", self.arguments.join(" "));
 
         if let Some(inherits) = &self.inherits {
             if inherits.is_empty() {
@@ -688,16 +691,15 @@ impl Profile {
                 println!("\t- ID: {id}");
             }
 
-            if let Some(features) = &self.features {
-                println!("\t- Required Features: {}", format_iter(features.iter()));
-            }
+            println!(
+                "\t- Required Features: {}",
+                format_iter(self.features.iter())
+            );
 
-            if let Some(conflicts) = &self.conflicts {
-                println!(
-                    "\t- Conflicting Features: {}",
-                    format_iter(conflicts.iter())
-                );
-            }
+            println!(
+                "\t- Conflicting Features: {}",
+                format_iter(self.conflicts.iter())
+            );
 
             if let Some(home) = &self.home {
                 println!("\t- Home");
@@ -722,42 +724,30 @@ impl Profile {
                 files.info()
             }
 
-            if let Some(binaries) = &self.binaries {
-                println!("\t- Binaries: {}", format_iter(binaries.iter()));
+            println!("\t- Binaries: {}", format_iter(self.binaries.iter()));
+
+            library_info(&self.libraries, verbose);
+
+            println!("\t- Devices:");
+            for device in &self.devices {
+                println!("\t\t- {}", style(device).italic());
             }
 
-            if let Some(libraries) = &self.libraries {
-                library_info(libraries, verbose);
+            println!("\t- Namespaces: {}", format_iter(self.namespaces.iter()));
+
+            println!("\t- Environment Variables:");
+            for (key, value) in &self.environment {
+                println!("\t\t - {key} = {value}");
             }
 
-            if let Some(devices) = &self.devices {
-                println!("\t- Devices:");
-                for device in devices {
-                    println!("\t\t- {}", style(device).italic());
-                }
-            }
-
-            if let Some(namespaces) = &self.namespaces {
-                println!("\t- Namespaces: {}", format_iter(namespaces.iter()));
-            }
-
-            if let Some(envs) = &self.environment {
-                println!("\t- Environment Variables:");
-                for (key, value) in envs {
-                    println!("\t\t - {key} = {value}");
-                }
-            }
-
-            if let Some(configs) = &self.configuration {
-                println!(
-                    "\t- Configurations: {}",
-                    configs
-                        .keys()
-                        .map(|k| k.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
-            }
+            println!(
+                "\t- Configurations: {}",
+                self.configuration
+                    .keys()
+                    .map(|k| k.to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
 
             if let Some(hooks) = &self.hooks {
                 hooks.info();
@@ -768,6 +758,31 @@ impl Profile {
     /// Edit a profile.
     pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
         edit::edit::<Self>(path)
+    }
+}
+impl Default for Profile {
+    fn default() -> Self {
+        Self {
+            path: None,
+            id: None,
+            features: deterministic_set(),
+            conflicts: deterministic_set(),
+            inherits: None,
+            home: Default::default(),
+            seccomp: Default::default(),
+            ipc: Default::default(),
+            files: Default::default(),
+            binaries: deterministic_set(),
+            libraries: deterministic_set(),
+            devices: deterministic_set(),
+            namespaces: deterministic_set(),
+            environment: deterministic_map(),
+            arguments: Default::default(),
+            configuration: Default::default(),
+            hooks: Default::default(),
+            new_privileges: Default::default(),
+            sandbox_args: Default::default(),
+        }
     }
 }
 
@@ -1140,8 +1155,8 @@ pub enum HomePolicy {
 }
 
 /// Files, RO/RW, and Modes.
-#[derive(Hash, Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[derive(Default, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough
     /// is provided, files are not passed. This includes using the application to open
@@ -1149,69 +1164,69 @@ pub struct Files {
     pub passthrough: Option<FileMode>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    pub user: Option<FileList>,
+    #[serde(default = "deterministic_map")]
+    pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    pub platform: Option<FileList>,
+    #[serde(default = "deterministic_map")]
+    pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
-    pub resources: Option<FileList>,
+    #[serde(default = "deterministic_map")]
+    pub resources: FileList,
 
     /// Direct files take a path, and file contents.
-    pub direct: Option<BTreeMap<FileMode, BTreeMap<String, String>>>,
+    #[serde(default = "deterministic_map")]
+    pub direct: Map<FileMode, IndexMap<String, String>>,
 }
 impl Files {
     /// Merge two file sets together.
-    pub fn merge(&mut self, mut files: Self) {
+    pub fn merge(&mut self, files: Self) {
         if files.passthrough.is_some() {
             self.passthrough = files.passthrough;
         }
 
-        if let Some(mut user) = files.user.take() {
-            let s_user = self.user.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(map) = user.remove(&mode) {
-                    s_user
-                        .get_mut(&mode)
-                        .get_or_insert(&mut BTreeSet::new())
-                        .extend(map);
-                }
+        let mut user = files.user;
+        let s_user = &mut self.user;
+        for mode in FILE_MODES {
+            if let Some(map) = user.remove(&mode) {
+                s_user
+                    .get_mut(&mode)
+                    .get_or_insert(&mut IndexSet::new())
+                    .extend(map);
             }
         }
 
-        if let Some(mut sys) = files.platform.take() {
-            let s_user = self.platform.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(map) = sys.remove(&mode) {
-                    s_user
-                        .get_mut(&mode)
-                        .get_or_insert(&mut BTreeSet::new())
-                        .extend(map);
-                }
+        let mut sys = files.platform;
+        let s_user = &mut self.platform;
+        for mode in FILE_MODES {
+            if let Some(map) = sys.remove(&mode) {
+                s_user
+                    .get_mut(&mode)
+                    .get_or_insert(&mut IndexSet::new())
+                    .extend(map);
             }
         }
 
-        if let Some(mut sys) = files.resources.take() {
-            let s_user = self.resources.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(map) = sys.remove(&mode) {
-                    s_user
-                        .get_mut(&mode)
-                        .get_or_insert(&mut BTreeSet::new())
-                        .extend(map);
-                }
+        let mut sys = files.resources;
+        let s_user = &mut self.resources;
+        for mode in FILE_MODES {
+            if let Some(map) = sys.remove(&mode) {
+                s_user
+                    .get_mut(&mode)
+                    .get_or_insert(&mut IndexSet::new())
+                    .extend(map);
             }
         }
 
-        if let Some(mut direct) = files.direct.take() {
-            let s_user = self.direct.get_or_insert_default();
-            for mode in FILE_MODES {
-                if let Some(map) = direct.remove(&mode) {
-                    s_user
-                        .get_mut(&mode)
-                        .get_or_insert(&mut BTreeMap::new())
-                        .extend(map);
-                }
+        let mut direct = files.direct;
+        let s_user = &mut self.direct;
+        for mode in FILE_MODES {
+            if let Some(map) = direct.remove(&mode) {
+                s_user
+                    .get_mut(&mode)
+                    .get_or_insert(&mut IndexMap::new())
+                    .extend(map);
             }
         }
     }
@@ -1227,9 +1242,9 @@ impl Files {
             let files = files.get_or_insert_default();
             ro.into_iter().for_each(|file| {
                 let list = if file.starts_with("/home") {
-                    files.user.get_or_insert_default()
+                    &mut files.user
                 } else {
-                    files.platform.get_or_insert_default()
+                    &mut files.platform
                 };
                 list.entry(FileMode::ReadOnly).or_default().insert(file);
             });
@@ -1238,9 +1253,9 @@ impl Files {
             let files = files.get_or_insert_default();
             rw.into_iter().for_each(|file| {
                 let list = if file.starts_with("/home") {
-                    files.user.get_or_insert_default()
+                    &mut files.user
                 } else {
-                    files.platform.get_or_insert_default()
+                    &mut files.platform
                 };
                 list.entry(FileMode::ReadWrite).or_default().insert(file);
             });
@@ -1266,18 +1281,11 @@ impl Files {
 
         for mode in FILE_MODES {
             let mut files = Set::new();
-            if let Some(system) = &self.platform {
-                files.extend(get_files(system, mode));
-            }
-            if let Some(system) = &self.resources {
-                files.extend(get_files(system, mode));
-            }
-            if let Some(user) = &self.user {
-                files.extend(get_files(user, mode));
-            }
-            if let Some(direct) = &self.direct
-                && let Some(mode_files) = direct.get(&mode)
-            {
+            files.extend(get_files(&self.platform, mode));
+            files.extend(get_files(&self.resources, mode));
+            files.extend(get_files(&self.user, mode));
+
+            if let Some(mode_files) = self.direct.get(&mode) {
                 for file in mode_files.keys() {
                     files.insert(format!("\t\t- {}", style(file).italic()));
                 }
@@ -1297,7 +1305,7 @@ impl Files {
 /// However, because Antimony provides file as bind mounts, this operation will fail.
 /// In such cases, use portals, put the file directly in the profile's home folder, or
 /// pass the parent folder.
-pub type FileList = BTreeMap<FileMode, BTreeSet<String>>;
+pub type FileList = Map<FileMode, IndexSet<String>>;
 
 #[derive(
     Hash,
@@ -1364,7 +1372,7 @@ impl std::fmt::Display for FileMode {
 }
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Hash, Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.
@@ -1377,28 +1385,28 @@ pub struct Ipc {
     pub user_bus: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    pub portals: BTreeSet<Portal>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub portals: Set<Portal>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    pub see: BTreeSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub see: Set<String>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    pub talk: BTreeSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub talk: Set<String>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    pub own: BTreeSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub own: Set<String>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
-    pub call: BTreeSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub call: Set<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
-    pub fn merge(&mut self, mut ipc: Self) {
+    pub fn merge(&mut self, ipc: Self) {
         if self.disable.is_none() {
             self.disable = ipc.disable;
         }
@@ -1410,11 +1418,11 @@ impl Ipc {
             self.user_bus = ipc.user_bus;
         }
 
-        self.portals.append(&mut ipc.portals);
-        self.see.append(&mut ipc.see);
-        self.talk.append(&mut ipc.talk);
-        self.own.append(&mut ipc.own);
-        self.call.append(&mut ipc.call);
+        self.portals.extend(ipc.portals);
+        self.see.extend(ipc.see);
+        self.talk.extend(ipc.talk);
+        self.own.extend(ipc.own);
+        self.call.extend(ipc.call);
     }
 
     /// Construct an IPC set from the command line.

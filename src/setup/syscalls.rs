@@ -1,19 +1,18 @@
-use std::{collections::BTreeSet, sync::Arc};
-
-use crate::shared::{profile::SeccompPolicy, syscalls, utility};
+use crate::shared::{Set, profile::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
 use spawn::Spawner;
+use std::sync::Arc;
 
 pub fn install_filter(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: Option<BTreeSet<String>>,
+    binaries: &Set<String>,
     main: &Spawner,
 ) -> Result<()> {
-    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, &binaries)? {
+    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, binaries)? {
         main.seccomp_i(filter);
 
         if let Some(fd) = fd {
@@ -66,11 +65,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
         SeccompPolicy::Disabled => {}
         policy => {
             if !args.args.dry {
-                let binaries = {
-                    let mut lock = args.profile.lock();
-                    lock.binaries.take()
-                };
-
+                let binaries = &args.profile.lock().binaries;
                 install_filter(
                     &args.name,
                     args.instance.name(),
