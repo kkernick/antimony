@@ -25,17 +25,13 @@ pub fn in_lib(path: &str) -> bool {
 }
 
 /// Determine dependencies for directories.
-fn dir_resolve(
-    library: Cow<'_, str>,
-    directories: Arc<DashSet<String>>,
-    cache: &Path,
-) -> Result<Vec<String>> {
+fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Result<Vec<String>> {
     let mut dependencies = Vec::new();
     let path = Path::new(library.as_ref());
 
     // Resolve directories.
     if path.is_dir() {
-        dependencies.extend(get_dir(&library, Some(cache))?);
+        dependencies.extend(get_dir(&library)?);
         directories.insert(library.to_string());
     } else if let Some(library) = elf_filter(&library) {
         dependencies.push(library);
@@ -123,9 +119,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         timer!("::binaries", {
             binaries.par_iter().for_each(|binary| {
                 let dep = dependencies.clone();
-                if let Ok(libraries) =
-                    get_libraries(Cow::Owned(binary.clone()), Some(&cache.clone()))
-                {
+                if let Ok(libraries) = get_libraries(Cow::Owned(binary.clone())) {
                     for library in libraries {
                         dep.insert(library);
                     }
@@ -188,7 +182,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         // and it does not seem to be contention on writing/reading the cache.
         debug!("Resolving wildcards");
         wildcards.into_par_iter().for_each(|w| {
-            if let Ok(cards) = get_wildcards(w, true, Some(&cache)) {
+            if let Ok(cards) = get_wildcards(w, true) {
                 cards.into_par_iter().for_each(|card| {
                     resolved.insert(Cow::Owned(card.clone()));
                 });
@@ -200,7 +194,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         Arc::into_inner(resolved)
             .unwrap()
             .into_par_iter()
-            .filter_map(|e| dir_resolve(e, directories.clone(), &cache).ok())
+            .filter_map(|e| dir_resolve(e, directories.clone()).ok())
             .flatten()
             .collect::<Set<_>>()
     });
@@ -209,7 +203,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         files.into_par_iter().for_each(|file| {
             let dep = dependencies.clone();
             dep.insert(file.clone());
-            if let Ok(libraries) = get_libraries(Cow::Owned(file), Some(&cache.clone())) {
+            if let Ok(libraries) = get_libraries(Cow::Owned(file)) {
                 for library in libraries {
                     dep.insert(library);
                 }

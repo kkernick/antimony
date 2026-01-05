@@ -1,10 +1,8 @@
 //! Refresh installed profiles.
 
 use crate::{
-    cli::{
-        self, run_vec, {integrate, run},
-    },
-    shared::env::{CACHE_DIR, HOME_PATH},
+    cli::{self, integrate, run, run_vec},
+    shared::env::{AT_HOME, CACHE_DIR, HOME_PATH},
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -41,13 +39,12 @@ impl cli::Run for Args {
         if self.hard {
             let _ = fs::remove_dir_all(CACHE_DIR.as_path());
         } else {
-            // This seems to be safe. Even if instances are in use,
-            // deleting the source does not affect either the proxy,
-            // or trying to open direct files.
+            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db"));
+            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-wal"));
+            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-shm"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".profile"));
         }
 
         // If a single profile exist, refresh it and it alone.

@@ -22,7 +22,7 @@ fn main() -> anyhow::Result<()> {
     let stdin = stdin();
 
     // We need to populate the library roots ;)
-    let root_thread = thread::spawn(|| get_libraries(Cow::Owned(utility("tracer")), None));
+    let root_thread = thread::spawn(|| get_libraries(Cow::Owned(utility("tracer"))));
 
     loop {
         let mut line = String::new();
@@ -91,7 +91,7 @@ fn main() -> anyhow::Result<()> {
                     let found = if file.is_empty() {
                         false
                     } else if d_name.contains("*") {
-                        match get_wildcards(&d_name, true, None) {
+                        match get_wildcards(&d_name, true) {
                             Ok(cards) => cards.contains(file),
                             Err(_) => false,
                         }

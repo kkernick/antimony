@@ -50,7 +50,7 @@ impl cli::Run for Args {
         };
 
         if modified.is_some() {
-            db::store(
+            db::store_str(
                 &self.name,
                 &fs::read_to_string(temp.full())?,
                 Database::User,

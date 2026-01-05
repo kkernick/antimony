@@ -64,8 +64,8 @@ impl cli::Run for Args {
             let system = db::all(Database::System, table)?;
 
             for thing in user.intersection(&system) {
-                if db::dump(thing, Database::User, table)?
-                    == db::dump(thing, Database::System, table)?
+                if db::dump::<String>(thing, Database::User, table)?
+                    == db::dump::<String>(thing, Database::System, table)?
                 {
                     println!("Removing redundant {kind}: {thing}");
                     db::delete(thing, Database::User, table)?;

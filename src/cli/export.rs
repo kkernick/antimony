@@ -34,7 +34,7 @@ impl super::Run for Args {
         };
 
         let export = |name: &str| -> Result<()> {
-            if let Some(content) = db::dump(name, Database::User, table)? {
+            if let Some(content) = db::dump::<String>(name, Database::User, table)? {
                 as_real!(Result<()>, {
                     fs::write(dest.join(name).with_extension("toml"), content)?;
                     Ok(())

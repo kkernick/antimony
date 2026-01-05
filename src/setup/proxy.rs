@@ -56,7 +56,7 @@ pub fn run(
         as_effective!(fs::create_dir_all(&sof))??;
 
         timer!("::sof", {
-            let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"), Some(&cache))?;
+            let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"))?;
             libraries
                 .into_par_iter()
                 .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache, "/usr"))?;

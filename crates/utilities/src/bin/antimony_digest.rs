@@ -38,7 +38,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    db::store(
+    db::store_str(
         "default",
         &fs::read_to_string(Path::new(root).join("config").join("default.toml"))?,
         Database::System,

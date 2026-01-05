@@ -26,10 +26,8 @@ use std::{
     hash::Hash,
     io,
     path::{Path, PathBuf},
-    sync::LazyLock,
 };
 use thiserror::Error;
-use user::as_effective;
 use which::which;
 
 pub static FILE_MODES: [FileMode; 3] = [
@@ -37,14 +35,6 @@ pub static FILE_MODES: [FileMode; 3] = [
     FileMode::ReadOnly,
     FileMode::ReadWrite,
 ];
-
-pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    let path = crate::shared::env::CACHE_DIR.join(".profile");
-    if !path.exists() {
-        as_effective!(fs::create_dir_all(&path).unwrap()).expect("Failed to create profile cache");
-    }
-    path
-});
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -105,7 +95,7 @@ pub fn library_info(libraries: &ISet<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true, None) {
+            match get_wildcards(library, true) {
                 Ok(wilds) => {
                     for wild in wilds {
                         println!("\t\t- {}", style(wild).italic());
@@ -232,8 +222,9 @@ impl Profile {
             if let Some(profile) = db::get::<Self>("default", Database::User, Table::Profiles)? {
                 return Ok(profile);
             } else {
-                let def = db::dump("default", Database::System, Table::Profiles)?.unwrap();
-                db::store("default", &def, Database::User, Table::Profiles)?;
+                let def =
+                    db::dump::<String>("default", Database::System, Table::Profiles)?.unwrap();
+                db::store_str("default", &def, Database::User, Table::Profiles)?;
                 return Ok(toml::from_str(&def)?);
             }
         }
@@ -354,8 +345,12 @@ impl Profile {
             return Ok(profile);
         }
 
-        let hash = profile.hash_str()?;
-        if let Some(cache) = db::get::<Self>(&hash, Database::User, Table::Cache)? {
+        let mut hash = profile.hash_str()?;
+        if let Some(config) = &config {
+            hash += config;
+        }
+
+        if let Some(cache) = db::get::<Self>(&hash, Database::Cache, Table::Profiles)? {
             debug!("Using cached profile");
             return Ok(cache);
         }
@@ -365,7 +360,7 @@ impl Profile {
             Some(i) => i.clone(),
             None => {
                 if !CONFIG_FILE.system_mode()
-                    && db::exists("default", Database::User, Table::Cache)?
+                    && db::exists("default", Database::User, Table::Profiles)?
                 {
                     ISet::from_iter(["default".to_string()])
                 } else {
@@ -414,7 +409,7 @@ impl Profile {
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
-        db::save(&hash, &profile, Database::User, Table::Cache)?;
+        db::save(&hash, &profile, Database::Cache, Table::Profiles)?;
         Ok(profile)
     }
 

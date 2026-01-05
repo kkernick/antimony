@@ -10,13 +10,14 @@ use crate::{
     fab::bin::ELF_MAGIC,
     shared::{
         Set,
+        db::{self, Database, Table},
         env::{AT_HOME, HOME},
         profile::Profile,
     },
     timer,
 };
 use anyhow::Result;
-use log::debug;
+use log::{debug, trace};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -24,13 +25,13 @@ use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
-    fs::{self, File},
-    io::{Read, Write},
+    fs::File,
+    io::Read,
     path::Path,
     sync::{LazyLock, OnceLock},
 };
 use temp::Temp;
-use user::{as_effective, as_real};
+use user::as_real;
 
 type Cache = Vec<String>;
 
@@ -57,25 +58,23 @@ pub struct FabInfo<'a> {
 
 /// Get cached definitions.
 #[inline]
-fn get_cache<T: DeserializeOwned>(name: &str, cache: &Path) -> Result<Option<T>> {
-    let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
-    if let Ok(bytes) = fs::read(&cache_file) {
+fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
+    if let Some(bytes) = db::dump::<Vec<u8>>(name, Database::Cache, tb)? {
+        trace!("Read {} from cache ({name} from {tb})", bytes.len());
         Ok(Some(postcard::from_bytes(&bytes)?))
     } else {
+        trace!("No cache for {name}");
         Ok(None)
     }
 }
 
 /// Write the cache file.
 #[inline]
-fn write_cache<T: Serialize>(name: &str, cache: &Path, content: &T) -> Result<()> {
-    let cache_file = cache.join(name.replace("/", ".").replace("*", "."));
-    as_effective!(Result<()>, {
-        let bytes = postcard::to_stdvec(content)?;
-        let mut file = File::create(&cache_file)?;
-        file.write_all(&bytes)?;
-        Ok(())
-    })?
+fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
+    let bytes = postcard::to_stdvec(content)?;
+    trace!("Writing {} bytes to cache ({name} to {tb})", bytes.len());
+    db::store_bytes(name, &bytes, Database::Cache, tb)?;
+    Ok(())
 }
 
 /// Filter non-elf files.
@@ -90,10 +89,8 @@ fn elf_filter(path: &str) -> Option<String> {
 }
 
 /// Get all executable files in a directory.
-pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Cache> {
-    if let Some(cache) = cache
-        && let Some(libraries) = get_cache(dir, cache)?
-    {
+pub fn get_dir(dir: &str) -> Result<Cache> {
+    if let Some(libraries) = get_cache(dir, Table::Directories)? {
         return Ok(libraries);
     }
 
@@ -108,13 +105,12 @@ pub fn get_dir(dir: &str, cache: Option<&Path>) -> Result<Cache> {
         .filter_map(elf_filter)
         .collect();
 
-    if let Some(cache) = cache {
-        write_cache(dir, cache, &libraries)?;
-    }
+    write_cache(dir, &libraries, Table::Directories)?;
+
     Ok(libraries)
 }
 
-pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<Cache> {
+pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
     let run = |dir: &str, base: &str| -> Result<Cache> {
         Ok(Spawner::abs("/usr/bin/find")
             .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base])?
@@ -127,9 +123,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<C
             .collect())
     };
 
-    if let Some(cache) = cache
-        && let Some(libraries) = get_cache(pattern, cache)?
-    {
+    if let Some(libraries) = get_cache(pattern, Table::Wildcards)? {
         return Ok(libraries);
     }
 
@@ -148,20 +142,16 @@ pub fn get_wildcards(pattern: &str, lib: bool, cache: Option<&Path>) -> Result<C
         run("/usr/bin", pattern)?
     };
 
-    if let Some(cache) = cache {
-        write_cache(pattern, cache, &libraries)?;
-    }
+    write_cache(pattern, &libraries, Table::Wildcards)?;
     Ok(libraries)
 }
 
 /// LDD a path.
-pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> {
-    let libraries = if let Some(cache) = cache
-        && let Some(libraries) = get_cache::<Cache>(&path, cache)?
-    {
+pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
+    let libraries = if let Some(libraries) = get_cache(&path, Table::Libraries)? {
         libraries
     } else {
-        let libraries = Spawner::abs("/usr/bin/ldd")
+        let libraries: Cache = Spawner::abs("/usr/bin/ldd")
             .arg(path.as_ref())?
             .output(StreamMode::Pipe)
             .spawn()?
@@ -195,9 +185,7 @@ pub fn get_libraries(path: Cow<'_, str>, cache: Option<&Path>) -> Result<Cache> 
             })
             .collect();
 
-        if let Some(cache) = cache {
-            write_cache(&path, cache, &libraries)?
-        }
+        write_cache(&path, &libraries, Table::Libraries)?;
         libraries
     };
 

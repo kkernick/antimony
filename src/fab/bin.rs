@@ -1,7 +1,9 @@
 use crate::{
     fab::{FabInfo, get_cache, get_dir, get_wildcards, lib::in_lib, localize_path, write_cache},
     shared::{
-        Set, format_iter,
+        Set,
+        db::Table,
+        format_iter,
         path::direct_path,
         profile::{FileMode, Profile},
         utility,
@@ -15,7 +17,7 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
-use user::{as_effective, as_real, run_as};
+use user::{as_real, run_as};
 
 use std::{
     borrow::Cow,
@@ -113,7 +115,6 @@ fn parse(
     path: &str,
     instance: &str,
     global: &ParseReturn,
-    cache: &Path,
     done: Arc<DashSet<String>>,
     mut include_self: bool,
 ) -> Result<Type> {
@@ -122,7 +123,7 @@ fn parse(
         return Ok(Type::Done);
     }
 
-    if let Some(cache) = get_cache(path, cache)? {
+    if let Some(cache) = get_cache(path, Table::Binaries)? {
         ParseReturn::merge(global, cache);
         return Ok(Type::None);
     }
@@ -159,7 +160,7 @@ fn parse(
                     }
                 };
             }
-            parse(&dest, instance, global, cache, done.clone(), true)?;
+            parse(&dest, instance, global, done.clone(), true)?;
             Type::Link
         } else {
             if in_lib(path) {
@@ -238,7 +239,7 @@ fn parse(
                 }
 
                 for bin in binaries {
-                    parse(&bin, instance, global, cache, done.clone(), true)?;
+                    parse(&bin, instance, global, done.clone(), true)?;
                 }
 
                 Type::Script
@@ -251,7 +252,7 @@ fn parse(
         }
     };
 
-    write_cache(path, cache, &ret)?;
+    write_cache(path, &ret, Table::Binaries)?;
     ParseReturn::merge(global, ret);
     Ok(t)
 }
@@ -276,14 +277,13 @@ fn handle_localize(
     include_self: bool,
     parsed: &ParseReturn,
     done: Arc<DashSet<String>>,
-    cache: &Path,
 ) -> Result<()> {
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            parse(file, instance, parsed, cache, done.clone(), include_self)?;
+            parse(file, instance, parsed, done.clone(), include_self)?;
         } else {
-            match parse(&src, instance, parsed, cache, done.clone(), false)? {
+            match parse(&src, instance, parsed, done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
                     parsed.localized.insert(src.into_owned(), dst);
                 }
@@ -291,7 +291,7 @@ fn handle_localize(
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    handle_localize(&ldst, instance, home, false, parsed, done.clone(), cache)?;
+                    handle_localize(&ldst, instance, home, false, parsed, done.clone())?;
                     parsed.symlinks.insert(dst, ldst);
                 }
                 _ => warn!("Excluding localization for {file}"),
@@ -299,7 +299,7 @@ fn handle_localize(
         }
         Ok(())
     } else {
-        parse(file, instance, parsed, cache, done.clone(), true)?;
+        parse(file, instance, parsed, done.clone(), true)?;
         Ok(())
     }
 }
@@ -309,7 +309,6 @@ pub fn collect(
     name: &str,
     instance: &str,
     parsed: &ParseReturn,
-    cache: &Path,
 ) -> Result<()> {
     let resolved = Arc::new(DashSet::new());
     resolved.insert(profile.lock().app_path(name).to_string());
@@ -327,7 +326,7 @@ pub fn collect(
             });
 
             wildcards.into_par_iter().for_each(|w| {
-                if let Ok(cards) = get_wildcards(w, false, Some(cache)) {
+                if let Ok(cards) = get_wildcards(w, false) {
                     for card in cards {
                         resolved.insert(card);
                     }
@@ -343,17 +342,17 @@ pub fn collect(
         if let Some(files) = &profile.lock().files {
             if let Some(x) = files.user.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, true, true, parsed, done.clone(), cache)
+                    handle_localize(file, instance, true, true, parsed, done.clone())
                 })?;
             }
             if let Some(x) = files.resources.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, false, true, parsed, done.clone(), cache)
+                    handle_localize(file, instance, false, true, parsed, done.clone())
                 })?;
             }
             if let Some(x) = files.platform.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, false, true, parsed, done.clone(), cache)
+                    handle_localize(file, instance, false, true, parsed, done.clone())
                 })?;
             }
             if let Some(x) = files.direct.get(&FileMode::Executable) {
@@ -366,7 +365,6 @@ pub fn collect(
                         false,
                         parsed,
                         done.clone(),
-                        cache,
                     )
                 })?;
             }
@@ -380,15 +378,7 @@ pub fn collect(
             .unwrap()
             .into_iter()
             .try_for_each(|binary| {
-                handle_localize(
-                    binary.as_str(),
-                    instance,
-                    false,
-                    true,
-                    parsed,
-                    done.clone(),
-                    cache,
-                )
+                handle_localize(binary.as_str(), instance, false, true, parsed, done.clone())
             })?;
     });
     Ok(())
@@ -410,28 +400,17 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     }
 
     info.handle.args_i(["--dir", "/usr/bin"])?;
-
-    let cache = crate::shared::env::CACHE_DIR.join(".bin");
-    if !cache.exists() {
-        as_effective!({ std::fs::create_dir_all(&cache).expect("Failed to create binary cache") })?;
-    }
-
-    let parsed = match get_cache("bin.cache", info.sys_dir)? {
+    let bin_cache = format!("{}-bin", info.instance.name());
+    let parsed = match get_cache(&bin_cache, Table::Binaries)? {
         Some(parsed) => parsed,
         None => {
             let parsed = ParseReturn::new();
             timer!(
                 "::collect",
-                collect(
-                    info.profile,
-                    info.name,
-                    info.instance.name(),
-                    &parsed,
-                    &cache,
-                )
+                collect(info.profile, info.name, info.instance.name(), &parsed,)
             )?;
 
-            write_cache("bin.cache", info.sys_dir, &parsed)?;
+            write_cache(&bin_cache, &parsed, Table::Binaries)?;
             parsed
         }
     };
@@ -495,7 +474,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
                 let home_str = home_dir.to_string_lossy();
-                let home_binaries = get_dir(&home_str, Some(&cache))?;
+                let home_binaries = get_dir(&home_str)?;
                 for binary in home_binaries {
                     elf_binaries.insert(binary);
                 }

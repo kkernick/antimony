@@ -5,7 +5,7 @@ use crate::shared::{
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use parking_lot::{Mutex, MutexGuard};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params, types::FromSql};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{fmt, fs, path::PathBuf, sync::LazyLock, thread::ThreadId};
 use thiserror::Error;
@@ -49,14 +49,20 @@ impl Database {
 pub enum Table {
     Profiles,
     Features,
-    Cache,
+    Wildcards,
+    Libraries,
+    Binaries,
+    Directories,
 }
 impl fmt::Display for Table {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Profiles => write!(f, "profiles"),
             Self::Features => write!(f, "features"),
-            Self::Cache => write!(f, "cache"),
+            Table::Wildcards => write!(f, "wildcards"),
+            Table::Libraries => write!(f, "libraries"),
+            Table::Binaries => write!(f, "binaries"),
+            Table::Directories => write!(f, "directories"),
         }
     }
 }
@@ -83,22 +89,49 @@ fn new_connection(db: Database) -> Result<Connection, Error> {
         }
         let conn = if !path.exists() {
             let conn = Connection::open(path)?;
-            conn.execute_batch(
-                r#"
-                CREATE TABLE IF NOT EXISTS profiles (
-                    name TEXT PRIMARY KEY,
-                    value    TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS features (
-                    name    BLOB PRIMARY KEY,
-                    value    TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS cache (
-                    name    BLOB PRIMARY KEY,
-                    value    TEXT NOT NULL
-                );
-                "#,
-            )?;
+            if let Database::User | Database::System = db {
+                conn.execute_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS profiles (
+                        name TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS features (
+                        name TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    );
+                    "#,
+                )?;
+            } else {
+                conn.execute_batch(
+                    r#"
+                    CREATE TABLE IF NOT EXISTS profiles (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS features (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS wildcards (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS directories (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS libraries (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    CREATE TABLE IF NOT EXISTS binaries (
+                        name TEXT PRIMARY KEY,
+                        value BLOB NOT NULL
+                    );
+                    "#,
+                )?;
+            }
             conn
         } else {
             Connection::open(path)?
@@ -147,10 +180,10 @@ pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
     Ok(result)
 }
 
-pub fn dump(name: &str, db: Database, tb: Table) -> Result<Option<String>, Error> {
+pub fn dump<T: FromSql>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
     let connection = get_connection(db)?;
     let mut stmt = connection.prepare(&format!("SELECT value FROM {tb} WHERE name = ?1"))?;
-    let result: Option<String> = stmt.query_row(params![name], |row| row.get(0)).optional()?;
+    let result: Option<T> = stmt.query_row(params![name], |row| row.get(0)).optional()?;
     if let Some(str) = result {
         Ok(Some(str))
     } else {
@@ -159,13 +192,21 @@ pub fn dump(name: &str, db: Database, tb: Table) -> Result<Option<String>, Error
 }
 
 pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
-    match dump(name, db, tb)? {
+    match dump::<String>(name, db, tb)? {
         Some(str) => Ok(Some(toml::from_str(&str)?)),
         None => Ok(None),
     }
 }
 
-pub fn store(name: &str, value: &str, db: Database, tb: Table) -> Result<(), Error> {
+pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(), Error> {
+    get_connection(db)?.execute(
+        &format!("INSERT OR REPLACE INTO {tb} (name, value) VALUES (?1, ?2)",),
+        params![name, value],
+    )?;
+    Ok(())
+}
+
+pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<(), Error> {
     get_connection(db)?.execute(
         &format!("INSERT OR REPLACE INTO {tb} (name, value) VALUES (?1, ?2)",),
         params![name, value],
