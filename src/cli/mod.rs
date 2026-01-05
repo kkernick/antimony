@@ -6,7 +6,7 @@ pub mod import;
 pub mod info;
 pub mod integrate;
 pub mod refresh;
-pub mod reset;
+pub mod remove;
 pub mod run;
 pub mod seccomp;
 
@@ -68,7 +68,7 @@ pub enum Command {
     Integrate(integrate::Args),
 
     /// Reset a profile back to the system-defined profile.
-    Reset(reset::Args),
+    Remove(remove::Args),
 
     /// List installed profiles and features
     Info(info::Args),

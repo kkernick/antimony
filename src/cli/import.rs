@@ -1,70 +1,42 @@
 //! Import user-profiles
 
 use crate::shared::{
-    env::{AT_HOME, USER_NAME},
+    db::{self, Database, Table},
     profile::Profile,
 };
 use anyhow::{Result, anyhow};
-use dialoguer::Confirm;
 use log::warn;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 #[derive(clap::Args, Debug)]
 pub struct Args {
     /// The path of the profile. Can also be a directory, which will import all files within.
     profile: String,
-
-    /// Overwrite existing entries
-    #[arg(short, long, default_value_t = false)]
-    overwrite: bool,
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        user::set(user::Mode::Effective)?;
-
-        let profile = PathBuf::from(self.profile);
-        let dest = AT_HOME
-            .join("config")
-            .join(USER_NAME.as_str())
-            .join("profiles");
-
-        if !dest.exists() {
-            fs::create_dir_all(&dest)?;
-        }
-
-        let import = |src: &Path, dst: &Path| -> Result<()> {
-            if Profile::new(&src.to_string_lossy(), None).is_ok()
-                && let Some(file) = src.file_name()
-            {
-                let dest = dst.join(file);
-                if dest.exists()
-                    && !self.overwrite
-                    && !Confirm::new()
-                        .with_prompt(format!(
-                            "Profile {} already exists. Overwrite?",
-                            dest.display()
-                        ))
-                        .interact()?
-                {
-                    return Ok(());
-                }
-                fs::copy(src, dest)?;
+        let import = |src: &Path| -> Result<()> {
+            if let Ok(profile) = Profile::load(&src.to_string_lossy()) {
+                db::save(
+                    &src.file_stem().unwrap().to_string_lossy(),
+                    &profile,
+                    Database::User,
+                    Table::Profiles,
+                )?
             } else {
-                warn!("Invalid profile: {}", profile.display());
+                warn!("Invalid profile: {}", src.display());
             }
             Ok(())
         };
 
+        let profile = Path::new(&self.profile);
         if profile.is_dir() {
             for profile in profile.read_dir()?.filter_map(|e| e.ok()) {
-                import(&profile.path(), &dest)?;
+                import(&profile.path())?;
             }
             Ok(())
         } else if profile.is_file() {
-            import(&profile, &dest)
+            import(profile)
         } else {
             Err(anyhow!("No such profile!"))
         }

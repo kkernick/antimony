@@ -6,8 +6,9 @@ use crate::{
     shared::{
         IMap, ISet, Set,
         config::CONFIG_FILE,
+        db::{self, Database, Table},
         edit,
-        env::{AT_HOME, DATA_HOME, HOME, PWD, USER_NAME},
+        env::{DATA_HOME, HOME},
         format_iter,
     },
     timer,
@@ -21,13 +22,13 @@ use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    error, fmt,
-    fs::{self, File},
+    error, fmt, fs,
     hash::Hash,
-    io::{self, Write},
+    io,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+use thiserror::Error;
 use user::as_effective;
 use which::which;
 
@@ -46,98 +47,46 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
 });
 
 /// An error for issues around Profiles.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// When a profile doesn't exist.
+    #[error("No such profile {0}: {1}")]
     NotFound(String, Cow<'static, str>),
 
     /// When the profile cannot be Deserialized.
-    Deserialize(toml::de::Error),
+    #[error("Failed to deserialize profile: {0}")]
+    Deserialize(#[from] toml::de::Error),
 
     /// When the profile cannot be Deserialized.
-    Cache(postcard::Error),
+    #[error("Failed to cache profile: {0}")]
+    Cache(#[from] postcard::Error),
 
     /// When the profile cannot be Serialized.
-    Serialize(toml::ser::Error),
+    #[error("Failed to serialize profile: {0}")]
+    Serialize(#[from] toml::ser::Error),
 
     /// Misc IO errors.
+    #[error("I/O Error: {0}: {1}")]
     Io(&'static str, io::Error),
 
     /// Misc Errno errors.
+    #[error("System error: {0}: {1}")]
     Errno(&'static str, nix::errno::Errno),
 
     /// Errors resolving/creating paths.
-    Path(which::Error),
+    #[error("Path error: {0}")]
+    Path(#[from] which::Error),
 
     /// Errors for profile arguments specified on the command line.
+    #[error("Command line error: {0}")]
     CommandLine(&'static str, String, Vec<String>),
 
     /// Errors incorporating features.
-    Feature(crate::fab::features::Error),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::NotFound(name, reason) => write!(
-                f,
-                "Profile {name} not found: {reason}. \
-                Check the path, or create one with `antimony create`"
-            ),
-            Self::Deserialize(e) => write!(f, "Failed to read profile: {e}"),
-            Self::Cache(e) => write!(f, "Failed to parse the cache file: {e}"),
-            Self::Serialize(e) => write!(f, "Failed to write profile: {e}"),
-            Self::Io(what, e) => write!(f, "Failed to {what}: {e}"),
-            Self::Errno(what, e) => write!(f, "{what} failed: {e}"),
-            Self::Path(e) => write!(f, "Path error: {e}"),
-            Self::Feature(e) => write!(f, "Failed to resolve feature: {e}"),
-            Self::CommandLine(arg, value, valid) => {
-                write!(
-                    f,
-                    "Unrecognized value for {arg}: {value}. Expected one of {}",
-                    format_iter(valid.iter())
-                )
-            }
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Deserialize(e) => Some(e),
-            Self::Cache(e) => Some(e),
-            Self::Serialize(e) => Some(e),
-            Self::Io(_, e) => Some(e),
-            Self::Errno(_, e) => Some(e),
-            Self::Path(e) => Some(e),
-            Self::Feature(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-impl From<which::Error> for Error {
-    fn from(val: which::Error) -> Self {
-        Error::Path(val)
-    }
-}
-impl From<toml::de::Error> for Error {
-    fn from(val: toml::de::Error) -> Self {
-        Error::Deserialize(val)
-    }
-}
-impl From<toml::ser::Error> for Error {
-    fn from(val: toml::ser::Error) -> Self {
-        Error::Serialize(val)
-    }
-}
-impl From<crate::fab::features::Error> for Error {
-    fn from(val: crate::fab::features::Error) -> Self {
-        Error::Feature(val)
-    }
-}
-impl From<postcard::Error> for Error {
-    fn from(val: postcard::Error) -> Self {
-        Error::Cache(val)
-    }
+    #[error("Feature error: {0}")]
+    Feature(#[from] crate::fab::features::Error),
+
+    #[error("Database error: {0}")]
+    Database(#[from] db::Error),
 }
 
 /// Append two things together. Used for Profile Merging.
@@ -193,6 +142,7 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
+    #[serde(skip_serializing_if = "ISet::is_empty")]
     pub features: ISet<String>,
 
     /// Features that should be excluded from running under the profile.
@@ -276,68 +226,36 @@ pub struct Profile {
     pub sandbox_args: Vec<String>,
 }
 impl Profile {
-    /// Get where the profile's user location is.
-    /// When a user creates a new profile, or modifies a system one,
-    /// this is the location is it stored.
-    pub fn user_profile(name: &str) -> PathBuf {
-        AT_HOME
-            .join("config")
-            .join(USER_NAME.as_str())
-            .join("profiles")
-            .join(name)
-            .with_extension("toml")
-    }
-
-    /// Get where the profile's system location is.
-    pub fn system_profile(name: &str) -> PathBuf {
-        AT_HOME.join("profiles").join(name).with_extension("toml")
-    }
-
-    /// Get the location of the user's default profile.
-    pub fn default_profile() -> PathBuf {
-        AT_HOME
-            .join("config")
-            .join(USER_NAME.as_str())
-            .join("default.toml")
-    }
-
     /// Get the path of a profile.
-    pub fn path(name: &str) -> Result<PathBuf, Error> {
+    pub fn load(name: &str) -> Result<Self, Error> {
         if name == "default" {
-            let path = Self::default_profile();
-            if !path.exists() {
-                fs::copy(AT_HOME.join("config").join("default.toml"), &path)
-                    .map_err(|e| Error::Io("Failed to create default profile", e))?;
+            if let Some(profile) = db::get::<Self>("default", Database::User, Table::Profiles)? {
+                return Ok(profile);
+            } else {
+                let def = db::dump("default", Database::System, Table::Profiles)?.unwrap();
+                db::store("default", &def, Database::User, Table::Profiles)?;
+                return Ok(toml::from_str(&def)?);
             }
-            return Ok(path);
         }
 
         // Try and load a file absolutely if the file is given.
         if name.ends_with(".toml") {
             let path = PathBuf::from(name);
             if path.exists() {
-                return Ok(path);
+                return Ok(toml::from_str(
+                    &fs::read_to_string(path).map_err(|e| Error::Io("reading TOML", e))?,
+                )?);
             }
         }
 
-        // Try and load user-configured profile from AT_HOME
-        if !CONFIG_FILE.system_mode() {
-            let user = Self::user_profile(name);
-            if user.exists() {
-                return Ok(user);
-            }
+        if !CONFIG_FILE.system_mode()
+            && let Some(profile) = db::get::<Self>(name, Database::User, Table::Profiles)?
+        {
+            return Ok(profile);
         }
 
-        // Try and load the system profile from AT_HOME
-        let system = Self::system_profile(name);
-        if system.exists() {
-            return Ok(system);
-        }
-
-        // Try and load the system profile from AT_HOME
-        let local = PWD.join("config").join("profiles").join(name);
-        if local.exists() {
-            return Ok(local);
+        if let Some(profile) = db::get::<Self>(name, Database::System, Table::Profiles)? {
+            return Ok(profile);
         }
 
         Err(Error::NotFound(
@@ -431,99 +349,73 @@ impl Profile {
     pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
         debug!("Loading {name}");
 
+        let mut profile = Self::load(name)?;
         if name == "default" {
-            let path = Self::default_profile();
-            if !path.exists() {
-                fs::copy(AT_HOME.join("config").join("default.toml"), &path)
-                    .map_err(|e| Error::Io("Failed to create default profile", e))?;
-            }
-            return Ok(toml::from_str(
-                &fs::read_to_string(path).map_err(|e| Error::Io("Reading default", e))?,
-            )?);
+            return Ok(profile);
         }
 
-        let profile_str = timer!("::read", {
-            fs::read_to_string(Profile::path(name)?).map_err(|e| Error::Io("read profile", e))
-        })?;
-        let mut profile: Profile = timer!("::parsing", toml::from_str(profile_str.as_str()))?;
+        let hash = profile.hash_str()?;
+        if let Some(cache) = db::get::<Self>(&hash, Database::User, Table::Cache)? {
+            debug!("Using cached profile");
+            return Ok(cache);
+        }
 
-        let hash = timer!("::hash", {
-            let s = RandomState::with_seed(0);
-            format!("{}", s.hash_one(&profile_str))
-        });
-
-        let cache = if let Some(config) = &config {
-            CACHE_DIR.join(format!("{hash}-{config}"))
-        } else {
-            CACHE_DIR.join(hash)
+        debug!("No cache available");
+        let to_inherit: ISet<String> = match &profile.inherits {
+            Some(i) => i.clone(),
+            None => {
+                if !CONFIG_FILE.system_mode()
+                    && db::exists("default", Database::User, Table::Cache)?
+                {
+                    ISet::from_iter(["default".to_string()])
+                } else {
+                    ISet::default()
+                }
+            }
         };
 
-        if cache.exists() {
-            debug!("Using direct cache");
-            timer!("::load_cache", {
-                let bytes = fs::read_to_string(&cache).map_err(|e| Error::Io("read profile", e))?;
-                Ok(toml::from_str(&bytes)?)
-            })
-        } else {
-            debug!("No cache available");
-            let to_inherit: ISet<String> = match &profile.inherits {
-                Some(i) => i.clone(),
-                None => {
-                    if Profile::default_profile().exists() && !CONFIG_FILE.system_mode() {
-                        ISet::from_iter(["default".to_string()])
-                    } else {
-                        ISet::default()
-                    }
-                }
-            };
-
-            for inherit in to_inherit {
-                profile.merge(Profile::new(&inherit, None)?)?;
-            }
-
-            if let Some(config) = config {
-                debug!("Loading configuration");
-                if !profile.configuration.is_empty() {
-                    match profile.configuration.swap_remove(&config) {
-                        Some(conf) => {
-                            profile = profile.base(conf)?;
-                        }
-                        None => {
-                            return Err(Error::NotFound(
-                                name.to_string(),
-                                Cow::Owned(format!("Configuration {config} does not exist")),
-                            ));
-                        }
-                    }
-                } else {
-                    return Err(Error::NotFound(
-                        name.to_string(),
-                        Cow::Borrowed("Profile does not have any configurations"),
-                    ));
-                }
-            };
-
-            if let Some(path) = &profile.path
-                && path.starts_with("~")
-            {
-                profile.path = Some(path.replace("~", HOME.as_str()))
-            }
-
-            // Try and lookup the path. If it doesn't work, then the corresponding application
-            // isn't installed. This is fine, as long as the user doesn't try and run the profile.
-            if !name.ends_with(".toml") && profile.path.is_none() {
-                profile.path = Some(which::which(&profile.app_path(name))?.to_string());
-            }
-
-            debug!("Fabricating features");
-            fab::features::fabricate(&mut profile, name)?;
-
-            let mut cache = File::create(cache).map_err(|e| Error::Io("write feature cache", e))?;
-            cache
-                .write(toml::to_string(&profile)?.as_bytes())
-                .map_err(|e| Error::Io("write cache", e))?;
-            Ok(profile)
+        for inherit in to_inherit {
+            profile.merge(Profile::new(&inherit, None)?)?;
         }
+
+        if let Some(config) = config {
+            debug!("Loading configuration");
+            if !profile.configuration.is_empty() {
+                match profile.configuration.swap_remove(&config) {
+                    Some(conf) => {
+                        profile = profile.base(conf)?;
+                    }
+                    None => {
+                        return Err(Error::NotFound(
+                            name.to_string(),
+                            Cow::Owned(format!("Configuration {config} does not exist")),
+                        ));
+                    }
+                }
+            } else {
+                return Err(Error::NotFound(
+                    name.to_string(),
+                    Cow::Borrowed("Profile does not have any configurations"),
+                ));
+            }
+        };
+
+        if let Some(path) = &profile.path
+            && path.starts_with("~")
+        {
+            profile.path = Some(path.replace("~", HOME.as_str()))
+        }
+
+        // Try and lookup the path. If it doesn't work, then the corresponding application
+        // isn't installed. This is fine, as long as the user doesn't try and run the profile.
+        if !name.ends_with(".toml") && profile.path.is_none() {
+            profile.path = Some(which::which(&profile.app_path(name))?.to_string());
+        }
+
+        debug!("Fabricating features");
+        fab::features::fabricate(&mut profile, name)?;
+        db::save(&hash, &profile, Database::User, Table::Cache)?;
+        Ok(profile)
     }
 
     /// Use another profile as the base for the caller.
@@ -671,10 +563,7 @@ impl Profile {
 
     /// Get the Profile's hash.
     pub fn hash_str(&self) -> Result<String, Error> {
-        timer!("::hash", {
-            let s = RandomState::with_seed(0);
-            Ok(format!("{}", s.hash_one(postcard::to_stdvec(&self)?)))
-        })
+        Ok(format!("{}", self.num_hash()?))
     }
 
     /// Get information about a profile.
@@ -1546,6 +1435,7 @@ impl std::fmt::Display for Namespace {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::env::AT_HOME;
 
     #[test]
     fn validate_profiles() {

@@ -122,7 +122,7 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 ':profile -- The name of the profile:_default' \
 && ret=0
 ;;
-(reset)
+(remove)
 _arguments "${_arguments_options[@]}" : \
 '--feature[Target a feature, rather than a profile. Requires privilege]' \
 '-h[Print help]' \
@@ -156,16 +156,15 @@ clean\:"Remove binaries that no longer exist from the database"))' \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
+'--feature[Target the feature set instead of the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::profile -- The name of a profile to export. If absent, export all user-profiles:_default' \
+'::name -- The name of the profile/feature to export. If absent, export all user-profiles/features:_default' \
 '::dest -- Where to export to. Defaults to current directory:_default' \
 && ret=0
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
-'-o[Overwrite existing entries]' \
-'--overwrite[Overwrite existing entries]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The path of the profile. Can also be a directory, which will import all files within:_default' \
@@ -205,7 +204,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(reset)
+(remove)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -249,7 +248,7 @@ _antimony_commands() {
 'edit:Edit an existing profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
-'reset:Reset a profile back to the system-defined profile' \
+'remove:Reset a profile back to the system-defined profile' \
 'info:List installed profiles and features' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
@@ -281,7 +280,7 @@ _antimony__help_commands() {
 'edit:Edit an existing profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
-'reset:Reset a profile back to the system-defined profile' \
+'remove:Reset a profile back to the system-defined profile' \
 'info:List installed profiles and features' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
@@ -331,10 +330,10 @@ _antimony__help__refresh_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help refresh commands' commands "$@"
 }
-(( $+functions[_antimony__help__reset_commands] )) ||
-_antimony__help__reset_commands() {
+(( $+functions[_antimony__help__remove_commands] )) ||
+_antimony__help__remove_commands() {
     local commands; commands=()
-    _describe -t commands 'antimony help reset commands' commands "$@"
+    _describe -t commands 'antimony help remove commands' commands "$@"
 }
 (( $+functions[_antimony__help__run_commands] )) ||
 _antimony__help__run_commands() {
@@ -366,10 +365,10 @@ _antimony__refresh_commands() {
     local commands; commands=()
     _describe -t commands 'antimony refresh commands' commands "$@"
 }
-(( $+functions[_antimony__reset_commands] )) ||
-_antimony__reset_commands() {
+(( $+functions[_antimony__remove_commands] )) ||
+_antimony__remove_commands() {
     local commands; commands=()
-    _describe -t commands 'antimony reset commands' commands "$@"
+    _describe -t commands 'antimony remove commands' commands "$@"
 }
 (( $+functions[_antimony__run_commands] )) ||
 _antimony__run_commands() {

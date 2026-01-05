@@ -1,14 +1,16 @@
 //! Environment Variables Antimony needs defined.
 use anyhow::Result;
 use log::{debug, warn};
+use nix::libc::getpwuid;
 use std::{
     env::{self, temp_dir},
+    ffi::CString,
     fs,
     os::unix::fs::PermissionsExt,
     path::PathBuf,
     sync::LazyLock,
 };
-use user::as_effective;
+use user::{USER, as_effective};
 use which::which;
 
 use crate::shared::config::CONFIG_FILE;
@@ -98,8 +100,15 @@ pub static RUNTIME_STR: LazyLock<String> = LazyLock::new(|| {
 /// The runtime directory is where portals and docs are located.
 pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(RUNTIME_STR.as_str()));
 
-pub static USER_NAME: LazyLock<String> =
-    LazyLock::new(|| env::var("USER").expect("USER is not defined"));
+pub static USER_NAME: LazyLock<String> = LazyLock::new(|| unsafe {
+    let passwd = getpwuid(USER.real.as_raw());
+    if passwd.is_null() || (*passwd).pw_name.is_null() {
+        panic!("Failed to get user name")
+    } else {
+        let name = CString::from_raw((*passwd).pw_name);
+        name.to_string_lossy().into_owned()
+    }
+});
 
 /// The user's data directory is where desktop files are stored, and the home folder is located
 pub static DATA_HOME: LazyLock<PathBuf> = LazyLock::new(|| {

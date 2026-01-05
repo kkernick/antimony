@@ -2,56 +2,35 @@
 
 use super::profile::{Ipc, Namespace};
 use crate::shared::{
-    IMap, ISet, edit,
-    env::{AT_HOME, PWD},
-    format_iter,
+    IMap, ISet,
+    config::CONFIG_FILE,
+    db::{self, Database, Table},
+    edit, format_iter,
     profile::{Files, Hooks},
 };
 use console::style;
 use serde::{Deserialize, Serialize};
-use std::{
-    error, fmt, fs, io,
-    path::{Path, PathBuf},
-};
+use std::{fs, io, path::Path};
+use thiserror::Error;
 
 /// Errors reading feature files
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// An error reading/writing/opening the file.
-    Io(io::Error),
+    #[error("Failed to read feature: {0}")]
+    Io(#[from] io::Error),
 
     /// An error if a feature does not exist.
+    #[error("No such feature: {0}")]
     NotFound(String),
 
     /// An error if the TOML is malformed.
-    Malformed(toml::de::Error),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "Failed to read feature: {e}"),
-            Self::NotFound(name) => write!(f, "Feature not found: {name}"),
-            Self::Malformed(e) => write!(f, "Malformed feature file: {e}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Error::Io(value)
-    }
-}
-impl From<toml::de::Error> for Error {
-    fn from(value: toml::de::Error) -> Self {
-        Error::Malformed(value)
-    }
+    #[error("Malform feature file: {0}")]
+    Malformed(#[from] toml::de::Error),
+
+    /// Database error
+    #[error("Database error: {0}")]
+    Database(#[from] db::Error),
 }
 
 /// A Feature
@@ -111,28 +90,23 @@ pub struct Feature {
     pub hooks: Option<Hooks>,
 }
 impl Feature {
-    /// Get the path to a feature.
-    pub fn path(name: &str) -> Result<PathBuf, Error> {
+    /// Get a feature from its name.
+    pub fn new(name: &str) -> Result<Feature, Error> {
         if name.ends_with(".toml") {
-            return Ok(PathBuf::from(name));
+            return Ok(toml::from_str(&fs::read_to_string(name)?)?);
         }
 
-        let system = AT_HOME.join("features").join(name).with_extension("toml");
-        if system.exists() {
-            return Ok(system);
+        if !CONFIG_FILE.system_mode()
+            && let Some(feature) = db::get::<Self>(name, Database::User, Table::Features)?
+        {
+            return Ok(feature);
         }
 
-        let local = PWD.join("config").join("features").join(name);
-        if local.exists() {
-            return Ok(local);
+        if let Some(feature) = db::get::<Self>(name, Database::System, Table::Features)? {
+            return Ok(feature);
         }
 
         Err(Error::NotFound(name.to_string()))
-    }
-
-    /// Get a feature from its name.
-    pub fn new(name: &str) -> Result<Feature, Error> {
-        Ok(toml::from_str(&fs::read_to_string(&Self::path(name)?)?)?)
     }
 
     /// Print info about the feature.
@@ -202,6 +176,7 @@ impl Feature {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::env::AT_HOME;
 
     #[test]
     fn validate_features() {

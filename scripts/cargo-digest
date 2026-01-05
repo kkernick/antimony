@@ -1,0 +1,9 @@
+#!/bin/bash
+
+
+ROOT=$(git rev-parse --show-toplevel)
+echo "Compiling Digester"
+cargo build --package utilities --bin antimony_digest
+
+echo "Digesting"
+$ROOT/target/debug/antimony_digest

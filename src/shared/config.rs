@@ -1,8 +1,9 @@
-use crate::shared::{Set, edit, env::AT_HOME};
-use nix::libc::getpwuid;
+use crate::shared::{
+    Set, edit,
+    env::{AT_HOME, USER_NAME},
+};
 use serde::{Deserialize, Serialize};
-use std::{ffi::CString, fs::read_to_string, path::Path, sync::LazyLock};
-use user::USER;
+use std::{fs::read_to_string, path::Path, sync::LazyLock};
 
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
 
@@ -23,16 +24,7 @@ impl ConfigFile {
 
     pub fn is_privileged(&self) -> bool {
         if let Some(users) = &self.privileged_users {
-            unsafe {
-                let passwd = getpwuid(USER.real.as_raw());
-                if passwd.is_null() || (*passwd).pw_name.is_null() {
-                    false
-                } else {
-                    let name = CString::from_raw((*passwd).pw_name);
-                    let str = name.to_string_lossy();
-                    users.contains(str.as_ref())
-                }
-            }
+            users.contains(USER_NAME.as_str())
         } else {
             false
         }

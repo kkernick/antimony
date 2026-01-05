@@ -41,10 +41,6 @@ impl cli::Run for Args {
         if self.hard {
             let _ = fs::remove_dir_all(CACHE_DIR.as_path());
         } else {
-            // Cached definitions can be removed safely.
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".bin"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
-
             // This seems to be safe. Even if instances are in use,
             // deleting the source does not affect either the proxy,
             // or trying to open direct files.

@@ -40,8 +40,8 @@ _antimony() {
             antimony,refresh)
                 cmd="antimony__refresh"
                 ;;
-            antimony,reset)
-                cmd="antimony__reset"
+            antimony,remove)
+                cmd="antimony__remove"
                 ;;
             antimony,run)
                 cmd="antimony__run"
@@ -73,8 +73,8 @@ _antimony() {
             antimony__help,refresh)
                 cmd="antimony__help__refresh"
                 ;;
-            antimony__help,reset)
-                cmd="antimony__help__reset"
+            antimony__help,remove)
+                cmd="antimony__help__remove"
                 ;;
             antimony__help,run)
                 cmd="antimony__help__run"
@@ -89,7 +89,7 @@ _antimony() {
 
     case "${cmd}" in
         antimony)
-            opts="-h -V --help --version run edit refresh integrate reset info seccomp export import config help"
+            opts="-h -V --help --version run edit refresh integrate remove info seccomp export import config help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -131,7 +131,7 @@ _antimony() {
             return 0
             ;;
         antimony__export)
-            opts="-h --help [PROFILE] [DEST]"
+            opts="-h --feature --help [NAME] [DEST]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -145,7 +145,7 @@ _antimony() {
             return 0
             ;;
         antimony__help)
-            opts="run edit refresh integrate reset info seccomp export import config help"
+            opts="run edit refresh integrate remove info seccomp export import config help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -270,7 +270,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__reset)
+        antimony__help__remove)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -313,7 +313,7 @@ _antimony() {
             return 0
             ;;
         antimony__import)
-            opts="-o -h --overwrite --help <PROFILE>"
+            opts="-h --help <PROFILE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -376,7 +376,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__reset)
+        antimony__remove)
             opts="-h --feature --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
