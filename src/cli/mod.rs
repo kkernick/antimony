@@ -1,4 +1,5 @@
-/// Antimony's CLI.
+//! Antimony's CLI.
+
 pub mod config;
 pub mod edit;
 pub mod export;

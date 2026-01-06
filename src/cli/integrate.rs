@@ -62,21 +62,19 @@ pub enum ConfigMode {
 
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
+        let profile = Profile::new(&self.profile, None)?;
         user::drop(user::Mode::Real)?;
         if self.remove {
-            remove(self)
+            remove(&profile, self)
         } else {
-            integrate(self)
+            integrate(&profile, self)
         }
     }
 }
 
 /// Undo integration.
-pub fn remove(cmd: Args) -> Result<()> {
-    let profile = Profile::new(&cmd.profile, None)?;
-
+pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
     let name = &cmd.profile;
-
     if fs::remove_file(HOME_PATH.join(".local").join("bin").join(name)).is_err() {
         warn!("Binary does not exist");
     }
@@ -141,7 +139,7 @@ fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cm
     }
 }
 
-/// Add the configurations, either by appending the Desktop File, or creating 
+/// Add the configurations, either by appending the Desktop File, or creating
 /// new ones.
 fn manage_configurations(
     contents: &mut Vec<String>,
@@ -301,9 +299,7 @@ fn format_desktop(
 }
 
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
-pub fn integrate(cmd: Args) -> Result<()> {
-    let profile = Profile::new(&cmd.profile, None)?;
-
+pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
     // Collect environment.
     let antimony = which::which("antimony")?;
     let name = &cmd.profile;
@@ -333,7 +329,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
         info!("Overriding Desktop File");
         format_desktop(
             &cmd,
-            &profile,
+            profile,
             name,
             &desktop_file,
             &local,
@@ -373,7 +369,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
         {
             fs::create_dir_all(parent)?;
         }
-        manage_configurations(&mut contents, &cmd, &profile, name, &local)?;
+        manage_configurations(&mut contents, &cmd, profile, name, &local)?;
         fs::write(out, contents.join("\n"))?;
     }
 
@@ -385,7 +381,7 @@ pub fn integrate(cmd: Args) -> Result<()> {
         info!("Overriding XDG Service");
         format_desktop(
             &cmd,
-            &profile,
+            profile,
             name,
             &service_file,
             &local,

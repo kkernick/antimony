@@ -7,7 +7,10 @@ use crate::{
     shared::{
         db,
         env::RUNTIME_DIR,
-        profile::{self, FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
+        profile::{
+            self, files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace,
+            seccomp::SeccompPolicy,
+        },
         utility,
     },
     timer,

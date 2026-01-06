@@ -83,13 +83,13 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add rea
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t''
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t'Enable all namespaces'
 user\t'The user namespace is needed to create additional sandboxes (Such as chromium)'
-ipc\t''
-pid\t''
+ipc\t'Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy'
+pid\t'Share the Pid namespace, so the process can see all running processes within the /proc directory'
 net\t'Use the network feature instead'
-uts\t''
-c-group\t''"
+uts\t'Enable the UTS namespace'
+c-group\t'Allow the sandbox to be managed/manage the system C-Groups'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l new-privileges -r -f -a "true\t''
 false\t''"
@@ -101,11 +101,10 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'Provide the user bus. xdg-dbus-proxy is not run'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target a feature, rather than a profile. Requires privilege'
+complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'
-complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s i -l integrate -d 'Integrate all profiles as well'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'
 file\t'Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers'"
@@ -118,7 +117,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand remove" -s h -l help -
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s v -l verbosity -d 'The verbosity of information'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set instead of the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand import" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand config" -s h -l help -d 'Print help'

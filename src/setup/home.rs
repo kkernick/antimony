@@ -1,4 +1,4 @@
-use crate::shared::profile::HomePolicy;
+use crate::shared::profile::home::HomePolicy;
 use anyhow::{Result, anyhow};
 use log::debug;
 use std::{

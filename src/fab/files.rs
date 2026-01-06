@@ -2,7 +2,7 @@ use crate::{
     fab::localize_path,
     shared::{
         env::HOME,
-        profile::{FileMode, FILE_MODES},
+        profile::files::{FILE_MODES, FileMode},
     },
 };
 use anyhow::Result;

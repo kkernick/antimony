@@ -1,12 +1,15 @@
 //!  Features are miniature profiles used by the latter for common functionality.
 
-use super::profile::{Ipc, Namespace};
-use crate::shared::{
-    IMap, ISet,
-    config::CONFIG_FILE,
-    db::{self, Database, Table},
-    edit, format_iter,
-    profile::{Files, Hooks},
+use super::profile::{ipc::Ipc, ns::Namespace};
+use crate::{
+    cli::info::Info,
+    shared::{
+        IMap, ISet,
+        config::CONFIG_FILE,
+        db::{self, Database, Table},
+        edit, format_iter,
+        profile::{files::Files, hooks::Hooks},
+    },
 };
 use console::style;
 use serde::{Deserialize, Serialize};
@@ -108,15 +111,20 @@ impl Feature {
 
         Err(Error::NotFound(name.to_string()))
     }
-
+    /// Edit a feature.
+    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
+        edit::edit::<Self>(path)
+    }
+}
+impl Info for Feature {
     /// Print info about the feature.
-    pub fn info(&self, verbose: u8) {
-        println!("{}: {}", style(&self.name).bold(), self.description);
+    fn info(&self, name: &str, verbosity: u8) {
+        println!("{}: {}", style(name).bold(), self.description);
         if let Some(caveat) = &self.caveat {
             println!("\t- Caveat: {}", style(caveat).red());
         }
 
-        if verbose > 0 {
+        if verbosity > 0 {
             if let Some(requires) = &self.requires {
                 println!("\t- Required Features: {}", format_iter(requires.iter()));
             }
@@ -148,7 +156,7 @@ impl Feature {
             }
 
             if let Some(libraries) = &self.libraries {
-                super::profile::library_info(libraries, verbose);
+                super::profile::library_info(libraries, verbosity);
             }
 
             if let Some(devices) = &self.devices {
@@ -165,11 +173,6 @@ impl Feature {
                 }
             }
         }
-    }
-
-    /// Edit a feature.
-    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
-        edit::edit::<Self>(path)
     }
 }
 

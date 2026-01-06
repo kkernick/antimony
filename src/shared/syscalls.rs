@@ -1,5 +1,5 @@
 use crate::{
-    shared::{ISet, Set, env::AT_HOME, path::user_dir, profile::SeccompPolicy},
+    shared::{ISet, Set, env::AT_HOME, path::user_dir, profile::seccomp::SeccompPolicy},
     timer,
 };
 use ahash::HashSetExt;

@@ -5,7 +5,7 @@ use crate::{
         ISet,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         path::user_dir,
-        profile::{Namespace, Portal, Profile},
+        profile::{Profile, ipc::Portal, ns::Namespace},
     },
     timer,
 };

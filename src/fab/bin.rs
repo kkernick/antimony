@@ -5,7 +5,7 @@ use crate::{
         db::Table,
         format_iter,
         path::direct_path,
-        profile::{FileMode, Profile},
+        profile::{Profile, files::FileMode},
         utility,
     },
     timer,
@@ -17,8 +17,6 @@ use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
-use user::{as_real, run_as};
-
 use std::{
     borrow::Cow,
     fs::{self, File},
@@ -26,12 +24,12 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use user::{as_real, run_as};
 use which::which;
 
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
 
-#[derive(Debug)]
 pub enum Type {
     Elf,
     File,
@@ -43,7 +41,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: DashSet<String>,

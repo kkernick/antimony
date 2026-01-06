@@ -2,16 +2,18 @@
 
 use crate::shared::{
     ISet, Set,
-    env::AT_HOME,
+    db::{self, Database, Table},
     feature::Feature,
-    profile::{self, Profile},
+    profile::Profile,
     syscalls,
 };
 use anyhow::Result;
 use clap::ValueEnum;
-use console::style;
 use seccomp::syscall::Syscall;
-use std::{fs, path::Path};
+
+pub trait Info {
+    fn info(&self, name: &str, verbosity: u8);
+}
 
 /// What to get information on.
 #[derive(ValueEnum, Clone, Debug)]
@@ -41,58 +43,21 @@ pub struct Args {
 impl super::Run for Args {
     fn run(self) -> Result<()> {
         match self.target {
-            Target::Profile => {
-                // Print information on a profile.
-                let print = |path: &str, verbosity: u8| -> Result<()> {
-                    let name = if let Some(i) = path.rfind('/') {
-                        &path[i + 1..]
-                    } else {
-                        path
-                    };
-
-                    match Profile::new(path, None) {
-                        Ok(profile) => {
-                            profile.info(name, verbosity);
-                        }
-                        Err(profile::Error::Path(_)) => {
-                            let name = if let Some(i) = path.rfind('/') {
-                                &path[i + 1..]
-                            } else {
-                                path
-                            };
-
-                            println!(
-                                "{} => {}",
-                                style(name).bold(),
-                                style("Application not installed").red()
-                            );
-                        }
-                        Err(e) => return Err(e.into()),
-                    }
-                    Ok(())
-                };
-
-                // Either get information on a single profile, or all of them.
-                match self.name {
-                    Some(profile) => print(&profile, self.verbosity + 1)?,
-                    None => {
-                        let profiles = Path::new(AT_HOME.as_path()).join("profiles");
-                        for path in fs::read_dir(profiles)?.filter_map(|e| e.ok()) {
-                            let path = path.path().to_string_lossy().into_owned();
-                            print(&path, self.verbosity)?;
-                        }
+            Target::Profile => match self.name {
+                Some(profile) => Profile::new(&profile, None)?.info(&profile, self.verbosity + 1),
+                None => {
+                    for profile in db::all(Database::System, Table::Profiles)? {
+                        Profile::new(&profile, None)?.info(&profile, self.verbosity + 1);
                     }
                 }
-            }
+            },
 
             // Feature information.
             Target::Feature => match self.name {
-                Some(profile) => Feature::new(&profile)?.info(self.verbosity + 1),
+                Some(feature) => Feature::new(&feature)?.info(&feature, self.verbosity + 1),
                 None => {
-                    let features = Path::new(AT_HOME.as_path()).join("features");
-                    for path in fs::read_dir(features)?.filter_map(|e| e.ok()) {
-                        let feature: Feature = toml::from_str(&fs::read_to_string(path.path())?)?;
-                        feature.info(self.verbosity);
+                    for feature in db::all(Database::System, Table::Features)? {
+                        Feature::new(&feature)?.info(&feature, self.verbosity + 1);
                     }
                 }
             },
@@ -175,7 +140,7 @@ impl super::Run for Args {
                     })?;
                 }
             },
-        }
+        };
         Ok(())
     }
 }

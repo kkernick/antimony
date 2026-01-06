@@ -1,6 +1,6 @@
 use crate::shared::{
     env::{HOME, PWD},
-    profile::FileMode,
+    profile::files::FileMode,
 };
 use anyhow::Result;
 use log::debug;

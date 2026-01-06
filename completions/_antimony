@@ -60,13 +60,13 @@ executable\:"Executable files need to be created as copies, so that chmod will w
 '*--binaries=[Add binaries]:BINARIES:_default' \
 '*--libraries=[Add libraries]:LIBRARIES:_default' \
 '*--devices=[Add devices]:DEVICES:_default' \
-'*--namespaces=[Add namespaces]:NAMESPACES:((all\:""
+'*--namespaces=[Add namespaces]:NAMESPACES:((all\:"Enable all namespaces"
 user\:"The user namespace is needed to create additional sandboxes (Such as chromium)"
-ipc\:""
-pid\:""
+ipc\:"Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy"
+pid\:"Share the Pid namespace, so the process can see all running processes within the /proc directory"
 net\:"Use the network feature instead"
-uts\:""
-c-group\:""))' \
+uts\:"Enable the UTS namespace"
+c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
 '--new-privileges=[]:NEW_PRIVILEGES:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
@@ -87,7 +87,7 @@ c-group\:""))' \
 ;;
 (edit)
 _arguments "${_arguments_options[@]}" : \
-'--feature[Target a feature, rather than a profile. Requires privilege]' \
+'--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name -- The object to edit:_default' \
@@ -98,8 +98,6 @@ _arguments "${_arguments_options[@]}" : \
 '-d[Just delete the cache, don'\''t repopulate]' \
 '--dry[Just delete the cache, don'\''t repopulate]' \
 '--hard[Delete the entire Cache directory. Will break any instance currently running!]' \
-'-i[Integrate all profiles as well]' \
-'--integrate[Integrate all profiles as well]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_default' \
@@ -156,7 +154,7 @@ clean\:"Remove binaries that no longer exist from the database"))' \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
-'--feature[Target the feature set instead of the profile set]' \
+'--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name -- The name of the profile/feature to export. If absent, export all user-profiles/features:_default' \

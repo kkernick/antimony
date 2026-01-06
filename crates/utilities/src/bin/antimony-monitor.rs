@@ -6,7 +6,7 @@ use antimony::shared::{
     self, Set,
     env::{DATA_HOME, RUNTIME_DIR},
     format_iter,
-    profile::SeccompPolicy,
+    profile::seccomp::SeccompPolicy,
     syscalls, utility,
 };
 use anyhow::{Context, Result};

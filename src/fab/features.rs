@@ -3,7 +3,7 @@ use crate::{
     shared::{
         ISet, Map, Set,
         feature::{self, Feature},
-        profile::{FILE_MODES, Profile},
+        profile::{Profile, files::FILE_MODES},
     },
 };
 use ahash::{HashMapExt, HashSetExt};

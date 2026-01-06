@@ -1,4 +1,4 @@
-use crate::shared::profile::Namespace;
+use crate::shared::profile::ns::Namespace;
 use spawn::SpawnError;
 
 pub fn fabricate(info: &super::FabInfo) -> Result<(), SpawnError> {

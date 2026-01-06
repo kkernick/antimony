@@ -1,4 +1,5 @@
 //! Environment Variables Antimony needs defined.
+use crate::shared::config::CONFIG_FILE;
 use anyhow::Result;
 use log::{debug, warn};
 use nix::libc::getpwuid;
@@ -12,8 +13,6 @@ use std::{
 };
 use user::{USER, as_effective};
 use which::which;
-
-use crate::shared::config::CONFIG_FILE;
 
 /// Antimony's home folder is where configuration is stored
 pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {

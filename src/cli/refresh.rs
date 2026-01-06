@@ -1,7 +1,7 @@
 //! Refresh installed profiles.
 
 use crate::{
-    cli::{self, integrate, run, run_vec},
+    cli::{self, run, run_vec},
     shared::env::{AT_HOME, CACHE_DIR, HOME_PATH},
 };
 use anyhow::Result;
@@ -23,10 +23,6 @@ pub struct Args {
     /// Delete the entire Cache directory. Will break any instance currently running!
     #[arg(long, default_value_t = false)]
     pub hard: bool,
-
-    /// Integrate all profiles as well.
-    #[arg(short, long, default_value_t = false)]
-    pub integrate: bool,
 
     /// Run arguments
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -60,13 +56,6 @@ impl cli::Run for Args {
             args.dry = self.dry;
             args.profile = profile.clone();
             args.run()?;
-
-            if self.integrate {
-                integrate::integrate(integrate::Args {
-                    profile,
-                    ..Default::default()
-                })?;
-            }
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
@@ -113,16 +102,6 @@ impl cli::Run for Args {
 
                     user::set(user::Mode::Effective)?;
                     args.run()?;
-
-                    if self.integrate {
-                        debug!("Integrating {name}");
-                        pb.set_message(format!("Integrating {name}"));
-                        user::set(user::Mode::Real)?;
-                        integrate::integrate(integrate::Args {
-                            profile: name,
-                            ..Default::default()
-                        })?;
-                    }
                     Ok(())
                 })?;
         }

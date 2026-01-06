@@ -1,7 +1,7 @@
 use ahash::HashSetExt;
 use antimony::{
     fab::{get_libraries, get_wildcards, resolve},
-    shared::{Set, env::AT_HOME, feature::Feature, profile::FileMode, utility},
+    shared::{Set, env::AT_HOME, feature::Feature, profile::files::FileMode, utility},
 };
 use dashmap::DashMap;
 use rayon::prelude::*;

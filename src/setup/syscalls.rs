@@ -1,4 +1,4 @@
-use crate::shared::{ISet, profile::SeccompPolicy, syscalls, utility};
+use crate::shared::{ISet, profile::seccomp::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
