@@ -1,10 +1,16 @@
+//! The Binary Fabricator determines all executables that are used by the program by analyzing
+//! it underneath a specialized SECCOMP Notifier. It then passes these binaries to the Library
+//! Fabricator to analyze under LDD.
+
 use crate::{
-    fab::{FabInfo, get_cache, get_dir, get_wildcards, lib::in_lib, localize_path, write_cache},
+    fab::{
+        ELF_MAGIC, FabInfo, get_cache, get_dir, get_wildcards, lib::in_lib, localize_path,
+        write_cache,
+    },
     shared::{
         Set,
         db::Table,
-        format_iter,
-        path::direct_path,
+        direct_path, format_iter,
         profile::{Profile, files::FileMode},
         utility,
     },
@@ -27,9 +33,7 @@ use std::{
 use user::{as_real, run_as};
 use which::which;
 
-/// The magic for an ELF file.
-pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
-
+/// The kind of thing we just analyzed.
 pub enum Type {
     Elf,
     File,
@@ -268,6 +272,10 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// Localization means pointing things in $HOME to /home/antimony, ensuring
+/// that environment variables in the filename are properly resolved, and
+/// that symlinks are properly managed. It also parses all intermediary files
+/// (IE the destination to a symlink).
 fn handle_localize(
     file: &str,
     instance: &str,
@@ -302,6 +310,9 @@ fn handle_localize(
     }
 }
 
+/// Collection takes all the binaries defined in the profiles, and parses them.
+/// This includes resolving wildcards, and parsing files tagged as Executable
+/// in the [files] header.
 pub fn collect(
     profile: &Mutex<Profile>,
     name: &str,
@@ -382,6 +393,7 @@ pub fn collect(
     Ok(())
 }
 
+/// Fabricate the binaries.
 pub fn fabricate(info: &FabInfo) -> Result<()> {
     {
         let binaries = &info.profile.lock().binaries;

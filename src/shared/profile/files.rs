@@ -8,12 +8,69 @@ use console::style;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
+/// How a file should be exposed in the sandbox.
+#[derive(Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
+#[serde(deny_unknown_fields)]
+pub enum FileMode {
+    /// Only allow reads
+    #[default]
+    ReadOnly,
+
+    /// Allow writes.
+    ReadWrite,
+
+    /// Executable files need to be created as copies, so that chmod will work
+    /// correctly.
+    Executable,
+}
+impl FileMode {
+    /// Get the bwrap argument for binding this file.
+    pub fn bind(&self, can_try: bool) -> &'static str {
+        match self {
+            Self::ReadWrite => {
+                if can_try {
+                    "--bind-try"
+                } else {
+                    "--bind"
+                }
+            }
+            _ => {
+                if can_try {
+                    "--ro-bind-try"
+                } else {
+                    "--ro-bind"
+                }
+            }
+        }
+    }
+
+    /// Get the chmod value that should be used for direct files.
+    pub fn chmod(&self) -> &'static str {
+        match self {
+            Self::ReadOnly => "444",
+            Self::ReadWrite => "666",
+            Self::Executable => "555",
+        }
+    }
+}
+impl std::fmt::Display for FileMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ReadOnly => write!(f, "ro"),
+            Self::ReadWrite => write!(f, "rw"),
+            Self::Executable => write!(f, "rx"),
+        }
+    }
+}
+
+/// Why use strum when we can just make a static array?
 pub static FILE_MODES: [FileMode; 3] = [
     FileMode::Executable,
     FileMode::ReadOnly,
     FileMode::ReadWrite,
 ];
 
+/// For each file mode, we have a list of files.
 pub type FileList = IMap<FileMode, ISet<String>>;
 
 /// Files, RO/RW, and Modes.
@@ -156,57 +213,6 @@ impl Files {
                 println!("\t- {mode} Files:");
                 files.into_iter().for_each(|file| println!("{file}"))
             }
-        }
-    }
-}
-
-#[derive(Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
-#[serde(deny_unknown_fields)]
-pub enum FileMode {
-    #[default]
-    ReadOnly,
-    ReadWrite,
-
-    /// Executable files need to be created as copies, so that chmod will work
-    /// correctly.
-    Executable,
-}
-impl FileMode {
-    /// Get the bwrap argument for binding this file.
-    pub fn bind(&self, can_try: bool) -> &'static str {
-        match self {
-            Self::ReadWrite => {
-                if can_try {
-                    "--bind-try"
-                } else {
-                    "--bind"
-                }
-            }
-            _ => {
-                if can_try {
-                    "--ro-bind-try"
-                } else {
-                    "--ro-bind"
-                }
-            }
-        }
-    }
-
-    /// Get the chmod value that should be used for direct files.
-    pub fn chmod(&self) -> &'static str {
-        match self {
-            Self::ReadOnly => "444",
-            Self::ReadWrite => "666",
-            Self::Executable => "555",
-        }
-    }
-}
-impl std::fmt::Display for FileMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ReadOnly => write!(f, "ro"),
-            Self::ReadWrite => write!(f, "rw"),
-            Self::Executable => write!(f, "rx"),
         }
     }
 }

@@ -37,6 +37,7 @@ use std::{
 use temp::Temp;
 use user::as_real;
 
+/// The information passed to the various setup functions.
 struct Args<'a> {
     pub profile: Mutex<Profile>,
     pub id: String,
@@ -49,6 +50,7 @@ struct Args<'a> {
     pub args: &'a mut super::cli::run::Args,
 }
 
+/// The information passed back to `run`.
 pub struct Info {
     pub name: String,
     pub handle: Spawner,
@@ -59,6 +61,7 @@ pub struct Info {
     pub sys_dir: PathBuf,
 }
 
+/// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
 pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
     let profile = timer!("::profile", {
         let profile = match Profile::new(&name, args.config.take()) {
@@ -90,6 +93,11 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         .owner(user::Mode::Real)
         .create::<temp::Directory>()?;
 
+    // Refreshing logic tries to avoid deleting an SOF from underneath a running instance.
+    // If another instance is running this profile, we defer to a -refresh folder, which new
+    // instances will be redirected to, and which will replace the original once all instances
+    // have been closed. If you run into the situation where you have two instances, each running
+    // on a different SOF, and try and refresh *again*, Antimony will throw an error.
     timer!("::cache", {
         let busy = |path: &Path| -> bool {
             match path.read_dir() {
@@ -142,6 +150,9 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     }
     let runtime = RUNTIME_STR.as_str();
 
+    // The Document Portal doesn't run until something pings it. If this is the
+    // first sandbox running, that introduces a significant lag on the wait() call,
+    // so we ping it immediately.
     timer!("::document_wakeup", {
         if let Some(ipc) = &profile.ipc
             && !ipc.disable.unwrap_or(false)
@@ -166,6 +177,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
                 })??;
             }
 
+            // Associate the flatpak dir with our instance so they're deleted together.
             instance.associate(
                 temp::Builder::new()
                     .within(RUNTIME_DIR.join(".flatpak"))
@@ -176,6 +188,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     });
 
+    // Symlink from the runtime directory to our system dir.
     instance.link(instances.join(instance.name()), user::Mode::Effective)?;
 
     // Start the command.
@@ -218,6 +231,14 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         args,
     });
 
+    // This is the fastest arrangement of setup functions.
+    // The proxy should be run in a separate thread, because its detached
+    // from the rest, and pretty slow (However, note that it *cannot* directly
+    // modify the Spawner, as it can cause the cache to contain its arguments.
+    //
+    // The Fabricator and Syscalls are the most expensive, to the point that
+    // there's no difference moving the rest into another thread. Unfortunately,
+    // and like with bin-lib fabricators, they also depend on each other.
     let (proxy, home) = timer!(
         "::setup_total",
         rayon::join(
@@ -237,14 +258,17 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
     );
 
     let home = home?;
-
     let mut a = Arc::into_inner(a).expect("Failed to unwrap fabricator");
 
+    // Add the proxy arguments. We couldn't add them directly, because they'd
+    // be added to the fabricator cache.
     if let Some(arguments) = proxy? {
         a.handle.args_i(arguments)?;
     }
     let post = timer!("::post", post::setup(&mut a))?;
 
+    // Unfortunately, the proxy is slower than Antimony, so we need to wait for it
+    // to be ready. I should probably just write my own.
     timer!(
         "::wait",
         wait::setup(a.watches, a.inotify.into_inner(), &mut a.handle, a.args.dry)

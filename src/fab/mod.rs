@@ -1,3 +1,5 @@
+//! Shared functionality between the Fabricators. This contains the brunt of the library fabricator's logic.
+
 pub mod bin;
 pub mod dev;
 pub mod etc;
@@ -7,7 +9,6 @@ pub mod lib;
 pub mod ns;
 
 use crate::{
-    fab::bin::ELF_MAGIC,
     shared::{
         Set,
         db::{self, Database, Table},
@@ -33,21 +34,41 @@ use std::{
 use temp::Temp;
 use user::as_real;
 
+/// What the Cache type is. Through benchmarking, a regular Vec outperforms
+/// both Sets and SmallVec.
 type Cache = Vec<String>;
 
-/// A lock for initializing LIB_ROOTS
+/// A lock for initializing LIB_ROOTS. There's no good way to guard against
+/// multiple threads trying to initialize the roots at once. We can check
+/// if the LIB_ROOTS is initialized, but bewteen checking and setting, another
+/// thread may have started as well.
 static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-// Get the library roots.
+/// Get the library roots.
+/// The Library Roots is generated on the first call to get_libraries,
+/// since it saves us having to explicitly call a function (LDD will
+/// localize for us). This means that trying to use LIB_ROOTS without
+/// calling get_libraries will cause a panic. Hence, the tracer
+/// will call get_libraries on itself just to initialize this value.
+///
+/// Hacky? Maybe a little, but there's no good way to determine this
+/// value through pure Rust, and spawning a child is expensive.
 pub static LIB_ROOTS: OnceLock<Set<String>> = OnceLock::new();
 
 /// Whether we have a split-root.
+/// Some distributions, like Ubuntu and Fedora, actually treat
+/// /lib and /lib64 as different things. Antimony doesn't currently
+/// have any support for explicit lib32, though it probably works.
 pub static SINGLE_LIB: LazyLock<bool> = LazyLock::new(|| {
     let single = std::fs::read_link("/usr/lib64").is_ok();
     debug!("Single Library Folder: {single}");
     single
 });
 
+/// The magic for an ELF file.
+pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
+
+/// Each fabrciator is passed this structure.
 pub struct FabInfo<'a> {
     pub profile: &'a Mutex<Profile>,
     pub handle: &'a Spawner,
@@ -80,6 +101,7 @@ fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
 }
 
 /// Filter non-elf files.
+#[inline]
 fn elf_filter(path: &str) -> Option<String> {
     let mut file = File::open(path).ok()?;
     let mut magic = [0u8; 5];
@@ -90,12 +112,11 @@ fn elf_filter(path: &str) -> Option<String> {
     Some(path.to_string())
 }
 
-/// Get all executable files in a directory.
+/// Get all executable files in a directory. This is very expensive.
 pub fn get_dir(dir: &str) -> Result<Cache> {
     if let Some(libraries) = get_cache(dir, Table::Directories)? {
         return Ok(libraries);
     }
-
     let libraries: Cache = Spawner::abs("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(StreamMode::Pipe)
@@ -106,12 +127,11 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .par_bridge()
         .filter_map(elf_filter)
         .collect();
-
     write_cache(dir, &libraries, Table::Directories)?;
-
     Ok(libraries)
 }
 
+/// Find all matches in a directory. We only match the top level for performance considerations.
 pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
     let run = |dir: &str, base: &str| -> Result<Cache> {
         Ok(Spawner::abs("/usr/bin/find")
@@ -129,9 +149,12 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
         return Ok(libraries);
     }
 
+    // If we have a direct path, call `find /path/to/parent -name file*`
     let libraries = if pattern.starts_with("/") {
         let i = pattern.rfind('/').unwrap();
         run(&pattern[..i], &pattern[i + 1..])?
+
+    // If we're looking for libraries, check each library root.
     } else if lib {
         let mut libraries = Cache::default();
         for root in LIB_ROOTS.get().unwrap() {
@@ -140,6 +163,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
         }
 
         libraries
+    // Otherwise, we assume we're looking for binaries.
     } else {
         run("/usr/bin", pattern)?
     };
@@ -191,6 +215,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         libraries
     };
 
+    // Initialize those dreadful roots.
     if LIB_ROOTS.get().is_none() {
         let _lock = LOCK.lock();
         timer!("::lib_roots", {
@@ -216,6 +241,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
     Ok(libraries)
 }
 
+/// Resolve environment variables within names.
 pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
     if string.contains('$') {
         let mut resolved = String::new();
@@ -233,6 +259,8 @@ pub fn resolve_env(string: Cow<'_, str>) -> Cow<'_, str> {
                     }
                 }
                 if !var_name.is_empty() {
+                    // These values may not be defined in the environment, but have explicit
+                    // values Antimony can fill.
                     let val = match var_name.as_str() {
                         "UID" => format!("{}", user::USER.real),
                         "AT_HOME" => format!("{}", AT_HOME.display()),

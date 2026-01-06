@@ -1,3 +1,5 @@
+//! The configuration file is a global configuration for Antimony.
+
 use crate::shared::{
     Set, edit,
     env::{AT_HOME, USER_NAME},

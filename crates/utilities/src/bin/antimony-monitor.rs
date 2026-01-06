@@ -454,16 +454,16 @@ pub fn notify_reader(
                         // anything. Chromium/Electron, for some reason, do not use seccomp_api_get
                         // to determine features, but instead send null pointers to test capabilities.
                         // We handle both cases, and only ignore filters that would have actually worked.
-                        if ((call == syscalls::get_name("prctl")
+                        if ((call == syscalls::get_num("prctl")
                             && args[0] == PR_SET_SECCOMP as u64)
-                            || call == syscalls::get_name("seccomp"))
+                            || call == syscalls::get_num("seccomp"))
                             && args[2] != 0
                         {
                             println!("Ignoring SECCOMP request");
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
-                        } else if call == syscalls::get_name("fchmod")
+                        } else if call == syscalls::get_num("fchmod")
                             && args[0] as i32 == -1
                             && args[1] == 0o7777
                         {

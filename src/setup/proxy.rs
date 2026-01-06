@@ -1,11 +1,14 @@
+//! Antimony uses xdg-dbus-proxy to proxy the user bus. It does this by spawning an associated process
+//! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
+
 use crate::{
     fab::{get_libraries, lib::add_sof},
     setup::syscalls,
     shared::{
         ISet,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
-        path::user_dir,
         profile::{Profile, ipc::Portal, ns::Namespace},
+        user_dir,
     },
     timer,
 };
@@ -26,6 +29,7 @@ use std::{
 };
 use user::{as_effective, as_real};
 
+/// Get the Spawner used to run Proxy.
 pub fn run(
     sys_dir: &Path,
     profile: &Mutex<Profile>,
@@ -50,7 +54,11 @@ pub fn run(
 
     // Create an SOF for the proxy.
     // It's shared between every application and instance.
-    // Performed before we drop to the user.
+    // The attack surface for this is bordering on paranoid, as
+    // we don't trust the proxy, or expect the sandbox to somehow
+    // access the proxy's sandbox through the user bus. Still, we
+    // have the means to do this, so might as well. The real
+    // paranoia is below.
     if !sof.exists() {
         as_effective!(fs::create_dir_all(&sof))??;
 
@@ -115,6 +123,7 @@ pub fn run(
         }
     });
 
+    // We cache the proxy's arguments directly.
     let cache = sys_dir.join("proxy.cache");
     if cache.exists() {
         proxy.cache_read(&cache)?;
@@ -168,7 +177,7 @@ pub fn run(
 }
 
 pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
-    // Run the proxy
+    // Scope the lock
     let ipc = {
         let lock = args.profile.lock();
         if let Some(ipc) = &lock.ipc {
@@ -188,8 +197,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     let runtime = RUNTIME_STR.as_str();
 
     // Add the system bus.
-    let system_bus = ipc.system_bus.unwrap_or(false);
-    if system_bus {
+    if ipc.system_bus.unwrap_or(false) {
         arguments.extend(
             [
                 "--ro-bind",
@@ -206,7 +214,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     let instance_dir_str = instance_dir.to_string_lossy();
     let info = user_dir(instance).join(".flatpak-info");
 
-    // Create the flatpak-info
+    // Create the flatpak-info, but don't bother if we're running dry.
     if !args.args.dry {
         timer!("::flatpak_info", {
             let namespaces = {
@@ -274,9 +282,8 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     }
 
     debug!("Setting up user bus");
-    let user_bus = ipc.user_bus.unwrap_or(false);
     // Either mount the bus directly
-    if user_bus {
+    if ipc.user_bus.unwrap_or(false) {
         arguments.extend(
             [
                 "--ro-bind",
@@ -300,7 +307,8 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
             )
         )?;
 
-        // Setup SECCOMP.
+        // This is *very* paranoid, but the proxy gets confined by its
+        // own policy when SECCOMP is enabled.
         if !args.args.dry
             && let Some(policy) = args.profile.lock().seccomp
         {
@@ -326,6 +334,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
             .map(Cow::Owned),
         );
 
+        // Watch for the proxy to expose its bus to give to the sandbox.
         if !args.args.dry {
             debug!("Creating proxy watch");
             as_real!(Result<()>, {

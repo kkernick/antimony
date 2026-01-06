@@ -1,3 +1,5 @@
+//! Setup the fabricators.
+
 use crate::{
     fab::{self, FabInfo},
     shared::env::USER_NAME,
@@ -9,7 +11,7 @@ use std::{fs, sync::Arc};
 use user::as_effective;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<()> {
-    // The fabricators are cached.
+    // The fabricators are cached, but on disk.
     let cmd_cache = args.sys_dir.join(USER_NAME.as_str()).join("cmd.cache");
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
@@ -38,7 +40,8 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // Start caching.
     args.handle.cache_start()?;
 
-    // Home must run before bin so that bin can populate files.
+    // These can't be readily done in parallel, since
+    // the heaviest ones (bin and lib) rely on each other.
     timer!("::files", fab::files::fabricate(&info))?;
     timer!("::etc", fab::etc::fabricate(&info));
     timer!("::bin", fab::bin::fabricate(&info))?;

@@ -1,5 +1,6 @@
 //! The Profile defines what application should be run, and what features it needs
-//! to function properly.
+//! to function properly. It's the core of Antimony, and has been separated into
+//! separate files for readability.
 
 pub mod files;
 pub mod home;
@@ -34,12 +35,13 @@ use std::{
 use thiserror::Error;
 use which::which;
 
+/// On our hot-path, SQLite is slower than directly than reading a file.
+/// To solve this, Antimony will immediately dump all profile information
+/// directly into memory (Here) on program start.
 pub static USER_CACHE: LazyLock<DatabaseCache> =
     LazyLock::new(|| db::dump_all(Database::User, Table::Profiles));
-
 pub static SYSTEM_CACHE: LazyLock<DatabaseCache> =
     LazyLock::new(|| db::dump_all(Database::System, Table::Profiles));
-
 pub static HASH_CACHE: LazyLock<DatabaseCache> =
     LazyLock::new(|| db::dump_all(Database::Cache, Table::Profiles));
 
@@ -82,6 +84,7 @@ pub enum Error {
     #[error("Feature error: {0}")]
     Feature(#[from] crate::fab::features::Error),
 
+    /// Database errors.
     #[error("Database error: {0}")]
     Database(#[from] db::Error),
 }
@@ -215,6 +218,11 @@ pub struct Profile {
     pub hooks: Option<hooks::Hooks>,
 
     /// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+    /// Note that this does grant privileges, it merely allows an application with existing privileges to
+    /// keep them when running within the sandbox. However, this property being allowed in the sandbox
+    /// means that an other unprivileged process could gain extra privilege if there's a binary in the
+    /// sandbox with privilege, and this flag is enabled (Though note the sandbox cannot elevate to root,
+    /// regardless of privilege).
     pub new_privileges: Option<bool>,
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
@@ -223,7 +231,7 @@ pub struct Profile {
     pub sandbox_args: Vec<String>,
 }
 impl Profile {
-    /// Get the path of a profile.
+    /// Load a profile from the database. This does not include any feature fabrication.
     pub fn load(name: &str) -> Result<Self, Error> {
         if name == "default" {
             if !CONFIG_FILE.system_mode()
@@ -576,6 +584,9 @@ impl Profile {
         }
     }
 
+    /// Get the numerical hash of the profile.
+    /// Note that while *deserializing* from postcard throws an error,
+    /// we can serialize it for the purposes of hashing.
     pub fn num_hash(&self) -> Result<u64, Error> {
         timer!("::hash", {
             Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(postcard::to_stdvec(&self)?))

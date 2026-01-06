@@ -1,3 +1,5 @@
+//! Edit a file.
+
 use dialoguer::Confirm;
 use log::error;
 use serde::Serialize;
@@ -41,6 +43,7 @@ pub enum Error {
     Dialog(#[from] dialoguer::Error),
 }
 
+/// Edit a file via a temporary, committing the changes back into the file.
 pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, Error> {
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want

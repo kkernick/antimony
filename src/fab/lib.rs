@@ -1,3 +1,10 @@
+//! The Library Fabricator is most important of all, as it assembles the SOF. It also touches almost every other fabricator, and is
+//! the central part of the most important path between bin-library-syscalls. It is also by the far the most complicated, as libraries
+//! can encompass files, wildcards, directories, and binaries. They can be sourced from just about anywhere on the system (IE /usr/bin,
+//! or /usr/share/application), and it needs to determine which files should be placed in the SOF, and what to do with their dependencies.
+//! It relies on LDD to determine ELF dependencies (IE .so files), and Find to scour directories. Everything is aggressively cached, and
+//! even more aggressively parallelized.
+
 use crate::{
     fab::{
         LIB_ROOTS, SINGLE_LIB, elf_filter, get_dir, get_libraries, get_wildcards, localize_home,
@@ -20,11 +27,13 @@ use std::{
 };
 use user::as_effective;
 
+#[inline]
 pub fn in_lib(path: &str) -> bool {
     path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
 }
 
 /// Determine dependencies for directories.
+#[inline]
 fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Result<Vec<String>> {
     let mut dependencies = Vec::new();
     let path = Path::new(library.as_ref());
@@ -39,10 +48,13 @@ fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Resu
     Ok(dependencies)
 }
 
+/// Resolve a regular path to its path in the SOF.
+#[inline]
 pub fn get_sof_path(sof: &Path, library: &str, prefix: &str) -> PathBuf {
     PathBuf::from(library.replace(prefix, &sof.to_string_lossy()))
 }
 
+/// Add a file to the SOF.
 pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) -> Result<()> {
     let sof_path = get_sof_path(sof, &library, prefix);
 
@@ -61,7 +73,6 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
             //
             // This reduces redundancy between profiles, and since shared exists
             // in the CACHE_DIR, hard links will work.
-
             let shared_path = get_sof_path(&cache.join("shared"), &library, prefix);
             if let Some(parent) = shared_path.parent() {
                 as_effective!(Result<()>, {
@@ -108,12 +119,8 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     // Libraries needed by the program. No Binaries.
     let dependencies: Arc<DashSet<String, ahash::RandomState>> = Arc::default();
 
-    // We use get_libraries to initialize the library roots, but need to pull one of the binaries
-    // off to do it before the roots are needed.
-    //
-    // I cannot think of any situation in which profile.binaries will be None, or empty. Profiles are
-    // either elf binaries themselves, or they use an interpreter that is. We fallback to the current
-    // program in emergencies.
+    // Scope the lock. We do binaries first, since we piggy-back off the LDD call
+    // to find library roots.
     {
         let binaries = &info.profile.lock().binaries;
         timer!("::binaries", {
@@ -128,6 +135,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         });
     }
 
+    // We do need the cache on disk in case we need to use a shared SOF source.
     if !cache.starts_with(AT_HOME.as_path()) {
         let shared = cache.join("shared");
         if !shared.exists() {
@@ -177,9 +185,6 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             }
         });
 
-        // Parallelizing this causes deadlocks. Not sure why. The Spawn Handle does not
-        // call its drop because we call wait(), so its not contention on the user lock,
-        // and it does not seem to be contention on writing/reading the cache.
         debug!("Resolving wildcards");
         wildcards.into_par_iter().for_each(|w| {
             if let Ok(cards) = get_wildcards(w, true) {

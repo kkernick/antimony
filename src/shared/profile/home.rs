@@ -1,10 +1,10 @@
-use std::path::PathBuf;
-
+use crate::{cli, shared::env::DATA_HOME};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
-use crate::{cli, shared::env::DATA_HOME};
-
+/// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
+/// for persistent configurations and caches.
 #[derive(Deserialize, Serialize, Default)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony

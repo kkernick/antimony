@@ -391,7 +391,7 @@ _antimony() {
             return 0
             ;;
         antimony__run)
-            opts="-d -l -r -c -h --dry --log --refresh --path --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --see --talk --own --call --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --binaries --libraries --devices --namespaces --env --new-privileges --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
+            opts="-d -r -c -h --dry --refresh --path --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --see --talk --own --call --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --binaries --libraries --devices --namespaces --env --new-privileges --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

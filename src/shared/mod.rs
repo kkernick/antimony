@@ -3,9 +3,17 @@ pub mod db;
 pub mod edit;
 pub mod env;
 pub mod feature;
-pub mod path;
 pub mod profile;
 pub mod syscalls;
+
+use crate::shared::{config::CONFIG_FILE, env::{AT_HOME, CACHE_DIR, RUNTIME_DIR}};
+use indexmap::{IndexMap, IndexSet};
+use log::{Level, Record};
+use nix::unistd::getpid;
+use notify::{level_name, level_urgency};
+use spawn::Spawner;
+use std::{fmt::Display, path::PathBuf};
+use user::as_real;
 
 pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
 pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
@@ -13,6 +21,8 @@ pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
 pub type ISet<T> = IndexSet<T, ahash::RandomState>;
 pub type IMap<K, V> = IndexMap<K, V, ahash::RandomState>;
 
+/// Check that the Real User is privileged. This is used to allow modifying the
+/// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)
 pub fn privileged() -> anyhow::Result<bool> {
     if CONFIG_FILE.is_privileged() {
         Ok(true)
@@ -36,6 +46,8 @@ pub fn privileged() -> anyhow::Result<bool> {
     }
 }
 
+/// Get the path to a utility.
+#[inline]
 pub fn utility(util: &str) -> String {
     AT_HOME
         .join("utilities")
@@ -44,6 +56,8 @@ pub fn utility(util: &str) -> String {
         .into_owned()
 }
 
+/// Our notify logger implementation. Because Antimony runs SetUID, we have to
+/// spawn a separate process to access the user bus.
 pub fn logger(record: &Record, level: Level) -> bool {
     let result = || -> anyhow::Result<()> {
         let code = Spawner::abs(utility("notify"))
@@ -68,6 +82,7 @@ pub fn logger(record: &Record, level: Level) -> bool {
     result.is_ok()
 }
 
+/// Format an iterator into a string.
 pub fn format_iter<T, V>(iter: T) -> String
 where
     T: Iterator<Item = V>,
@@ -78,6 +93,22 @@ where
     ret
 }
 
+/// The user dir is where the instance information is stored.
+#[inline]
+pub fn user_dir(instance: &str) -> PathBuf {
+    PathBuf::from(RUNTIME_DIR.as_path())
+        .join("antimony")
+        .join(instance)
+}
+
+/// Get where direct files should be placed.
+#[inline]
+pub fn direct_path(file: &str) -> PathBuf {
+    CACHE_DIR.join(".direct").join(&file[1..])
+}
+
+/// Debug macro to record how long something took, but only in developer builds.
+/// On release builds, this does nothing.
 #[macro_export]
 macro_rules! timer {
     ($name:literal, $body:block) => {{
@@ -107,14 +138,4 @@ macro_rules! timer {
         $expr
     }};
 }
-use std::fmt::Display;
-
-use indexmap::{IndexMap, IndexSet};
-use log::{Level, Record};
-use nix::unistd::getpid;
-use notify::{level_name, level_urgency};
-use spawn::Spawner;
 pub use timer;
-use user::as_real;
-
-use crate::shared::{config::CONFIG_FILE, env::AT_HOME};

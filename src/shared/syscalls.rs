@@ -1,5 +1,7 @@
+//! The bulk of the SECCOMP Logic.
+
 use crate::{
-    shared::{ISet, Set, env::AT_HOME, path::user_dir, profile::seccomp::SeccompPolicy},
+    shared::{ISet, Set, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
     timer,
 };
 use ahash::HashSetExt;
@@ -54,6 +56,7 @@ pub enum Error {
     Errno(#[from] errno::Errno),
 }
 
+/// Get a new connection to the database.
 fn new_connection() -> Result<Connection, Error> {
     as_effective!({
         let db = AT_HOME.join("seccomp").join("syscalls.db");
@@ -118,9 +121,11 @@ thread_local! {
     pub static CONNECTION: RefCell<Connection> = RefCell::new(new_connection().expect("Failed to access User Database"));
 }
 
+/// Cache syscall names.
 static CACHE: LazyLock<DashMap<String, i32, ahash::RandomState>> = LazyLock::new(DashMap::default);
 
-pub fn get_name(name: &str) -> i32 {
+/// Get the number for a given name.
+pub fn get_num(name: &str) -> i32 {
     // Insert if missing
     if !CACHE.contains_key(name) {
         CACHE.insert(
@@ -260,6 +265,7 @@ pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
         .collect()
 }
 
+/// Get the syscalls from a binary id.
 pub fn id_syscalls(
     tx: &Transaction,
     binary: &str,
@@ -310,6 +316,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
     Ok(())
 }
 
+/// The system + bubblewrap definitions.
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
@@ -392,7 +399,7 @@ pub fn new(
         syscalls.insert(Syscall::from_name(required)?.get_number());
     }
 
-    let audit = !syscalls.contains(&get_name("sendmsg"));
+    let audit = !syscalls.contains(&get_num("sendmsg"));
 
     let syscalls = syscalls.into_iter().collect::<Vec<_>>();
     timer!("::add_rules", {

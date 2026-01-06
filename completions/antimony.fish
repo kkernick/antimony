@@ -30,12 +30,12 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "run" -d 'Run a pr
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "edit" -d 'Edit an existing profile'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "refresh" -d 'Refresh caches'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "integrate" -d 'Integrate a profile into the user environment'
-complete -c antimony -n "__fish_antimony_needs_command" -f -a "remove" -d 'Reset a profile back to the system-defined profile'
-complete -c antimony -n "__fish_antimony_needs_command" -f -a "info" -d 'List installed profiles and features'
+complete -c antimony -n "__fish_antimony_needs_command" -f -a "remove" -d 'Remove features/profiles, or reset user definitions to the default'
+complete -c antimony -n "__fish_antimony_needs_command" -f -a "info" -d 'List info about various components of the system'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "export" -d 'Export user profiles'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "import" -d 'Import user profiles'
-complete -c antimony -n "__fish_antimony_needs_command" -f -a "config" -d 'Import user profiles'
+complete -c antimony -n "__fish_antimony_needs_command" -f -a "config" -d 'Manage the system configuration file'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
@@ -91,11 +91,10 @@ net\t'Use the network feature instead'
 uts\t'Enable the UTS namespace'
 c-group\t'Allow the sandbox to be managed/manage the system C-Groups'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l new-privileges -r -f -a "true\t''
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l new-privileges -d 'Allow the sandbox to acquire new privileges' -r -f -a "true\t''
 false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
-complete -c antimony -n "__fish_antimony_using_subcommand run" -s l -l log -d 'Collect output from the sandbox, and output it to a log file'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
@@ -125,10 +124,10 @@ complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_s
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "edit" -d 'Edit an existing profile'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "refresh" -d 'Refresh caches'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "integrate" -d 'Integrate a profile into the user environment'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "remove" -d 'Reset a profile back to the system-defined profile'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "info" -d 'List installed profiles and features'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "remove" -d 'Remove features/profiles, or reset user definitions to the default'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "info" -d 'List info about various components of the system'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "seccomp" -d 'Perform operations on the SECCOMP Database'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "export" -d 'Export user profiles'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "import" -d 'Import user profiles'
-complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "config" -d 'Import user profiles'
+complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "config" -d 'Manage the system configuration file'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove info seccomp export import config help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

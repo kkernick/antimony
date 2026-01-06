@@ -1,3 +1,10 @@
+//! The Feature Fabricator composes all defined features defined in the Profile,
+//! recursively analyzes dependencies, strikes conflicts, and merges definitions
+//! into a single, complete Profile.
+//!
+//! Note that due to performance considerations, the feature fabricator is called on
+//! Profile::new(), and is cached separately from the other fabricators as well.
+
 use crate::{
     fab::resolve,
     shared::{
@@ -25,6 +32,7 @@ pub enum Error {
 }
 
 /// Replace {} names with the real values in the profile.
+#[inline]
 fn format(mut str: String, map: &Map<&str, String>) -> Result<String, Error> {
     for (key, val) in map {
         str = str.replace(key, val);
@@ -155,6 +163,9 @@ fn add_feature(
     map: &Map<&str, String>,
     feature: &mut Feature,
 ) -> Result<(), Error> {
+    // Conditionals intentionally don't use any schema. It just runs the content through
+    // bash. This lets you do something as simple requiring a certain file via `command`, or
+    // something more complicated. It runs under the
     if let Some(condition) = feature.conditional.take() {
         let code = || -> anyhow::Result<i32> {
             let code = Spawner::abs("/usr/bin/bash")
@@ -185,6 +196,10 @@ fn add_feature(
         }
     }
 
+    // Caveats don't do anything more than warn. If a feature was truly dangerous enough to warrant an error,
+    // it wouldn't be acceptable to use in Antimony at all. Remember, it can't be any worse than running the
+    // application on the host directly. Even the broad features like `lib` and `bin` restrict access to
+    // other processes, the possibility for root access, etc.
     if let Some(caveat) = feature.caveat.take() {
         warn!(
             "This profile uses a dangerous feature! {}: {}",

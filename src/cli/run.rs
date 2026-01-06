@@ -20,8 +20,7 @@ use heck::ToTitleCase;
 use log::{debug, error};
 use nix::errno::Errno;
 use spawn::{Spawner, StreamMode};
-use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
-use user::Mode;
+use std::{borrow::Cow, env, fs, thread, time::Duration};
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -40,10 +39,6 @@ pub struct Args {
     /// Generate the profile, but do not run the executable.
     #[arg(short, long, default_value_t = false)]
     pub dry: bool,
-
-    /// Collect output from the sandbox, and output it to a log file.
-    #[arg(short, long, default_value_t = false)]
-    pub log: bool,
 
     /// Refresh cache definitions. Analogous to `antimony refresh`
     #[arg(short, long, default_value_t = false)]
@@ -153,6 +148,7 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
 
+    /// Allow the sandbox to acquire new privileges.
     #[arg(long)]
     pub new_privileges: Option<bool>,
 
@@ -166,6 +162,7 @@ pub struct Args {
 }
 impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
+        // Dump the Profile Definitions immediately into memory.
         rayon::spawn(|| {
             let _ = profile::USER_CACHE.as_ref();
         });
@@ -218,6 +215,7 @@ pub fn wait_for_doc() {
     }
 }
 
+/// Run the profile.
 pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
     let sandbox_args = &info.profile.sandbox_args;
     let add_regular = if !sandbox_args.is_empty() {
@@ -256,11 +254,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         info.handle.args_i(info.post)?;
     }
 
-    if args.log {
-        info.handle.error_i(StreamMode::Pipe);
-    } else {
-        info.handle.error_i(StreamMode::Log(log::Level::Warn));
-    }
+    info.handle.error_i(StreamMode::Log(log::Level::Warn));
 
     // Run it
     if !args.dry {
@@ -305,29 +299,10 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let mut handle = info.handle.spawn()?;
         let code = handle.wait()?;
 
-        let log = if code != 0 && args.log {
-            debug!("Logging...");
-            let error = handle.error_all()?;
-            // Write it to a log file.
-            if !error.is_empty() {
-                let log = info
-                    .sys_dir
-                    .join(info.instance.name())
-                    .with_extension("log");
-                let mut file = fs::File::create(&log)?;
-                file.write_all(error.as_bytes())?;
-                Some(log)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
         if code != 0 {
             // Alert the user.
             let error_name = Errno::from_raw(-code);
-            let handle = Spawner::abs(utility("notify")).mode(user::Mode::Real).    pass_env("DBUS_SESSION_BUS_ADDRESS")?
+            Spawner::abs(utility("notify")).mode(user::Mode::Real).    pass_env("DBUS_SESSION_BUS_ADDRESS")?
                 .output(StreamMode::Pipe)
                 .args([
                 "--title",
@@ -343,28 +318,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 ),
                 "--timeout", "5000",
                 "--urgency", "critical",
-            ])?;
-
-            if log.is_some() {
-                handle.args_i(["--action", "Open=Open Error Log"])?;
-            }
-            let action = handle.spawn()?.output_all()?;
-
-            // If we want to open, use xdg-open.
-            if let Some(log) = log
-                && action.starts_with("Open")
-            {
-                Spawner::abs(utility("open"))
-                    .arg(log.to_string_lossy())?
-                    .preserve_env(true)
-                    .mode(Mode::Real)
-                    .spawn()?
-                    .wait()?;
-            }
-        } else if let Some(log) = log
-            && args.log
-        {
-            log::info!("Log is available at {}", log.display())
+            ])?.spawn()?.output_all()?;
         }
 
         if let Some(mut hooks) = info.profile.hooks.take()

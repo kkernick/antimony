@@ -1,4 +1,5 @@
 //! Environment Variables Antimony needs defined.
+
 use crate::shared::config::CONFIG_FILE;
 use anyhow::Result;
 use log::{debug, warn};
@@ -14,7 +15,7 @@ use std::{
 use user::{USER, as_effective};
 use which::which;
 
-/// Antimony's home folder is where configuration is stored
+/// Antimony's home folder is where configuration/caches are stored
 pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     let path = PathBuf::from(env::var("AT_HOME").unwrap_or("/usr/share/antimony".to_string()));
     if !path.starts_with("/usr/") {
@@ -99,6 +100,7 @@ pub static RUNTIME_STR: LazyLock<String> = LazyLock::new(|| {
 /// The runtime directory is where portals and docs are located.
 pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(RUNTIME_STR.as_str()));
 
+/// The user's name. We don't trust the USER variable, and instead lookup the name from the Real UID.
 pub static USER_NAME: LazyLock<String> = LazyLock::new(|| unsafe {
     let passwd = getpwuid(USER.real.as_raw());
     if passwd.is_null() || (*passwd).pw_name.is_null() {

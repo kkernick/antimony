@@ -1,6 +1,7 @@
 use anyhow::Result;
 use rayon::prelude::*;
 
+#[inline]
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     info.profile
         .lock()

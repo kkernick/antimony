@@ -1,3 +1,10 @@
+//! Functions for interfacing with the databases used by Antimony.
+//! There are three:
+//!
+//! 1. The System Database (antimony.db) contains static definitions of profiles and features
+//! 2. The User Database (USER_NAME.db) contains user profiles and features.
+//! 3. The Cache Database (cache.db) is a dumping ground for caching used through the project.
+
 use crate::shared::{
     Map, Set,
     env::{AT_HOME, USER_NAME},
@@ -26,8 +33,10 @@ pub enum Error {
     Serialize(#[from] toml::ser::Error),
 }
 
+// A map containing all names and values for a particular table.
 pub type DatabaseCache = Result<Map<String, String>, Error>;
 
+/// What Database we're targeting.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Database {
     User,
@@ -44,6 +53,7 @@ impl Database {
     }
 }
 
+/// The Table within the Database we're looking at.
 #[derive(Copy, Clone)]
 pub enum Table {
     Profiles,
@@ -72,6 +82,7 @@ thread_local! {
     pub static CACHE_DB: Connection = new_connection(Database::Cache).expect("Failed to access Cache Database");
 }
 
+/// Get a new connection.
 fn new_connection(db: Database) -> Result<Connection, Error> {
     as_effective!({
         let path = db.path();
@@ -136,6 +147,7 @@ fn new_connection(db: Database) -> Result<Connection, Error> {
     .map_err(|e| Error::Errno("user", e))?
 }
 
+/// Execute a query/command against the database.
 #[inline]
 pub fn execute<T, F>(db: Database, f: F) -> Result<T, Error>
 where
@@ -148,6 +160,7 @@ where
     }
 }
 
+/// Check if a particular name exists within the database.
 #[inline]
 pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
     execute(db, |db| {
@@ -159,6 +172,7 @@ pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
     })
 }
 
+/// Dump the raw content of the database into either a String or Vec<u8>
 #[inline]
 pub fn dump<T: FromSql>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
     execute(db, |db| {
@@ -172,8 +186,9 @@ pub fn dump<T: FromSql>(name: &str, db: Database, tb: Table) -> Result<Option<T>
     })
 }
 
+/// Dump everything in the database,
 #[inline]
-pub fn dump_all(db: Database, tb: Table) -> Result<Map<String, String>, Error> {
+pub fn dump_all(db: Database, tb: Table) -> DatabaseCache {
     execute(db, |conn| {
         conn.execute_batch("BEGIN IMMEDIATE;")?;
         let mut map = Map::default();
@@ -192,6 +207,7 @@ pub fn dump_all(db: Database, tb: Table) -> Result<Map<String, String>, Error> {
     })
 }
 
+/// Get a TOML file from the database.
 #[inline]
 pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
     match dump::<String>(name, db, tb)? {
@@ -200,6 +216,7 @@ pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<O
     }
 }
 
+/// Store a string in the database.
 #[inline]
 pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
@@ -211,6 +228,7 @@ pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(),
     })
 }
 
+/// Store raw bytes into the database.
 #[inline]
 pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
@@ -222,6 +240,7 @@ pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<
     })
 }
 
+/// Save a TOML into the database.
 #[inline]
 pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
@@ -233,6 +252,7 @@ pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Res
     })
 }
 
+/// Delete a row from the database.
 #[inline]
 pub fn delete(name: &str, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
@@ -242,6 +262,7 @@ pub fn delete(name: &str, db: Database, tb: Table) -> Result<(), Error> {
     Ok(())
 }
 
+/// Get the names within a table.
 #[inline]
 pub fn all(db: Database, tb: Table) -> Result<Set<String>, Error> {
     execute(db, |db| {

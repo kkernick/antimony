@@ -68,12 +68,10 @@ net\:"Use the network feature instead"
 uts\:"Enable the UTS namespace"
 c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
-'--new-privileges=[]:NEW_PRIVILEGES:(true false)' \
+'--new-privileges=[Allow the sandbox to acquire new privileges]:NEW_PRIVILEGES:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
 '-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \
-'-l[Collect output from the sandbox, and output it to a log file]' \
-'--log[Collect output from the sandbox, and output it to a log file]' \
 '-r[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--refresh[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
@@ -246,12 +244,12 @@ _antimony_commands() {
 'edit:Edit an existing profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
-'remove:Reset a profile back to the system-defined profile' \
-'info:List installed profiles and features' \
+'remove:Remove features/profiles, or reset user definitions to the default' \
+'info:List info about various components of the system' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'config:Import user profiles' \
+'config:Manage the system configuration file' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony commands' commands "$@"
@@ -278,12 +276,12 @@ _antimony__help_commands() {
 'edit:Edit an existing profile' \
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
-'remove:Reset a profile back to the system-defined profile' \
-'info:List installed profiles and features' \
+'remove:Remove features/profiles, or reset user definitions to the default' \
+'info:List info about various components of the system' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'config:Import user profiles' \
+'config:Manage the system configuration file' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony help commands' commands "$@"

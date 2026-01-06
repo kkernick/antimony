@@ -3,7 +3,6 @@ use std::path::Path;
 pub fn fabricate(info: &super::FabInfo) {
     // Each is sent to the library fabricator, in case they contain anything,
     // and are then mounted directly.
-
     let etc = Path::new("/etc").join(info.name);
     if etc.exists() {
         info.profile

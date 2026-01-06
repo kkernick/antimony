@@ -68,10 +68,10 @@ pub enum Command {
     /// Integrate a profile into the user environment.
     Integrate(integrate::Args),
 
-    /// Reset a profile back to the system-defined profile.
+    /// Remove features/profiles, or reset user definitions to the default.
     Remove(remove::Args),
 
-    /// List installed profiles and features
+    /// List info about various components of the system.
     Info(info::Args),
 
     /// Perform operations on the SECCOMP Database.
@@ -83,7 +83,7 @@ pub enum Command {
     /// Import user profiles.
     Import(import::Args),
 
-    /// Import user profiles.
+    /// Manage the system configuration file.
     Config(config::Args),
 }
 impl Default for Command {

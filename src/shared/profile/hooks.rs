@@ -131,6 +131,7 @@ pub struct Hook {
     pub capture_error: Option<bool>,
 }
 impl Hook {
+    /// Process the hook.
     pub fn process(
         self,
         main: Option<Spawner>,

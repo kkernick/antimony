@@ -10,6 +10,7 @@ binaries = [
   "rustc",
   "rustdoc",
   "rustfmt",
+  "rustup"
   "nm",
   "ld.lld",
   "strip",

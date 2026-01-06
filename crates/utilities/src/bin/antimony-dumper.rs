@@ -11,9 +11,8 @@
 
 use antimony::shared::{
     self,
-    path::user_dir,
     syscalls::{self, Notifier},
-    utility,
+    user_dir, utility,
 };
 use anyhow::Result;
 use caps::Capability;
@@ -142,7 +141,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                     }
 
                     // We only care about exec.
-                    if call == syscalls::get_name("execve")
+                    if call == syscalls::get_num("execve")
                         && let Ok(paths) = collect_paths(pid, &args)
                         && !paths.is_empty()
                     {
@@ -156,8 +155,8 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
 
                     // We bail on these syscalls, since they're seen
                     // as the program falling into a steady-state.
-                    } else if call == syscalls::get_name("ppoll")
-                        || call == syscalls::get_name("wait4")
+                    } else if call == syscalls::get_num("ppoll")
+                        || call == syscalls::get_num("wait4")
                     {
                         term.store(true, Ordering::Relaxed);
                         let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
@@ -171,10 +170,10 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                     resp.flags = 1;
 
                     // Ignore SECCOMP and EXECVE.
-                    if (((call == syscalls::get_name("prctl") && args[0] == PR_SET_SECCOMP as u64)
-                        || call == syscalls::get_name("seccomp"))
+                    if (((call == syscalls::get_num("prctl") && args[0] == PR_SET_SECCOMP as u64)
+                        || call == syscalls::get_num("seccomp"))
                         && args[2] != 0)
-                        || call == syscalls::get_name("execve")
+                        || call == syscalls::get_num("execve")
                     {
                         resp.flags = 0;
                     }

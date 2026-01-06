@@ -1,7 +1,7 @@
 use crate::{
     fab::{localize_path, resolve_env},
     shared::{
-        path::direct_path,
+        direct_path,
         profile::files::{FILE_MODES, FileMode},
     },
 };
@@ -17,6 +17,7 @@ use std::{
 };
 use user::as_effective;
 
+/// Open a file and pass it as executable to the sandbox.
 #[inline]
 fn get_x(file: &str, handle: &Spawner) -> Result<()> {
     let fd = OwnedFd::from(File::open(file)?);
@@ -26,6 +27,7 @@ fn get_x(file: &str, handle: &Spawner) -> Result<()> {
     Ok(())
 }
 
+/// Add a file to the sandbox.
 pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
     let path = direct_path(file);
     let fd = as_effective!(Result<OwnedFd>, {
