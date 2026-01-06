@@ -3,8 +3,17 @@
 
 ROOT=$(git rev-parse --show-toplevel)
 
+if [[ -n $CARGO_TARGET_DIR ]]; then
+  TARGET=$CARGO_TARGET_DIR
+else
+  TARGET=$ROOT/target
+fi
+
 echo "Compiling Bench Script"
-cargo build --package utilities --bin antimony_bench --bin antimony_build
+cargo build --package utilities --bin antimony_bench --bin antimony_build --bin antimony_digest
+
+echo "Digesting database"
+$TARGET/debug/antimony_digest
 
 echo "Benchmarking"
-$ROOT/target/debug/antimony_bench "${@:2}"
+$TARGET/debug/antimony_bench "${@:2}"

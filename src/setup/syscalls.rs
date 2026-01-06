@@ -11,6 +11,7 @@ pub fn install_filter(
     policy: SeccompPolicy,
     binaries: &ISet<String>,
     main: &Spawner,
+    monitor_parent: &Spawner,
 ) -> Result<()> {
     if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, binaries)? {
         main.seccomp_i(filter);
@@ -19,7 +20,7 @@ pub fn install_filter(
             main.fd_arg_i("--seccomp", fd)?;
         }
 
-        if main.get_associate("monitor").is_none()
+        if monitor_parent.get_associate("monitor").is_none()
             && (policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying)
         {
             debug!("Spawning SECCOMP Monitor");
@@ -47,7 +48,7 @@ pub fn install_filter(
             if log::log_enabled!(log::Level::Info) {
                 handle.pass_env_i("RUST_LOG")?
             }
-            main.associate(handle.spawn()?);
+            monitor_parent.associate(handle.spawn()?);
         }
     }
     Ok(())
@@ -71,6 +72,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
                     args.instance.name(),
                     policy,
                     binaries,
+                    &args.handle,
                     &args.handle,
                 )?;
             }

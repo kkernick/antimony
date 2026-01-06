@@ -2,7 +2,13 @@
 
 ROOT=$(git rev-parse --show-toplevel)
 
-DOC_GEN="$ROOT/target/doc"
+if [[ -n $CARGO_TARGET_DIR ]]; then
+  TARGET=$CARGO_TARGET_DIR
+else
+  TARGET=$ROOT/target
+fi
+
+DOC_GEN="$TARGET/doc"
 DOC_OUT="$ROOT/docs"
 rm -r "${DOC_GEN}" "${DOC_OUT}"
 

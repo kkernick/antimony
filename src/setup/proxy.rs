@@ -32,7 +32,6 @@ pub fn run(
     instance: &str,
     info: &Path,
     id: &str,
-    dry: bool,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let cache = CACHE_DIR.join(".proxy");
@@ -100,13 +99,6 @@ pub fn run(
         ])?;
         proxy
     });
-
-    // Setup SECCOMP.
-    if !dry && let Some(policy) = profile.lock().seccomp {
-        timer!("::seccomp", {
-            syscalls::install_filter("xdg-dbus-proxy", instance, policy, &ISet::default(), &proxy)?
-        })
-    }
 
     timer!("::post", {
         proxy.args_i([
@@ -305,9 +297,25 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                 args.instance.name(),
                 &info,
                 id,
-                args.args.dry,
             )
         )?;
+
+        // Setup SECCOMP.
+        if !args.args.dry
+            && let Some(policy) = args.profile.lock().seccomp
+        {
+            timer!("::seccomp", {
+                syscalls::install_filter(
+                    "xdg-dbus-proxy",
+                    instance,
+                    policy,
+                    &ISet::default(),
+                    &proxy,
+                    &args.handle,
+                )?
+            })
+        }
+
         arguments.extend(
             [
                 "--ro-bind",

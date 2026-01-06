@@ -2,8 +2,14 @@
 
 ROOT=$(git rev-parse --show-toplevel)
 
+if [[ -n $CARGO_TARGET_DIR ]]; then
+  TARGET=$CARGO_TARGET_DIR
+else
+  TARGET=$ROOT/target
+fi
+
 echo "Compiling Build Script"
 cargo build --package utilities --bin antimony_build
 
 echo "Building"
-$ROOT/target/debug/antimony_build "${@:2}"
+$TARGET/debug/antimony_build "${@:2}"

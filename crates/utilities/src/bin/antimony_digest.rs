@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use antimony::shared::{
-    db::{self, Database, Table, get_connection},
+    db::{self, Database, Table},
     feature::Feature,
     profile::Profile,
 };
@@ -45,6 +45,9 @@ fn main() -> anyhow::Result<()> {
         Table::Profiles,
     )?;
 
-    get_connection(Database::System)?.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
+    db::write_execute(Database::System, |db| {
+        db.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
+        Ok(())
+    })?;
     Ok(())
 }

@@ -84,7 +84,6 @@ fn main() -> Result<()> {
             .new_privileges(true)
             .preserve_env(true)
             .output(StreamMode::Discard)
-            .error(StreamMode::Discard)
             .spawn()?
             .wait()?;
 
@@ -106,7 +105,6 @@ fn main() -> Result<()> {
             .new_privileges(true)
             .preserve_env(true)
             .output(StreamMode::Discard)
-            .error(StreamMode::Discard)
             .spawn()?
             .wait()?;
 
@@ -116,7 +114,6 @@ fn main() -> Result<()> {
             .new_privileges(true)
             .preserve_env(true)
             .output(StreamMode::Discard)
-            .error(StreamMode::Discard)
             .args(cargo_flags)?;
 
         #[rustfmt::skip]
@@ -137,13 +134,18 @@ fn main() -> Result<()> {
             .args(["--target", target, "--workspace", "--profile", &cli.recipe])?
             .args(post_flags)?
             .output(StreamMode::Discard)
-            .error(StreamMode::Discard)
             .spawn()?
             .wait()?;
     }
 
+    let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
+        var
+    } else {
+        format!("{root}/target")
+    };
+
     println!(
-        "{root}/target/{target}/{}",
+        "{target_dir}/{target}/{}",
         match cli.recipe.as_str() {
             "dev" => "debug",
             "pgo" => "release",

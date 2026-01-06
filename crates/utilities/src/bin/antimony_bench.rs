@@ -205,9 +205,15 @@ fn main() -> Result<()> {
             args.extend([Cow::Borrowed("-m"), Cow::Owned(min.to_string())])
         }
 
+        let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
+            var
+        } else {
+            format!("{root}/target")
+        };
+
         let antimony = if let Some(recipe) = cli.recipe {
             println!("Building recipe");
-            let antimony = Spawner::abs(format!("{root}/target/debug/antimony_build"))
+            let antimony = Spawner::abs(format!("{target_dir}/debug/antimony_build"))
                 .args(["--recipe", &recipe])?
                 .args(cli.builder_args.unwrap_or_default())?
                 .preserve_env(true)

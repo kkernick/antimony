@@ -6,7 +6,7 @@ use crate::{
     shared::{
         IMap, ISet, Set,
         config::CONFIG_FILE,
-        db::{self, Database, Table},
+        db::{self, Database, DatabaseCache, Table},
         edit,
         env::{DATA_HOME, HOME},
         format_iter,
@@ -16,7 +16,7 @@ use crate::{
 use ahash::{HashSetExt, RandomState};
 use clap::ValueEnum;
 use console::style;
-use log::debug;
+use log::{debug, info};
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
@@ -26,6 +26,7 @@ use std::{
     hash::Hash,
     io,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 use thiserror::Error;
 use which::which;
@@ -35,6 +36,15 @@ pub static FILE_MODES: [FileMode; 3] = [
     FileMode::ReadOnly,
     FileMode::ReadWrite,
 ];
+
+pub static USER_CACHE: LazyLock<DatabaseCache> =
+    LazyLock::new(|| db::dump_all(Database::User, Table::Profiles));
+
+pub static SYSTEM_CACHE: LazyLock<DatabaseCache> =
+    LazyLock::new(|| db::dump_all(Database::System, Table::Profiles));
+
+pub static HASH_CACHE: LazyLock<DatabaseCache> =
+    LazyLock::new(|| db::dump_all(Database::Cache, Table::Profiles));
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -219,13 +229,20 @@ impl Profile {
     /// Get the path of a profile.
     pub fn load(name: &str) -> Result<Self, Error> {
         if name == "default" {
-            if let Some(profile) = db::get::<Self>("default", Database::User, Table::Profiles)? {
-                return Ok(profile);
+            if !CONFIG_FILE.system_mode()
+                && let Ok(cache) = USER_CACHE.as_ref()
+                && let Some(def) = cache.get("default")
+            {
+                return Ok(toml::from_str(def)?);
+            } else if let Ok(cache) = SYSTEM_CACHE.as_ref()
+                && let Some(def) = cache.get("default")
+            {
+                if !CONFIG_FILE.system_mode() {
+                    db::store_str("default", def, Database::User, Table::Profiles)?;
+                }
+                return Ok(toml::from_str(def)?);
             } else {
-                let def =
-                    db::dump::<String>("default", Database::System, Table::Profiles)?.unwrap();
-                db::store_str("default", &def, Database::User, Table::Profiles)?;
-                return Ok(toml::from_str(&def)?);
+                return Ok(Profile::default());
             }
         }
 
@@ -233,6 +250,7 @@ impl Profile {
         if name.ends_with(".toml") {
             let path = PathBuf::from(name);
             if path.exists() {
+                info!("Using File");
                 return Ok(toml::from_str(
                     &fs::read_to_string(path).map_err(|e| Error::Io("reading TOML", e))?,
                 )?);
@@ -240,13 +258,18 @@ impl Profile {
         }
 
         if !CONFIG_FILE.system_mode()
-            && let Some(profile) = db::get::<Self>(name, Database::User, Table::Profiles)?
+            && let Ok(cache) = USER_CACHE.as_ref()
+            && let Some(profile) = cache.get(name)
         {
-            return Ok(profile);
+            info!("Using Profile Cache");
+            return Ok(toml::from_str(profile)?);
         }
 
-        if let Some(profile) = db::get::<Self>(name, Database::System, Table::Profiles)? {
-            return Ok(profile);
+        if let Ok(cache) = SYSTEM_CACHE.as_ref()
+            && let Some(profile) = cache.get(name)
+        {
+            info!("Using System Cache");
+            return Ok(toml::from_str(profile)?);
         }
 
         Err(Error::NotFound(
@@ -340,19 +363,25 @@ impl Profile {
     pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
         debug!("Loading {name}");
 
-        let mut profile = Self::load(name)?;
+        let mut profile = timer!("::load", Self::load(name))?;
         if name == "default" {
             return Ok(profile);
         }
 
-        let mut hash = profile.hash_str()?;
-        if let Some(config) = &config {
-            hash += config;
-        }
+        let hash = timer!("::hash", {
+            let mut hash = profile.hash_str()?;
+            if let Some(config) = &config {
+                hash += config;
+            }
+            hash += &CONFIG_FILE.system_mode().to_string();
+            hash
+        });
 
-        if let Some(cache) = db::get::<Self>(&hash, Database::Cache, Table::Profiles)? {
+        if let Ok(cache) = timer!("::hash_fetch", HASH_CACHE.as_ref())
+            && let Some(profile) = cache.get(&hash)
+        {
             debug!("Using cached profile");
-            return Ok(cache);
+            return Ok(timer!("::cache_parse", toml::from_str(profile)?));
         }
 
         debug!("No cache available");
@@ -552,7 +581,7 @@ impl Profile {
 
     pub fn num_hash(&self) -> Result<u64, Error> {
         timer!("::hash", {
-            Ok(RandomState::with_seed(0).hash_one(postcard::to_stdvec(&self)?))
+            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(postcard::to_stdvec(&self)?))
         })
     }
 

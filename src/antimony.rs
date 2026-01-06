@@ -2,13 +2,28 @@
 
 use antimony::{
     cli::{Run, run::as_symlink},
-    shared,
+    shared::{self, db, profile},
 };
 use anyhow::Result;
 use clap::Parser;
 
 fn main() -> Result<()> {
-    rayon::ThreadPoolBuilder::new().build_global()?;
+    rayon::spawn(|| {
+        let _ = profile::USER_CACHE.as_ref();
+    });
+    rayon::spawn(|| {
+        let _ = profile::SYSTEM_CACHE.as_ref();
+    });
+    rayon::spawn(|| {
+        let _ = profile::HASH_CACHE.as_ref();
+    });
+
+    rayon::spawn_broadcast(|_| {
+        let _ = db::USER_DB;
+        let _ = db::SYS_DB;
+        let _ = db::CACHE_DB;
+    });
+
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 

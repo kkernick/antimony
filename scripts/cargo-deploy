@@ -3,15 +3,22 @@ set -e
 
 ROOT=$(git rev-parse --show-toplevel)
 
+if [[ -n $CARGO_TARGET_DIR ]]; then
+  TARGET=$CARGO_TARGET_DIR
+else
+  TARGET=$ROOT/target
+fi
+
+
 echo "Compiling Build Script"
 cargo build --package utilities --bin antimony_build --bin antimony_digest
-DIR=$($ROOT/target/debug/antimony_build "${@:2}")
+DIR=$($TARGET/debug/antimony_build "${@:2}")
 
 echo "Digesting Profiles and Features"
 if [[ ! -d /usr/share/antimony/db ]]; then
   sudo mkdir -p /usr/share/antimony/db
 fi
-$ROOT/target/debug/antimony_digest
+$TARGET/debug/antimony_digest
 
 sudo cp --remove-destination -v $ROOT/config/db/antimony.db /usr/share/antimony/db/antimony.db
 sudo chown antimony:antimony -R /usr/share/antimony/db
