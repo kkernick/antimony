@@ -2,7 +2,6 @@ use crate::shared::{
     Map, Set,
     env::{AT_HOME, USER_NAME},
 };
-use log::trace;
 use rusqlite::{Connection, OptionalExtension, params, types::FromSql};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{fmt, fs, path::PathBuf};
@@ -75,7 +74,6 @@ thread_local! {
 
 fn new_connection(db: Database) -> Result<Connection, Error> {
     as_effective!({
-        trace!("Creating parent");
         let path = db.path();
         if let Some(parent) = path.parent()
             && !parent.exists()
@@ -138,15 +136,11 @@ fn new_connection(db: Database) -> Result<Connection, Error> {
     .map_err(|e| Error::Errno("user", e))?
 }
 
+#[inline]
 pub fn execute<T, F>(db: Database, f: F) -> Result<T, Error>
 where
     F: FnOnce(&Connection) -> Result<T, Error>,
 {
-    let path = db.path();
-    if !path.exists() {
-        trace!("Creating database at {}", path.display());
-        as_effective!(Connection::open(&path)).map_err(|e| Error::Errno("user", e))??;
-    }
     match db {
         Database::User => USER_DB.with(|c| f(c)),
         Database::System => SYS_DB.with(|c| f(c)),
@@ -154,6 +148,7 @@ where
     }
 }
 
+#[inline]
 pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
     execute(db, |db| {
         Ok(db.query_row(
@@ -164,6 +159,7 @@ pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
     })
 }
 
+#[inline]
 pub fn dump<T: FromSql>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
     execute(db, |db| {
         let mut stmt = db.prepare(&format!("SELECT value FROM {tb} WHERE name = ?1"))?;
@@ -176,6 +172,7 @@ pub fn dump<T: FromSql>(name: &str, db: Database, tb: Table) -> Result<Option<T>
     })
 }
 
+#[inline]
 pub fn dump_all(db: Database, tb: Table) -> Result<Map<String, String>, Error> {
     execute(db, |conn| {
         conn.execute_batch("BEGIN IMMEDIATE;")?;
@@ -195,6 +192,7 @@ pub fn dump_all(db: Database, tb: Table) -> Result<Map<String, String>, Error> {
     })
 }
 
+#[inline]
 pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<Option<T>, Error> {
     match dump::<String>(name, db, tb)? {
         Some(str) => Ok(Some(toml::from_str(&str)?)),
@@ -202,6 +200,7 @@ pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<O
     }
 }
 
+#[inline]
 pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
         db.execute(
@@ -212,6 +211,7 @@ pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(),
     })
 }
 
+#[inline]
 pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
         db.execute(
@@ -222,6 +222,7 @@ pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<
     })
 }
 
+#[inline]
 pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
         db.execute(
@@ -232,6 +233,7 @@ pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Res
     })
 }
 
+#[inline]
 pub fn delete(name: &str, db: Database, tb: Table) -> Result<(), Error> {
     execute(db, |db| {
         db.execute(&format!("DELETE FROM {tb} WHERE name = ?1"), params![name])?;
@@ -240,6 +242,7 @@ pub fn delete(name: &str, db: Database, tb: Table) -> Result<(), Error> {
     Ok(())
 }
 
+#[inline]
 pub fn all(db: Database, tb: Table) -> Result<Set<String>, Error> {
     execute(db, |db| {
         let mut things = Set::default();

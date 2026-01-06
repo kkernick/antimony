@@ -39,13 +39,14 @@ impl cli::Run for Args {
         if self.hard {
             let _ = fs::remove_dir_all(CACHE_DIR.as_path());
         } else {
-            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db"));
-            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-wal"));
-            let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-shm"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
         }
+
+        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db"));
+        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-wal"));
+        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-shm"));
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {

@@ -856,7 +856,7 @@ impl Hook {
         handle.env_i("ANTIMONY_CACHE", cache)?;
         handle.mode_i(user::Mode::Real);
         handle.output_i(StreamMode::Log(log::Level::Debug));
-        handle.error_i(StreamMode::Log(log::Level::Error));
+        handle.error_i(StreamMode::Log(log::Level::Warn));
 
         if self.new_privileges.unwrap_or(false) {
             handle.new_privileges_i(true);
@@ -1061,15 +1061,19 @@ pub struct Files {
     pub passthrough: Option<FileMode>,
 
     /// User files assume a root of /home/antimony unless absolute.
+    #[serde(skip_serializing_if = "IMap::is_empty")]
     pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
+    #[serde(skip_serializing_if = "IMap::is_empty")]
     pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
+    #[serde(skip_serializing_if = "IMap::is_empty")]
     pub resources: FileList,
 
     /// Direct files take a path, and file contents.
+    #[serde(skip_serializing_if = "IMap::is_empty")]
     pub direct: IMap<FileMode, IMap<String, String>>,
 }
 impl Files {

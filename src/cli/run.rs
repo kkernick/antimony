@@ -5,8 +5,9 @@ use crate::{
     fab::localize_home,
     setup::setup,
     shared::{
+        db,
         env::RUNTIME_DIR,
-        profile::{FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
+        profile::{self, FileMode, HomePolicy, Namespace, Portal, SeccompPolicy},
         utility,
     },
     timer,
@@ -198,6 +199,23 @@ pub fn wait_for_doc() {
 }
 
 pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
+    rayon::spawn(|| {
+        let _ = profile::USER_CACHE.as_ref();
+    });
+    rayon::spawn(|| {
+        let _ = profile::SYSTEM_CACHE.as_ref();
+    });
+    rayon::spawn(|| {
+        let _ = profile::HASH_CACHE.as_ref();
+    });
+
+    // Initialize all the databases for each thread.
+    rayon::spawn_broadcast(|_| {
+        let _ = db::USER_DB;
+        let _ = db::SYS_DB;
+        let _ = db::CACHE_DB;
+    });
+
     let sandbox_args = &info.profile.sandbox_args;
     let add_regular = if !sandbox_args.is_empty() {
         let mut add = true;
