@@ -12,12 +12,13 @@ use crate::{
     shared::{
         Set,
         env::{AT_HOME, HOME},
+        format_iter,
     },
     timer,
 };
 use anyhow::{Result, anyhow};
 use dashmap::DashSet;
-use log::{debug, error, warn};
+use log::{debug, error, trace, warn};
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
@@ -42,9 +43,11 @@ fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Resu
     if path.is_dir() {
         dependencies.extend(get_dir(&library)?);
         directories.insert(library.to_string());
+        trace!("DIR: {library} => {}", format_iter(dependencies.iter()));
     } else if let Some(library) = elf_filter(&library) {
         dependencies.push(library);
     }
+
     Ok(dependencies)
 }
 
@@ -153,9 +156,12 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     if let Some(roots) = LIB_ROOTS.get() {
         for lib_root in roots.iter() {
             let app_lib = format!("{lib_root}/{}", info.name);
+            trace!("Checking {app_lib}");
             if Path::new(&app_lib).exists() {
                 debug!("Adding program lib folder");
-                resolved.insert(Cow::Owned(app_lib));
+                for exe in dir_resolve(Cow::Owned(app_lib), directories.clone())? {
+                    resolved.insert(Cow::Owned(exe));
+                }
             }
         }
     }

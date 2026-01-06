@@ -18,7 +18,7 @@ use crate::{
     timer,
 };
 use anyhow::Result;
-use log::{debug, trace, warn};
+use log::{debug, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -81,10 +81,8 @@ pub struct FabInfo<'a> {
 #[inline]
 fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
     if let Some(bytes) = db::dump::<Vec<u8>>(name, Database::Cache, tb)? {
-        trace!("Read {} from cache ({name} from {tb})", bytes.len());
         Ok(Some(postcard::from_bytes(&bytes)?))
     } else {
-        trace!("No cache for {name}");
         Ok(None)
     }
 }
@@ -93,7 +91,6 @@ fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
 #[inline]
 fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
     let bytes = postcard::to_stdvec(content)?;
-    trace!("Writing {} bytes to cache ({name} to {tb})", bytes.len());
     if let Err(e) = db::store_bytes(name, &bytes, Database::Cache, tb) {
         warn!("Couldn't write to system cache: {e}");
     }
@@ -185,15 +182,10 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
             .lines()
             .par_bridge()
             .filter_map(|e| {
-                if let Some(start) = e.find("=> /")
-                    && let Some(end) = e.rfind(' ')
+                if let Some(start) = e.find("/")
+                    && let Some(end) = e[start..].find(' ')
                 {
-                    Some(String::from(&e[start + 3..end]))
-                } else if let Some(start) = e.find("/")
-                    && let Some(end) = e.rfind(' ')
-                {
-                    let path = String::from(&e[start..end]);
-                    if path.contains(" ") { None } else { Some(path) }
+                    Some(String::from(&e[start..start + end]))
                 } else {
                     None
                 }

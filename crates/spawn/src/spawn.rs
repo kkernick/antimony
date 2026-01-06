@@ -739,7 +739,9 @@ impl<'a> Spawner {
         // Log if desired.
         if log::log_enabled!(log::Level::Trace) {
             let formatted = format_iter(args_c.iter().map(|e| e.to_string_lossy()));
-            if !envs.is_empty() {
+            if self.preserve_env.load(Ordering::Relaxed) {
+                trace!("[SYSTEM ENVIRONMENT] {formatted}",);
+            } else if !envs.is_empty() {
                 let env_formatted = format_iter(envs.iter().map(|e| e.to_string_lossy()));
                 trace!("{env_formatted} {formatted}",);
             } else {

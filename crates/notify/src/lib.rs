@@ -15,7 +15,7 @@ use parking_lot::{Mutex, ReentrantMutex};
 use std::{
     borrow::Cow,
     collections::HashMap,
-    io::{IsTerminal, Write, stdout},
+    io::{IsTerminal, stdout},
     sync::{
         Arc, LazyLock, OnceLock,
         atomic::{AtomicBool, Ordering},
@@ -54,7 +54,7 @@ pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> =
     });
 
 /// The global Logger
-static LOGGER: NotifyLogger = NotifyLogger::new();
+static LOGGER: OnceLock<NotifyLogger> = OnceLock::new();
 
 /// A lock to ensure only a single thread can log at a time.
 static LOCK: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::default);
@@ -412,12 +412,15 @@ pub fn level_urgency(level: log::Level) -> Urgency {
 
 /// A log::Log implementation that is controlled by RUST_LOG for console logs,
 /// and NOTIFY for which of those should be promoted to Notifications.
-struct NotifyLogger {}
+struct NotifyLogger {
+    error: bool,
+}
 impl NotifyLogger {
-    const fn new() -> Self {
-        Self {}
+    const fn new(error: bool) -> Self {
+        Self { error }
     }
 }
+
 impl log::Log for NotifyLogger {
     fn enabled(&self, metadata: &log::Metadata) -> bool {
         metadata.level() <= *LEVEL
@@ -429,7 +432,6 @@ impl log::Log for NotifyLogger {
             return;
         }
 
-        let mut out = stdout();
         let mut msg = String::new();
         msg.push_str(&format!(
             "[{} {} {:?}] {}",
@@ -445,7 +447,11 @@ impl log::Log for NotifyLogger {
 
         {
             let _lock = LOCK.lock();
-            let _ = write!(out, "{msg}");
+            if self.error {
+                eprint!("{msg}");
+            } else {
+                print!("{msg}");
+            }
         }
 
         if let Some(prompt) = *PROMPT_LEVEL
@@ -471,9 +477,26 @@ impl log::Log for NotifyLogger {
 
 /// Initialize the NotifyLogger as the program's Logger.
 pub fn init() -> Result<(), Error> {
-    log::set_logger(&LOGGER).map_err(|_| Error::Init)?;
-    log::set_max_level(log::LevelFilter::Trace);
-    Ok(())
+    if LOGGER.set(NotifyLogger::new(false)).is_ok() {
+        log::set_logger(LOGGER.get().unwrap()).map_err(|_| Error::Init)?;
+        log::set_max_level(log::LevelFilter::Trace);
+        Ok(())
+    } else {
+        Err(Error::Init)
+    }
+}
+
+/// Initialize the NotifyLogger as the program's Logger, but print to
+/// stderr instead of stdout. Note that this only applies to direct logging,
+/// notification call fallback still prints to stdout.
+pub fn init_error() -> Result<(), Error> {
+    if LOGGER.set(NotifyLogger::new(true)).is_ok() {
+        log::set_logger(LOGGER.get().unwrap()).map_err(|_| Error::Init)?;
+        log::set_max_level(log::LevelFilter::Trace);
+        Ok(())
+    } else {
+        Err(Error::Init)
+    }
 }
 
 /// Set an optional Notifier function that is called instead of the

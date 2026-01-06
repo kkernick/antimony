@@ -29,7 +29,7 @@ temp = { path = "crates/temp", features = ["user"]}
 user = { path = "crates/user" }
 which = { path = "crates/which" }
 
-ahash = { version = "0.8.12", default-features = false, features = ["compile-time-rng", "std"] }
+ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = { version = "1.0.98", features = ["std"], default-features = false }
 caps = "0.5.6"
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }
@@ -43,15 +43,15 @@ indicatif = { version = "0.18.0", default-features = false }
 inotify = { version = "0.11.0", default-features = false }
 log = { version = "0.4.27", default-features = false }
 nix = { version = "0.30.1", default-features = false, features = ["socket", "uio"] }
-parking_lot = { version = "0.12.5", default-features = false }
+parking_lot = { version = "0.12.5", default-features = false, features = ["deadlock_detection"]}
 rayon = { version = "1.10.0", default-features = false }
 rusqlite = { version = "0.37.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive"], default-features = false }
 signal-hook = { version = "0.3.18", default-features = false }
 toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
-indexmap = { version = "2.12.1", features = ["rayon", "serde", "std"] }
 postcard = { version = "1.1.3", default-features = false, features = ["use-std"] }
 thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
+indexmap = { version = "2.12.1", default-features = false, features = ["std", "rayon", "serde"] }
 
 [dev-dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace", "std"] }

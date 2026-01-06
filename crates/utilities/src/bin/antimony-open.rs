@@ -1,6 +1,5 @@
 //! A simple implementation of xdg-open, without requiring Bash.
 
-use ahash::{HashMap, HashMapExt};
 use anyhow::{Result, anyhow};
 use dbus::{
     Message,
@@ -8,7 +7,7 @@ use dbus::{
     blocking::{BlockingSender, LocalConnection},
     strings::{BusName, Interface, Member},
 };
-use std::{env, fs::File, os::fd::OwnedFd, path::Path, time::Duration};
+use std::{collections::HashMap, env, fs::File, os::fd::OwnedFd, path::Path, time::Duration};
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
@@ -32,7 +31,7 @@ fn main() -> Result<()> {
     );
 
     if let Ok(msg) = msg {
-        let args: HashMap<&str, Variant<Box<dyn dbus::arg::RefArg>>> = HashMap::new();
+        let args: HashMap<&str, Variant<Box<dyn dbus::arg::RefArg>>> = HashMap::default();
         if uri {
             connection
                 .send_with_reply_and_block(msg.append3("", arg, args), Duration::from_mins(1))?;

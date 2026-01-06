@@ -1,7 +1,7 @@
 //! Get info about the installed configuration.
 
 use crate::shared::{
-    ISet, Set,
+    Set,
     db::{self, Database, Table},
     feature::Feature,
     profile::Profile,
@@ -75,7 +75,7 @@ impl super::Run for Args {
                             Ok(calls)
                         })?
                     } else {
-                        let (syscalls, _) = syscalls::get_calls(&name, &ISet::default());
+                        let (syscalls, _) = syscalls::get_calls(&name, &Set::default());
                         syscalls.into_iter().collect()
                     };
 

@@ -1,10 +1,9 @@
 //! The bulk of the SECCOMP Logic.
 
 use crate::{
-    shared::{ISet, Set, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
+    shared::{Set, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
     timer,
 };
-use ahash::HashSetExt;
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
@@ -285,7 +284,7 @@ pub fn id_syscalls(
 
 /// Get the syscalls used by a binary.
 pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, Error> {
-    let mut syscalls = Set::new();
+    let mut syscalls = Set::default();
     if let Ok(id) = binary_id(tx, binary) {
         id_syscalls(tx, binary, id, &mut syscalls)?;
     } else if let Ok(link) = fs::read_link(PathBuf::from(binary)) {
@@ -320,9 +319,9 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &ISet<String>) -> PolicyPair {
-    let mut syscalls = Set::new();
-    let mut bwrap = Set::new();
+pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
+    let mut syscalls = Set::default();
+    let mut bwrap = Set::default();
 
     let query_result: Result<(), Error> = CONNECTION.with_borrow_mut(|conn| {
         let tx = conn.transaction()?;
@@ -335,7 +334,7 @@ pub fn get_calls(name: &str, p_binaries: &ISet<String>) -> PolicyPair {
             WHERE pb.profile_id = ?1",
         )?;
 
-        let mut binaries = Set::new();
+        let mut binaries = Set::default();
         if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
             for bin_res in binaries_iter {
                 binaries.insert(bin_res?);
@@ -376,7 +375,7 @@ pub fn new(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &ISet<String>,
+    binaries: &Set<String>,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {

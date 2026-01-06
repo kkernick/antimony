@@ -9,10 +9,13 @@
 //!
 //! Or whatever instance value you have.
 
-use antimony::shared::{
-    self,
-    syscalls::{self, Notifier},
-    user_dir, utility,
+use antimony::{
+    shared::{
+        self,
+        syscalls::{self, Notifier, get_num},
+        user_dir, utility,
+    },
+    timer,
 };
 use anyhow::Result;
 use caps::Capability;
@@ -20,12 +23,15 @@ use clap::{Parser, Subcommand};
 use common::stream::receive_fd;
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
+use log::info;
 use nix::{
     libc::{EPERM, PR_SET_SECCOMP},
     sys::signal::{Signal::SIGKILL, kill},
     unistd::Pid,
 };
-use seccomp::{action::Action, attribute::Attribute, filter::Filter, notify::Pair};
+use seccomp::{
+    action::Action, attribute::Attribute, filter::Filter, notify::Pair, syscall::Syscall,
+};
 use spawn::Spawner;
 use std::{
     fs::{self, File},
@@ -74,12 +80,20 @@ pub struct RunArgs {
     /// Do not enforce a timeout on the application.
     #[arg(long, default_value_t = false)]
     no_timeout: bool,
+
+    /// Only collect from the specified syscall names.
+    #[arg(long)]
+    filter: Option<Vec<String>>,
 }
 
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct AttachArgs {
     /// The path to the socket established by `run`.
     socket: String,
+
+    /// Only collect from the specified syscall names.
+    #[arg(long)]
+    filter: Option<Vec<i32>>,
 }
 
 /// The current process, to allow all syscalls coming from it.
@@ -119,7 +133,7 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
 }
 
 /// Listen on the Kernel FD and find paths.
-pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
+pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Result<()> {
     let found = Arc::new(DashMap::<u32, Vec<String>>::new());
 
     while !term.load(Ordering::Relaxed) {
@@ -141,13 +155,17 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
                     }
 
                     // We only care about exec.
-                    if call == syscalls::get_num("execve")
+                    if (filter.is_empty() || filter.contains(&call))
                         && let Ok(paths) = collect_paths(pid, &args)
                         && !paths.is_empty()
                     {
                         let mut local_found = found.entry(pid).or_default();
                         for path in paths {
                             if !local_found.contains(&path) {
+                                info!(
+                                    "{} => {path}",
+                                    Syscall::get_name(call).unwrap_or(format!("{call}"))
+                                );
                                 println!("{path}");
                                 local_found.push(path);
                             }
@@ -189,6 +207,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd) -> Result<()> {
 /// Collect syscall information from Kernel FDs.
 pub fn collection(args: AttachArgs) -> Result<()> {
     let listener = UnixListener::bind(args.socket)?;
+    let filter: Arc<Vec<i32>> = Arc::new(args.filter.unwrap_or_default());
 
     // Ensure that we can record syscall info after the attached process dies.
     let term = Arc::new(AtomicBool::new(false));
@@ -198,7 +217,8 @@ pub fn collection(args: AttachArgs) -> Result<()> {
         match receive_fd(&listener) {
             Ok(Some((fd, _))) => {
                 let term_clone = term.clone();
-                thread::spawn(move || reader(term_clone, fd));
+                let filter_clone = filter.clone();
+                thread::spawn(move || reader(term_clone, fd, filter_clone));
             }
             Ok(None) => continue,
             Err(_) => break,
@@ -218,10 +238,19 @@ pub fn runner(args: RunArgs) -> Result<()> {
     if !path.exists() {
         fs::create_dir_all(&path)?;
     }
-    let socket = path.join(format!("dumper-{name}"));
+    let temp = temp::Builder::new()
+        .within(path)
+        .name(format!("dumper-{name}"))
+        .owner(user::Mode::Real)
+        .make(false)
+        .create::<temp::File>()?;
+
+    let socket = temp.full();
     let sock_str = socket.to_string_lossy().into_owned();
+    info!("Listening on {sock_str}");
+
     let mut inotify = Inotify::init()?;
-    inotify.watches().add(&path, WatchMask::CREATE)?;
+    inotify.watches().add(temp.path(), WatchMask::CREATE)?;
 
     // Setup the filter.
     let mut filter = Filter::new(Action::Notify)?;
@@ -231,16 +260,33 @@ pub fn runner(args: RunArgs) -> Result<()> {
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     // Create an attached version to listen.
-    let _handle = Spawner::abs(utility("dumper"))
+    let mut _handle = Spawner::abs(utility("dumper"))
         .args(["attach", &sock_str])?
         .preserve_env(true)
         .new_privileges(true)
-        .cap(Capability::CAP_SYS_PTRACE)
-        .spawn()?;
+        .cap(Capability::CAP_SYS_PTRACE);
+
+    if let Some(filter) = args.filter {
+        for call in filter {
+            _handle.args_i(["--filter", &format!("{}", get_num(&call))])?;
+        }
+    }
+    let _handle = _handle.spawn()?;
 
     // Wait for it to be ready.
-    let mut buffer = [0; 1024];
-    let _ = inotify.read_events_blocking(&mut buffer)?;
+    timer!("::inotify", {
+        let mut buffer = [0; 1024];
+        'outer: loop {
+            let events = inotify.read_events_blocking(&mut buffer)?;
+            for event in events {
+                if let Some(name) = event.name
+                    && name == temp.name()
+                {
+                    break 'outer;
+                }
+            }
+        }
+    });
 
     // Spawn the program under our Notify policy.
     Spawner::new(args.path)?
@@ -251,12 +297,11 @@ pub fn runner(args: RunArgs) -> Result<()> {
         .spawn()?
         .wait()?;
 
-    fs::remove_file(sock_str)?;
     Ok(())
 }
 
 fn main() -> Result<()> {
-    notify::init()?;
+    notify::init_error()?;
     notify::set_notifier(Box::new(shared::logger))?;
     match Cli::parse().command {
         Command::Run(args) => runner(args)?,

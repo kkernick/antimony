@@ -5,7 +5,7 @@ use crate::{
     fab::{get_libraries, lib::add_sof},
     setup::syscalls,
     shared::{
-        ISet,
+        Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::{Profile, ipc::Portal, ns::Namespace},
         user_dir,
@@ -317,7 +317,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                     "xdg-dbus-proxy",
                     instance,
                     policy,
-                    &ISet::default(),
+                    &Set::default(),
                     &proxy,
                     &args.handle,
                 )?

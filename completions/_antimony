@@ -52,8 +52,8 @@ notifying\:"The policy is enforced\: unrecognized syscalls are presented to the 
 '*--talk=[Add busses the sandbox can talk to]:TALK:_default' \
 '*--own=[Add busses the sandbox owns]:OWN:_default' \
 '*--call=[Add busses the sandbox can call]:CALL:_default' \
-'--file-passthrough=[Override the file passthrough mode]:FILE_PASSTHROUGH:((read-only\:""
-read-write\:""
+'--file-passthrough=[Override the file passthrough mode]:FILE_PASSTHROUGH:((read-only\:"Only allow reads"
+read-write\:"Allow writes"
 executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
 '*--ro=[Add read-only files]:RO:_default' \
 '*--rw=[Add read-write files]:RW:_default' \

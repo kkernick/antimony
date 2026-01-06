@@ -1,4 +1,3 @@
-use ahash::HashSetExt;
 use antimony::{
     fab::{get_libraries, get_wildcards, resolve},
     shared::{Set, env::AT_HOME, feature::Feature, profile::files::FileMode, utility},
@@ -11,7 +10,6 @@ use std::{
     io::{self, Write, stdin},
     path::Path,
     sync::{Arc, atomic::AtomicBool},
-    thread,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -22,7 +20,7 @@ fn main() -> anyhow::Result<()> {
     let stdin = stdin();
 
     // We need to populate the library roots ;)
-    let root_thread = thread::spawn(|| get_libraries(Cow::Owned(utility("tracer"))));
+    get_libraries(Cow::Owned(utility("tracer")))?;
 
     loop {
         let mut line = String::new();
@@ -34,10 +32,6 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
-
-    root_thread
-        .join()
-        .map_err(|_| anyhow::anyhow!("Failed to join root thread!"))??;
 
     println!("Generating Report...");
     // Get the files.
@@ -71,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         not_found.into_par_iter().try_for_each(|file| {
             let database = arc.clone();
 
-            let mut features = Set::<(String, String, FileMode)>::new();
+            let mut features = Set::<(String, String, FileMode)>::default();
 
             // For each file, try and see if any part of the file path
             // is provided:

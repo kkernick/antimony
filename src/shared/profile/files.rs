@@ -1,7 +1,7 @@
 use crate::{
     cli,
     fab::resolve,
-    shared::{IMap, ISet, Set},
+    shared::{Map, Set},
 };
 use clap::ValueEnum;
 use console::style;
@@ -71,7 +71,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 ];
 
 /// For each file mode, we have a list of files.
-pub type FileList = IMap<FileMode, ISet<String>>;
+pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
 #[derive(Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -83,20 +83,20 @@ pub struct Files {
     pub passthrough: Option<FileMode>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    #[serde(skip_serializing_if = "IMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    #[serde(skip_serializing_if = "IMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
-    #[serde(skip_serializing_if = "IMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub resources: FileList,
 
     /// Direct files take a path, and file contents.
-    #[serde(skip_serializing_if = "IMap::is_empty")]
-    pub direct: IMap<FileMode, IMap<String, String>>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub direct: Map<FileMode, Map<String, String>>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -111,7 +111,7 @@ impl Files {
             if let Some(map) = user.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut ISet::default())
+                    .get_or_insert(&mut Set::default())
                     .extend(map);
             }
         }
@@ -122,7 +122,7 @@ impl Files {
             if let Some(map) = sys.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut ISet::default())
+                    .get_or_insert(&mut Set::default())
                     .extend(map);
             }
         }
@@ -133,7 +133,7 @@ impl Files {
             if let Some(map) = sys.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut ISet::default())
+                    .get_or_insert(&mut Set::default())
                     .extend(map);
             }
         }
@@ -144,7 +144,7 @@ impl Files {
             if let Some(map) = direct.swap_remove(&mode) {
                 s_user
                     .get_mut(&mode)
-                    .get_or_insert(&mut IMap::default())
+                    .get_or_insert(&mut Map::default())
                     .extend(map);
             }
         }

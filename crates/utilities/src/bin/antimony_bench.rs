@@ -6,6 +6,12 @@
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
 
+use antimony::{cli::refresh::installed_profiles, shared};
+use anyhow::Result;
+use clap::{Parser, ValueEnum};
+use dialoguer::Input;
+use nix::unistd::chdir;
+use spawn::Spawner;
 use std::{
     borrow::Cow,
     env,
@@ -15,13 +21,6 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-
-use antimony::shared;
-use anyhow::Result;
-use clap::{Parser, ValueEnum};
-use dialoguer::Input;
-use nix::unistd::chdir;
-use spawn::Spawner;
 
 #[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
 pub enum Benchmark {
@@ -55,9 +54,9 @@ pub enum Benchmark {
 #[command(version)]
 #[command(about = "A Utility for Benchmarking Antimony, using Hyperfine")]
 pub struct Cli {
-    /// The profiles to benchmark.
+    /// The profiles to benchmark. Defaults to integrated profiles.
     #[arg(value_delimiter = ' ', num_args = 1..)]
-    pub profiles: Vec<String>,
+    pub profiles: Option<Vec<String>>,
 
     /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
     /// wherever `antimony` resolves to, and doesn't build.
@@ -147,6 +146,11 @@ fn main() -> Result<()> {
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 
+    let profiles = match cli.profiles {
+        Some(profiles) => profiles,
+        None => installed_profiles()?,
+    };
+
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])?
         .output(spawn::StreamMode::Pipe)
@@ -227,7 +231,7 @@ fn main() -> Result<()> {
         };
 
         println!("Using: {antimony}");
-        for profile in &cli.profiles {
+        for profile in &profiles {
             cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
 
             if benchmarks.contains(&Benchmark::Cold) {

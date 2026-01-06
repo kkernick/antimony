@@ -1,7 +1,6 @@
 //! A SECCOMP Notify application that stores syscall information in a SQLite3
 //! Database to be used for profile generation.
 
-use ahash::RandomState;
 use antimony::shared::{
     self, Set,
     env::{DATA_HOME, RUNTIME_DIR},
@@ -33,7 +32,6 @@ use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
 use spawn::{Spawner, StreamMode};
 use std::{
-    collections::HashSet,
     fmt::Display,
     fs,
     os::{
@@ -157,7 +155,7 @@ fn commit_or_defer(
     profile: &str,
     path: String,
     call: i32,
-    mut entry: RefMut<'_, String, HashSet<i32, RandomState>>,
+    mut entry: RefMut<'_, String, Set<i32>>,
 ) {
     let commit: Result<()> = syscalls::CONNECTION.with_borrow_mut(|conn| {
         let tx = conn.transaction()?;

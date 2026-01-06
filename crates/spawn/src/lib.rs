@@ -70,11 +70,7 @@ fn dup_null() -> Result<OwnedFd, SpawnError> {
 /// Returns either a set of `None`, or the result of `pipe()`
 fn cond_pipe(cond: &StreamMode) -> Result<Option<(OwnedFd, OwnedFd)>, SpawnError> {
     match cond {
-        StreamMode::Pipe => match pipe() {
-            Ok((r, w)) => Ok(Some((r, w))),
-            Err(e) => Err(SpawnError::Errno(None, "pipe", e)),
-        },
-        StreamMode::Log(e) if log::log_enabled!(*e) => match pipe() {
+        StreamMode::Pipe | StreamMode::Log(_) => match pipe() {
             Ok((r, w)) => Ok(Some((r, w))),
             Err(e) => Err(SpawnError::Errno(None, "pipe", e)),
         },

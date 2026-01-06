@@ -227,7 +227,15 @@ fn parse(
                     .any(|shell| header.contains(shell))
                 {
                     let out = Spawner::abs(utility("dumper"))
-                        .args(["run", "--path", &resolved, "--instance", instance])?
+                        .args([
+                            "run",
+                            "--path",
+                            &resolved,
+                            "--instance",
+                            instance,
+                            "--filter",
+                            "execve",
+                        ])?
                         .output(StreamMode::Pipe)
                         .preserve_env(true)
                         .new_privileges(true)

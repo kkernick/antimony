@@ -39,14 +39,18 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         if !cache_dir.exists() {
             as_effective!(fs::create_dir(&cache_dir).is_ok())
         } else {
-            as_effective!({ fs::File::create(cache_dir.join(".test")).is_ok() })
+            Ok(temp::Builder::new()
+                .within(&cache_dir)
+                .owner(user::Mode::Effective)
+                .create::<temp::File>()
+                .is_ok())
         }
         .expect("Failed to create cache dir")
     };
 
     if !writeable {
         debug!("Cache dir not-writable. Pivoting to /tmp");
-        cache_dir = temp_dir().join("antimony");
+        cache_dir = temp_dir().join(format!("antimony-{}", USER_NAME.as_str()));
         let result = || -> Result<()> {
             as_effective!({
                 if !cache_dir.exists() {
@@ -61,9 +65,9 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
             warn!("Cannot create the cache directory safely! This is a security hole!");
             if !cache_dir.exists() {
                 fs::create_dir_all(&cache_dir).unwrap();
+                fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))
+                    .expect("Failed to set permissions for cache!");
             }
-            fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o750))
-                .expect("Failed to set permissions for cache!");
         }
     }
     cache_dir

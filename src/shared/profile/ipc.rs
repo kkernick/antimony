@@ -1,6 +1,6 @@
 use crate::{
     cli,
-    shared::{ISet, format_iter},
+    shared::{Set, format_iter},
 };
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -19,24 +19,24 @@ pub struct Ipc {
     pub user_bus: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub portals: ISet<Portal>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub portals: Set<Portal>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub see: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub see: Set<String>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub talk: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub talk: Set<String>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub own: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub own: Set<String>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub call: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub call: Set<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.

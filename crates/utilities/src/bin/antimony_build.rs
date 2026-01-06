@@ -5,7 +5,7 @@ use antimony::shared::env::HOME_PATH;
 use anyhow::Result;
 use clap::Parser;
 use spawn::{Spawner, StreamMode};
-use std::{fs, path::Path};
+use std::fs;
 
 #[derive(Parser, Debug, Default)]
 #[command(name = "Antimony-Build")]
@@ -28,6 +28,7 @@ pub struct Cli {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    notify::init_error()?;
 
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])?
@@ -36,6 +37,12 @@ fn main() -> Result<()> {
         .spawn()?
         .output_all()?;
     let root = &root[..root.len() - 1];
+
+    let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
+        var
+    } else {
+        format!("{root}/target")
+    };
 
     let mut rust_flags = Vec::new();
     if cli.native {
@@ -52,40 +59,41 @@ fn main() -> Result<()> {
     let target = "x86_64-unknown-linux-gnu";
     if cli.recipe == "pgo" {
         eprintln!("Compiling instrumented binary");
-        let handle = Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
-            .new_privileges(true)
-            .preserve_env(true)
-            .error(spawn::StreamMode::Pipe)
-            .output(StreamMode::Discard)
-            .args(cargo_flags.clone())?;
+        assert!(
+            Spawner::new("cargo")?
+                .env("RUSTFLAGS", rust_flags.join(" "))?
+                .new_privileges(true)
+                .preserve_env(true)
+                .env("RUST_LOG", "")?
+                .error(StreamMode::Log(log::Level::Warn))
+                .output(StreamMode::Log(log::Level::Info))
+                .args(cargo_flags.clone())?
+                .args(["pgo", "build", "--", "--target", target])?
+                .args(post_flags.clone())?
+                .spawn()?
+                .wait()?
+                == 0,
+        );
 
-        #[rustfmt::skip]
-        handle.args_i([
-            "pgo", "build", "--",
-            "--target", target,
-        ])?;
-        handle.args_i(post_flags.clone())?;
-
-        let output = handle.spawn()?.error_all()?;
-        let instrumented = output
-            .lines()
-            .find(|e| e.contains("Now run"))
-            .unwrap()
-            .split(" ")
-            .find(|e| Path::new(e).exists())
-            .unwrap();
-
+        let instrumented = format!("{target_dir}/{target}/release/antimony");
         eprintln!("Using {instrumented}");
 
         eprintln!("Performing Refresh Profiling");
-        Spawner::abs(instrumented)
-            .args(["refresh", "--hard"])?
-            .new_privileges(true)
-            .preserve_env(true)
-            .output(StreamMode::Discard)
-            .spawn()?
-            .wait()?;
+        assert!(
+            Spawner::abs(&instrumented)
+                .args(["refresh", "--hard"])?
+                .new_privileges(true)
+                .preserve_env(true)
+                .env(
+                    "LLVM_PROFILE_FILE",
+                    format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
+                )?
+                .error(StreamMode::Log(log::Level::Warn))
+                .output(StreamMode::Log(log::Level::Info))
+                .spawn()?
+                .wait()?
+                == 0
+        );
 
         let profiles = fs::read_dir(HOME_PATH.join(".local").join("bin"))?.filter_map(|e| {
             if let Ok(entry) = e
@@ -99,51 +107,65 @@ fn main() -> Result<()> {
         });
 
         eprintln!("Peforming Benchmark Profiling");
-        Spawner::abs(format!("{root}/scripts/bench"))
-            .args(profiles)?
-            .args(["--recipe", instrumented, "--bench", "real"])?
-            .new_privileges(true)
-            .preserve_env(true)
-            .output(StreamMode::Discard)
-            .spawn()?
-            .wait()?;
+        assert!(
+            Spawner::abs(format!("{root}/scripts/cargo-bencher"))
+                .args(profiles)?
+                .args(["--recipe", &instrumented, "--bench", "real"])?
+                .new_privileges(true)
+                .preserve_env(true)
+                .env(
+                    "LLVM_PROFILE_FILE",
+                    format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
+                )?
+                .error(StreamMode::Log(log::Level::Warn))
+                .output(StreamMode::Log(log::Level::Info))
+                .spawn()?
+                .wait()?
+                == 0
+        );
 
         eprintln!("Compiling Final Binary");
-        let handle = Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
-            .new_privileges(true)
-            .preserve_env(true)
-            .output(StreamMode::Discard)
-            .args(cargo_flags)?;
-
-        #[rustfmt::skip]
-        handle.args_i([
-            "pgo", "optimize", "build", "--",
-            "--target", target,
-            "--workspace",
-        ])?;
-        handle.args_i(post_flags)?;
-        handle.spawn()?.wait()?;
+        assert!(
+            Spawner::new("cargo")?
+                .env("RUSTFLAGS", rust_flags.join(" "))?
+                .new_privileges(true)
+                .preserve_env(true)
+                .env("RUST_LOG", "")?
+                .error(StreamMode::Log(log::Level::Warn))
+                .output(StreamMode::Log(log::Level::Info))
+                .args(cargo_flags)?
+                .args([
+                    "pgo",
+                    "optimize",
+                    "build",
+                    "--",
+                    "--target",
+                    target,
+                    "--workspace",
+                ])?
+                .args(post_flags)?
+                .spawn()?
+                .wait()?
+                == 0
+        );
     } else {
         eprintln!("Compiling Binary");
-        Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
-            .new_privileges(true)
-            .preserve_env(true)
-            .args(cargo_flags)?
-            .arg("build")?
-            .args(["--target", target, "--workspace", "--profile", &cli.recipe])?
-            .args(post_flags)?
-            .output(StreamMode::Discard)
-            .spawn()?
-            .wait()?;
+        assert!(
+            Spawner::new("cargo")?
+                .env("RUSTFLAGS", rust_flags.join(" "))?
+                .new_privileges(true)
+                .preserve_env(true)
+                .args(cargo_flags)?
+                .arg("build")?
+                .args(["--target", target, "--workspace", "--profile", &cli.recipe])?
+                .args(post_flags)?
+                .error(StreamMode::Log(log::Level::Warn))
+                .output(StreamMode::Log(log::Level::Info))
+                .spawn()?
+                .wait()?
+                == 0
+        );
     }
-
-    let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
-        var
-    } else {
-        format!("{root}/target")
-    };
 
     println!(
         "{target_dir}/{target}/{}",

@@ -207,12 +207,8 @@ impl Stream {
         Ok(res)
     }
 
-    /// Wait for the thread to terminate (The subprocess closes their side of the pipe),
-    /// then return the entire contents of the stream.
-    ///
-    /// This function is blocking.
+    /// Read everything currently in the pipe. Not blocking.
     pub fn read_all(&mut self) -> Result<String, Error> {
-        self.wait()?;
         let mut state = self.shared.state.lock();
         Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
     }

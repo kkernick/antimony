@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
+log = "0.4.29"
 user = { path = "../user", optional = true}

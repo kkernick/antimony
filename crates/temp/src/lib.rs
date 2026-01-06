@@ -59,10 +59,7 @@ impl Object for File {
         std::fs::File::create_new(self.parent.join(&self.name)).map(|_| ())
     }
     fn remove(&self) -> Result<(), std::io::Error> {
-        let path = self.parent.join(&self.name);
-        if path.exists() {
-            std::fs::remove_file(path).map(|_| ())?;
-        }
+        std::fs::remove_file(self.full()).map(|_| ())?;
         Ok(())
     }
 
@@ -95,10 +92,7 @@ impl Object for Directory {
     }
 
     fn remove(&self) -> Result<(), std::io::Error> {
-        let path = self.path.join(&self.name);
-        if path.exists() {
-            std::fs::remove_dir_all(path).map(|_| ())?;
-        }
+        std::fs::remove_dir_all(self.full()).map(|_| ())?;
         Ok(())
     }
 
@@ -197,12 +191,17 @@ impl Drop for Temp {
     #[cfg(feature = "user")]
     fn drop(&mut self) {
         let mode = self.mode;
-        let _ = user::run_as!(mode, { self.object.remove() });
+        if let Err(e) = user::run_as!(mode, { self.object.remove() }) {
+            log::error!("Failed to remove temporary file: {e}");
+        }
     }
 
     #[cfg(not(feature = "user"))]
     fn drop(&mut self) {
-        let _ = self.object.remove();
+        log::trace!("Dropping temporary file: {}", self.full().display());
+        if let Err(e) = self.object.remove() {
+            log::error!("Failed to remove temporary file: {e}");
+        }
     }
 }
 unsafe impl Send for Temp {}

@@ -11,6 +11,25 @@ fn main() -> Result<()> {
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 
+    #[cfg(debug_assertions)]
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            let deadlocks = parking_lot::deadlock::check_deadlock();
+            if deadlocks.is_empty() {
+                continue;
+            }
+            log::error!("{} deadlocks detected", deadlocks.len());
+            for (i, threads) in deadlocks.iter().enumerate() {
+                log::error!("Deadlock #{}", i);
+                for t in threads {
+                    log::error!("Thread Id {:#?}", t.thread_id());
+                    log::error!("{:#?}", t.backtrace());
+                }
+            }
+        }
+    });
+
     // In most SetUID applications, The effective user is the privileged
     // one (Usually root), but in Antimony its the opposite. The user
     // is considered privileged, as the antimony user has no permission

@@ -6,20 +6,29 @@ pub mod feature;
 pub mod profile;
 pub mod syscalls;
 
-use crate::shared::{config::CONFIG_FILE, env::{AT_HOME, CACHE_DIR, RUNTIME_DIR}};
+use crate::shared::{
+    config::CONFIG_FILE,
+    env::{AT_HOME, CACHE_DIR, RUNTIME_DIR},
+};
 use indexmap::{IndexMap, IndexSet};
 use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
 use spawn::Spawner;
-use std::{fmt::Display, path::PathBuf};
+use std::{fmt::Display, hash::BuildHasher, path::PathBuf};
 use user::as_real;
 
-pub type Set<T> = std::collections::HashSet<T, ahash::RandomState>;
-pub type Map<K, V> = std::collections::HashMap<K, V, ahash::RandomState>;
+#[derive(Default, Copy, Clone)]
+pub struct StaticHash;
+impl BuildHasher for StaticHash {
+    type Hasher = ahash::AHasher;
+    fn build_hasher(&self) -> Self::Hasher {
+        ahash::RandomState::with_seeds(0, 0, 0, 0).build_hasher()
+    }
+}
 
-pub type ISet<T> = IndexSet<T, ahash::RandomState>;
-pub type IMap<K, V> = IndexMap<K, V, ahash::RandomState>;
+pub type Set<T> = IndexSet<T, StaticHash>;
+pub type Map<K, V> = IndexMap<K, V, StaticHash>;
 
 /// Check that the Real User is privileged. This is used to allow modifying the
 /// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)

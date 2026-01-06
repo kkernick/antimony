@@ -8,12 +8,11 @@
 use crate::{
     fab::resolve,
     shared::{
-        ISet, Map, Set,
+        Map, Set,
         feature::{self, Feature},
         profile::{Profile, files::FILE_MODES},
     },
 };
-use ahash::{HashMapExt, HashSetExt};
 use log::{debug, warn};
 use spawn::Spawner;
 use std::borrow::Cow;
@@ -79,7 +78,7 @@ fn strike_feature(
         debug!("Striking feature: {feature}");
 
         // Remove the offending feature immediately.
-        features.remove(feature);
+        features.swap_remove(feature);
 
         // Then, grab the features that this feature requires.
         if let Some(depends) = load_feature(feature, db)?.requires.clone() {
@@ -105,7 +104,7 @@ fn resolve_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
     features: &mut Map<String, u32>,
-    blacklist: &mut ISet<String>,
+    blacklist: &mut Set<String>,
     searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
@@ -148,8 +147,8 @@ fn resolve_features(
     profile: &mut Profile,
     db: &mut Map<String, Feature>,
 ) -> Result<Set<String>, Error> {
-    let mut features = Map::new();
-    let mut searched = Set::new();
+    let mut features = Map::default();
+    let mut searched = Set::default();
     let blacklist = &mut profile.conflicts;
 
     for feat in &profile.features {
@@ -308,7 +307,7 @@ fn add_feature(
             None => ipc.disable,
         };
 
-        let format_all = |ipc_list: ISet<String>| -> ISet<String> {
+        let format_all = |ipc_list: Set<String>| -> Set<String> {
             ipc_list
                 .into_iter()
                 .filter_map(|f| format(f, map).ok())
@@ -369,11 +368,11 @@ fn add_feature(
 }
 
 pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
-    let mut map = Map::new();
+    let mut map = Map::default();
     map.insert("{name}", name.to_string());
     map.insert("{desktop}", profile.desktop(name).to_string());
 
-    let mut db = Map::new();
+    let mut db = Map::default();
     for feature in resolve_features(profile, &mut db)? {
         add_feature(profile, &map, load_feature(&feature, &mut db)?)?;
     }

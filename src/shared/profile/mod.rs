@@ -13,7 +13,7 @@ use crate::{
     cli::{self, info::Info},
     fab::{self, get_wildcards},
     shared::{
-        IMap, ISet,
+        Map, Set,
         config::CONFIG_FILE,
         db::{self, Database, DatabaseCache, Table},
         edit,
@@ -24,7 +24,7 @@ use crate::{
 };
 use ahash::RandomState;
 use console::style;
-use log::{debug, info};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -101,7 +101,7 @@ fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
 }
 
 /// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &ISet<String>, verbose: u8) {
+pub fn library_info(libraries: &Set<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
@@ -142,12 +142,12 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub features: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub features: Set<String>,
 
     /// Features that should be excluded from running under the profile.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub conflicts: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub conflicts: Set<String>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -168,7 +168,7 @@ pub struct Profile {
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    pub inherits: Option<ISet<String>>,
+    pub inherits: Option<Set<String>>,
 
     /// Configuration for the profile's home.
     pub home: Option<home::Home>,
@@ -184,35 +184,35 @@ pub struct Profile {
     pub files: Option<files::Files>,
 
     /// Binaries needed in the sandbox.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub binaries: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub binaries: Set<String>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
     /// 2. Directories (eg /usr/lib/mylib) to which all contents will be resolved
     /// 3. Wildcards (eg lib*), which can match directories and files.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub libraries: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub libraries: Set<String>,
 
     /// Devices needed in the sandbox, at /dev.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub devices: ISet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub devices: Set<String>,
 
     /// Namespaces, such as User and Net.
-    #[serde(skip_serializing_if = "ISet::is_empty")]
-    pub namespaces: ISet<ns::Namespace>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub namespaces: Set<ns::Namespace>,
 
     /// Environment Variable Keypairs
-    #[serde(skip_serializing_if = "IMap::is_empty")]
-    pub environment: IMap<String, String>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub environment: Map<String, String>,
 
     /// Arguments to pass to the sandboxed application directly.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    #[serde(skip_serializing_if = "IMap::is_empty")]
-    pub configuration: IMap<String, Profile>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub configuration: Map<String, Profile>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
@@ -390,15 +390,15 @@ impl Profile {
         }
 
         debug!("No cache available");
-        let to_inherit: ISet<String> = match &profile.inherits {
+        let to_inherit: Set<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
                 if !CONFIG_FILE.system_mode()
                     && db::exists("default", Database::User, Table::Profiles)?
                 {
-                    ISet::from_iter(["default".to_string()])
+                    Set::from_iter(["default".to_string()])
                 } else {
-                    ISet::default()
+                    Set::default()
                 }
             }
         };
@@ -443,7 +443,9 @@ impl Profile {
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
-        db::save(&hash, &profile, Database::Cache, Table::Profiles)?;
+        if db::save(&hash, &profile, Database::Cache, Table::Profiles).is_err() {
+            warn!("Cannot write profile cache to database.");
+        }
         Ok(profile)
     }
 
@@ -589,7 +591,7 @@ impl Profile {
     /// we can serialize it for the purposes of hashing.
     pub fn num_hash(&self) -> Result<u64, Error> {
         timer!("::hash", {
-            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(postcard::to_stdvec(&self)?))
+            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(&postcard::to_stdvec(&self)?))
         })
     }
 

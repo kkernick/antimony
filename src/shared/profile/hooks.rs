@@ -137,6 +137,7 @@ impl Hook {
         main: Option<Spawner>,
         name: &str,
         cache: &str,
+        instance: &str,
         home: &Option<String>,
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
@@ -152,6 +153,7 @@ impl Hook {
         handle.preserve_env_i(self.env.unwrap_or(false));
         handle.env_i("ANTIMONY_NAME", name)?;
         handle.env_i("ANTIMONY_CACHE", cache)?;
+        handle.env_i("ANTIMONY_INSTANCE", instance)?;
         handle.mode_i(user::Mode::Real);
         handle.output_i(StreamMode::Log(log::Level::Debug));
         handle.error_i(StreamMode::Log(log::Level::Warn));

@@ -68,7 +68,7 @@ sudo chmod ug+s /usr/bin/antimony
 >[!note]
 >Antimony does not *require* SetUID to function, all that is required is that the `AT_HOME` environment variable points to somewhere it has write access. Note, however, that provided a globally accessible home for Antimony can allowed for trivial sandbox compromise by writing to the sandboxes SOF folder. It also allows erroneous modifications to be made to Profiles and Features without Antimony being able to mediate it.
 
-2.  Antimony creates hard-links from the system library folder (`/usr/lib` and `/usr/lib64`). Some distributions and hardened kernels enforce the `fs.protected_hardlinks` sysctl, which denies this. Antimony should additionally be installed with the `CAP_FOWNER` capability to allow this. You can set it via: `sudo setcap cap_fowner+ep /usr/bin/antimony`.
+2.  Antimony creates hard-links from the system library folder (`/usr/lib` and `/usr/lib64`). Some distributions and hardened kernels enforce the `fs.protected_hardlinks` sysctl, which denies this. 
 
 >[!warning]
 >If Antimony cannot create hard links, it will default to copies. This has a drastic toll on performance.

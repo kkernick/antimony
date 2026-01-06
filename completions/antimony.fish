@@ -75,8 +75,8 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l see -d 'Add bu
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l talk -d 'Add busses the sandbox can talk to' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l own -d 'Add busses the sandbox owns' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l call -d 'Add busses the sandbox can call' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l file-passthrough -d 'Override the file passthrough mode' -r -f -a "read-only\t''
-read-write\t''
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l file-passthrough -d 'Override the file passthrough mode' -r -f -a "read-only\t'Only allow reads'
+read-write\t'Allow writes'
 executable\t'Executable files need to be created as copies, so that chmod will work correctly'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r
