@@ -2,10 +2,10 @@ use crate::shared::{
     Map, Set,
     env::{AT_HOME, USER_NAME},
 };
-use parking_lot::Mutex;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params, types::FromSql};
+use log::trace;
+use rusqlite::{Connection, OptionalExtension, params, types::FromSql};
 use serde::{Serialize, de::DeserializeOwned};
-use std::{fmt, fs, path::PathBuf, sync::LazyLock};
+use std::{fmt, fs, path::PathBuf};
 use thiserror::Error;
 use user::as_effective;
 
@@ -29,7 +29,7 @@ pub enum Error {
 
 pub type DatabaseCache = Result<Map<String, String>, Error>;
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Database {
     User,
     System,
@@ -67,40 +67,26 @@ impl fmt::Display for Table {
     }
 }
 
-static WRITE_USER: LazyLock<Mutex<Connection>> = LazyLock::new(|| {
-    Mutex::new(new_connection(Database::User, true).expect("Failed to access User Database"))
-});
-static WRITE_SYS: LazyLock<Mutex<Connection>> = LazyLock::new(|| {
-    Mutex::new(new_connection(Database::System, true).expect("Failed to access User Database"))
-});
-static WRITE_CACHE: LazyLock<Mutex<Connection>> = LazyLock::new(|| {
-    Mutex::new(new_connection(Database::Cache, true).expect("Failed to access User Database"))
-});
-
 thread_local! {
-    pub static USER_DB: Connection = new_connection(Database::User, false).expect("Failed to access User Database");
-    pub static SYS_DB: Connection = new_connection(Database::System, false).expect("Failed to access User Database");
-    pub static CACHE_DB: Connection = new_connection(Database::Cache, false).expect("Failed to access User Database");
+    pub static USER_DB: Connection = new_connection(Database::User).expect("Failed to access User Database");
+    pub static SYS_DB: Connection = new_connection(Database::System).expect("Failed to access System Database");
+    pub static CACHE_DB: Connection = new_connection(Database::Cache).expect("Failed to access Cache Database");
 }
 
-fn new_connection(db: Database, write: bool) -> Result<Connection, Error> {
+fn new_connection(db: Database) -> Result<Connection, Error> {
     as_effective!({
+        trace!("Creating parent");
         let path = db.path();
         if let Some(parent) = path.parent()
             && !parent.exists()
         {
             fs::create_dir(parent).map_err(|e| Error::Io("creating database", e))?;
         }
-        let conn = if !path.exists() {
-            let conn = if write {
-                Connection::open(path)?
-            } else {
-                Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?
-            };
 
-            if let Database::System | Database::User = db {
-                conn.execute_batch(
-                    r#"
+        let conn = Connection::open(&path)?;
+        if let Database::System | Database::User = db {
+            conn.execute_batch(
+                r#"
                     CREATE TABLE IF NOT EXISTS profiles (
                         name TEXT PRIMARY KEY,
                         value TEXT NOT NULL
@@ -110,10 +96,10 @@ fn new_connection(db: Database, write: bool) -> Result<Connection, Error> {
                         value TEXT NOT NULL
                     );
                     "#,
-                )?;
-            } else {
-                conn.execute_batch(
-                    r#"
+            )?;
+        } else {
+            conn.execute_batch(
+                r#"
                     CREATE TABLE IF NOT EXISTS profiles (
                         name TEXT PRIMARY KEY,
                         value BLOB NOT NULL
@@ -139,14 +125,8 @@ fn new_connection(db: Database, write: bool) -> Result<Connection, Error> {
                         value BLOB NOT NULL
                     );
                     "#,
-                )?;
-            }
-            conn
-        } else if write {
-            Connection::open(path)?
-        } else {
-            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?
-        };
+            )?;
+        }
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -162,23 +142,16 @@ pub fn execute<T, F>(db: Database, f: F) -> Result<T, Error>
 where
     F: FnOnce(&Connection) -> Result<T, Error>,
 {
+    let path = db.path();
+    if !path.exists() {
+        trace!("Creating database at {}", path.display());
+        as_effective!(Connection::open(&path)).map_err(|e| Error::Errno("user", e))??;
+    }
     match db {
         Database::User => USER_DB.with(|c| f(c)),
         Database::System => SYS_DB.with(|c| f(c)),
         Database::Cache => CACHE_DB.with(|c| f(c)),
     }
-}
-
-pub fn write_execute<T, F>(db: Database, f: F) -> Result<T, Error>
-where
-    F: FnOnce(&Connection) -> Result<T, Error>,
-{
-    let mutex = match db {
-        Database::User => WRITE_USER.lock(),
-        Database::System => WRITE_SYS.lock(),
-        Database::Cache => WRITE_CACHE.lock(),
-    };
-    f(&mutex)
 }
 
 pub fn exists(name: &str, db: Database, tb: Table) -> Result<bool, Error> {
@@ -230,7 +203,7 @@ pub fn get<T: DeserializeOwned>(name: &str, db: Database, tb: Table) -> Result<O
 }
 
 pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(), Error> {
-    write_execute(db, |db| {
+    execute(db, |db| {
         db.execute(
             &format!("INSERT OR REPLACE INTO {tb} (name, value) VALUES (?1, ?2)",),
             params![name, value],
@@ -240,7 +213,7 @@ pub fn store_str(name: &str, value: &str, db: Database, tb: Table) -> Result<(),
 }
 
 pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<(), Error> {
-    write_execute(db, |db| {
+    execute(db, |db| {
         db.execute(
             &format!("INSERT OR REPLACE INTO {tb} (name, value) VALUES (?1, ?2)",),
             params![name, value],
@@ -250,7 +223,7 @@ pub fn store_bytes(name: &str, value: &[u8], db: Database, tb: Table) -> Result<
 }
 
 pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Result<(), Error> {
-    write_execute(db, |db| {
+    execute(db, |db| {
         db.execute(
             &format!("INSERT OR REPLACE INTO {tb} (name, value) VALUES (?1, ?2)",),
             params![name, toml::to_string(value)?],
@@ -260,7 +233,7 @@ pub fn save<T: Serialize>(name: &str, value: &T, db: Database, tb: Table) -> Res
 }
 
 pub fn delete(name: &str, db: Database, tb: Table) -> Result<(), Error> {
-    write_execute(db, |db| {
+    execute(db, |db| {
         db.execute(&format!("DELETE FROM {tb} WHERE name = ?1"), params![name])?;
         Ok(())
     })?;

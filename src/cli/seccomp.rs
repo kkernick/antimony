@@ -6,7 +6,6 @@ use crate::shared::{
 };
 use anyhow::{Result, anyhow};
 use clap::ValueEnum;
-use dialoguer::Confirm;
 use nix::unistd::getcwd;
 use rusqlite::params;
 use spawn::{Spawner, StreamMode};
@@ -55,22 +54,16 @@ impl super::Run for Args {
             user::set(user::Mode::Effective)?;
 
             match self.operation {
-                Operation::Optimize => {
-                    let conn = syscalls::get_connection()?;
+                Operation::Optimize => syscalls::CONNECTION.with_borrow_mut(|conn| {
                     conn.execute("VACUUM;", [])?;
                     conn.execute("ANALYZE;", [])?;
                     println!("Optimized!");
                     Ok(())
-                }
+                }),
                 Operation::Remove => {
-                    let confirm = Confirm::new()
-                        .with_prompt("Are you sure you want to delete the SECCOMP Database?")
-                        .interact()?;
+                    fs::remove_dir_all(AT_HOME.join("seccomp"))?;
+                    println!("Deleted");
 
-                    if confirm {
-                        fs::remove_dir_all(AT_HOME.join("seccomp"))?;
-                        println!("Deleted");
-                    }
                     Ok(())
                 }
                 Operation::Export => {
@@ -100,46 +93,47 @@ impl super::Run for Args {
                         .create::<temp::File>()?;
                     fs::copy(&db, temp.path())?;
 
-                    let mut conn = syscalls::get_connection()?;
-                    let tx = conn.transaction()?;
-                    tx.execute(
-                        &format!("ATTACH DATABASE '{}' AS other", temp.path().display()),
-                        [],
-                    )?;
-                    tx.execute_batch(
-                        "
-                     INSERT OR IGNORE INTO binaries (path)
-                     SELECT path FROM other.binaries;
+                    syscalls::CONNECTION.with_borrow_mut(|conn| {
+                        let tx = conn.transaction()?;
+                        tx.execute(
+                            &format!("ATTACH DATABASE '{}' AS other", temp.path().display()),
+                            [],
+                        )?;
+                        tx.execute_batch(
+                            "
+                        INSERT OR IGNORE INTO binaries (path)
+                        SELECT path FROM other.binaries;
 
-                     INSERT OR IGNORE INTO syscalls (name)
-                     SELECT name FROM other.syscalls;
+                        INSERT OR IGNORE INTO syscalls (name)
+                        SELECT name FROM other.syscalls;
 
-                     INSERT OR IGNORE INTO profiles (name)
-                     SELECT name FROM other.profiles;
+                        INSERT OR IGNORE INTO profiles (name)
+                        SELECT name FROM other.profiles;
 
-                     INSERT OR IGNORE INTO binary_syscalls (binary_id, syscall_id)
-                     SELECT b1.id, s1.id
-                     FROM other.binary_syscalls bs
-                     JOIN other.binaries b2 ON bs.binary_id = b2.id
-                     JOIN binaries b1 ON b1.path = b2.path
-                     JOIN other.syscalls s2 ON bs.syscall_id = s2.id
-                     JOIN syscalls s1 ON s1.name = s2.name;
+                        INSERT OR IGNORE INTO binary_syscalls (binary_id, syscall_id)
+                        SELECT b1.id, s1.id
+                        FROM other.binary_syscalls bs
+                        JOIN other.binaries b2 ON bs.binary_id = b2.id
+                        JOIN binaries b1 ON b1.path = b2.path
+                        JOIN other.syscalls s2 ON bs.syscall_id = s2.id
+                        JOIN syscalls s1 ON s1.name = s2.name;
 
-                     INSERT OR IGNORE INTO profile_binaries (profile_id, binary_id)
-                     SELECT p1.id, b1.id
-                     FROM other.profile_binaries pb
-                     JOIN other.profiles p2 ON pb.profile_id = p2.id
-                     JOIN profiles p1 ON p1.name = p2.name
-                     JOIN other.binaries b2 ON pb.binary_id = b2.id
-                     JOIN binaries b1 ON b1.path = b2.path;
-                     ",
-                    )?;
-                    tx.commit()?;
-                    Ok(())
+                        INSERT OR IGNORE INTO profile_binaries (profile_id, binary_id)
+                        SELECT p1.id, b1.id
+                        FROM other.profile_binaries pb
+                        JOIN other.profiles p2 ON pb.profile_id = p2.id
+                        JOIN profiles p1 ON p1.name = p2.name
+                        JOIN other.binaries b2 ON pb.binary_id = b2.id
+                        JOIN binaries b1 ON b1.path = b2.path;
+                        ",
+                        )?;
+                        tx.commit()?;
+                        Ok(())
+                    })
                 }
 
                 Operation::Clean => {
-                    let mut conn = syscalls::get_connection()?;
+                    syscalls::CONNECTION.with_borrow_mut(|conn| {
                     let tx = conn.transaction()?;
 
                     || -> Result<()> {
@@ -213,6 +207,7 @@ impl super::Run for Args {
 
                     tx.commit()?;
                     Ok(())
+                    })
                 }
             }
         }

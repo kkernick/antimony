@@ -3,7 +3,6 @@ use crate::{
     timer,
 };
 use ahash::HashSetExt;
-use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
@@ -11,11 +10,11 @@ use nix::{
     errno,
     sys::socket::{self, ControlMessage, MsgFlags},
 };
-use parking_lot::{Mutex, MutexGuard};
 use rusqlite::{Connection, Transaction};
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
     borrow::Cow,
+    cell::RefCell,
     error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
@@ -26,82 +25,73 @@ use std::{
     },
     path::PathBuf,
     sync::LazyLock,
-    thread::{ThreadId, sleep},
+    thread::sleep,
     time::Duration,
 };
 use user::{as_effective, as_real};
 
 fn new_connection() -> Result<Connection, Error> {
     as_effective!({
-        let dir = AT_HOME.join("seccomp");
-        if !dir.exists() {
-            fs::create_dir_all(&dir)?;
+        let db = AT_HOME.join("seccomp").join("syscalls.db");
+        if let Some(parent) = db.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
         }
-        let conn = Connection::open(dir.join("syscalls.db"))?;
+
+        let conn = if !db.exists() {
+            let conn = Connection::open(db)?;
+            conn.execute_batch(
+                r#"
+                PRAGMA foreign_keys = ON;
+                CREATE TABLE IF NOT EXISTS binaries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path TEXT NOT NULL UNIQUE
+                );
+
+                CREATE TABLE IF NOT EXISTS syscalls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name INTEGER NOT NULL UNIQUE
+                );
+
+                CREATE TABLE IF NOT EXISTS binary_syscalls (
+                    binary_id INTEGER NOT NULL,
+                    syscall_id INTEGER NOT NULL,
+                    PRIMARY KEY (binary_id, syscall_id),
+                    FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE,
+                    FOREIGN KEY (syscall_id) REFERENCES syscalls(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS profiles (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT UNIQUE NOT NULL
+                    );
+
+                CREATE TABLE IF NOT EXISTS profile_binaries (
+                    profile_id INTEGER NOT NULL,
+                    binary_id INTEGER NOT NULL,
+                    PRIMARY KEY (profile_id, binary_id),
+                    FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
+                    FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
+                );
+                "#,
+            )?;
+            conn
+        } else {
+            Connection::open(db)?
+        };
+
         conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "cache_size", "-20000")?;
+        conn.set_prepared_statement_cache_capacity(100);
         Ok(conn)
     })?
 }
 
-pub static POOL: LazyLock<anyhow::Result<()>> = LazyLock::new(|| {
-    as_effective!(anyhow::Result<()>, {
-        let conn = new_connection()?;
-        conn.execute_batch(
-            "
-            PRAGMA foreign_keys = ON;
-            CREATE TABLE IF NOT EXISTS binaries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                path TEXT NOT NULL UNIQUE
-            );
-
-            CREATE TABLE IF NOT EXISTS syscalls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name INTEGER NOT NULL UNIQUE
-            );
-
-            CREATE TABLE IF NOT EXISTS binary_syscalls (
-                binary_id INTEGER NOT NULL,
-                syscall_id INTEGER NOT NULL,
-                PRIMARY KEY (binary_id, syscall_id),
-                FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE,
-                FOREIGN KEY (syscall_id) REFERENCES syscalls(id) ON DELETE CASCADE
-            );
-
-            CREATE TABLE IF NOT EXISTS profiles (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT UNIQUE NOT NULL
-                );
-
-            CREATE TABLE IF NOT EXISTS profile_binaries (
-                profile_id INTEGER NOT NULL,
-                binary_id INTEGER NOT NULL,
-                PRIMARY KEY (profile_id, binary_id),
-                FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
-                FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
-            );
-            ",
-        )?;
-        Ok(())
-    })?
-});
-
-static CONNECTION_CACHE: CacheStatic<ThreadId, Mutex<Connection>> = LazyLock::new(DashMap::default);
-pub static CONNECTIONS: LazyLock<cache::Cache<ThreadId, Mutex<Connection>>> =
-    LazyLock::new(|| cache::Cache::new(&CONNECTION_CACHE));
-
-pub fn get_connection() -> Result<MutexGuard<'static, Connection>, Error> {
-    if POOL.is_err() {
-        Err(Error::Pool)
-    } else {
-        let id = std::thread::current().id();
-        match CONNECTIONS.get(&id) {
-            Some(connection) => Ok(connection.lock()),
-            None => {
-                CONNECTIONS.insert(id, Mutex::new(new_connection()?));
-                Ok(CONNECTIONS.get(&id).unwrap().lock())
-            }
-        }
-    }
+thread_local! {
+    pub static CONNECTION: RefCell<Connection> = RefCell::new(new_connection().expect("Failed to access User Database"));
 }
 
 static CACHE: LazyLock<DashMap<String, i32, ahash::RandomState>> = LazyLock::new(DashMap::default);
@@ -383,51 +373,50 @@ pub fn get_calls(name: &str, p_binaries: &ISet<String>) -> PolicyPair {
     let mut syscalls = Set::new();
     let mut bwrap = Set::new();
 
-    if let Ok(mut conn) = get_connection() {
-        let query_result = || -> Result<(), Error> {
-            let tx = conn.transaction()?;
-            let profile_id = insert_profile(&tx, name)?;
+    let query_result: Result<(), Error> = CONNECTION.with_borrow_mut(|conn| {
+        let tx = conn.transaction()?;
+        let profile_id = insert_profile(&tx, name)?;
 
-            let mut stmt = tx.prepare(
-                "SELECT b.path
+        let mut stmt = tx.prepare(
+            "SELECT b.path
             FROM binaries b
             JOIN profile_binaries pb ON b.id = pb.binary_id
             WHERE pb.profile_id = ?1",
-            )?;
+        )?;
 
-            let mut binaries = Set::new();
-            if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
-                for bin_res in binaries_iter {
-                    binaries.insert(bin_res?);
-                }
+        let mut binaries = Set::new();
+        if let Ok(binaries_iter) = stmt.query_map([profile_id], |row| row.get::<_, String>(0)) {
+            for bin_res in binaries_iter {
+                binaries.insert(bin_res?);
             }
-
-            // Add extra binaries if passed
-            for b in p_binaries {
-                binaries.insert(b.clone());
-            }
-            binaries.iter().for_each(|bin| {
-                if let Err(e) = extend(
-                    &tx,
-                    bin,
-                    if bin.ends_with("bwrap") {
-                        &mut bwrap
-                    } else {
-                        &mut syscalls
-                    },
-                ) {
-                    warn!("Failed to extend syscalls for binary {bin}: {e}");
-                }
-            });
-            Ok(())
-        }();
-
-        if let Err(e) = query_result {
-            warn!("Could not query the SECCOMP Database: {e}. Filter is incomplete");
         }
 
-        bwrap = bwrap.difference(&syscalls).cloned().collect();
+        // Add extra binaries if passed
+        for b in p_binaries {
+            binaries.insert(b.clone());
+        }
+        binaries.iter().for_each(|bin| {
+            if let Err(e) = extend(
+                &tx,
+                bin,
+                if bin.ends_with("bwrap") {
+                    &mut bwrap
+                } else {
+                    &mut syscalls
+                },
+            ) {
+                warn!("Failed to extend syscalls for binary {bin}: {e}");
+            }
+        });
+        Ok(())
+    });
+
+    if let Err(e) = query_result {
+        warn!("Could not query the SECCOMP Database: {e}. Filter is incomplete");
     }
+
+    bwrap = bwrap.difference(&syscalls).cloned().collect();
+
     (syscalls, bwrap)
 }
 

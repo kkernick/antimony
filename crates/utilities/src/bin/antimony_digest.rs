@@ -45,7 +45,7 @@ fn main() -> anyhow::Result<()> {
         Table::Profiles,
     )?;
 
-    db::write_execute(Database::System, |db| {
+    db::execute(Database::System, |db| {
         db.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
         Ok(())
     })?;

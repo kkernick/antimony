@@ -8,6 +8,9 @@ use anyhow::Result;
 use clap::Parser;
 
 fn main() -> Result<()> {
+    notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
+
     rayon::spawn(|| {
         let _ = profile::USER_CACHE.as_ref();
     });
@@ -24,8 +27,6 @@ fn main() -> Result<()> {
         let _ = db::CACHE_DB;
     });
 
-    notify::init()?;
-    notify::set_notifier(Box::new(shared::logger))?;
 
     // In most SetUID applications, The effective user is the privileged
     // one (Usually root), but in Antimony its the opposite. The user

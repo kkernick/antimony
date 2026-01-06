@@ -102,16 +102,12 @@ impl super::Run for Args {
                 Some(name) => {
                     print!("{name}: ");
                     let calls: Set<i32> = if name.contains('/') {
-                        if let Ok(mut conn) = syscalls::get_connection() {
+                        syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<Set<i32>> {
                             let tx = conn.transaction()?;
                             let calls = syscalls::get_binary_syscalls(&tx, &name)?;
                             tx.commit()?;
-                            calls
-                        } else {
-                            return Err(anyhow::anyhow!(
-                                "Could not initialize connection to SECCOMP Database"
-                            ));
-                        }
+                            Ok(calls)
+                        })?
                     } else {
                         let (syscalls, _) = syscalls::get_calls(&name, &ISet::default());
                         syscalls.into_iter().collect()
@@ -135,7 +131,7 @@ impl super::Run for Args {
 
                 // Get information on everything in the database.
                 None => {
-                    if let Ok(mut conn) = syscalls::get_connection() {
+                    syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
                         let tx = conn.transaction()?;
 
                         // Profile info.
@@ -174,11 +170,8 @@ impl super::Run for Args {
                             }
                         }
                         println!("================");
-                    } else {
-                        return Err(anyhow::anyhow!(
-                            "Could not initialize connection to SECCOMP Database"
-                        ));
-                    }
+                        Ok(())
+                    })?;
                 }
             },
         }

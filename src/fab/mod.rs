@@ -17,7 +17,7 @@ use crate::{
     timer,
 };
 use anyhow::Result;
-use log::{debug, trace};
+use log::{debug, trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -73,7 +73,9 @@ fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
 fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
     let bytes = postcard::to_stdvec(content)?;
     trace!("Writing {} bytes to cache ({name} to {tb})", bytes.len());
-    db::store_bytes(name, &bytes, Database::Cache, tb)?;
+    if let Err(e) = db::store_bytes(name, &bytes, Database::Cache, tb) {
+        warn!("Couldn't write to system cache: {e}");
+    }
     Ok(())
 }
 

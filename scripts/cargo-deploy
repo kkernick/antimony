@@ -41,7 +41,7 @@ sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/ant
 echo "Setting SetUID"
 exec="/usr/bin/antimony"
 sudo chown antimony:antimony $exec
-sudo chmod u+s $exec
+sudo chmod ug+s $exec
 sudo chmod o+x $exec
 
 echo "Removing old config"

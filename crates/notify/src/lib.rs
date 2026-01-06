@@ -462,9 +462,10 @@ impl log::Log for NotifyLogger {
         let mut out = stdout();
         let mut msg = String::new();
         msg.push_str(&format!(
-            "[{} {}] {}",
+            "[{} {} {:?}] {}",
             level_color(record.level()),
             style(record.target()).bold().italic(),
+            std::thread::current().id(),
             record.args()
         ));
 

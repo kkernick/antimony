@@ -120,6 +120,7 @@ fn main() -> Result<()> {
         handle.args_i([
             "pgo", "optimize", "build", "--",
             "--target", target,
+            "--workspace",
         ])?;
         handle.args_i(post_flags)?;
         handle.spawn()?.wait()?;
