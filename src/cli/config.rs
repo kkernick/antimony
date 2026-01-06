@@ -1,4 +1,4 @@
-//! Edit the configuration file
+//! Edit the configuration file.
 
 use crate::shared::{config::ConfigFile, env::AT_HOME, privileged};
 use anyhow::Result;
@@ -6,7 +6,7 @@ use log::{error, trace};
 use std::fs;
 use user::as_effective;
 
-#[derive(clap::Args, Debug, Default)]
+#[derive(clap::Args, Default)]
 pub struct Args {}
 
 impl super::Run for Args {

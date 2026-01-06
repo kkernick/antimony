@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use log::warn;
 use std::path::Path;
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args)]
 pub struct Args {
     /// The path of the profile. Can also be a directory, which will import all files within.
     profile: String,

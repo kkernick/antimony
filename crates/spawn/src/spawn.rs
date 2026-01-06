@@ -13,14 +13,13 @@ use parking_lot::Mutex;
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
-    error,
     ffi::{CString, NulError, OsString},
-    fmt,
     os::fd::OwnedFd,
     process::exit,
     str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
 };
+use thiserror::Error;
 
 #[cfg(feature = "seccomp")]
 use seccomp::filter::Filter;
@@ -35,78 +34,41 @@ use {
 use std::{fs, path::Path};
 
 /// Errors related to the Spawner.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Errors when passed arguments contain Null values.
-    Null(NulError),
+    #[error("Invalid string: {0}")]
+    Null(#[from] NulError),
 
     /// Errors when the cache is improperly accessed.
     #[cfg(feature = "cache")]
+    #[error("Cache error: {0}")]
     Cache(&'static str),
 
     /// Errors reading/writing to the cache.
-    Io(std::io::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 
     /// Errors to various functions that return `Errno`.
+    #[error("Spawn error within {0:?} failed to {1}: {2}")]
     Errno(Option<ForkResult>, &'static str, nix::errno::Errno),
 
     /// Errors resolving binary paths.
-    Path(which::Error),
+    #[error("Failed to resolve binary: {0}")]
+    Path(#[from] which::Error),
 
     /// An error when trying to fork.
+    #[error("Fork error: {0}")]
     Fork(nix::errno::Errno),
 
     /// An error when the spawner fails to parse the environment.
+    #[error("Failed to parse environment")]
     Environment,
 
     #[cfg(feature = "seccomp")]
     /// An error trying to apply the *SECCOMP* Filter.
-    Seccomp(seccomp::filter::Error),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Null(error) => write!(f, "Provided string contains null values: {error}"),
-
-            #[cfg(feature = "cache")]
-            Self::Cache(error) => write!(f, "Cache error: {error}"),
-
-            Self::Io(error) => write!(f, "Io error: {error}"),
-
-            Self::Errno(fork, context, errno) => {
-                let source = match fork {
-                    Some(ForkResult::Child) => "child",
-                    Some(ForkResult::Parent { child: _ }) | None => "parent",
-                };
-
-                write!(f, "{source} failed to {context}: {errno}",)
-            }
-            Self::Path(path) => write!(f, "Could not resolve binary: {path}"),
-            Self::Fork(errno) => write!(f, "Failed to fork: {errno}"),
-            Self::Environment => write!(f, "Failed to parse environment"),
-
-            #[cfg(feature = "seccomp")]
-            Self::Seccomp(error) => write!(f, "Failed to load SECCOMP filter: {error}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Null(error) => Some(error),
-
-            #[cfg(feature = "cache")]
-            Self::Io(error) => Some(error),
-
-            Self::Errno(_, _, errno) => Some(errno),
-            Self::Fork(errno) => Some(errno),
-
-            #[cfg(feature = "seccomp")]
-            Self::Seccomp(error) => Some(error),
-
-            _ => None,
-        }
-    }
+    #[error("SECCOMP error: {0}")]
+    Seccomp(#[from] seccomp::filter::Error),
 }
 
 /// How to handle the standard input/out/error streams
@@ -221,7 +183,7 @@ impl<'a> Spawner {
     /// *cmd* will be resolved from **PATH**.
     pub fn new(cmd: impl Into<String>) -> Result<Self, Error> {
         let cmd = cmd.into();
-        let path = which::which(&cmd).map_err(Error::Path)?;
+        let path = which::which(&cmd)?;
         Ok(Self::abs(path))
     }
 
@@ -514,8 +476,8 @@ impl<'a> Spawner {
         value: impl Into<Cow<'a, str>>,
     ) -> Result<(), Error> {
         self.env.insert(
-            CString::from_str(&key.into()).map_err(Error::Null)?,
-            CString::from_str(&value.into()).map_err(Error::Null)?,
+            CString::from_str(&key.into())?,
+            CString::from_str(&value.into())?,
         );
         Ok(())
     }
@@ -525,10 +487,8 @@ impl<'a> Spawner {
         let key = key.into();
         let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
         if let Ok(env) = std::env::var(&os_key) {
-            self.env.insert(
-                CString::from_str(&key).map_err(Error::Null)?,
-                CString::from_str(&env).map_err(Error::Null)?,
-            );
+            self.env
+                .insert(CString::from_str(&key)?, CString::from_str(&env)?);
             Ok(())
         } else {
             Err(Error::Environment)
@@ -549,9 +509,7 @@ impl<'a> Spawner {
 
     /// Move an argument to the `Spawner` in-place.
     pub fn arg_i(&self, arg: impl Into<Cow<'a, str>>) -> Result<(), Error> {
-        self.args
-            .lock()
-            .push(CString::new(arg.into().as_ref()).map_err(Error::Null)?);
+        self.args.lock().push(CString::new(arg.into().as_ref())?);
         Ok(())
     }
 
@@ -595,7 +553,7 @@ impl<'a> Spawner {
 
         for s in args {
             let cow: Cow<'a, str> = s.into();
-            a.push(CString::new(cow.as_ref()).map_err(Error::Null)?);
+            a.push(CString::new(cow.as_ref())?);
         }
         Ok(())
     }
@@ -653,12 +611,12 @@ impl<'a> Spawner {
             if let Some(parent) = path.parent()
                 && !parent.exists()
             {
-                fs::create_dir(parent).map_err(Error::Io)?;
+                fs::create_dir(parent)?;
             }
-            let mut file = fs::File::create(path).map_err(Error::Io)?;
+            let mut file = fs::File::create(path)?;
             let bytes = postcard::to_stdvec(&args[i..])
                 .map_err(|_| Error::Cache("Failed to serialize cache"))?;
-            file.write_all(&bytes).map_err(Error::Io)?;
+            file.write_all(&bytes)?;
             *index = None;
             Ok(())
         } else {
@@ -674,7 +632,7 @@ impl<'a> Spawner {
     pub fn cache_read(&self, path: &Path) -> Result<(), Error> {
         let mut args = self.args.lock();
 
-        let mut cached: Vec<CString> = postcard::from_bytes(&fs::read(path).map_err(Error::Io)?)
+        let mut cached: Vec<CString> = postcard::from_bytes(&fs::read(path)?)
             .map_err(|_| Error::Cache("Failed to decode cache"))?;
         args.append(&mut cached);
         Ok(())
@@ -723,14 +681,14 @@ impl<'a> Spawner {
         // Launch with pkexec if we're elevated.
         #[cfg(feature = "elevate")]
         if self.elevate.load(Ordering::Relaxed) {
-            let polkit = CString::new("/usr/bin/pkexec".to_string()).map_err(Error::Null)?;
+            let polkit = CString::new("/usr/bin/pkexec".to_string())?;
             if cmd_c.is_none() {
                 cmd_c = Some(polkit.clone());
             }
             args_c.push(polkit);
         }
 
-        let resolved = CString::new(self.cmd.clone()).map_err(Error::Null)?;
+        let resolved = CString::new(self.cmd.clone())?;
         let cmd_c = if let Some(cmd) = cmd_c {
             cmd
         } else {
@@ -797,7 +755,7 @@ impl<'a> Spawner {
         let filter = {
             let mut filter = self.seccomp.into_inner();
             if let Some(filter) = &mut filter {
-                filter.setup().map_err(Error::Seccomp)?;
+                filter.setup()?;
             }
             filter
         };

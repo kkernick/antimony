@@ -10,7 +10,7 @@ use log::debug;
 use std::{fs, time::Duration};
 use user::as_real;
 
-#[derive(clap::Args, Debug, Default)]
+#[derive(clap::Args, Default)]
 pub struct Args {
     /// Run a profile, but refresh its contents.
     /// If not defined, all profiles are refreshed, but nothing is run.

@@ -600,6 +600,7 @@ dependencies = [
  "log",
  "nix",
  "parking_lot",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -748,6 +749,7 @@ name = "seccomp"
 version = "0.1.0"
 dependencies = [
  "nix",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -846,6 +848,7 @@ dependencies = [
  "serde",
  "signal-hook",
  "temp",
+ "thiserror 2.0.17",
  "user",
  "which",
 ]

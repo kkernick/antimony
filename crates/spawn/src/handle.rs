@@ -16,7 +16,6 @@ use parking_lot::{Condvar, Mutex, MutexGuard};
 use signal_hook::{consts::signal, iterator::Signals};
 use std::{
     collections::VecDeque,
-    error, fmt,
     fs::File,
     io::{self, Read, Write},
     os::fd::OwnedFd,
@@ -24,69 +23,50 @@ use std::{
     thread::{self, JoinHandle, sleep},
     time::Duration,
 };
+use thiserror::Error;
 
 /// Errors related to a ProcessHandle
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Errors related to communicating with the process, such as
     /// when waiting, killing, or sending a signal fails.
+    #[error("Communication error: {0}")]
     Comm(Errno),
 
     /// Errors when a Handle's descriptor functions are called, but
     /// the Spawner made no such descriptors.
+    #[error("No such file was created.")]
     NoFile,
 
-    /// Errors when no associate has the provided name.,
+    /// Errors when no associate has the provided name.
+    #[error("No such associate found: {0}")]
     NoAssociate(String),
 
     /// Errors when the Child fails; returned when the Handle's readers
     /// get strange output from the child.
+    #[error("Error in child process")]
     Child,
 
     /// Error when a Handle tries to write to a child standard input, but
     /// the child no longer exist.
+    #[error("Failed to write to child")]
     Input,
 
     /// The parent received a termination signal
+    #[error("Failed to communicate with child.")]
     Signal,
 
     /// Error trying to write to standard input.
-    Io(io::Error),
+    #[error("I/O error: {0}")]
+    Io(#[from] io::Error),
 
     /// Timeout error
+    #[error("Timeout")]
     Timeout,
 
     /// User switching errors.
+    #[error("Failed to switch user: {0}")]
     User(Errno),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Comm(e) => write!(
-                f,
-                "There was an error communicating to the child: {}",
-                e.desc()
-            ),
-            Self::NoFile => write!(f, "The requested File Handle does not exist."),
-            Self::Signal => write!(f, "Parent received a termination signal."),
-            Self::Child => write!(f, "The child process terminated prematurely"),
-            Self::Input => write!(f, "Cannot read input, as child has already terminated!"),
-            Self::Io(e) => write!(f, "IO Error: {e}"),
-            Self::NoAssociate(name) => write!(f, "No such associate: {name}"),
-            Self::Timeout => write!(f, "Timeout"),
-            Self::User(e) => write!(f, "Failed to switch user: {e}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Error::Comm(errno) => Some(errno),
-            Error::Io(error) => Some(error),
-            Error::User(errno) => Some(errno),
-            _ => None,
-        }
-    }
 }
 
 /// The shared state between StreamHandle and Worker Thread.
@@ -343,8 +323,7 @@ impl Handle {
                 signal::SIGINT,
                 signal::SIGCHLD,
                 signal::SIGALRM,
-            ])
-            .map_err(Error::Io)?;
+            ])?;
 
             let _ = thread::spawn(move || {
                 sleep(timeout);
@@ -388,8 +367,7 @@ impl Handle {
     /// hang the process. You cannot use this function in multi-threaded environments.
     pub fn wait(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
-            let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])
-                .map_err(Error::Io)?;
+            let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])?;
             'outer: loop {
                 for signal in signals.wait() {
                     match signal {

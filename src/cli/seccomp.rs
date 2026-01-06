@@ -16,7 +16,7 @@ use std::{
 };
 use user::as_real;
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args)]
 pub struct Args {
     /// The operation to perform.
     pub operation: Operation,
@@ -26,7 +26,7 @@ pub struct Args {
 }
 
 /// The Operation to perform.
-#[derive(ValueEnum, Copy, Clone, Debug)]
+#[derive(ValueEnum, Copy, Clone)]
 pub enum Operation {
     /// Optimize the database.
     Optimize,

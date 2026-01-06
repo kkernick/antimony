@@ -26,7 +26,6 @@
 use crate::{HandleError, SpawnError, Stream, StreamMode, clear_capabilities, cond_pipe};
 use caps::{Capability, CapsHashSet};
 use common::stream::receive_fd;
-use core::fmt;
 use log::warn;
 use nix::{
     sys::{
@@ -37,7 +36,6 @@ use nix::{
     unistd::{ForkResult, close},
 };
 use std::{
-    error,
     io::{IoSlice, Write},
     os::{
         fd::{AsRawFd, IntoRawFd, OwnedFd},
@@ -48,64 +46,29 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use thiserror::Error;
 
 #[cfg(feature = "seccomp")]
 use {parking_lot::Mutex, seccomp::filter::Filter};
 
 /// Errors related to Fork
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Errors preparing the fork
-    Spawn(SpawnError),
+    #[error("Spawn error: {0}")]
+    Spawn(#[from] SpawnError),
 
     /// Errors communicating with the fork
-    Handle(HandleError),
+    #[error("Handle error: {0}")]
+    Handle(#[from] HandleError),
 
     /// Errors serializing the return data.
-    Postcard(postcard::Error),
+    #[error("Failed to serialize return: {0}")]
+    Postcard(#[from] postcard::Error),
 
     /// Generic IO errors.
-    Io(std::io::Error),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Spawn(e) => write!(f, "Failure creating fork: {e}"),
-            Self::Handle(e) => write!(f, "Failure communicating with fork: {e}"),
-            Self::Postcard(e) => write!(f, "Serialization/Deserialization error: {e}"),
-            Self::Io(e) => write!(f, "Failed to send FD: {e}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Spawn(e) => Some(e),
-            Self::Handle(e) => Some(e),
-            Self::Postcard(e) => Some(e),
-            Self::Io(e) => Some(e),
-        }
-    }
-}
-impl From<SpawnError> for Error {
-    fn from(value: SpawnError) -> Self {
-        Self::Spawn(value)
-    }
-}
-impl From<HandleError> for Error {
-    fn from(value: HandleError) -> Self {
-        Self::Handle(value)
-    }
-}
-impl From<postcard::Error> for Error {
-    fn from(value: postcard::Error) -> Self {
-        Self::Postcard(value)
-    }
-}
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Self::Io(value)
-    }
+    #[error("I/O Error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// A `Spawner`-like structure that executes a closure instead of another process. Specifically,

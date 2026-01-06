@@ -22,6 +22,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+use thiserror::Error;
 
 /// The current log level, set by the RUST_LOG environment variable
 pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_LOG") {
@@ -69,63 +70,32 @@ type VariantMap<'a> = HashMap<&'a str, Variant<Box<dyn dbus::arg::RefArg>>>;
 type Notifier = dyn Fn(&Record, Level) -> bool + Send + Sync + 'static;
 
 /// Errors for the NotifyLogger.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Errors for when the console-fallback fails to receive
     /// user input for an action.
-    Dialog(dialoguer::Error),
+    #[error("Failed to query user: {0}")]
+    Dialog(#[from] dialoguer::Error),
 
-    /// Errors with the dbus crate.
-    Dbus(dbus::Error),
+    /// Errors with the dbus crate
+    #[error("Failed to communicate with the user bus: {0}")]
+    Dbus(#[from] dbus::Error),
 
     /// Miscellaneous errors returning an Errno.
-    Errno(errno::Errno),
-
-    /// Errors communicating to the User Bus.
-    Connection,
+    #[error("System error: {0}")]
+    Errno(#[from] errno::Errno),
 
     /// Errors initializing the Logger.
+    #[error("Failed to initialize logger")]
     Init,
 
     /// Errors setting the Notifier.
+    #[error("Failed to set notify logger")]
     Set,
-}
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Dialog(e) => Some(e),
-            Self::Dbus(e) => Some(e),
-            Self::Errno(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Dbus(e) => write!(f, "Failed to communicate to user bus: {e}"),
-            Self::Dialog(e) => write!(f, "Failed to query user: {e}"),
-            Self::Connection => write!(f, "User Bus connection error"),
-            Self::Errno(e) => write!(f, "Failed to switch user mode: {e}"),
-            Self::Init => write!(f, "Failed to initialize logger"),
-            Self::Set => write!(f, "Could not set the notifier"),
-        }
-    }
-}
-impl From<dbus::Error> for Error {
-    fn from(value: dbus::Error) -> Self {
-        Self::Dbus(value)
-    }
-}
-impl From<errno::Errno> for Error {
-    fn from(value: errno::Errno) -> Self {
-        Self::Errno(value)
-    }
-}
-impl From<dialoguer::Error> for Error {
-    fn from(value: dialoguer::Error) -> Self {
-        Self::Dialog(value)
-    }
+
+    /// Errors setting the Notifier.
+    #[error("Unexpected response from the user-bus")]
+    Connection,
 }
 
 /// The urgency level of a Notification.
@@ -222,7 +192,7 @@ fn get_msg(
     timeout: &Option<Duration>,
     urgency: &Option<Urgency>,
     actions: Option<&Vec<String>>,
-) -> Result<Message, Error> {
+) -> Message {
     let mut hints = VariantMap::new();
     if let Some(urgency) = urgency {
         hints.insert("urgency", Variant(Box::new(urgency.byte())));
@@ -236,13 +206,13 @@ fn get_msg(
         &a_placeholder
     };
 
-    Ok(Message::new_method_call(
+    Message::new_method_call(
         "org.freedesktop.Notifications",
         "/org/freedesktop/Notifications",
         "org.freedesktop.Notifications",
         "Notify",
     )
-    .map_err(|_| Error::Connection)?
+    .unwrap()
     // App Name
     .append1(
         if let Ok(path) = std::env::current_exe()
@@ -264,7 +234,7 @@ fn get_msg(
         timeout.as_millis() as i32
     } else {
         -1
-    }))
+    })
 }
 
 /// Send a stateless Notification across the User Bus.
@@ -279,7 +249,7 @@ pub fn notify(
     let title = title.into();
     let body = body.into();
 
-    let msg = get_msg(&title, &body, &timeout, &urgency, None)?;
+    let msg = get_msg(&title, &body, &timeout, &urgency, None);
     let result = || -> Result<(), Error> {
         let connection = LocalConnection::new_session()?;
         connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
@@ -318,7 +288,7 @@ pub fn action(
     let result = || -> Result<String, Error> {
         // Get a connection, and send the notification.
         let connection = LocalConnection::new_session()?;
-        let msg = get_msg(&title, &body, &timeout, &urgency, Some(&a))?;
+        let msg = get_msg(&title, &body, &timeout, &urgency, Some(&a));
         let response = connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
         let id = match response.get1::<u32>() {
             Some(id) => id,

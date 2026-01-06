@@ -5,84 +5,52 @@ use super::{action::Action, attribute::Attribute, raw, syscall::Syscall};
 use crate::notify::Notifier;
 use nix::errno::Errno;
 use std::{
-    error, fmt,
     fs::File,
     io,
     os::fd::{IntoRawFd, OwnedFd},
-    path::{Path, PathBuf},
+    path::Path,
 };
+use thiserror::Error;
 
 #[cfg(feature = "notify")]
 use std::os::fd::FromRawFd;
 
 /// Errors related to filter generation.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Failure to initialize the context
+    #[error("Failed to initialization the Filter context")]
     Initialization,
 
     /// Failed to set attribute.
+    #[error("Failed to set attribute {0}: {1}")]
     SetAttribute(Attribute, Errno),
 
     /// Failed to add rule.
+    #[error("Failed to add rule {0} for {1}: {2}")]
     AddRule(Action, Syscall, Errno),
 
     /// Failed to write out as BPF
-    Io(PathBuf, io::Error),
+    #[error("Failed to write BPF: {0}")]
+    Io(#[from] io::Error),
 
     /// Failed to export the SECCOMP to BPF.
+    #[error("Failed to export to BPF: {0}")]
     Export(Errno),
 
     /// Failed to load the policy into the process.
+    #[error("Failed to load policy: {0}")]
     Load(Errno),
 
     /// Failed to send the SECCOMP FD to the monitor.
     #[cfg(feature = "notify")]
+    #[error("Failed to send FD to notifier")]
     Send,
 
     /// Failed to prepare notifier
     #[cfg(feature = "notify")]
+    #[error("Failed to prepare notifier: {0}")]
     Prepare(String),
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::SetAttribute(_, errno) => Some(errno),
-            Self::AddRule(_, _, errno) => Some(errno),
-            Self::Io(_, error) => Some(error),
-            Self::Export(errno) => Some(errno),
-            Self::Load(errno) => Some(errno),
-            _ => None,
-        }
-    }
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Initialization => write!(f, "Failed to initialization the Filter context"),
-            Self::SetAttribute(attr, errno) => write!(f, "Failed to set attribute {attr}: {errno}"),
-            Self::AddRule(action, syscall, errno) => {
-                write!(f, "Failed to add rule {action} = {syscall}: {errno}")
-            }
-            Self::Io(path, error) => {
-                write!(f, "IO error {}: {error}", path.to_string_lossy())
-            }
-            Self::Export(errno) => {
-                write!(f, "Failed to export to BPF: {errno}",)
-            }
-            Self::Load(errno) => {
-                write!(f, "Failed to load filter: {errno}",)
-            }
-            #[cfg(feature = "notify")]
-            Self::Send => {
-                write!(f, "Failed to send notify FD",)
-            }
-            #[cfg(feature = "notify")]
-            Self::Prepare(msg) => {
-                write!(f, "Failed to prepare notifier: {msg}")
-            }
-        }
-    }
 }
 
 /// The Filter is a wrapper around a SECCOMP Context.
@@ -153,11 +121,9 @@ impl Filter {
 
     /// Write the filter to a new file with the BPF format of the filter.
     pub fn write(&self, path: &Path) -> Result<OwnedFd, Error> {
-        let file = File::create(path).map_err(|e| Error::Io(path.to_path_buf(), e))?;
+        let file = File::create(path)?;
         match unsafe { raw::seccomp_export_bpf(self.ctx, file.into_raw_fd()) } {
-            0 => Ok(File::open(path)
-                .map_err(|e| Error::Io(path.to_path_buf(), e))?
-                .into()),
+            0 => Ok(File::open(path)?.into()),
             e => Err(Error::Export(Errno::from_raw(e))),
         }
     }

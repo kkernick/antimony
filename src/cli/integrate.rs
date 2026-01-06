@@ -19,7 +19,7 @@ use std::{
     path::Path,
 };
 
-#[derive(clap::Args, Debug, Default)]
+#[derive(clap::Args, Default)]
 pub struct Args {
     /// The name of the profile
     pub profile: String,
@@ -121,6 +121,7 @@ pub fn remove(cmd: Args) -> Result<()> {
     Ok(())
 }
 
+/// Fix the exec line to point to Antimony.
 fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cmd: &Args) {
     let args = match line.find(' ') {
         Some(index) => &line[index + 1..],
@@ -140,6 +141,8 @@ fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cm
     }
 }
 
+/// Add the configurations, either by appending the Desktop File, or creating 
+/// new ones.
 fn manage_configurations(
     contents: &mut Vec<String>,
     cmd: &Args,

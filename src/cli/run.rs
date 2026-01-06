@@ -20,7 +20,7 @@ use spawn::{Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, io::Write, thread, time::Duration};
 use user::Mode;
 
-#[derive(clap::Args, Debug, Default, Clone)]
+#[derive(clap::Args, Default)]
 pub struct Args {
     /// The name of the profile, or a command to sandbox.
     ///
@@ -163,6 +163,23 @@ pub struct Args {
 }
 impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
+        rayon::spawn(|| {
+            let _ = profile::USER_CACHE.as_ref();
+        });
+        rayon::spawn(|| {
+            let _ = profile::SYSTEM_CACHE.as_ref();
+        });
+        rayon::spawn(|| {
+            let _ = profile::HASH_CACHE.as_ref();
+        });
+
+        // Initialize all the databases for each thread.
+        rayon::spawn_broadcast(|_| {
+            let _ = db::USER_DB;
+            let _ = db::SYS_DB;
+            let _ = db::CACHE_DB;
+        });
+
         user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {
             let info = timer!(
@@ -199,23 +216,6 @@ pub fn wait_for_doc() {
 }
 
 pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
-    rayon::spawn(|| {
-        let _ = profile::USER_CACHE.as_ref();
-    });
-    rayon::spawn(|| {
-        let _ = profile::SYSTEM_CACHE.as_ref();
-    });
-    rayon::spawn(|| {
-        let _ = profile::HASH_CACHE.as_ref();
-    });
-
-    // Initialize all the databases for each thread.
-    rayon::spawn_broadcast(|_| {
-        let _ = db::USER_DB;
-        let _ = db::SYS_DB;
-        let _ = db::CACHE_DB;
-    });
-
     let sandbox_args = &info.profile.sandbox_args;
     let add_regular = if !sandbox_args.is_empty() {
         let mut add = true;

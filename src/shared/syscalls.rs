@@ -15,7 +15,6 @@ use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscal
 use std::{
     borrow::Cow,
     cell::RefCell,
-    error, fmt,
     fs::{self, File},
     hash::{DefaultHasher, Hash, Hasher},
     io::{self, IoSlice},
@@ -28,7 +27,32 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use thiserror::Error;
 use user::{as_effective, as_real};
+
+/// Errors relating to SECCOMP policy generation.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Errors from the `seccomp` crate.
+    #[error("SECCOMP Error: {0}")]
+    Syscall(#[from] seccomp::syscall::Error),
+
+    /// Errors from the `seccomp` crate.
+    #[error("Filter Error: {0}")]
+    Filter(#[from] seccomp::filter::Error),
+
+    /// Errors interfacing with the database
+    #[error("Database Error: {0}")]
+    Database(#[from] rusqlite::Error),
+
+    /// Errors for IO.
+    #[error("I/O Error: {0}")]
+    Io(#[from] io::Error),
+
+    /// Misc Errnos.
+    #[error("System Error: {0}")]
+    Errno(#[from] errno::Errno),
+}
 
 fn new_connection() -> Result<Connection, Error> {
     as_effective!({
@@ -105,86 +129,6 @@ pub fn get_name(name: &str) -> i32 {
         );
     }
     *CACHE.get(name).unwrap().value()
-}
-
-/// Errors relating to SECCOMP policy generation.
-#[derive(Debug)]
-pub enum Error {
-    /// Errors from the `seccomp` crate.
-    Seccomp(seccomp::Error),
-
-    /// Errors interfacing with the database
-    Database(rusqlite::Error),
-
-    /// Errors for IO.
-    Io(io::Error),
-
-    /// Misc Errnos.
-    Errno(errno::Errno),
-
-    /// Error when the pool failed to initialize
-    Pool,
-
-    /// Errors with multithreading.
-    Sync,
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Seccomp(e) => write!(f, "SECCOMP Error: {e}"),
-            Self::Database(e) => write!(f, "Database Error: {e}"),
-            Self::Io(e) => write!(f, "Io Error: {e}"),
-            Self::Errno(e) => write!(f, "Error {e}"),
-            Self::Pool => write!(f, "Database pool could not be initialized"),
-            Self::Sync => write!(f, "Multiple references exist to Connection!"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Seccomp(e) => Some(e),
-            Self::Database(e) => Some(e),
-            Self::Io(e) => Some(e),
-            Self::Errno(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-impl From<seccomp::Error> for Error {
-    fn from(value: seccomp::Error) -> Self {
-        Error::Seccomp(value)
-    }
-}
-impl From<seccomp::filter::Error> for Error {
-    fn from(value: seccomp::filter::Error) -> Self {
-        Error::Seccomp(value.into())
-    }
-}
-impl From<seccomp::syscall::Error> for Error {
-    fn from(value: seccomp::syscall::Error) -> Self {
-        Error::Seccomp(value.into())
-    }
-}
-impl From<seccomp::notify::Error> for Error {
-    fn from(value: seccomp::notify::Error) -> Self {
-        Error::Seccomp(value.into())
-    }
-}
-impl From<rusqlite::Error> for Error {
-    fn from(value: rusqlite::Error) -> Self {
-        Error::Database(value)
-    }
-}
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Error::Io(value)
-    }
-}
-impl From<errno::Errno> for Error {
-    fn from(value: errno::Errno) -> Self {
-        Error::Errno(value)
-    }
 }
 
 /// The Antimony Monitor Notifier Implementation.

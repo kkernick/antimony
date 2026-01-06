@@ -4,7 +4,7 @@ use clap::Parser;
 use notify::Error;
 use std::time::Duration;
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(name = "Antimony Notify")]
 #[command(version)]
 #[command(about = "Notify user-space via the Notification Portal")]

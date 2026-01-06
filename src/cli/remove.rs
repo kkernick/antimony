@@ -10,7 +10,7 @@ use crate::{
 use anyhow::Result;
 use dialoguer::Confirm;
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile. If absent, resets profiles that are identical to the system.
     pub name: Option<String>,

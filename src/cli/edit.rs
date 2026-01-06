@@ -1,7 +1,5 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
-use user::Mode;
-
 use crate::{
     cli::{self},
     shared::{
@@ -12,13 +10,14 @@ use crate::{
     },
 };
 use std::fs;
+use user::Mode;
 
-#[derive(clap::Args, Debug, Default)]
+#[derive(clap::Args, Default)]
 pub struct Args {
     /// The object to edit.
     name: String,
 
-    /// Target a feature, rather than a profile. Requires privilege.
+    /// Target the feature set rather than the profile set.
     #[arg(long)]
     pub feature: bool,
 }
@@ -30,6 +29,7 @@ impl cli::Run for Args {
             (Table::Profiles, "profile")
         };
 
+        // Dump the content to a temporary file.
         let temp = temp::Builder::new()
             .owner(Mode::Effective)
             .create::<temp::File>()?;
@@ -42,7 +42,6 @@ impl cli::Run for Args {
         };
 
         fs::write(temp.full(), content)?;
-
         let modified = if self.feature {
             Feature::edit(&temp.full())?
         } else {

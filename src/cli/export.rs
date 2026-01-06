@@ -8,7 +8,7 @@ use anyhow::{Result, anyhow};
 use std::{fs, path::PathBuf};
 use user::as_real;
 
-#[derive(clap::Args, Debug)]
+#[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile/feature to export. If absent, export all user-profiles/features.
     name: Option<String>,
@@ -16,7 +16,7 @@ pub struct Args {
     /// Where to export to. Defaults to current directory
     dest: Option<String>,
 
-    /// Target the feature set instead of the profile set.
+    /// Target the feature set rather than the profile set.
     #[arg(long, default_value_t = false)]
     feature: bool,
 }

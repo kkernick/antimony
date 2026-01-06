@@ -1,4 +1,5 @@
 //! Get info about the installed configuration.
+
 use crate::shared::{
     ISet, Set,
     env::AT_HOME,

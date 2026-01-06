@@ -2,39 +2,26 @@ use crate::{
     fab::resolve,
     shared::{
         ISet, Map, Set,
-        feature::Feature,
+        feature::{self, Feature},
         profile::{FILE_MODES, Profile},
     },
 };
 use ahash::{HashMapExt, HashSetExt};
 use log::{debug, warn};
 use spawn::Spawner;
-use std::{borrow::Cow, error, fmt};
+use std::borrow::Cow;
+use thiserror::Error;
 
 /// Errors related to feature integration
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// Invalid bus name.
+    #[error("Invalid bus name: {0}")]
     InvalidBus(String),
 
     /// Feature error.
-    Feature(crate::shared::feature::Error),
-}
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::InvalidBus(name) => write!(f, "Invalid bus name: {name}"),
-            Self::Feature(e) => write!(f, "Failed to parse feature: {e}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Feature(e) => Some(e),
-            _ => None,
-        }
-    }
+    #[error("Feature error: {0}")]
+    Feature(feature::Error),
 }
 
 /// Replace {} names with the real values in the profile.

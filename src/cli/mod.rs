@@ -29,7 +29,7 @@ pub fn run_vec(profile: &str, mut passthrough: Vec<String>) -> run::Args {
     }
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default)]
 #[command(name = "Antimony")]
 #[command(version)]
 #[command(about = "Sandbox Applications")]
@@ -51,7 +51,7 @@ pub struct Cli {
     pub command: Command,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 #[enum_dispatch(Run)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
