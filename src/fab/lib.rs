@@ -12,7 +12,6 @@ use crate::{
     shared::{
         Set,
         env::{AT_HOME, HOME},
-        format_iter,
     },
     timer,
 };
@@ -43,7 +42,6 @@ fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Resu
     if path.is_dir() {
         dependencies.extend(get_dir(&library)?);
         directories.insert(library.to_string());
-        trace!("DIR: {library} => {}", format_iter(dependencies.iter()));
     } else if let Some(library) = elf_filter(&library) {
         dependencies.push(library);
     }
@@ -68,9 +66,14 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
 
-        if let Err(e) = fs::hard_link(&canon, &sof_path)
-            && e.kind() != io::ErrorKind::AlreadyExists
+        if !sof_path.exists()
+            && let Err(e) = fs::hard_link(&canon, &sof_path)
         {
+            warn!(
+                "Failed to hardlink {} => {}: {e}",
+                canon.display(),
+                sof_path.display()
+            );
             // If we cannot hard-link directly, then we created a shared source
             // of library copies within the CACHE_DIR, then hard-link from that.
             //
@@ -82,7 +85,10 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
                     if !parent.exists() {
                         fs::create_dir_all(parent)?;
                     }
-                    fs::copy(&canon, &shared_path)?;
+
+                    if !shared_path.exists() {
+                        fs::copy(&canon, &shared_path)?;
+                    }
                     fs::hard_link(&shared_path, &sof_path)?;
                     Ok(())
                 })??;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 /// How a file should be exposed in the sandbox.
-#[derive(Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
+#[derive(Debug, Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
 #[serde(deny_unknown_fields)]
 pub enum FileMode {
     /// Only allow reads
@@ -74,7 +74,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough
@@ -109,21 +109,16 @@ impl Files {
         let s_user = &mut self.user;
         for mode in FILE_MODES {
             if let Some(map) = user.swap_remove(&mode) {
-                s_user
-                    .get_mut(&mode)
-                    .get_or_insert(&mut Set::default())
-                    .extend(map);
+                s_user.entry(mode).or_default().extend(map);
             }
         }
 
         let mut sys = files.platform;
         let s_user = &mut self.platform;
+
         for mode in FILE_MODES {
             if let Some(map) = sys.swap_remove(&mode) {
-                s_user
-                    .get_mut(&mode)
-                    .get_or_insert(&mut Set::default())
-                    .extend(map);
+                s_user.entry(mode).or_default().extend(map);
             }
         }
 
@@ -131,10 +126,7 @@ impl Files {
         let s_user = &mut self.resources;
         for mode in FILE_MODES {
             if let Some(map) = sys.swap_remove(&mode) {
-                s_user
-                    .get_mut(&mode)
-                    .get_or_insert(&mut Set::default())
-                    .extend(map);
+                s_user.entry(mode).or_default().extend(map);
             }
         }
 
@@ -142,10 +134,7 @@ impl Files {
         let s_user = &mut self.direct;
         for mode in FILE_MODES {
             if let Some(map) = direct.swap_remove(&mode) {
-                s_user
-                    .get_mut(&mode)
-                    .get_or_insert(&mut Map::default())
-                    .extend(map);
+                s_user.entry(mode).or_default().extend(map);
             }
         }
     }

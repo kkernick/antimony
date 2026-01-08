@@ -120,7 +120,7 @@ pub fn library_info(libraries: &Set<String>, verbose: u8) {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application

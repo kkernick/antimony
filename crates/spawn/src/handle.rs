@@ -207,6 +207,13 @@ impl Stream {
         Ok(res)
     }
 
+    /// Read everything currently in the pipe, blocking.
+    pub fn read_blocking(&mut self) -> Result<String, Error> {
+        self.wait()?;
+        let mut state = self.shared.state.lock();
+        Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
+    }
+
     /// Read everything currently in the pipe. Not blocking.
     pub fn read_all(&mut self) -> Result<String, Error> {
         let mut state = self.shared.state.lock();
@@ -526,7 +533,7 @@ impl Handle {
     pub fn error_all(mut self) -> Result<String, Error> {
         self.wait_blocking()?;
         if let Some(mut error) = self.stderr.take() {
-            error.read_all()
+            error.read_blocking()
         } else {
             Err(Error::NoFile)
         }
@@ -548,7 +555,7 @@ impl Handle {
     pub fn output_all(mut self) -> Result<String, Error> {
         self.wait_blocking()?;
         if let Some(mut output) = self.stdout.take() {
-            output.read_all()
+            output.read_blocking()
         } else {
             Err(Error::NoFile)
         }

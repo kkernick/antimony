@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.

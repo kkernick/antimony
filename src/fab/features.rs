@@ -46,10 +46,7 @@ fn format(mut str: String, map: &Map<&str, String>) -> Result<String, Error> {
 
 /// Load a feature from the cache database. This prevents loading the same Feature multiple times.
 #[inline]
-fn load_feature<'a>(
-    name: &str,
-    db: &'a mut Map<String, Feature>,
-) -> Result<&'a mut Feature, Error> {
+fn load_feature<'a>(name: &str, db: &'a mut Map<String, Feature>) -> Result<&'a Feature, Error> {
     Ok(db
         .entry(name.to_string())
         .or_insert(Feature::new(name).map_err(Error::Feature)?))
@@ -144,23 +141,33 @@ fn resolve_feature(
 }
 
 fn resolve_features(
-    profile: &mut Profile,
-    db: &mut Map<String, Feature>,
-) -> Result<Set<String>, Error> {
-    let mut features = Map::default();
+    features: &Set<String>,
+    conflicts: &Set<String>,
+) -> Result<Vec<Feature>, Error> {
+    let mut feature_list = Map::default();
     let mut searched = Set::default();
-    let blacklist = &mut profile.conflicts;
+    let mut blacklist = conflicts.clone();
+    let mut db = Map::default();
 
-    for feat in &profile.features {
-        resolve_feature(feat.as_str(), db, &mut features, blacklist, &mut searched)?;
+    for feat in features {
+        resolve_feature(
+            feat.as_str(),
+            &mut db,
+            &mut feature_list,
+            &mut blacklist,
+            &mut searched,
+        )?;
     }
-    Ok(features.into_keys().collect())
+    Ok(feature_list
+        .into_keys()
+        .filter_map(|name| db.swap_remove(&name))
+        .collect())
 }
 
 fn add_feature(
     profile: &mut Profile,
     map: &Map<&str, String>,
-    feature: &mut Feature,
+    mut feature: Feature,
 ) -> Result<(), Error> {
     // Conditionals intentionally don't use any schema. It just runs the content through
     // bash. This lets you do something as simple requiring a certain file via `command`, or
@@ -363,7 +370,6 @@ fn add_feature(
             p_hooks.parent = hooks.parent;
         }
     }
-
     Ok(())
 }
 
@@ -372,9 +378,8 @@ pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
     map.insert("{name}", name.to_string());
     map.insert("{desktop}", profile.desktop(name).to_string());
 
-    let mut db = Map::default();
-    for feature in resolve_features(profile, &mut db)? {
-        add_feature(profile, &map, load_feature(&feature, &mut db)?)?;
+    for feature in resolve_features(&profile.features, &profile.conflicts)? {
+        add_feature(profile, &map, feature)?;
     }
     Ok(())
 }

@@ -177,10 +177,10 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
             .arg(path.as_ref())?
             .output(StreamMode::Pipe)
+            .mode(user::Mode::Real)
             .spawn()?
             .output_all()?
             .lines()
-            .par_bridge()
             .filter_map(|e| {
                 if let Some(start) = e.find("/")
                     && let Some(end) = e[start..].find(' ')
@@ -191,10 +191,13 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .map(|e| {
-                if e.contains("..")
-                    && let Ok(path) = std::fs::canonicalize(&e)
-                {
-                    path.to_string_lossy().into_owned()
+                if e.contains("..") {
+                    let path = Path::new(&e);
+                    if let Ok(canon) = path.canonicalize() {
+                        canon.to_string_lossy().into_owned()
+                    } else {
+                        e
+                    }
                 } else if !e.starts_with("/usr") {
                     format!("/usr{e}")
                 } else {

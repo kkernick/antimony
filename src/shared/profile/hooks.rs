@@ -39,7 +39,7 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
@@ -90,7 +90,7 @@ impl Hooks {
 ///     ANTIMONY_NAME: The name of the current profile.
 ///     ANTIMONY_HOME: The path to the home folder, if it exists.
 ///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Hook {
     /// An optional name to identify the process.
@@ -155,8 +155,6 @@ impl Hook {
         handle.env_i("ANTIMONY_CACHE", cache)?;
         handle.env_i("ANTIMONY_INSTANCE", instance)?;
         handle.mode_i(user::Mode::Real);
-        handle.output_i(StreamMode::Log(log::Level::Debug));
-        handle.error_i(StreamMode::Log(log::Level::Warn));
 
         if self.new_privileges.unwrap_or(false) {
             handle.new_privileges_i(true);

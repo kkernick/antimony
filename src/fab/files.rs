@@ -23,7 +23,9 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
+    log::info!("Starting file fabricator");
     if let Some(files) = &info.profile.lock().files {
+        log::trace!("{files:?}");
         let user_files = &files.user;
         for mode in FILE_MODES {
             if let Some(files) = user_files.get(&mode) {

@@ -254,8 +254,6 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         info.handle.args_i(info.post)?;
     }
 
-    info.handle.error_i(StreamMode::Log(log::Level::Warn));
-
     // Run it
     if !args.dry {
         if let Some(ipc) = info.profile.ipc.take()
