@@ -21,7 +21,7 @@ use log::{debug, error, trace, warn};
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
-    fs, io,
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -122,7 +122,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     debug!("Creating SOF");
     let sof = info.sys_dir.join("sof");
     if !sof.exists() {
-        fs::create_dir(&sof)?;
+        as_effective!(fs::create_dir(&sof))??;
     }
 
     // Libraries needed by the program. No Binaries.
