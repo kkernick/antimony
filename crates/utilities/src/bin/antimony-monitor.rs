@@ -13,6 +13,7 @@ use clap::Parser;
 use common::stream::receive_fd;
 use dashmap::{DashMap, mapref::one::RefMut};
 use heck::ToTitleCase;
+use log::debug;
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
@@ -570,14 +571,9 @@ fn main() -> Result<()> {
         }
     }
 
-    // Wait for threads to finish.
-    for thread in threads {
-        if thread.join().is_err() {
-            println!("Failed to join worker thread!");
-        }
-    }
-
     if !stats.is_empty() {
+        debug!("Writing stats");
+
         // Grab a connection (Permission is handled via the call)
         syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
             println!("Storing syscall data.");
@@ -658,5 +654,6 @@ fn main() -> Result<()> {
             Ok(())
         })?;
     }
+    debug!("Done");
     Ok(())
 }

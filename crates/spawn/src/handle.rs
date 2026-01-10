@@ -3,11 +3,11 @@
 //! Spawner was configured to hook such descriptors), as well as mediating
 //! signal handling and teardown.
 
-use log::warn;
+use log::{trace, warn};
 use nix::{
     errno::Errno,
     sys::{
-        signal::{Signal, kill, raise},
+        signal::{Signal, kill, killpg, raise},
         wait::{WaitPidFlag, WaitStatus, waitpid},
     },
     unistd::Pid,
@@ -67,6 +67,10 @@ pub enum Error {
     /// User switching errors.
     #[error("Failed to switch user: {0}")]
     User(Errno),
+
+    /// User switching errors.
+    #[error("System Error: {0}")]
+    Errno(#[from] Errno),
 }
 
 /// The shared state between StreamHandle and Worker Thread.
@@ -319,7 +323,7 @@ impl Handle {
     /// Note that this function uses a signal handler to ensure it does not
     /// hang the process, as well as efficiently wait the timeout. You cannot
     /// use this function in multi-threaded environments.
-    pub fn wait_timeout(&mut self, timeout: Duration) -> Result<i32, Error> {
+    pub fn wait_timeout(mut self, timeout: Duration) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([
                 signal::SIGTERM,
@@ -368,7 +372,7 @@ impl Handle {
     ///
     /// Note that this function uses a signal handler to ensure it does not
     /// hang the process. You cannot use this function in multi-threaded environments.
-    pub fn wait(&mut self) -> Result<i32, Error> {
+    pub fn wait_and(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])?;
             'outer: loop {
@@ -395,6 +399,11 @@ impl Handle {
             }
         }
         Ok(self.exit)
+    }
+
+    /// Consume the handle and return the exit code of the process.
+    pub fn wait(mut self) -> Result<i32, Error> {
+        self.wait_and()
     }
 
     /// Wait for the child without signal handlers.
@@ -474,6 +483,31 @@ impl Handle {
 
             #[cfg(not(feature = "user"))]
             let result = kill(pid, sig);
+
+            match result {
+                Ok(_) => Ok(()),
+                Err(Errno::ESRCH) => {
+                    self.child = None;
+                    Ok(())
+                }
+                Err(e) => Err(Error::Comm(e)),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Send the signal to the child, and all associated handles.
+    pub fn signal_group(&mut self, sig: Signal) -> Result<(), Error> {
+        if let Some(pid) = self.alive()? {
+            #[cfg(feature = "user")]
+            let result = {
+                let mode = self.mode;
+                user::run_as!(mode, killpg(pid, sig)).map_err(Error::User)?
+            };
+
+            #[cfg(not(feature = "user"))]
+            let result = killpg(pid, sig);
 
             match result {
                 Ok(_) => Ok(()),
@@ -575,9 +609,14 @@ impl Drop for Handle {
     fn drop(&mut self) {
         if let Ok(pid) = self.alive() {
             if let Some(pid) = pid {
-                match self.signal(Signal::SIGKILL) {
+                trace!("{} is alive", self.name());
+                match self.signal(Signal::SIGTERM) {
                     Ok(_) => {
-                        let _ = waitpid(pid, None);
+                        if let Err(e) = waitpid(pid, None) {
+                            warn!("Failed to wait for process {pid}: {e}");
+                        } else {
+                            trace!("{} exited!", self.name());
+                        }
                     }
                     Err(e) => warn!("Failed to terminate process {pid}: {e}"),
                 }

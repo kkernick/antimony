@@ -8,17 +8,15 @@ pub mod files;
 pub mod lib;
 pub mod ns;
 
-use crate::{
-    shared::{
-        Set,
-        db::{self, Database, Table},
-        env::{AT_HOME, HOME},
-        profile::Profile,
-    },
-    timer,
+use crate::shared::{
+    Set,
+    db::{self, Database, Table},
+    env::{AT_HOME, HOME},
+    format_iter,
+    profile::Profile,
 };
 use anyhow::Result;
-use log::{debug, warn};
+use log::{debug, trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -26,10 +24,10 @@ use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
-    fs::File,
+    fs::{self, File},
     io::Read,
     path::Path,
-    sync::{LazyLock, OnceLock},
+    sync::LazyLock,
 };
 use temp::Temp;
 use user::as_real;
@@ -37,12 +35,6 @@ use user::as_real;
 /// What the Cache type is. Through benchmarking, a regular Vec outperforms
 /// both Sets and SmallVec.
 type Cache = Vec<String>;
-
-/// A lock for initializing LIB_ROOTS. There's no good way to guard against
-/// multiple threads trying to initialize the roots at once. We can check
-/// if the LIB_ROOTS is initialized, but bewteen checking and setting, another
-/// thread may have started as well.
-static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 /// Get the library roots.
 /// The Library Roots is generated on the first call to get_libraries,
@@ -53,20 +45,25 @@ static LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 ///
 /// Hacky? Maybe a little, but there's no good way to determine this
 /// value through pure Rust, and spawning a child is expensive.
-pub static LIB_ROOTS: OnceLock<Set<String>> = OnceLock::new();
+pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
+    let mut roots = Set::default();
 
-/// Whether we have a split-root.
-/// Some distributions, like Ubuntu and Fedora, actually treat
-/// /lib and /lib64 as different things. Antimony doesn't currently
-/// have any support for explicit lib32, though it probably works.
-pub static SINGLE_LIB: LazyLock<bool> = LazyLock::new(|| {
-    let single = std::fs::read_link("/usr/lib64").is_ok();
-    debug!("Single Library Folder: {single}");
-    single
+    for known_root in [
+        "/usr/lib",
+        "/usr/lib64",
+        "/usr/lib32",
+        "/usr/lib/x86_64-linux-gnu",
+    ] {
+        if Path::new(known_root).exists() && fs::read_link(known_root).is_err() {
+            roots.insert(known_root.to_string());
+        }
+    }
+    trace!("Library roots {}", format_iter(roots.iter()));
+    roots
 });
 
 /// The magic for an ELF file.
-pub static ELF_MAGIC: [u8; 5] = [0x7F, b'E', b'L', b'F', 2];
+pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 
 /// Each fabrciator is passed this structure.
 pub struct FabInfo<'a> {
@@ -101,7 +98,7 @@ fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
 #[inline]
 fn elf_filter(path: &str) -> Option<String> {
     let mut file = File::open(path).ok()?;
-    let mut magic = [0u8; 5];
+    let mut magic = [0u8; 4];
     file.read_exact(&mut magic).ok()?;
     if magic != ELF_MAGIC {
         return None;
@@ -154,10 +151,11 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
     // If we're looking for libraries, check each library root.
     } else if lib {
         let mut libraries = Cache::default();
-        for root in LIB_ROOTS.get().unwrap() {
-            debug!("Checking {root}");
-            libraries.extend(run(root, pattern)?);
-        }
+        LIB_ROOTS.iter().for_each(|root| {
+            if let Ok(lib) = run(root, pattern) {
+                libraries.extend(lib);
+            }
+        });
 
         libraries
     // Otherwise, we assume we're looking for binaries.
@@ -191,48 +189,30 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .map(|e| {
-                if e.contains("..") {
-                    let path = Path::new(&e);
-                    if let Ok(canon) = path.canonicalize() {
-                        canon.to_string_lossy().into_owned()
-                    } else {
-                        e
-                    }
-                } else if !e.starts_with("/usr") {
-                    format!("/usr{e}")
+                if let Ok(mut canon) = fs::canonicalize(&e) {
+                    let name = match e.strip_suffix('/').unwrap_or(&e).rfind('/') {
+                        Some(i) => &e[i + 1..],
+                        None => &e,
+                    };
+
+                    canon.set_file_name(name);
+                    canon.to_string_lossy().into_owned()
+                } else {
+                    e
+                }
+            })
+            .map(|e| {
+                let formatted = format!("/usr{e}");
+                if Path::new(&formatted).exists() {
+                    formatted
                 } else {
                     e
                 }
             })
             .collect();
-
         write_cache(&path, &libraries, Table::Libraries)?;
         libraries
     };
-
-    // Initialize those dreadful roots.
-    if LIB_ROOTS.get().is_none() {
-        let _lock = LOCK.lock();
-        timer!("::lib_roots", {
-            let mut roots: Set<String> = libraries
-                .iter()
-                .filter_map(|lib| Path::new(&lib).parent().map(|p| p.to_owned()))
-                .map(|path| path.to_string_lossy().into_owned())
-                .filter(|e| {
-                    if *SINGLE_LIB {
-                        !e.contains("lib64")
-                    } else {
-                        true
-                    }
-                })
-                .collect();
-            roots.insert(String::from("/usr/lib"));
-            if !*SINGLE_LIB {
-                roots.insert(String::from("/usr/lib64"));
-            }
-            let _ = LIB_ROOTS.set(roots);
-        })
-    }
     Ok(libraries)
 }
 

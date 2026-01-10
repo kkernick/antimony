@@ -81,7 +81,7 @@ pub fn logger(record: &Record, level: Level) -> bool {
                 &format!("{}", level_urgency(level)),
             ])?
             .spawn()?
-            .wait()?;
+            .wait_blocking()?;
         if code != 0 {
             Err(anyhow::anyhow!("Failed to notify"))
         } else {

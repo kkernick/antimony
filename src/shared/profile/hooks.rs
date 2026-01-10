@@ -188,7 +188,7 @@ impl Hook {
                 Err(HookError::Parent)
             }
         } else {
-            let mut handle = handle.spawn()?;
+            let handle = handle.spawn()?;
             if self.attach.unwrap_or(false) {
                 if let Some(m) = main {
                     m.associate(handle);

@@ -296,8 +296,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         }
 
         log::trace!("Spawning");
-        let mut handle = info.handle.spawn()?;
-        let code = handle.wait()?;
+        let code = info.handle.spawn()?.wait()?;
 
         if code != 0 {
             // Alert the user.

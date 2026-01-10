@@ -181,7 +181,7 @@ fn parse(
             };
 
             // Get the magic.
-            let mut magic = [0u8; 5];
+            let mut magic = [0u8; 4];
             if file.read_exact(&mut magic).is_err() {
                 return Ok(Type::None);
             }
@@ -503,8 +503,8 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     #[rustfmt::skip]
     info.handle.args_i([
         "--symlink", "/usr/bin", "/bin",
-        "--symlink", "/usr/sbin", "/sbin"
-
+        "--symlink", "/usr/bin", "/usr/sbin",
+        "--symlink", "/usr/bin", "/sbin",
     ])?;
 
     info.profile.lock().binaries = Arc::into_inner(elf_binaries)

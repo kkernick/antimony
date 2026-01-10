@@ -104,7 +104,7 @@ fn main() -> Result<()> {
         chdir(Path::new(&directory))?;
     }
 
-    let mut handle = if cli.sandbox {
+    let handle = if cli.sandbox {
         // Construct the relevant arguments.
         let mut args = antimony::cli::run::Args {
             passthrough: cli.passthrough,

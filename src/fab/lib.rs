@@ -6,16 +6,14 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{
-        LIB_ROOTS, SINGLE_LIB, elf_filter, get_dir, get_libraries, get_wildcards, localize_home,
-    },
+    fab::{LIB_ROOTS, elf_filter, get_dir, get_libraries, get_wildcards, localize_home},
     shared::{
         Set,
         env::{AT_HOME, HOME},
     },
     timer,
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use dashmap::DashSet;
 use log::{debug, error, trace, warn};
 use rayon::prelude::*;
@@ -29,7 +27,7 @@ use user::as_effective;
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    path.starts_with("/usr/lib") || (!*SINGLE_LIB && path.starts_with("/usr/lib64"))
+    LIB_ROOTS.par_iter().any(|r| path.starts_with(r))
 }
 
 /// Determine dependencies for directories.
@@ -159,16 +157,19 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     // Directories to exclude and attach
     let directories = Arc::from(DashSet::new());
 
-    if let Some(roots) = LIB_ROOTS.get() {
-        for lib_root in roots.iter() {
-            let app_lib = format!("{lib_root}/{}", info.name);
-            trace!("Checking {app_lib}");
-            if Path::new(&app_lib).exists() {
-                debug!("Adding program lib folder");
-                for exe in dir_resolve(Cow::Owned(app_lib), directories.clone())? {
-                    resolved.insert(Cow::Owned(exe));
-                }
+    for lib_root in LIB_ROOTS.iter() {
+        let app_lib = format!("{lib_root}/{}", info.name);
+        trace!("Checking {app_lib}");
+        if Path::new(&app_lib).exists() {
+            debug!("Adding program lib folder");
+            for exe in dir_resolve(Cow::Owned(app_lib), directories.clone())? {
+                resolved.insert(Cow::Owned(exe));
             }
+        }
+        let loader = format!("{lib_root}/ld-linux.so.2");
+        if Path::new(&loader).exists() {
+            debug!("Adding linker for {lib_root}");
+            resolved.insert(Cow::Owned(loader));
         }
     }
 
@@ -185,8 +186,8 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                 resolved.insert(Cow::Owned(e.to_string()));
             } else if e.starts_with("~") {
                 resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
-            } else if let Some(roots) = LIB_ROOTS.get() {
-                for root in roots.iter() {
+            } else {
+                for root in LIB_ROOTS.iter() {
                     let path = format!("{root}/{e}");
                     if Path::new(&path).exists() {
                         resolved.insert(Cow::Owned(path));
@@ -233,16 +234,6 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     timer!("::writing", {
         dependencies
             .into_par_iter()
-            .map(|library| {
-                let mut resolved = library;
-                if resolved.starts_with("/lib") {
-                    resolved = format!("/usr{resolved}");
-                }
-                if *SINGLE_LIB {
-                    resolved = resolved.replace("/lib64/", "/lib/");
-                }
-                resolved
-            })
             // Filter things that aren't in /usr/lib
             .filter(|library| {
                 let parent = if let Some(i) = library.rfind('/') {
@@ -251,15 +242,25 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                     library.as_str()
                 };
 
-                if parent.contains("lib")
-                    && let Some(roots) = LIB_ROOTS.get()
-                    && roots.iter().any(|r| parent == r)
-                {
+                if in_lib(parent) {
                     true
                 } else {
-                    !directories
-                        .iter()
-                        .any(|dir| parent.starts_with(dir.as_str()))
+                    if Path::new(library).is_dir()
+                        && !directories
+                            .iter()
+                            .any(|dir| parent.starts_with(dir.as_str()))
+                    {
+                        let _ = info.handle.args_i([
+                            if library.starts_with("/home/") {
+                                "--bind"
+                            } else {
+                                "--ro-bind"
+                            },
+                            library.as_str(),
+                            library.as_str(),
+                        ]);
+                    }
+                    false
                 }
             })
             // Write the SOF version, as a hard link preferably.
@@ -271,38 +272,44 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     });
 
     let sof_str = sof.to_string_lossy();
-    info.handle
-        .args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
-
-    let path = &format!("{sof_str}/lib64");
-    if Path::new(path).exists() {
-        info.handle.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
-    } else {
-        info.handle
-            .args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
+    for root in sof.read_dir()? {
+        let root = root?.file_name();
+        let name = root.to_string_lossy();
+        info.handle.args_i([
+            "--ro-bind-try",
+            &format!("{sof_str}/{name}"),
+            &format!("/usr/{name}"),
+            "--symlink",
+            &format!("/usr/{name}"),
+            &format!("/{name}"),
+        ])?;
     }
-
-    #[rustfmt::skip]
-    info.handle.args_i([
-        "--symlink", "/usr/lib", "/lib",
-        "--symlink", "/usr/lib64", "/lib64",
-    ])?;
+    if !LIB_ROOTS.contains("/usr/lib64") {
+        info.handle.args_i([
+            "--symlink",
+            "/usr/lib",
+            "/usr/lib64",
+            "--symlink",
+            "/usr/lib",
+            "/lib64",
+        ])?;
+    }
 
     timer!("::mount_directories", {
         directories.par_iter().try_for_each(|dir| -> Result<()> {
-            if let Some(roots) = LIB_ROOTS.get() {
-                if roots.iter().any(|r| dir.starts_with(r)) {
-                    let sof_path = get_sof_path(&sof, dir.as_str(), "/usr");
-                    if !sof_path.exists() {
-                        fs::create_dir_all(sof_path)?;
-                    }
+            if in_lib(&dir) {
+                let sof_path = get_sof_path(&sof, dir.as_str(), "/usr");
+                if !sof_path.exists() {
+                    fs::create_dir_all(sof_path)?;
                 }
-            } else {
-                return Err(anyhow!("Roots not initialized!"));
             }
 
             info.handle.args_i([
-                "--ro-bind",
+                if dir.starts_with("/home/") {
+                    "--bind"
+                } else {
+                    "--ro-bind"
+                },
                 dir.as_str(),
                 localize_home(dir.as_str()).as_ref(),
             ])?;

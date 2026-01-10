@@ -37,7 +37,7 @@ fn accept_with_timeout(
 
 /// Receive a file descriptor from a Unix socket as an `OwnedFd`.
 pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, std::io::Error> {
-    let stream = accept_with_timeout(listener, PollTimeout::from(100u16))?;
+    let stream = accept_with_timeout(listener, PollTimeout::from(1000u16))?;
     if let Some(stream) = stream {
         let mut buf = [0u8; 256];
         let pair = || -> Result<Option<(OwnedFd, usize)>, Errno> {
