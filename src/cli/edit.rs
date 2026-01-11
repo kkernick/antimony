@@ -29,8 +29,12 @@ impl cli::Run for Args {
         let user = AT_CONFIG
             .join(USER_NAME.as_str())
             .join(table)
-            .join(&self.name);
-        let system = AT_CONFIG.join(table).join(&self.name);
+            .join(&self.name)
+            .with_extension("toml");
+        let system = AT_CONFIG
+            .join(table)
+            .join(&self.name)
+            .with_extension("toml");
         let path = if user.exists() {
             user
         } else if system.exists() {
