@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use user::as_effective;
+use user::{as_effective, as_real};
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
@@ -285,12 +285,18 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         ])?;
     }
     if !LIB_ROOTS.contains("/usr/lib64") {
+        let source = match as_real!({ fs::read_link("/usr/lib64") })? {
+            Ok(symlink) => Cow::Owned(symlink.to_string_lossy().into_owned()),
+            Err(_) => Cow::Borrowed("/usr/lib"),
+        };
+
+        debug!("Symlinking lib64 to {source}");
         info.handle.args_i([
             "--symlink",
-            "/usr/lib",
+            &source,
             "/usr/lib64",
             "--symlink",
-            "/usr/lib",
+            "/usr/lib64",
             "/lib64",
         ])?;
     }

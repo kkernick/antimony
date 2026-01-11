@@ -16,10 +16,11 @@
 #     a subfolder for each configuration, with its own /etc/ssh, authorized_keys,
 #     etc. Then, you can pull in what files you need, and even listen on different
 #     ports so multiple configurations can be up simultaneously!
-
 features = ["network", "passwd"]
+seccomp = "Disabled"
 binaries = ["sh"]
 libraries = ["/usr/lib/ssh"]
+arguments = ["-D"]
 
 [home]
 name = "sshd/home"

@@ -12,4 +12,9 @@ echo "Compiling Build Script"
 cargo build --package utilities --bin antimony_build
 
 echo "Building"
-$TARGET/debug/antimony_build "${@:2}"
+
+if [[ $1 == "builder" ]]; then
+  $TARGET/debug/antimony_build "${@:2}"
+else 
+  $TARGET/debug/antimony_build "${@:1}"
+fi

@@ -47,6 +47,7 @@ To compile Antimony, you will need:
 * `libseccomp` (`libseccomp-dev` for Debian)
 * `sqlite` (`libsqlite3-dev` for Debian) 
 * `pkgconf` (`pkg-config` for Debian)
+* `libdbus` (`libdbus-1-dev` for Debian)
 
 To build, simply execute `cargo build --release` to generate the required binaries in `target/release`. If you want shell completions, execute `cargo build --release --workspace`, then run the `target/release/antimony_completions`. The completions files will be available in the `completions` folder.
 ### Packaging

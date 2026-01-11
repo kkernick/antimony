@@ -31,6 +31,9 @@ pub enum Error {
 
     #[error("Failed to serialize TOML: {0}")]
     Serialize(#[from] toml::ser::Error),
+
+    #[error("Database could not be initialized: {0}")]
+    Initialize(String),
 }
 
 // A map containing all names and values for a particular table.
@@ -77,9 +80,9 @@ impl fmt::Display for Table {
 }
 
 thread_local! {
-    pub static USER_DB: Connection = new_connection(Database::User).expect("Failed to access User Database");
-    pub static SYS_DB: Connection = new_connection(Database::System).expect("Failed to access System Database");
-    pub static CACHE_DB: Connection = new_connection(Database::Cache).expect("Failed to access Cache Database");
+    pub static USER_DB: Result<Connection, Error> = new_connection(Database::User);
+    pub static SYS_DB: Result<Connection, Error> = new_connection(Database::System);
+    pub static CACHE_DB: Result<Connection, Error> = new_connection(Database::Cache);
 }
 
 /// Get a new connection.
@@ -154,9 +157,18 @@ where
     F: FnOnce(&Connection) -> Result<T, Error>,
 {
     match db {
-        Database::User => USER_DB.with(|c| f(c)),
-        Database::System => SYS_DB.with(|c| f(c)),
-        Database::Cache => CACHE_DB.with(|c| f(c)),
+        Database::User => USER_DB.with(|c| match c {
+            Ok(c) => f(c),
+            Err(e) => Err(Error::Initialize(format!("{e}"))),
+        }),
+        Database::System => SYS_DB.with(|c| match c {
+            Ok(c) => f(c),
+            Err(e) => Err(Error::Initialize(format!("{e}"))),
+        }),
+        Database::Cache => CACHE_DB.with(|c| match c {
+            Ok(c) => f(c),
+            Err(e) => Err(Error::Initialize(format!("{e}"))),
+        }),
     }
 }
 

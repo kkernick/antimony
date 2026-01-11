@@ -12,7 +12,12 @@ fi
 
 echo "Compiling Build Script"
 cargo build --package utilities --bin antimony_build --bin antimony_digest
-DIR=$($TARGET/debug/antimony_build "${@:2}")
+
+if [[ $1 == "deploy" ]]; then
+  DIR=$($TARGET/debug/antimony_build "${@:2}")
+else
+  DIR=$($TARGET/debug/antimony_build "${@:1}")
+fi
 
 echo "Digesting Profiles and Features"
 if [[ ! -d /usr/share/antimony/db ]]; then

@@ -13,7 +13,7 @@ use clap::Parser;
 use common::stream::receive_fd;
 use dashmap::{DashMap, mapref::one::RefMut};
 use heck::ToTitleCase;
-use log::debug;
+use log::{debug, warn};
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
@@ -572,87 +572,94 @@ fn main() -> Result<()> {
     }
 
     if !stats.is_empty() {
-        debug!("Writing stats");
+        let write = || -> Result<()> {
+            debug!("Writing stats");
 
-        // Grab a connection (Permission is handled via the call)
-        syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
-            println!("Storing syscall data.");
-            let tx = conn.transaction()?;
+            // Grab a connection (Permission is handled via the call)
+            syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
+                println!("Storing syscall data.");
+                let tx = conn.transaction()?;
 
-            // Make sure the binary is either in the profile's persist home, or
-            // exists.
-            let binary_exist = |path: &str| -> Result<bool> {
-                Ok(if path.starts_with("/home/antimony") {
-                    let path = path.replace("/home/antimony", "*");
-                    !Spawner::abs("/usr/bin/find")
-                        .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                        .args(["-wholename", &path])?
-                        .mode(user::Mode::Real)
-                        .output(StreamMode::Pipe)
-                        .spawn()?
-                        .output_all()?
-                        .is_empty()
-                } else if path.ends_with("flatpak-spawn") {
-                    true
-                } else {
-                    Path::new(&path).exists()
-                })
-            };
-
-            for (name, stats) in stats {
-                // Collect and insert syscall sets
-                let binaries: Set<String> = stats
-                    .iter_mut()
-                    .filter_map(|mut entry| {
-                        let binary = entry.key().clone();
-                        let syscalls = entry.value_mut();
-
-                        if syscalls.is_empty() {
-                            return None;
-                        }
-
-                        match binary_exist(&binary) {
-                            Ok(true) => {
-                                println!(
-                                    "{}: {} => {}",
-                                    binary,
-                                    syscalls.len(),
-                                    format_iter(syscalls.iter())
-                                );
-
-                                // Insert into DB using the transaction
-                                if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
-                                    println!("DB insert failed for {binary}: {e}");
-                                    return None;
-                                }
-
-                                if binary.contains("strace") {
-                                    None
-                                } else {
-                                    Some(binary.clone())
-                                }
-                            }
-                            _ => {
-                                println!("Ignoring ephemeral binary {binary}");
-                                None
-                            }
-                        }
+                // Make sure the binary is either in the profile's persist home, or
+                // exists.
+                let binary_exist = |path: &str| -> Result<bool> {
+                    Ok(if path.starts_with("/home/antimony") {
+                        let path = path.replace("/home/antimony", "*");
+                        !Spawner::abs("/usr/bin/find")
+                            .arg(DATA_HOME.join("antimony").to_string_lossy())?
+                            .args(["-wholename", &path])?
+                            .mode(user::Mode::Real)
+                            .output(StreamMode::Pipe)
+                            .spawn()?
+                            .output_all()?
+                            .is_empty()
+                    } else if path.ends_with("flatpak-spawn") {
+                        true
+                    } else {
+                        Path::new(&path).exists()
                     })
-                    .collect();
+                };
 
-                if name != "audit" && !binaries.is_empty() {
-                    println!("Updating {name}");
-                    update_profile(&tx, &name, binaries.iter())
-                        .with_context(|| "Updating profile")?;
+                for (name, stats) in stats {
+                    // Collect and insert syscall sets
+                    let binaries: Set<String> = stats
+                        .iter_mut()
+                        .filter_map(|mut entry| {
+                            let binary = entry.key().clone();
+                            let syscalls = entry.value_mut();
+
+                            if syscalls.is_empty() {
+                                return None;
+                            }
+
+                            match binary_exist(&binary) {
+                                Ok(true) => {
+                                    println!(
+                                        "{}: {} => {}",
+                                        binary,
+                                        syscalls.len(),
+                                        format_iter(syscalls.iter())
+                                    );
+
+                                    // Insert into DB using the transaction
+                                    if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
+                                        println!("DB insert failed for {binary}: {e}");
+                                        return None;
+                                    }
+
+                                    if binary.contains("strace") {
+                                        None
+                                    } else {
+                                        Some(binary.clone())
+                                    }
+                                }
+                                _ => {
+                                    println!("Ignoring ephemeral binary {binary}");
+                                    None
+                                }
+                            }
+                        })
+                        .collect();
+
+                    if name != "audit" && !binaries.is_empty() {
+                        println!("Updating {name}");
+                        update_profile(&tx, &name, binaries.iter())
+                            .with_context(|| "Updating profile")?;
+                    }
                 }
-            }
 
-            // Commit and flush.
-            tx.commit()?;
-            conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
-                .with_context(|| "Flushing WAL")?;
-            Ok(())
-        })?;
+                // Commit and flush.
+                tx.commit()?;
+                conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
+                Ok(())
+            })
+        };
+
+        if write().is_err() {
+            warn!(
+                "Failed to commit syscall data. The monitor may have insufficient privilege to update the database."
+            );
+        }
     }
     debug!("Done");
     Ok(())

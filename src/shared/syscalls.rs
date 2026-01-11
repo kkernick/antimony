@@ -181,15 +181,15 @@ impl seccomp::notify::Notifier for Notifier {
 
     /// Setup the UnixStream. We wait for the Monitor to setup the socket.
     fn prepare(&mut self) -> Result<(), String> {
-        if let Err(e) = as_real!({
-            if !self.path.exists() {
-                if let Some(mut notify) = self.notify.take() {
-                    let mut buffer = [0; 1024];
+        match as_real!({
+            let mut notify = self.notify.take();
+            let mut buffer = [0; 1024];
+            while !self.path.exists() {
+                debug!("Waiting for {}", self.path.display());
+                if let Some(notify) = &mut notify {
                     let _ = notify.read_events_blocking(&mut buffer);
                 } else {
-                    while !self.path.exists() {
-                        sleep(Duration::from_millis(10));
-                    }
+                    sleep(Duration::from_millis(10));
                 }
             }
             match UnixStream::connect(&self.path) {
@@ -200,9 +200,8 @@ impl seccomp::notify::Notifier for Notifier {
                 Err(e) => Err(format!("Failed to connect to stream: {e}")),
             }
         }) {
-            Err(format!("Failed to get monitor socket: {e}"))
-        } else {
-            Ok(())
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to switch user: {e}")),
         }
     }
 

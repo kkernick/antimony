@@ -18,7 +18,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{trace, warn};
+use log::{debug, info, trace, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,7 @@ use user::{as_real, run_as};
 use which::which;
 
 /// The kind of thing we just analyzed.
+#[derive(Debug, Deserialize, Serialize)]
 pub enum Type {
     Elf,
     File,
@@ -45,7 +46,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: DashSet<String>,
@@ -125,9 +126,10 @@ fn parse(
         return Ok(Type::Done);
     }
 
-    if let Some(cache) = get_cache(path, Table::Binaries)? {
+    if let Ok(Some((t, cache))) = get_cache::<(Type, ParseReturn)>(path, Table::Binaries) {
+        debug!("Using cache");
         ParseReturn::merge(global, cache);
-        return Ok(Type::None);
+        return Ok(t);
     }
 
     let resolved = match resolve_bin(path) {
@@ -203,9 +205,12 @@ fn parse(
 
                 let mut binaries = Vec::new();
                 // Rewind.
-                file.seek(io::SeekFrom::Start(0))?;
-                let reader = BufReader::new(file);
-                let mut iter = reader.lines();
+
+                let mut iter = as_real!(Result<_>, {
+                    file.seek(io::SeekFrom::Start(0))?;
+                    let reader = BufReader::new(file);
+                    Ok(reader.lines())
+                })??;
 
                 // Grab the shebang
                 let header = match iter.next() {
@@ -262,7 +267,7 @@ fn parse(
         }
     };
 
-    write_cache(path, &ret, Table::Binaries)?;
+    write_cache(path, &(&t, &ret), Table::Binaries)?;
     ParseReturn::merge(global, ret);
     Ok(t)
 }
@@ -308,7 +313,7 @@ fn handle_localize(
                     handle_localize(&ldst, instance, home, false, parsed, done.clone())?;
                     parsed.symlinks.insert(dst, ldst);
                 }
-                _ => warn!("Excluding localization for {file}"),
+                _ => {}
             }
         }
         Ok(())
@@ -342,13 +347,16 @@ pub fn collect(
                 resolved.insert(f.clone());
             });
 
-            wildcards.into_par_iter().for_each(|w| {
-                if let Ok(cards) = get_wildcards(w, false) {
-                    for card in cards {
-                        resolved.insert(card);
+            wildcards
+                .into_par_iter()
+                .for_each(|w| match get_wildcards(w, false) {
+                    Ok(cards) => {
+                        for card in cards {
+                            resolved.insert(card);
+                        }
                     }
-                }
-            })
+                    Err(e) => warn!("Failed to get wildcards for {w}: {e}"),
+                })
         });
     }
 
@@ -394,9 +402,13 @@ pub fn collect(
         Arc::into_inner(resolved)
             .unwrap()
             .into_iter()
-            .try_for_each(|binary| {
-                handle_localize(binary.as_str(), instance, false, true, parsed, done.clone())
-            })?;
+            .for_each(|binary| {
+                if let Err(e) =
+                    handle_localize(binary.as_str(), instance, false, true, parsed, done.clone())
+                {
+                    warn!("Failed to localize {binary}: {e}");
+                }
+            });
     });
     Ok(())
 }
@@ -419,16 +431,18 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
 
     info.handle.args_i(["--dir", "/usr/bin"])?;
     let bin_cache = format!("{}-bin", info.instance.name());
-    let parsed = match get_cache(&bin_cache, Table::Binaries)? {
-        Some(parsed) => parsed,
-        None => {
+    let parsed = match get_cache(&bin_cache, Table::Binaries) {
+        Ok(Some(parsed)) => parsed,
+        _ => {
             let parsed = ParseReturn::new();
             timer!(
                 "::collect",
                 collect(info.profile, info.name, info.instance.name(), &parsed,)
             )?;
 
+            info!("Finished");
             write_cache(&bin_cache, &parsed, Table::Binaries)?;
+            info!("Writting");
             parsed
         }
     };

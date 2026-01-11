@@ -108,7 +108,7 @@ fn elf_filter(path: &str) -> Option<String> {
 
 /// Get all executable files in a directory. This is very expensive.
 pub fn get_dir(dir: &str) -> Result<Cache> {
-    if let Some(libraries) = get_cache(dir, Table::Directories)? {
+    if let Ok(Some(libraries)) = get_cache(dir, Table::Directories) {
         return Ok(libraries);
     }
     let libraries: Cache = Spawner::abs("/usr/bin/find")
@@ -169,7 +169,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
 
 /// LDD a path.
 pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
-    let libraries = if let Some(libraries) = get_cache(&path, Table::Libraries)? {
+    let libraries = if let Ok(Some(libraries)) = get_cache(&path, Table::Libraries) {
         libraries
     } else {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
@@ -189,13 +189,11 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .map(|e| {
-                if let Ok(mut canon) = fs::canonicalize(&e) {
-                    let name = match e.strip_suffix('/').unwrap_or(&e).rfind('/') {
-                        Some(i) => &e[i + 1..],
-                        None => &e,
-                    };
-
-                    canon.set_file_name(name);
+                let path = Path::new(&e);
+                if let Some(parent) = path.parent()
+                    && let Ok(canon) = fs::canonicalize(parent)
+                {
+                    let canon = canon.join(path.file_name().unwrap());
                     canon.to_string_lossy().into_owned()
                 } else {
                     e

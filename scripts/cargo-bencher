@@ -16,4 +16,9 @@ echo "Digesting database"
 $TARGET/debug/antimony_digest
 
 echo "Benchmarking"
-$TARGET/debug/antimony_bench "${@:2}"
+
+if [[ $1 == "bench" ]]; then
+  $TARGET/debug/antimony_bench "${@:2}"
+else 
+  $TARGET/debug/antimony_bench "${@:1}"
+fi
