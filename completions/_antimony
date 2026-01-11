@@ -126,18 +126,6 @@ _arguments "${_arguments_options[@]}" : \
 '::name -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
 && ret=0
 ;;
-(info)
-_arguments "${_arguments_options[@]}" : \
-'*-v[The verbosity of information]' \
-'*--verbosity[The verbosity of information]' \
-'-h[Print help (see more with '\''--help'\'')]' \
-'--help[Print help (see more with '\''--help'\'')]' \
-':target -- What to get info on:((profile\:"A Profile"
-feature\:"A Feature"
-seccomp\:"Query the SECCOMP database"))' \
-'::name -- Profile/Feature/Binary name:_default' \
-&& ret=0
-;;
 (seccomp)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help (see more with '\''--help'\'')]' \
@@ -204,10 +192,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(info)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (seccomp)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -245,7 +229,6 @@ _antimony_commands() {
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'remove:Remove features/profiles, or reset user definitions to the default' \
-'info:List info about various components of the system' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
@@ -277,7 +260,6 @@ _antimony__help_commands() {
 'refresh:Refresh caches' \
 'integrate:Integrate a profile into the user environment' \
 'remove:Remove features/profiles, or reset user definitions to the default' \
-'info:List info about various components of the system' \
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
@@ -311,11 +293,6 @@ _antimony__help__import_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help import commands' commands "$@"
 }
-(( $+functions[_antimony__help__info_commands] )) ||
-_antimony__help__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help info commands' commands "$@"
-}
 (( $+functions[_antimony__help__integrate_commands] )) ||
 _antimony__help__integrate_commands() {
     local commands; commands=()
@@ -345,11 +322,6 @@ _antimony__help__seccomp_commands() {
 _antimony__import_commands() {
     local commands; commands=()
     _describe -t commands 'antimony import commands' commands "$@"
-}
-(( $+functions[_antimony__info_commands] )) ||
-_antimony__info_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony info commands' commands "$@"
 }
 (( $+functions[_antimony__integrate_commands] )) ||
 _antimony__integrate_commands() {

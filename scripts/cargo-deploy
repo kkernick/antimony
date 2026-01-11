@@ -11,23 +11,13 @@ fi
 
 
 echo "Compiling Build Script"
-cargo build --package utilities --bin antimony_build --bin antimony_digest
+cargo build --package utilities --bin antimony_build
 
 if [[ $1 == "deploy" ]]; then
   DIR=$($TARGET/debug/antimony_build "${@:2}")
 else
   DIR=$($TARGET/debug/antimony_build "${@:1}")
 fi
-
-echo "Digesting Profiles and Features"
-if [[ ! -d /usr/share/antimony/db ]]; then
-  sudo mkdir -p /usr/share/antimony/db
-fi
-$TARGET/debug/antimony_digest
-
-sudo cp --remove-destination -v $ROOT/config/db/antimony.db /usr/share/antimony/db/antimony.db
-sudo chown antimony:antimony -R /usr/share/antimony/db
-
 
 echo "Copying binaries"
 if [[ ! -d /usr/share/antimony/utilities ]]; then
@@ -57,7 +47,10 @@ if [[ ! -d /usr/share/antimony/config ]]; then
   sudo mkdir /usr/share/antimony/config
 fi
 
-sudo cp $ROOT/config/default.toml /usr/share/antimony/config
+sudo cp -vr $ROOT/config/features /usr/share/antimony/config
+sudo cp -vr $ROOT/config/profiles /usr/share/antimony/config
+sudo cp $ROOT/config/default.toml /usr/share/antimony/config/profiles
+
 sudo cp $ROOT/config/feature.toml /usr/share/antimony/config
 sudo cp $ROOT/config/profile.toml /usr/share/antimony/config
 sudo cp $ROOT/config/config.toml /usr/share/antimony/config

@@ -161,7 +161,7 @@ fn main() -> Result<()> {
 
     if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
-        unsafe { env::set_var("AT_HOME", format!("{root}/config")) }
+        unsafe { env::set_var("AT_HOME", root) }
         unsafe { env::set_var("AT_FORCE_TEMP", "1") }
     }
 
@@ -174,15 +174,13 @@ fn main() -> Result<()> {
 
         // Checkout the desired state, but only for code and Cargo.
         Spawner::new("git")?
-            .args([
-                "checkout",
-                checkout,
-                "src",
-                "config",
-                "crates",
-                "Cargo.toml",
-                "Cargo.lock",
-            ])?
+            .args(["checkout", checkout])?
+            .spawn()?
+            .wait()?;
+
+        // Reset to the original state
+        Spawner::new("git")?
+            .args(["reset", "--hard"])?
             .spawn()?
             .wait()?;
     }
@@ -329,15 +327,7 @@ fn main() -> Result<()> {
     if cli.checkout.is_some() {
         // Undo the checkout
         Spawner::new("git")?
-            .args([
-                "checkout",
-                "-",
-                "src",
-                "config",
-                "crates",
-                "Cargo.toml",
-                "Cargo.lock",
-            ])?
+            .args(["checkout", "main"])?
             .spawn()?
             .wait()?;
 

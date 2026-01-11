@@ -29,7 +29,7 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
     path
 });
 
-/// THe Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
+/// The Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
 
@@ -72,6 +72,8 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     }
     cache_dir
 });
+
+pub static AT_CONFIG: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config"));
 
 /// The user's home folder.
 pub static HOME: LazyLock<String> = LazyLock::new(|| {

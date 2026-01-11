@@ -1,16 +1,13 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
 use crate::{
-    cli::{self},
+    cli,
     shared::{
-        db::{self, Database, Table},
-        env::AT_HOME,
+        env::{AT_CONFIG, USER_NAME},
         feature::Feature,
         profile::Profile,
     },
 };
-use std::fs;
-use user::Mode;
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -24,38 +21,29 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(self) -> anyhow::Result<()> {
         let (table, kind) = if self.feature {
-            (Table::Features, "feature")
+            ("features", "feature")
         } else {
-            (Table::Profiles, "profile")
+            ("profiles", "profile")
         };
 
-        // Dump the content to a temporary file.
-        let temp = temp::Builder::new()
-            .owner(Mode::Effective)
-            .create::<temp::File>()?;
-        let content = if let Some(user) = db::dump(&self.name, Database::User, table)? {
+        let user = AT_CONFIG
+            .join(USER_NAME.as_str())
+            .join(table)
+            .join(&self.name);
+        let system = AT_CONFIG.join(table).join(&self.name);
+        let path = if user.exists() {
             user
-        } else if let Some(system) = db::dump(&self.name, Database::System, table)? {
+        } else if system.exists() {
             system
         } else {
-            fs::read_to_string(AT_HOME.join("config").join(format!("{kind}.toml")))?
+            return Err(anyhow::anyhow!("No such {kind}"));
         };
 
-        fs::write(temp.full(), content)?;
-        let modified = if self.feature {
-            Feature::edit(&temp.full())?
+        if self.feature {
+            Feature::edit(&path)?
         } else {
-            Profile::edit(&temp.full())?
+            Profile::edit(&path)?
         };
-
-        if modified.is_some() {
-            db::store_str(
-                &self.name,
-                &fs::read_to_string(temp.full())?,
-                Database::User,
-                table,
-            )?
-        }
         Ok(())
     }
 }

@@ -1,9 +1,6 @@
 //! Export user-profiles
 
-use crate::shared::{
-    db::{self, Database, Table},
-    env::PWD,
-};
+use crate::shared::env::{AT_CONFIG, PWD, USER_NAME};
 use anyhow::{Result, anyhow};
 use std::{fs, path::PathBuf};
 use user::as_real;
@@ -28,13 +25,14 @@ impl super::Run for Args {
         };
 
         let (table, kind) = if self.feature {
-            (Table::Features, "feature")
+            ("features", "feature")
         } else {
-            (Table::Profiles, "profile")
+            ("profiles", "profile")
         };
 
         let export = |name: &str| -> Result<()> {
-            if let Some(content) = db::dump::<String>(name, Database::User, table)? {
+            let path = AT_CONFIG.join(USER_NAME.as_str()).join(table).join(name);
+            if let Ok(content) = fs::read_to_string(path) {
                 as_real!(Result<()>, {
                     fs::write(dest.join(name).with_extension("toml"), content)?;
                     Ok(())
@@ -50,8 +48,11 @@ impl super::Run for Args {
         } else if let Some(object) = self.name {
             export(&object)
         } else {
-            for object in db::all(Database::User, table)? {
-                export(&object)?;
+            for object in fs::read_dir(AT_CONFIG.join(USER_NAME.as_str()).join(table))?
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name())
+            {
+                export(&object.into_string().unwrap())?;
             }
             Ok(())
         }

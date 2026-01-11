@@ -10,21 +10,19 @@ pub mod ns;
 pub mod seccomp;
 
 use crate::{
-    cli::{self, info::Info},
+    cli,
     fab::{self, get_wildcards},
     shared::{
         Map, Set,
         config::CONFIG_FILE,
-        db::{self, Database, DatabaseCache, Table},
         edit,
-        env::HOME,
-        format_iter,
+        env::{AT_CONFIG, CACHE_DIR, HOME, USER_NAME},
     },
     timer,
 };
 use ahash::RandomState;
 use console::style;
-use log::{debug, info, warn};
+use log::{debug, info, trace};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -33,17 +31,10 @@ use std::{
     sync::LazyLock,
 };
 use thiserror::Error;
+use user::as_effective;
 use which::which;
 
-/// On our hot-path, SQLite is slower than directly than reading a file.
-/// To solve this, Antimony will immediately dump all profile information
-/// directly into memory (Here) on program start.
-pub static USER_CACHE: LazyLock<DatabaseCache> =
-    LazyLock::new(|| db::dump_all(Database::User, Table::Profiles));
-pub static SYSTEM_CACHE: LazyLock<DatabaseCache> =
-    LazyLock::new(|| db::dump_all(Database::System, Table::Profiles));
-pub static HASH_CACHE: LazyLock<DatabaseCache> =
-    LazyLock::new(|| db::dump_all(Database::Cache, Table::Profiles));
+static PROFILE_CACHE: LazyLock<PathBuf> = LazyLock::new(|| CACHE_DIR.join("profiles"));
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -72,6 +63,10 @@ pub enum Error {
     #[error("System error: {0}: {1}")]
     Errno(&'static str, nix::errno::Errno),
 
+    /// Misc Errno errors.
+    #[error("Failed to switch user: {0}")]
+    User(#[from] nix::errno::Errno),
+
     /// Errors resolving/creating paths.
     #[error("Path error: {0}")]
     Path(#[from] which::Error),
@@ -83,10 +78,6 @@ pub enum Error {
     /// Errors incorporating features.
     #[error("Feature error: {0}")]
     Feature(#[from] crate::fab::features::Error),
-
-    /// Database errors.
-    #[error("Database error: {0}")]
-    Database(#[from] db::Error),
 }
 
 /// Append two things together. Used for Profile Merging.
@@ -231,23 +222,31 @@ pub struct Profile {
     pub sandbox_args: Vec<String>,
 }
 impl Profile {
+    pub fn user_profile(name: &str) -> PathBuf {
+        AT_CONFIG
+            .join(USER_NAME.as_str())
+            .join("profiles")
+            .join(name)
+            .with_extension("toml")
+    }
+
+    pub fn system_profile(name: &str) -> PathBuf {
+        AT_CONFIG.join("profiles").join(name).with_extension("toml")
+    }
+
     /// Load a profile from the database. This does not include any feature fabrication.
     pub fn load(name: &str) -> Result<Self, Error> {
         if name == "default" {
             if !CONFIG_FILE.system_mode()
-                && let Ok(cache) = USER_CACHE.as_ref()
-                && let Some(def) = cache.get("default")
+                && let Ok(str) = fs::read_to_string(Self::user_profile(name))
             {
-                return Ok(toml::from_str(def)?);
-            } else if let Ok(cache) = SYSTEM_CACHE.as_ref()
-                && let Some(def) = cache.get("default")
-            {
-                if !CONFIG_FILE.system_mode() {
-                    db::store_str("default", def, Database::User, Table::Profiles)?;
-                }
-                return Ok(toml::from_str(def)?);
+                return Ok(toml::from_str(&str)?);
             } else {
-                return Ok(Profile::default());
+                let str = fs::read_to_string(Self::system_profile(name))
+                    .map_err(|e| Error::Io("Reading default", e))?;
+                as_effective!(fs::write(Self::user_profile(name), &str))?
+                    .map_err(|e| Error::Io("Writing default", e))?;
+                return Ok(toml::from_str(&str)?);
             }
         }
 
@@ -262,19 +261,18 @@ impl Profile {
             }
         }
 
+        trace!("Checking: {}", Self::user_profile(name).display());
         if !CONFIG_FILE.system_mode()
-            && let Ok(cache) = USER_CACHE.as_ref()
-            && let Some(profile) = cache.get(name)
+            && let Ok(str) = fs::read_to_string(Self::user_profile(name))
         {
             info!("Using Profile Cache");
-            return Ok(toml::from_str(profile)?);
+            return Ok(toml::from_str(&str)?);
         }
 
-        if let Ok(cache) = SYSTEM_CACHE.as_ref()
-            && let Some(profile) = cache.get(name)
-        {
+        trace!("Checking: {}", Self::system_profile(name).display());
+        if let Ok(str) = fs::read_to_string(Self::system_profile(name)) {
             info!("Using System Cache");
-            return Ok(toml::from_str(profile)?);
+            return Ok(toml::from_str(&str)?);
         }
 
         Err(Error::NotFound(
@@ -382,20 +380,17 @@ impl Profile {
             hash
         });
 
-        if let Ok(cache) = timer!("::hash_fetch", HASH_CACHE.as_ref())
-            && let Some(profile) = cache.get(&hash)
-        {
+        let cache = PROFILE_CACHE.join(hash);
+        if let Ok(str) = fs::read_to_string(&cache) {
             debug!("Using cached profile");
-            return Ok(timer!("::cache_parse", toml::from_str(profile)?));
+            return Ok(timer!("::cache_parse", toml::from_str(&str)?));
         }
 
         debug!("No cache available");
         let to_inherit: Set<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
-                if !CONFIG_FILE.system_mode()
-                    && db::exists("default", Database::User, Table::Profiles)?
-                {
+                if !CONFIG_FILE.system_mode() && Self::user_profile("default").exists() {
                     Set::from_iter(["default".to_string()])
                 } else {
                     Set::default()
@@ -443,8 +438,16 @@ impl Profile {
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
-        if db::save(&hash, &profile, Database::Cache, Table::Profiles).is_err() {
-            warn!("Cannot write profile cache to database.");
+        if let Some(parent) = cache.parent()
+            && !parent.exists()
+        {
+            as_effective!(fs::create_dir_all(parent))?
+                .map_err(|e| Error::Io("create profile cache", e))?;
+        }
+
+        if let Ok(str) = toml::to_string(&profile) {
+            as_effective!(fs::write(cache, &str))?
+                .map_err(|e| Error::Io("write profile cache", e))?;
         }
         Ok(profile)
     }
@@ -603,108 +606,6 @@ impl Profile {
     /// Edit a profile.
     pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
         edit::edit::<Self>(path)
-    }
-}
-impl Info for Profile {
-    /// Get information about a profile.
-    fn info(&self, name: &str, verbose: u8) {
-        print!(
-            "{} => {} ",
-            style(name).bold(),
-            style(self.app_path(name)).italic()
-        );
-        print!("{} ", self.arguments.join(" "));
-
-        if let Some(inherits) = &self.inherits {
-            if inherits.is_empty() {
-                print!("(No default)");
-            } else {
-                print!("(Inherits: {})", format_iter(inherits.iter()));
-            }
-        };
-        println!();
-
-        if verbose > 0 {
-            println!(
-                "\t- Allow New Privileges: {}",
-                if self.new_privileges.unwrap_or(false) {
-                    style("Yes").red()
-                } else {
-                    style("No").green()
-                }
-            );
-
-            println!(
-                "\t- Sandbox Arguments: {}",
-                format_iter(self.sandbox_args.iter())
-            );
-
-            if let Some(id) = &self.id {
-                println!("\t- ID: {id}");
-            }
-
-            println!(
-                "\t- Required Features: {}",
-                format_iter(self.features.iter())
-            );
-
-            println!(
-                "\t- Conflicting Features: {}",
-                format_iter(self.conflicts.iter())
-            );
-
-            if let Some(home) = &self.home {
-                println!("\t- Home");
-                home.info(name);
-            }
-
-            println!(
-                "\t- SECCOMP: {}",
-                match self.seccomp.unwrap_or_default() {
-                    seccomp::SeccompPolicy::Permissive => style("Permissive").yellow(),
-                    seccomp::SeccompPolicy::Enforcing => style("Enforcing").green(),
-                    seccomp::SeccompPolicy::Notifying => style("Notify").blue(),
-                    seccomp::SeccompPolicy::Disabled => style("Disabled").red(),
-                }
-            );
-
-            if let Some(ipc) = &self.ipc {
-                ipc.info();
-            }
-
-            if let Some(files) = &self.files {
-                files.info()
-            }
-
-            println!("\t- Binaries: {}", format_iter(self.binaries.iter()));
-
-            library_info(&self.libraries, verbose);
-
-            println!("\t- Devices:");
-            for device in &self.devices {
-                println!("\t\t- {}", style(device).italic());
-            }
-
-            println!("\t- Namespaces: {}", format_iter(self.namespaces.iter()));
-
-            println!("\t- Environment Variables:");
-            for (key, value) in &self.environment {
-                println!("\t\t - {key} = {value}");
-            }
-
-            println!(
-                "\t- Configurations: {}",
-                self.configuration
-                    .keys()
-                    .map(|k| k.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-
-            if let Some(hooks) = &self.hooks {
-                hooks.info();
-            }
-        }
     }
 }
 

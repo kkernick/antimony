@@ -1,17 +1,13 @@
 //!  Features are miniature profiles used by the latter for common functionality.
 
 use super::profile::{ipc::Ipc, ns::Namespace};
-use crate::{
-    cli::info::Info,
-    shared::{
-        Map, Set,
-        config::CONFIG_FILE,
-        db::{self, Database, Table},
-        edit, format_iter,
-        profile::{files::Files, hooks::Hooks},
-    },
+use crate::shared::{
+    Map, Set,
+    config::CONFIG_FILE,
+    edit,
+    env::{AT_CONFIG, USER_NAME},
+    profile::{files::Files, hooks::Hooks},
 };
-use console::style;
 use serde::{Deserialize, Serialize};
 use std::{fs, io, path::Path};
 use thiserror::Error;
@@ -28,12 +24,8 @@ pub enum Error {
     NotFound(String),
 
     /// An error if the TOML is malformed.
-    #[error("Malform feature file: {0}")]
+    #[error("Malformed feature file: {0}")]
     Malformed(#[from] toml::de::Error),
-
-    /// Database error
-    #[error("Database error: {0}")]
-    Database(#[from] db::Error),
 }
 
 /// A Feature
@@ -94,19 +86,30 @@ pub struct Feature {
 }
 impl Feature {
     /// Get a feature from its name.
-    pub fn new(name: &str) -> Result<Feature, Error> {
+    pub fn new(name: &str) -> Result<Self, Error> {
         if name.ends_with(".toml") {
             return Ok(toml::from_str(&fs::read_to_string(name)?)?);
         }
 
         if !CONFIG_FILE.system_mode()
-            && let Some(feature) = db::get::<Self>(name, Database::User, Table::Features)?
+            && let Ok(str) = fs::read_to_string(
+                AT_CONFIG
+                    .join(USER_NAME.as_str())
+                    .join("features")
+                    .join(name)
+                    .with_extension("toml"),
+            )
         {
-            return Ok(feature);
+            return Ok(toml::from_str(&str)?);
         }
 
-        if let Some(feature) = db::get::<Self>(name, Database::System, Table::Features)? {
-            return Ok(feature);
+        if let Ok(str) = fs::read_to_string(
+            AT_CONFIG
+                .join("features")
+                .join(name)
+                .with_extension("toml"),
+        ) {
+            return Ok(toml::from_str(&str)?);
         }
 
         Err(Error::NotFound(name.to_string()))
@@ -114,65 +117,6 @@ impl Feature {
     /// Edit a feature.
     pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
         edit::edit::<Self>(path)
-    }
-}
-impl Info for Feature {
-    /// Print info about the feature.
-    fn info(&self, name: &str, verbosity: u8) {
-        println!("{}: {}", style(name).bold(), self.description);
-        if let Some(caveat) = &self.caveat {
-            println!("\t- Caveat: {}", style(caveat).red());
-        }
-
-        if verbosity > 0 {
-            if let Some(requires) = &self.requires {
-                println!("\t- Required Features: {}", format_iter(requires.iter()));
-            }
-
-            if let Some(conflicts) = &self.conflicts {
-                println!(
-                    "\t- Conflicting Features: {}",
-                    format_iter(conflicts.iter())
-                );
-            }
-
-            if let Some(ipc) = &self.ipc {
-                ipc.info();
-            }
-
-            if let Some(namespaces) = &self.namespaces {
-                println!("\t- Namespaces: {}", format_iter(namespaces.iter()));
-            }
-
-            if let Some(files) = &self.files {
-                files.info()
-            }
-
-            if let Some(binaries) = &self.binaries {
-                println!("\t- Binaries:");
-                for binary in binaries {
-                    println!("\t\t- {}", style(binary).italic());
-                }
-            }
-
-            if let Some(libraries) = &self.libraries {
-                super::profile::library_info(libraries, verbosity);
-            }
-
-            if let Some(devices) = &self.devices {
-                println!("\t- Devices:");
-                for device in devices {
-                    println!("\t\t- {}", style(device).italic());
-                }
-            }
-
-            if let Some(envs) = &self.environment {
-                println!("\t- Environment Variables:");
-                for (key, value) in envs {
-                    println!("\t\t - {key} = {value}");
-                }
-            }
-        }
     }
 }
 

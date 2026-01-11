@@ -10,13 +10,12 @@ pub mod ns;
 
 use crate::shared::{
     Set,
-    db::{self, Database, Table},
-    env::{AT_HOME, HOME},
+    env::{AT_HOME, CACHE_DIR, HOME},
     format_iter,
     profile::Profile,
 };
 use anyhow::Result;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -30,21 +29,13 @@ use std::{
     sync::LazyLock,
 };
 use temp::Temp;
-use user::as_real;
+use user::{as_effective, as_real};
 
 /// What the Cache type is. Through benchmarking, a regular Vec outperforms
 /// both Sets and SmallVec.
 type Cache = Vec<String>;
 
 /// Get the library roots.
-/// The Library Roots is generated on the first call to get_libraries,
-/// since it saves us having to explicitly call a function (LDD will
-/// localize for us). This means that trying to use LIB_ROOTS without
-/// calling get_libraries will cause a panic. Hence, the tracer
-/// will call get_libraries on itself just to initialize this value.
-///
-/// Hacky? Maybe a little, but there's no good way to determine this
-/// value through pure Rust, and spawning a child is expensive.
 pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
     let mut roots = Set::default();
 
@@ -76,8 +67,8 @@ pub struct FabInfo<'a> {
 
 /// Get cached definitions.
 #[inline]
-fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
-    if let Some(bytes) = db::dump::<Vec<u8>>(name, Database::Cache, tb)? {
+fn get_cache<T: DeserializeOwned>(name: &str, cache: &str) -> Result<Option<T>> {
+    if let Ok(bytes) = fs::read(CACHE_DIR.join(cache).join(name.replace("/", "-"))) {
         Ok(Some(postcard::from_bytes(&bytes)?))
     } else {
         Ok(None)
@@ -86,11 +77,15 @@ fn get_cache<T: DeserializeOwned>(name: &str, tb: Table) -> Result<Option<T>> {
 
 /// Write the cache file.
 #[inline]
-fn write_cache<T: Serialize>(name: &str, content: &T, tb: Table) -> Result<()> {
+fn write_cache<T: Serialize>(name: &str, content: &T, cache: &str) -> Result<()> {
     let bytes = postcard::to_stdvec(content)?;
-    if let Err(e) = db::store_bytes(name, &bytes, Database::Cache, tb) {
-        warn!("Couldn't write to system cache: {e}");
+    let cache = CACHE_DIR.join(cache);
+    if !cache.exists() {
+        as_effective!(fs::create_dir_all(&cache))??;
     }
+    let cache = cache.join(name.replace("/", "-"));
+    trace!("Writing {}", cache.display());
+    as_effective!(fs::write(cache, &bytes))??;
     Ok(())
 }
 
@@ -108,7 +103,7 @@ fn elf_filter(path: &str) -> Option<String> {
 
 /// Get all executable files in a directory. This is very expensive.
 pub fn get_dir(dir: &str) -> Result<Cache> {
-    if let Ok(Some(libraries)) = get_cache(dir, Table::Directories) {
+    if let Ok(Some(libraries)) = get_cache(dir, "directories") {
         return Ok(libraries);
     }
     let libraries: Cache = Spawner::abs("/usr/bin/find")
@@ -121,7 +116,7 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .par_bridge()
         .filter_map(elf_filter)
         .collect();
-    write_cache(dir, &libraries, Table::Directories)?;
+    write_cache(dir, &libraries, "directories")?;
     Ok(libraries)
 }
 
@@ -139,7 +134,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
             .collect())
     };
 
-    if let Some(libraries) = get_cache(pattern, Table::Wildcards)? {
+    if let Some(libraries) = get_cache(pattern, "wildcards")? {
         return Ok(libraries);
     }
 
@@ -163,13 +158,13 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
         run("/usr/bin", pattern)?
     };
 
-    write_cache(pattern, &libraries, Table::Wildcards)?;
+    write_cache(pattern, &libraries, "wildcards")?;
     Ok(libraries)
 }
 
 /// LDD a path.
 pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
-    let libraries = if let Ok(Some(libraries)) = get_cache(&path, Table::Libraries) {
+    let libraries = if let Ok(Some(libraries)) = get_cache(&path, "libraries") {
         libraries
     } else {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
@@ -208,7 +203,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .collect();
-        write_cache(&path, &libraries, Table::Libraries)?;
+        write_cache(&path, &libraries, "libraries")?;
         libraries
     };
     Ok(libraries)

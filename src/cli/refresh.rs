@@ -2,7 +2,7 @@
 
 use crate::{
     cli::{self, run, run_vec},
-    shared::env::{AT_HOME, CACHE_DIR, HOME_PATH},
+    shared::env::{CACHE_DIR, HOME_PATH},
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -42,9 +42,15 @@ impl cli::Run for Args {
                 }
             }
         } else {
+            let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join("binaries"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join("libraries"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join("directories"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join("profiles"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join("wildcards"));
 
             for cache in fs::read_dir(CACHE_DIR.as_path())? {
                 let cache = cache?;
@@ -64,10 +70,6 @@ impl cli::Run for Args {
                 }
             }
         }
-
-        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db"));
-        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-wal"));
-        let _ = fs::remove_file(AT_HOME.join("db").join("cache.db-shm"));
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {

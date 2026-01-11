@@ -1,5 +1,4 @@
 pub mod config;
-pub mod db;
 pub mod edit;
 pub mod env;
 pub mod feature;

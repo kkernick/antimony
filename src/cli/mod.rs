@@ -4,7 +4,6 @@ pub mod config;
 pub mod edit;
 pub mod export;
 pub mod import;
-pub mod info;
 pub mod integrate;
 pub mod refresh;
 pub mod remove;
@@ -70,9 +69,6 @@ pub enum Command {
 
     /// Remove features/profiles, or reset user definitions to the default.
     Remove(remove::Args),
-
-    /// List info about various components of the system.
-    Info(info::Args),
 
     /// Perform operations on the SECCOMP Database.
     Seccomp(seccomp::Args),

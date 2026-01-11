@@ -6,11 +6,9 @@ use crate::{
     setup::setup,
     shared::{
         config::CONFIG_FILE,
-        db,
         env::RUNTIME_DIR,
         profile::{
-            self, files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace,
-            seccomp::SeccompPolicy,
+            files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace, seccomp::SeccompPolicy,
         },
         utility,
     },
@@ -164,24 +162,6 @@ pub struct Args {
 }
 impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
-        // Dump the Profile Definitions immediately into memory.
-        rayon::spawn(|| {
-            let _ = profile::USER_CACHE.as_ref();
-        });
-        rayon::spawn(|| {
-            let _ = profile::SYSTEM_CACHE.as_ref();
-        });
-        rayon::spawn(|| {
-            let _ = profile::HASH_CACHE.as_ref();
-        });
-
-        // Initialize all the databases for each thread.
-        rayon::spawn_broadcast(|_| {
-            let _ = db::USER_DB;
-            let _ = db::SYS_DB;
-            let _ = db::CACHE_DB;
-        });
-
         user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {
             let info = timer!(

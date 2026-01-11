@@ -10,15 +10,12 @@ else
 fi
 
 echo "Compiling Bench Script"
-cargo build --package utilities --bin antimony_bench --bin antimony_build --bin antimony_digest
-
-echo "Digesting database"
-$TARGET/debug/antimony_digest
+cargo build --package utilities --bin antimony_bench --bin antimony_build
 
 echo "Benchmarking"
 
-if [[ $1 == "bench" ]]; then
+if [[ $1 == "bencher" ]]; then
   $TARGET/debug/antimony_bench "${@:2}"
-else 
+else
   $TARGET/debug/antimony_bench "${@:1}"
 fi

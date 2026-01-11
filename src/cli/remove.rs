@@ -3,12 +3,15 @@
 use crate::{
     cli,
     shared::{
-        db::{self, Database, Table},
+        Set,
+        env::{AT_CONFIG, USER_NAME},
         privileged,
     },
 };
 use anyhow::Result;
 use dialoguer::Confirm;
+use std::fs;
+use user::as_effective;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -22,19 +25,24 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
         let (table, kind) = if self.feature {
-            (Table::Features, "feature")
+            ("features", "feature")
         } else {
-            (Table::Profiles, "profile")
+            ("profiles", "profile")
         };
 
         if let Some(name) = self.name {
-            let user = db::exists(&name, Database::User, table)?;
-            let system = db::exists(&name, Database::System, table)?;
+            let user = AT_CONFIG
+                .join(USER_NAME.as_str())
+                .join(table)
+                .join(&name)
+                .with_extension("toml");
 
-            if user && system {
+            let system = AT_CONFIG.join(table).join(&name).with_extension("toml");
+
+            if user.exists() && system.exists() {
                 println!("Resetting to system {kind}");
-                db::delete(&name, Database::User, table)?;
-            } else if user {
+                as_effective!(fs::remove_file(user))??;
+            } else if user.exists() {
                 if Confirm::new()
                     .with_prompt(format!(
                         "{name} is a user-created {kind}. There is no system default to reset to. Are you sure you want to remove it?",
@@ -42,9 +50,9 @@ impl cli::Run for Args {
                     .interact()?
                 {
                     println!("Goodbye, {name}!");
-                    db::delete(&name, Database::User, table)?;
+                    as_effective!(fs::remove_file(user))??;
                 }
-            } else if system && name != "default" {
+            } else if system.exists() && name != "default" {
                 if privileged()?
                     && Confirm::new()
                         .with_prompt(format!(
@@ -53,22 +61,29 @@ impl cli::Run for Args {
                         .interact()?
                 {
                     println!("Deleting system {kind}");
-                    db::delete(&name, Database::System, table)?;
+                    as_effective!(fs::remove_file(system))??;
                 }
             } else {
                 println!("No such {kind}")
             }
             Ok(())
         } else {
-            let user = db::all(Database::User, table)?;
-            let system = db::all(Database::System, table)?;
+            let user: Set<_> = fs::read_dir(AT_CONFIG.join(USER_NAME.as_str()).join(table))?
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name())
+                .collect();
+            let system: Set<_> = fs::read_dir(AT_CONFIG.join(table))?
+                .filter_map(|e| e.ok())
+                .map(|e| e.file_name())
+                .collect();
 
             for thing in user.intersection(&system) {
-                if db::dump::<String>(thing, Database::User, table)?
-                    == db::dump::<String>(thing, Database::System, table)?
-                {
-                    println!("Removing redundant {kind}: {thing}");
-                    db::delete(thing, Database::User, table)?;
+                let user = AT_CONFIG.join(USER_NAME.as_str()).join(table).join(thing);
+                let system = AT_CONFIG.join(table).join(thing);
+
+                if fs::read_to_string(&user)? == fs::read_to_string(&system)? {
+                    println!("Removing redundant {kind}: {}", thing.display());
+                    as_effective!(fs::remove_file(user))??;
                 }
             }
             Ok(())

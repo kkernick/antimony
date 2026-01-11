@@ -38,7 +38,7 @@ fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Resu
 
     // Resolve directories.
     if path.is_dir() {
-        dependencies.extend(get_dir(&library)?);
+        dependencies.extend(get_dir(&library)?.iter().cloned());
         directories.insert(library.to_string());
     } else if let Some(library) = elf_filter(&library) {
         dependencies.push(library);
@@ -202,7 +202,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         wildcards.into_par_iter().for_each(|w| {
             if let Ok(cards) = get_wildcards(w, true) {
                 cards.into_par_iter().for_each(|card| {
-                    resolved.insert(Cow::Owned(card.clone()));
+                    resolved.insert(Cow::Owned(card));
                 });
             }
         });
