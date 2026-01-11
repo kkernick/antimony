@@ -2,12 +2,12 @@ name = "fonts"
 description = "Provide host fonts and config."
 
 [files]
-platform.ReadOnly = [
+platform.ro = [
   "/usr/share/fonts",
   "/usr/share/fontconfig",
   "/etc/fonts"
 ]
-user.ReadOnly = [
+user.ro = [
   "$XDG_CONFIG_HOME/fontconfig",
   "$XDG_DATA_HOME/fontconfig",
   "$XDG_DATA_HOME/fonts",

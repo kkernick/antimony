@@ -89,7 +89,7 @@ fn new_connection(db: Database) -> Result<Connection, Error> {
         if let Some(parent) = path.parent()
             && !parent.exists()
         {
-            fs::create_dir(parent).map_err(|e| Error::Io("creating database", e))?;
+            fs::create_dir_all(parent).map_err(|e| Error::Io("creating database", e))?;
         }
 
         let conn = Connection::open(&path)?;

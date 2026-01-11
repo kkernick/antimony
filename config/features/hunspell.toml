@@ -4,4 +4,4 @@ description = "Spell Checking Library"
 libraries = ["libhunspell*"]
 
 [files.resources]
-ReadOnly = ["/usr/share/hunspell/"]
+ro = ["/usr/share/hunspell/"]

@@ -5,7 +5,7 @@ home.policy = "Enabled"
 features = ["wayland", "dri", "vulkan", "fonts", "shell"]
 
 [files]
-passthrough = "ReadWrite"
+passthrough = "rw"
 
 [ipc]
 portals = ["Settings", "FileChooser", "Documents"]

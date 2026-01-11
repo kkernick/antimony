@@ -12,12 +12,12 @@ libraries = [
 devices = ["/dev/dri"]
 
 [files]
-platform.ReadOnly = [
+platform.ro = [
   "/sys/devices/pci0000:00",
   "/sys/dev/char"
 ]
 
-resources.ReadOnly = [
+resources.ro = [
   "/usr/share/glvnd",
   "/usr/share/libdrm",
 ]

@@ -6,3 +6,6 @@ binaries = [
   "$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn",
   "ldd", "bwrap", "find", "bash"
 ]
+
+[files]
+resources.ro = ["/usr/share/antimony/db/antimony.db"]

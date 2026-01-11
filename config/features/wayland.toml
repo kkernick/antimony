@@ -1,11 +1,11 @@
 name = "wayland"
 description = "Provide the wayland socket."
 
-files.resources.ReadOnly = [
+files.resources.ro = [
   "/usr/share/X11/xkb",
 ]
 
-files.platform.ReadOnly = [
+files.platform.ro = [
   "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY",
 ]
 

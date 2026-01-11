@@ -5,6 +5,7 @@ use crate::{
     fab::localize_home,
     setup::setup,
     shared::{
+        config::CONFIG_FILE,
         db,
         env::RUNTIME_DIR,
         profile::{
@@ -16,6 +17,7 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
+use clap::Parser;
 use heck::ToTitleCase;
 use log::{debug, error};
 use nix::errno::Errno;
@@ -299,9 +301,34 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let code = info.handle.spawn()?.wait()?;
 
         if code != 0 {
+            if CONFIG_FILE.auto_refresh() && !args.refresh {
+                Spawner::abs(utility("notify"))
+                    .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                    .mode(user::Mode::Real)
+                    .output(StreamMode::Pipe)
+                    .args([
+                        "--title",
+                        &format!("Sandbox Auto-Refreshing: {}", info.name.to_title_case()),
+                        "--body",
+                        "The sandbox encountered an error, and is automatically attempting
+                        to refresh cached definitions.",
+                        "--timeout",
+                        "5000",
+                    ])?
+                    .spawn()?
+                    .wait()?;
+
+                let cli = cli::Cli::parse();
+                if let cli::Command::Run(mut args) = cli.command {
+                    args.refresh = true;
+                    return args.run();
+                }
+            }
+
             // Alert the user.
             let error_name = Errno::from_raw(-code);
-            Spawner::abs(utility("notify")).mode(user::Mode::Real).    pass_env("DBUS_SESSION_BUS_ADDRESS")?
+            Spawner::abs(utility("notify")).mode(user::Mode::Real)
+                .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                 .output(StreamMode::Pipe)
                 .args([
                 "--title",

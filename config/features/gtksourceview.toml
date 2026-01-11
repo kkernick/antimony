@@ -5,7 +5,7 @@ requires = ["gtk4"]
 libraries = ["libgtksourceview*"]
 
 [files]
-resources.ReadOnly = [
+resources.ro = [
   "/usr/share/gtksourceview-5/",
   "/usr/share/gtksourceview-4/",
 ]

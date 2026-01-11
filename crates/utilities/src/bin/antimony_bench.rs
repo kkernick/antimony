@@ -295,6 +295,7 @@ fn main() -> Result<()> {
                 }
                 command.push("--features=dry".to_string());
                 command.push("--home-policy=none".to_string());
+                command.push("--home-lock=false".to_string());
 
                 Spawner::new("hyperfine")?
                     .args([

@@ -107,8 +107,10 @@ pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(RUNTI
 /// The user's name. We don't trust the USER variable, and instead lookup the name from the Real UID.
 pub static USER_NAME: LazyLock<String> = LazyLock::new(|| unsafe {
     let passwd = getpwuid(USER.real.as_raw());
+
+    // This happens if we don't have a /etc/passwd (IE within Antimony itself)
     if passwd.is_null() || (*passwd).pw_name.is_null() {
-        panic!("Failed to get user name")
+        env::var("USER").unwrap_or("unknown".to_string())
     } else {
         let name = CString::from_raw((*passwd).pw_name);
         name.to_string_lossy().into_owned()

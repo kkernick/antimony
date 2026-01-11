@@ -4,11 +4,11 @@ features = ["gtk3", "python", "network", "gtksourceview"]
 libraries = ["libvirt*", "libosinfo*", "libspice-client*"]
 
 [files]
-resources.ReadOnly = [
+resources.ro = [
   "/usr/share/osinfo",
   "/usr/share/hwdata",
 ]
-platform.ReadOnly = [
+platform.ro = [
   "/var/run/libvirt",
   "/sys"
 ]

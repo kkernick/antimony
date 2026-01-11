@@ -6,4 +6,4 @@ libraries = ["libdolphin*"]
 own = ["org.kde.dolphin.*"]
 
 [files.user]
-ReadWrite = ["/"]
+rw = ["/"]

@@ -1,5 +1,5 @@
 name = "passwd"
 description = "Provide a /etc/passwd"
 
-[files.direct.ReadOnly]
+[files.direct.ro]
 "/etc/passwd" = "antimony:x:$UID:$UID:Antimony:/home/antimony:/usr/bin/sh\n"

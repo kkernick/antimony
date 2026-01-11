@@ -7,4 +7,4 @@ libraries = [
   "libgst*",
 ]
 
-files.resources.ReadOnly = ["/usr/share/gstreamer-1.0/"]
+files.resources.ro = ["/usr/share/gstreamer-1.0/"]

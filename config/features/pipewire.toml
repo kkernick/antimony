@@ -1,16 +1,16 @@
 name = "pipewire"
 description = "The PipeWire socket for video/audio."
 
-files.platform.ReadOnly = [
+files.platform.ro = [
  "$XDG_RUNTIME_DIR/pipewire-0",
  "$XDG_RUNTIME_DIR/pulse",
  "/etc/pipewire",
 ]
-files.resources.ReadOnly = [
+files.resources.ro = [
   "/usr/share/pipewire",
 ]
 
-files.user.ReadOnly = [
+files.user.ro = [
   "$XDG_CONFIG_HOME/pulse"
 ]
 

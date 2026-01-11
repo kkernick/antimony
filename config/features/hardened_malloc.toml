@@ -3,7 +3,7 @@ description = "Enforce Hardened Malloc as the memory allocator within the sandbo
 caveat = "Hardened Malloc can cause noticeable performance degredation."
 libraries = ["libhardened_malloc.so"]
 
-[files.direct.ReadOnly]
+[files.direct.ro]
 "/etc/ld.so.preload" = "libhardened_malloc.so"
 
 [environment]

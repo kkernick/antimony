@@ -5,4 +5,4 @@ features = ["electron", "network", "shell", "xdg-open"]
 arguments = ["--ozone-platform=wayland"]
 
 [files]
-platform.ReadOnly = ["/usr/share/applications/proton-mail.desktop"]
+platform.ro = ["/usr/share/applications/proton-mail.desktop"]

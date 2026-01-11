@@ -1,4 +1,4 @@
 name = "etc"
 description = "Provide /etc to the sandbox"
 caveat = "/etc is accessible in the sandbox. This can conflict with other features that place files in /etc"
-files.platform.ReadOnly = ["/etc"]
+files.platform.ro = ["/etc"]

@@ -5,7 +5,7 @@ libraries = ["libnotify*"]
 system_bus = true
 
 [files.user]
-ReadWrite = ["$XDG_CONFIG_HOME/firewall"]
+rw = ["$XDG_CONFIG_HOME/firewall"]
 
 [files.platform]
-ReadOnly = ["/etc/firewall"]
+ro = ["/etc/firewall"]

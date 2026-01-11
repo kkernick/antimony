@@ -8,7 +8,7 @@ conditional = "command -v /usr/bin/dirname && command -v /usr/bin/kdialog && com
 name = "gocryptfs init"
 content = """
 set -e
-if [[ -z $ANTIMONY_HOME ]]; then exit 1; fi
+if [[ -z $ANTIMONY_HOME ]]; then exit 0; fi
 ENCRYPT_ROOT="$(dirname $ANTIMONY_HOME)/.gocryptfs/$(basename $ANTIMONY_HOME)"
 echo "$ENCRYPT_ROOT"
 if [[ ! -d "${ENCRYPT_ROOT}" ]]; then
@@ -23,6 +23,7 @@ new_privileges = true
 name = "gocryptfs mount"
 content = """
 set -e
+if [[ -z $ANTIMONY_HOME ]]; then exit 0; fi
 ENCRYPT_ROOT="$(dirname $ANTIMONY_HOME)/.gocryptfs/$(basename $ANTIMONY_HOME)"
 kdialog --password "Enter the password" | gocryptfs "${ENCRYPT_ROOT}" "${ANTIMONY_HOME}"
 """
@@ -31,5 +32,5 @@ new_privileges = true
 
 [[hooks.post]]
 name = "gocryptfs unmount"
-content = 'umount "${ANTIMONY_HOME}"'
+content = 'if [[ -z $ANTIMONY_HOME ]]; then exit 0; else umount "${ANTIMONY_HOME}"; fi'
 new_privileges = true

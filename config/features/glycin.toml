@@ -3,7 +3,7 @@ description = "Gnome Image Loading."
 requires = ["gir", "flatpak-spawn"]
 conflicts = ["hardened_malloc"]
 
-files.resources.ReadOnly = [
+files.resources.ro = [
   "/usr/include/glycin-2/",
   "/usr/include/glycin-gtk4-2/",
   "/usr/share/glycin-loaders/"

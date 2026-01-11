@@ -26,4 +26,4 @@ name = "sshd/home"
 policy = "Enabled"
 
 [files.resources]
-ReadOnly = ["$XDG_DATA_HOME/antimony/sshd/etc=/etc/ssh"]
+ro = ["$XDG_DATA_HOME/antimony/sshd/etc=/etc/ssh"]

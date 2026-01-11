@@ -11,4 +11,4 @@ talk = ["org.kde.ksystemstats", "org.kde.ksystemstats1.*"]
 own = ["org.kde.plasma-systemmonitor"]
 
 [files.platform]
-ReadOnly = ["/sys"]
+ro = ["/sys"]

@@ -6,14 +6,14 @@ requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
 libraries = ["qt6", "libQt6*"]
 
 [files]
-user.ReadOnly = [
+user.ro = [
   "$XDG_CONFIG_HOME/kdedefaults",
   "$XDG_CONFIG_HOME/breezerc",
   "$XDG_CONFIG_HOME/kdeglobals",
   "$XDG_CONFIG_HOME/Trolltech.conf",
   "$XDG_CONFIG_HOME/kde.org"
 ]
-resources.ReadOnly = [
+resources.ro = [
   "/usr/share/qt6"
 ]
 

@@ -4,12 +4,12 @@ description = "Pass host themes, cursors, and icons"
 requires = ["mime"]
 
 [files]
-platform.ReadOnly = [
+platform.ro = [
   "/usr/share/themes", "/usr/share/color-schemes",
   "/usr/share/icons", "/usr/share/pixmaps",
   "/usr/share/cursors"
 ]
-user.ReadOnly = [
+user.ro = [
   "$XDG_DATA_HOME/pixmaps",
 ]
 

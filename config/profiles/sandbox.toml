@@ -7,4 +7,4 @@ user_bus = true
 system_bus = true
 
 [files.resources]
-ReadOnly = ["/usr/share/antimony"]
+ro = ["/usr/share/antimony"]

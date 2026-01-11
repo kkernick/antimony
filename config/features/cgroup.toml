@@ -3,4 +3,4 @@ description = "Share the host CGroup"
 namespaces = ["CGroup"]
 
 [files.platform]
-ReadOnly = ["/sys/fs/cgroup"]
+ro = ["/sys/fs/cgroup"]

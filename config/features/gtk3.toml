@@ -8,16 +8,16 @@ libraries = [
 ]
 
 [files]
-resources.ReadOnly = [
+resources.ro = [
   "/usr/share/gtk",
   "/usr/share/glib-2.0",
   "/usr/share/gtk-2.0",
   "/usr/share/gtk-3.0",
 ]
-platform.ReadOnly = [
+platform.ro = [
   "/etc/xdg/gtk-3.0/",
 ]
-user.ReadOnly = [
+user.ro = [
   "$XDG_CONFIG_HOME/gtkrc",
   "$XDG_CONFIG_HOME/gtkrc-2.0",
   "$XDG_CONFIG_HOME/gtk-2.0",

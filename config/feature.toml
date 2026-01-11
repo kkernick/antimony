@@ -108,9 +108,9 @@ description = ""
 
 # Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
 # do not fall into this group. Each group specifies three kinds of files:
-#   1. ReadOnly provides files ro
-#   2. ReadWrite provides files rw (Note files are mounted, so applications cannot replace them via move)
-#   3. Executable provides files with chmod 555.
+#   1. ro provides files ro
+#   2. rw provides files rw (Note files are mounted, so applications cannot replace them via move)
+#   3. rx provides files with chmod 555.
 #
 # By default, files are canonicalized to either the sandbox home or root, and match the path on the host
 # (With the exception of translating /home/$USER to /home/antimony), but you can manually override this
@@ -121,38 +121,38 @@ description = ""
 #
 # Passthrough defines how files that are given via the command line should be provided. This is used,
 # for example, if you've integrated the sandbox, and are opening a supported file via your file explorer.
-# passthrough = "ReadOnly"
-# passthrough = "ReadWrite"
-# passthrough = "Executable"
+# passthrough = "ro"
+# passthrough = "rw"
+# passthrough = "rx"
 #
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
 # [files.user]
-# ReadOnly = []
-# ReadWrite = []
-# Executable = []
+# ro = []
+# rw = []
+# rx = []
 #
 # System files have the normal root as canonical (/).
 # [files.platform]
-# ReadOnly = []
-# ReadWrite = []
-# Executable = []
+# ro = []
+# rw = []
+# rx = []
 #
 # [files.resources]
-# ReadOnly = []
-# ReadWrite = []
-# Executable = []
+# ro = []
+# rw = []
+# rx = []
 #
 # Direct files are constructed with the sandbox, creating the file with the path specified with the key,
 # and the contents as the value. They are mounted ro.
 # [files.direct]
-# [files.direct.ReadOnly]
+# [files.direct.ro]
 # "/my/file.txt" = "Contents"
 #
-# [files.direct.ReadWrite]
+# [files.direct.rw]
 # "/my/file.txt.rw" = "Contents"
 #
-# [files.direct.Executable]
+# [files.direct.rx]
 # "/my/file.txt.exe" = "#!/bin/bash"
 
 # Keypair environment variables to pass to the sandbox.
@@ -186,7 +186,7 @@ description = ""
 # used.
 # content = "echo 'Hello, world!'"
 #
-# Arguments for the hook executable
+# Arguments for the hook rx
 # args = []
 #
 # Whether to attach the pre-hook to the sandbox.

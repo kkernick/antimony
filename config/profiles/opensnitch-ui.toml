@@ -6,7 +6,7 @@ namespaces = ["Pid"]
 policy = "Enabled"
 
 [files.platform]
-ReadWrite = ["/tmp"]
+rw = ["/tmp"]
 
 [[hooks.pre]]
 name = "sleep"

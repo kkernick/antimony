@@ -3,7 +3,7 @@ description = "Give applications network connectivity."
 
 namespaces = ["Net"]
 
-files.platform.ReadOnly = [
+files.platform.ro = [
   "/etc/gai.conf",
   "/etc/host.conf",
   "/etc/hosts",
@@ -13,7 +13,7 @@ files.platform.ReadOnly = [
   "/etc/pki",
   "/etc/ssl",
 ]
-files.resources.ReadOnly = [
+files.resources.ro = [
   "/usr/share/ca-certificates",
   "/usr/share/pki",
   "/usr/share/ssl",

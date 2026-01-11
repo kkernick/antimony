@@ -13,9 +13,14 @@ pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default
 pub struct ConfigFile {
     force_temp: Option<bool>,
     system_mode: Option<bool>,
+    auto_refresh: Option<bool>,
     privileged_users: Option<Set<String>>,
 }
 impl ConfigFile {
+    pub fn auto_refresh(&self) -> bool {
+        self.auto_refresh.unwrap_or(false)
+    }
+
     pub fn force_temp(&self) -> bool {
         self.force_temp.unwrap_or(false)
     }
@@ -48,6 +53,7 @@ impl Default for ConfigFile {
             Self {
                 force_temp: None,
                 system_mode: None,
+                auto_refresh: None,
                 privileged_users: None,
             }
         };
@@ -57,6 +63,9 @@ impl Default for ConfigFile {
         }
         if let Ok(env) = std::env::var("AT_SYSTEM_MODE") {
             config.system_mode = Some(env != "0")
+        }
+        if let Ok(env) = std::env::var("AT_AUTO_REFRESH") {
+            config.auto_refresh = Some(env != "0")
         }
 
         config

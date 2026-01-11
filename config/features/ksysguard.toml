@@ -3,4 +3,4 @@ description = "System Monitor for KDE"
 libraries = ["ksysguard"]
 
 [files.resources]
-ReadOnly = ["/usr/share/ksysguard"]
+ro = ["/usr/share/ksysguard"]

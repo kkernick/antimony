@@ -14,13 +14,16 @@ use std::borrow::Cow;
 pub enum FileMode {
     /// Only allow reads
     #[default]
+    #[serde(rename = "ro")]
     ReadOnly,
 
     /// Allow writes.
+    #[serde(rename = "rw")]
     ReadWrite,
 
     /// Executable files need to be created as copies, so that chmod will work
     /// correctly.
+    #[serde(rename = "rx")]
     Executable,
 }
 impl FileMode {
