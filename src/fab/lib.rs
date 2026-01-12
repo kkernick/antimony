@@ -165,11 +165,6 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                 resolved.insert(Cow::Owned(exe));
             }
         }
-        let loader = format!("{lib_root}/ld-linux.so.2");
-        if Path::new(&loader).exists() {
-            debug!("Adding linker for {lib_root}");
-            resolved.insert(Cow::Owned(loader));
-        }
     }
 
     timer!("::wildcards", {
