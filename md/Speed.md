@@ -92,9 +92,9 @@ id: SBCold
 
 We can also see how the performance of Antimony has evolved over releases. Attached to this table is an Obsidian Chart block which can visualize the data in a line chart. Results are in milliseconds.
 
-For Versions < 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG`
-For Versions ≥ 2.1.0: `./bench $PROFILES --recipe release --privileged --checkout tags/$TAG --antimony-args='--hard'`
-For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --checkout tags/$TAG --antimony-args='--hard' --antimony-args='--home-lock=false'`
+>[!note]
+>These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
+
 
 | Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
 | --------------------- | -------- | --- | ------ | --------- | --- |
@@ -118,6 +118,7 @@ For Versions ≥ 3.0.0: `./bench $PROFILES --recipe release --checkout tags/$TAG
 | 2.5.0                 | 2.9      | 2.5 | 2.9    | 2.1       | 1.7 |
 | 2.6.0                 | 3.2      | 2.8 | 3.1    | 2.7       | 1.9 |
 | 3.0.0                 | 2.0      | 1.7 | 1.5    | 2.1       | 1.5 |
+| 4.0.0                 | 2.0      | 1.8 | 1.8    | 2.1       | 1.6 |
 ^HistoryHot
 
 ```chart
@@ -146,6 +147,7 @@ spanGaps: true
 | 2.2.2                  | 1.00     | 0.99 | 1.02   | 1.02      | 1.04 |
 | 2.3.0                  | 1.08     | 0.99 | 1.04   | 1.02      | 1.03 |
 | 3.0.0                  | 0.85     | 0.84 | 1.04   | 0.90      | 0.91 |
+| 4.0.0                  | 0.75     | 1.09 | 1.00   | 0.24      | 0.95 |
 ^HistoryCold
 
 | Profile Cold/Release | Chromium | Zed  | Okular | Syncthing | Sh    |
@@ -167,6 +169,7 @@ spanGaps: true
 | Profile Real / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
 | ---------------------- | -------- | ---- | ------ | --------- | --- |
 | 3.0.0                  | 30.6     | 18.9 | 23.3   | 10.4      | 9.0 |
+| 4.0.0                  | 29.0     | 19.9 | 24.2   | 5.1       | 9.5 |
 ^HistoryReal
 
 ```chart
