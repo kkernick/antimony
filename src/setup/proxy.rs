@@ -61,7 +61,6 @@ pub fn run(
     // paranoia is below.
     if !sof.exists() {
         as_effective!(fs::create_dir_all(&sof))??;
-
         timer!("::sof", {
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"))?;
             libraries

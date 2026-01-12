@@ -94,6 +94,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub inspect: bool,
 
+    /// Where to point AT_HOME. If not set, defaults to the repository root.
+    #[arg(long)]
+    pub home: Option<String>,
+
     /// Additional commands to pass to antimony_builder
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub builder_args: Option<Vec<String>>,
@@ -161,7 +165,7 @@ fn main() -> Result<()> {
 
     if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
-        unsafe { env::set_var("AT_HOME", root) }
+        unsafe { env::set_var("AT_HOME", cli.home.unwrap_or(root.to_string())) }
         unsafe { env::set_var("AT_FORCE_TEMP", "1") }
     }
 

@@ -11,7 +11,6 @@ pub mod ns;
 use crate::shared::{
     Set,
     env::{AT_HOME, CACHE_DIR, HOME},
-    format_iter,
     profile::Profile,
 };
 use anyhow::Result;
@@ -38,18 +37,11 @@ type Cache = Vec<String>;
 /// Get the library roots.
 pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
     let mut roots = Set::default();
-
-    for known_root in [
-        "/usr/lib",
-        "/usr/lib64",
-        "/usr/lib32",
-        "/usr/lib/x86_64-linux-gnu",
-    ] {
+    for known_root in ["/usr/lib", "/usr/lib64", "/usr/lib/x86_64-linux-gnu"] {
         if Path::new(known_root).exists() && fs::read_link(known_root).is_err() {
             roots.insert(known_root.to_string());
         }
     }
-    trace!("Library roots {}", format_iter(roots.iter()));
     roots
 });
 
@@ -174,6 +166,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
             .spawn()?
             .output_all()?
             .lines()
+            .par_bridge()
             .filter_map(|e| {
                 if let Some(start) = e.find("/")
                     && let Some(end) = e[start..].find(' ')
@@ -206,6 +199,8 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         write_cache(&path, &libraries, "libraries")?;
         libraries
     };
+
+    trace!("{path} => {libraries:?}");
     Ok(libraries)
 }
 

@@ -27,7 +27,7 @@ use user::{as_effective, as_real};
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    LIB_ROOTS.par_iter().any(|r| path.starts_with(r))
+    LIB_ROOTS.iter().any(|r| path.starts_with(r))
 }
 
 /// Determine dependencies for directories.
@@ -63,7 +63,6 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
         }
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
-
         if !sof_path.exists()
             && let Err(e) = fs::hard_link(&canon, &sof_path)
         {
@@ -72,6 +71,7 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
                 canon.display(),
                 sof_path.display()
             );
+
             // If we cannot hard-link directly, then we created a shared source
             // of library copies within the CACHE_DIR, then hard-link from that.
             //
@@ -234,32 +234,24 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     timer!("::writing", {
         dependencies
             .into_par_iter()
-            // Filter things that aren't in /usr/lib
             .filter(|library| {
-                let parent = if let Some(i) = library.rfind('/') {
-                    &library[..i]
-                } else {
-                    library.as_str()
-                };
-
-                if in_lib(parent) {
+                if directories
+                    .iter()
+                    .any(|dir| library.starts_with(dir.as_str()))
+                {
+                    false
+                } else if in_lib(library) {
                     true
                 } else {
-                    if Path::new(library).is_dir()
-                        && !directories
-                            .iter()
-                            .any(|dir| parent.starts_with(dir.as_str()))
-                    {
-                        let _ = info.handle.args_i([
-                            if library.starts_with("/home/") {
-                                "--bind"
-                            } else {
-                                "--ro-bind"
-                            },
-                            library.as_str(),
-                            library.as_str(),
-                        ]);
-                    }
+                    let _ = info.handle.args_i([
+                        if library.starts_with("/home/") {
+                            "--bind"
+                        } else {
+                            "--ro-bind"
+                        },
+                        library.as_str(),
+                        library.as_str(),
+                    ]);
                     false
                 }
             })
