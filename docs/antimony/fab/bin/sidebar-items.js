@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Type"],"fn":["collect","fabricate"],"static":["ELF_MAGIC"],"struct":["ParseReturn"]};
+window.SIDEBAR_ITEMS = {"enum":["Type"],"fn":["collect","fabricate"],"struct":["ParseReturn"]};

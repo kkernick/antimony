@@ -15,7 +15,7 @@ use crate::{
 };
 use anyhow::Result;
 use dashmap::DashSet;
-use log::{debug, error, trace, warn};
+use log::{debug, error, warn};
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
@@ -159,7 +159,6 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
 
     for lib_root in LIB_ROOTS.iter() {
         let app_lib = format!("{lib_root}/{}", info.name);
-        trace!("Checking {app_lib}");
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
             for exe in dir_resolve(Cow::Owned(app_lib), directories.clone())? {
@@ -235,9 +234,10 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         dependencies
             .into_par_iter()
             .filter(|library| {
+                let parent = Path::new(library).parent().unwrap().to_string_lossy();
                 if directories
                     .iter()
-                    .any(|dir| library.starts_with(dir.as_str()))
+                    .any(|dir| parent.starts_with(dir.as_str()))
                 {
                     false
                 } else if in_lib(library) {

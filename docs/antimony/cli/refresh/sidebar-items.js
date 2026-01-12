@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Args"]};
+window.SIDEBAR_ITEMS = {"fn":["installed_profiles"],"struct":["Args"]};

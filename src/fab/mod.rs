@@ -14,7 +14,7 @@ use crate::shared::{
     profile::Profile,
 };
 use anyhow::Result;
-use log::{debug, trace};
+use log::debug;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -76,7 +76,6 @@ fn write_cache<T: Serialize>(name: &str, content: &T, cache: &str) -> Result<()>
         as_effective!(fs::create_dir_all(&cache))??;
     }
     let cache = cache.join(name.replace("/", "-"));
-    trace!("Writing {}", cache.display());
     as_effective!(fs::write(cache, &bytes))??;
     Ok(())
 }
@@ -200,7 +199,6 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         libraries
     };
 
-    trace!("{path} => {libraries:?}");
     Ok(libraries)
 }
 

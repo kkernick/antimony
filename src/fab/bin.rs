@@ -8,7 +8,7 @@ use crate::{
         write_cache,
     },
     shared::{
-        Set, direct_path, format_iter,
+        Set, direct_path,
         profile::{Profile, files::FileMode},
         utility,
     },
@@ -16,7 +16,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow};
 use dashmap::{DashMap, DashSet};
-use log::{debug, info, trace, warn};
+use log::{debug, info, warn};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -247,7 +247,6 @@ fn parse(
                         .output_all()?;
 
                     let out = out.lines().map(String::from);
-                    trace!("{resolved} => {}", format_iter(binaries.iter()));
                     binaries.extend(out);
                 }
 
@@ -323,7 +322,7 @@ fn handle_localize(
 
 /// Collection takes all the binaries defined in the profiles, and parses them.
 /// This includes resolving wildcards, and parsing files tagged as Executable
-/// in the [files] header.
+/// in the files header.
 pub fn collect(
     profile: &Mutex<Profile>,
     name: &str,

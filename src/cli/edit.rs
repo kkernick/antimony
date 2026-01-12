@@ -1,5 +1,9 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
+use std::fs;
+
+use user::as_effective;
+
 use crate::{
     cli,
     shared::{
@@ -35,12 +39,21 @@ impl cli::Run for Args {
             .join(table)
             .join(&self.name)
             .with_extension("toml");
+
         let path = if user.exists() {
             user
         } else if system.exists() {
             system
         } else {
-            return Err(anyhow::anyhow!("No such {kind}"));
+            as_effective!(anyhow::Result<()>, {
+                if let Some(parent) = user.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+
+                fs::copy(AT_CONFIG.join(kind).with_extension("toml"), &user)?;
+                Ok(())
+            })??;
+            user
         };
 
         if self.feature {

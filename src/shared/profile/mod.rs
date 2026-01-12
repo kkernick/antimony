@@ -22,7 +22,7 @@ use crate::{
 };
 use ahash::RandomState;
 use console::style;
-use log::{debug, info, trace};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -261,7 +261,6 @@ impl Profile {
             }
         }
 
-        trace!("Checking: {}", Self::user_profile(name).display());
         if !CONFIG_FILE.system_mode()
             && let Ok(str) = fs::read_to_string(Self::user_profile(name))
         {
@@ -269,7 +268,6 @@ impl Profile {
             return Ok(toml::from_str(&str)?);
         }
 
-        trace!("Checking: {}", Self::system_profile(name).display());
         if let Ok(str) = fs::read_to_string(Self::system_profile(name)) {
             info!("Using System Cache");
             return Ok(toml::from_str(&str)?);

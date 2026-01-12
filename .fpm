@@ -13,20 +13,20 @@
 --after-remove hooks/after_remove.sh
 --after-upgrade hooks/after_upgrade.sh
 
-./target/release/antimony=/usr/bin/antimony
-./target/release/antimony-monitor=/usr/share/antimony/utilities/antimony-monitor
-./target/release/antimony-dumper=/usr/share/antimony/utilities/antimony-dumper
-./target/release/antimony-spawn=/usr/share/antimony/utilities/antimony-spawn
-./target/release/antimony-open=/usr/share/antimony/utilities/antimony-open
-./target/release/antimony-tracer=/usr/share/antimony/utilities/antimony-tracer
-./target/release/notify=/usr/share/antimony/utilities/antimony-notify
+./target/x86_64-unknown-linux-gnu/release/antimony=/usr/bin/antimony
+./target/x86_64-unknown-linux-gnu/release/antimony-monitor=/usr/share/antimony/utilities/antimony-monitor
+./target/x86_64-unknown-linux-gnu/release/antimony-dumper=/usr/share/antimony/utilities/antimony-dumper
+./target/x86_64-unknown-linux-gnu/release/antimony-spawn=/usr/share/antimony/utilities/antimony-spawn
+./target/x86_64-unknown-linux-gnu/release/antimony-open=/usr/share/antimony/utilities/antimony-open
+./target/x86_64-unknown-linux-gnu/release/antimony-tracer=/usr/share/antimony/utilities/antimony-tracer
+./target/x86_64-unknown-linux-gnu/release/notify=/usr/share/antimony/utilities/antimony-notify
 
-./config/profiles=/usr/share/antimony
-./config/features=/usr/share/antimony
+./config/profiles=/usr/share/antimony/config
+./config/features=/usr/share/antimony/config
+./config/default.toml=/usr/share/antimony/config/profiles/default.toml
 
-./config/default.toml=/usr/share/antimony/config/default.toml
 ./config/feature.toml=/usr/share/antimony/config/feature.toml
-./config/new.toml=/usr/share/antimony/config/new.toml
+./config/profile.toml=/usr/share/antimony/config/profile.toml
 ./config/config.toml=/usr/share/antimony/config/config.toml
 
 ./completions/antimony.bash=/usr/share/bash-completion/completions/antimony

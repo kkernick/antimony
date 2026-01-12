@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Error","Urgency"],"fn":["action","init","level_color","level_name","level_urgency","notify","set_notifier"],"static":["LEVEL","PROMPT_LEVEL"]};
+window.SIDEBAR_ITEMS = {"enum":["Error","Urgency"],"fn":["action","init","init_error","level_color","level_name","level_urgency","notify","set_notifier"],"static":["LEVEL","PROMPT_LEVEL"]};

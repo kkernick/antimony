@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["get_dir","get_libraries","get_wildcards","localize_home","localize_path","resolve","resolve_env"],"mod":["bin","dev","etc","features","files","lib","ns"],"static":["LIB_ROOTS","SINGLE_LIB"],"struct":["FabInfo"]};
+window.SIDEBAR_ITEMS = {"fn":["get_dir","get_libraries","get_wildcards","localize_home","localize_path","resolve","resolve_env"],"mod":["bin","dev","etc","features","files","lib","ns"],"static":["ELF_MAGIC","LIB_ROOTS"],"struct":["FabInfo"]};

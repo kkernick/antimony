@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["run_vec"],"mod":["config","edit","export","import","info","integrate","refresh","reset","run","seccomp","trace"],"struct":["Cli"],"trait":["Run"]};
+window.SIDEBAR_ITEMS = {"enum":["Command"],"fn":["run_vec"],"mod":["config","edit","export","import","integrate","refresh","remove","run","seccomp"],"struct":["Cli"],"trait":["Run"]};

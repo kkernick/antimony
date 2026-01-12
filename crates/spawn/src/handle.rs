@@ -3,7 +3,7 @@
 //! Spawner was configured to hook such descriptors), as well as mediating
 //! signal handling and teardown.
 
-use log::{trace, warn};
+use log::warn;
 use nix::{
     errno::Errno,
     sys::{
@@ -609,13 +609,10 @@ impl Drop for Handle {
     fn drop(&mut self) {
         if let Ok(pid) = self.alive() {
             if let Some(pid) = pid {
-                trace!("{} is alive", self.name());
                 match self.signal(Signal::SIGTERM) {
                     Ok(_) => {
                         if let Err(e) = waitpid(pid, None) {
                             warn!("Failed to wait for process {pid}: {e}");
-                        } else {
-                            trace!("{} exited!", self.name());
                         }
                     }
                     Err(e) => warn!("Failed to terminate process {pid}: {e}"),

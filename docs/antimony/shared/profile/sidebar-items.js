@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Error","FileMode","HomePolicy","HookError","Namespace","Portal","SeccompPolicy"],"fn":["library_info"],"static":["CACHE_DIR","FILE_MODES"],"struct":["Files","Home","Hook","Hooks","Ipc","Profile"],"type":["FileList"]};
+window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["library_info"],"mod":["files","home","hooks","ipc","ns","seccomp"],"struct":["Profile"]};
