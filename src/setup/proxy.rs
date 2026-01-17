@@ -213,73 +213,6 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     let instance_dir_str = instance_dir.to_string_lossy();
     let info = user_dir(instance).join(".flatpak-info");
 
-    // Create the flatpak-info, but don't bother if we're running dry.
-    if !args.args.dry {
-        timer!("::flatpak_info", {
-            let namespaces = {
-                let lock = args.profile.lock();
-                lock.namespaces.clone()
-            };
-
-            // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
-            #[rustfmt::skip]
-            let mut info_contents: Vec<String> = vec![
-                "[Application]",
-                &format!("name={id}"),
-                "[Instance]",
-                &format!("instance-id={instance}"),
-                "app-path=/usr",
-                "[Context]",
-                "sockets=session-bus;system-bus;",
-            ].into_iter().map(|e| e.to_string()).collect();
-
-            if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
-                info_contents.push("shared=network;".to_string());
-            }
-
-            as_real!(Result<()>, {
-                debug!("Creating flatpak info");
-                if let Some(parent) = info.parent()
-                    && !parent.exists()
-                {
-                    fs::create_dir_all(parent)?;
-                }
-                let out = fs::File::create_new(&info)?;
-                write!(&out, "{}", info_contents.join("\n"))?;
-                Ok(())
-            })??;
-
-            #[rustfmt::skip]
-            arguments.extend([
-                "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
-                "--ro-bind", "/run/dbus", "/run/dbus",
-                "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
-                "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
-                "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-            ].map(String::from).map(Cow::Owned));
-        });
-
-        timer!("::flapak_dir", {
-            debug!("Creating flatpak directory");
-            let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
-
-            let file = as_real!(Result<File>, {
-                if !flatpak_dir.exists() {
-                    fs::create_dir_all(&flatpak_dir)?;
-                }
-                let file = File::create(flatpak_dir.join("bwrapinfo.json"))?;
-                Ok(file)
-            })??;
-
-            arguments.extend(
-                ["--json-status-fd", &format!("{}", file.as_raw_fd())]
-                    .map(String::from)
-                    .map(Cow::Owned),
-            );
-            args.handle.fd_i(file);
-        });
-    }
-
     debug!("Setting up user bus");
     // Either mount the bus directly
     if ipc.user_bus.unwrap_or(false) {
@@ -306,21 +239,98 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
             )
         )?;
 
-        // This is *very* paranoid, but the proxy gets confined by its
-        // own policy when SECCOMP is enabled.
-        if !args.args.dry
-            && let Some(policy) = args.profile.lock().seccomp
-        {
-            timer!("::seccomp", {
-                syscalls::install_filter(
-                    "xdg-dbus-proxy",
-                    instance,
-                    policy,
-                    &Set::default(),
-                    &proxy,
-                    &args.handle,
-                )?
-            })
+        if !args.args.dry {
+            // This is *very* paranoid, but the proxy gets confined by its
+            // own policy when SECCOMP is enabled.
+            if let Some(policy) = args.profile.lock().seccomp {
+                timer!("::seccomp", {
+                    syscalls::install_filter(
+                        "xdg-dbus-proxy",
+                        instance,
+                        policy,
+                        &Set::default(),
+                        &proxy,
+                        &args.handle,
+                    )?
+                })
+            }
+
+            // Create the flatpak-info, but don't bother if we're running dry.
+            timer!("::flatpak_info", {
+                let namespaces = {
+                    let lock = args.profile.lock();
+                    lock.namespaces.clone()
+                };
+
+                // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
+                #[rustfmt::skip]
+                let mut info_contents: Vec<String> = vec![
+                    "[Application]",
+                    &format!("name={id}"),
+                    "[Instance]",
+                    &format!("instance-id={instance}"),
+                    "app-path=/usr",
+                    "[Context]",
+                    "sockets=session-bus;system-bus;",
+                ].into_iter().map(|e| e.to_string()).collect();
+
+                if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
+                    info_contents.push("shared=network;".to_string());
+                }
+
+                as_real!(Result<()>, {
+                    debug!("Creating flatpak info");
+                    if let Some(parent) = info.parent()
+                        && !parent.exists()
+                    {
+                        fs::create_dir_all(parent)?;
+                    }
+                    let out = fs::File::create_new(&info)?;
+                    write!(&out, "{}", info_contents.join("\n"))?;
+                    Ok(())
+                })??;
+
+                #[rustfmt::skip]
+                arguments.extend([
+                    "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
+                    "--ro-bind", "/run/dbus", "/run/dbus",
+                    "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
+                    "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
+                    "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
+                ].map(String::from).map(Cow::Owned));
+            });
+
+            timer!("::flapak_dir", {
+                debug!("Creating flatpak directory");
+                let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
+
+                let file = as_real!(Result<File>, {
+                    if !flatpak_dir.exists() {
+                        fs::create_dir_all(&flatpak_dir)?;
+                    }
+                    let file = File::create(flatpak_dir.join("bwrapinfo.json"))?;
+                    Ok(file)
+                })??;
+
+                arguments.extend(
+                    ["--json-status-fd", &format!("{}", file.as_raw_fd())]
+                        .map(String::from)
+                        .map(Cow::Owned),
+                );
+                args.handle.fd_i(file);
+            });
+
+            // Watch for the proxy to expose its bus to give to the sandbox.
+            debug!("Creating proxy watch");
+            as_real!(Result<()>, {
+                args.watches.insert(args.inotify.lock().watches().add(
+                    user_dir(args.instance.name()).join("proxy"),
+                    WatchMask::CREATE,
+                )?);
+                Ok(())
+            })??;
+
+            args.handle.associate(proxy.spawn()?);
         }
 
         arguments.extend(
@@ -332,22 +342,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
             .map(String::from)
             .map(Cow::Owned),
         );
-
-        // Watch for the proxy to expose its bus to give to the sandbox.
-        if !args.args.dry {
-            debug!("Creating proxy watch");
-            as_real!(Result<()>, {
-                args.watches.insert(args.inotify.lock().watches().add(
-                    user_dir(args.instance.name()).join("proxy"),
-                    WatchMask::CREATE,
-                )?);
-                Ok(())
-            })??;
-
-            args.handle.associate(proxy.spawn()?);
-            return Ok(Some(arguments));
-        }
     }
 
-    Ok(None)
+    Ok(Some(arguments))
 }

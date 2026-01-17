@@ -31,7 +31,11 @@ impl super::Run for Args {
         };
 
         let export = |name: &str| -> Result<()> {
-            let path = AT_CONFIG.join(USER_NAME.as_str()).join(table).join(name);
+            let path = AT_CONFIG
+                .join(USER_NAME.as_str())
+                .join(table)
+                .join(name)
+                .with_extension("toml");
             if let Ok(content) = fs::read_to_string(path) {
                 as_real!(Result<()>, {
                     fs::write(dest.join(name).with_extension("toml"), content)?;

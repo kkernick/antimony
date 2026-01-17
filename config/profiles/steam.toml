@@ -1,0 +1,19 @@
+features = ["network", "xorg", "lib", "bin", "electron", "vulkan", "ld", "passwd", "pipewire", "tray"]
+conflicts = ["hardened_malloc"]
+seccomp = "Disabled"
+new_privileges = true
+
+[home]
+policy = "Enabled"
+
+[ipc]
+user_bus = true
+
+[files.user]
+rw = ["/.local/share/Steam"]
+
+[files.platform]
+ro = ["/etc/machine-id"]
+
+[files.resources]
+ro = ["/usr/lib32"]

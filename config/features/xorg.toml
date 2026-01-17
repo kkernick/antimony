@@ -1,0 +1,16 @@
+name = "xorg"
+description = "Provide the X11 socket."
+caveat = "Exposing the X11 socket is inherently unsafe. Ensure a proper SECCOMP policy is in place to prevent sandbox escape!"
+conflicts = ["wayland"]
+
+files.resources.ro = [
+  "/usr/share/X11",
+  "/tmp/.X11-unix/$DISPLAY",
+  "$XAUTHORITY",
+]
+
+[environment]
+"DISPLAY" = "$DISPLAY"
+"XAUTHORITY" = "$XAUTHORITY"
+"XDG_CURRENT_DESKTOP" = "$XDG_CURRENT_DESKTOP"
+"DESKTOP_SESSION" = "$DESKTOP_SESSION"

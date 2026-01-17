@@ -14,10 +14,12 @@ devices = ["/dev/dri"]
 [files]
 platform.ro = [
   "/sys/devices/pci0000:00",
-  "/sys/dev/char"
+  "/sys/dev/char",
+  "/etc/OpenCL/",
 ]
 
 resources.ro = [
   "/usr/share/glvnd",
   "/usr/share/libdrm",
+  "/usr/share/drirc.d",
 ]

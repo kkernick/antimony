@@ -389,9 +389,7 @@ pub fn new(
         Filter::new(Action::KillProcess)?
     };
 
-    filter.set_attribute(Attribute::NoNewPrivileges(true))?;
     filter.set_attribute(Attribute::ThreadSync(true))?;
-    filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     for required in ["execve", "wait4", "exit"] {
         syscalls.insert(Syscall::from_name(required)?.get_number());
