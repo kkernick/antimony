@@ -10,6 +10,7 @@ use crate::{
     shared::{
         Set, direct_path,
         profile::{Profile, files::FileMode},
+        store::Object,
         utility,
     },
     timer,
@@ -124,7 +125,7 @@ fn parse(
         return Ok(Type::Done);
     }
 
-    if let Ok(Some((t, cache))) = get_cache::<(Type, ParseReturn)>(path, "binaries") {
+    if let Ok(Some((t, cache))) = get_cache::<(Type, ParseReturn)>(path, Object::Binaries) {
         debug!("Using cache");
         ParseReturn::merge(global, cache);
         return Ok(t);
@@ -264,7 +265,7 @@ fn parse(
         }
     };
 
-    write_cache(path, &(&t, &ret), "binaries")?;
+    write_cache(path, &(&t, &ret), Object::Binaries)?;
     ParseReturn::merge(global, ret);
     Ok(t)
 }
@@ -432,7 +433,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
 
     info.handle.args_i(["--dir", "/usr/bin"])?;
     let bin_cache = format!("{}-bin", info.instance.name());
-    let parsed = match get_cache(&bin_cache, "binaries") {
+    let parsed = match get_cache(&bin_cache, Object::Binaries) {
         Ok(Some(parsed)) => parsed,
         _ => {
             let parsed = ParseReturn::new();
@@ -442,7 +443,7 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             )?;
 
             info!("Finished");
-            write_cache(&bin_cache, &parsed, "binaries")?;
+            write_cache(&bin_cache, &parsed, Object::Binaries)?;
             info!("Writting");
             parsed
         }

@@ -10,8 +10,9 @@ pub mod ns;
 
 use crate::shared::{
     Set,
-    env::{AT_HOME, CACHE_DIR, HOME},
+    env::{AT_HOME, HOME},
     profile::Profile,
+    store::{BackingStore, CACHE_STORE, Object},
 };
 use anyhow::Result;
 use log::debug;
@@ -20,10 +21,16 @@ use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
-    borrow::Cow, collections::HashSet, env, fs::{self, File}, io::Read, path::Path, sync::LazyLock
+    borrow::Cow,
+    collections::HashSet,
+    env,
+    fs::{self, File},
+    io::Read,
+    path::Path,
+    sync::LazyLock,
 };
 use temp::Temp;
-use user::{as_effective, as_real};
+use user::as_real;
 
 /// What the Cache type is. Through benchmarking, a regular Vec outperforms
 /// both Sets and SmallVec.
@@ -54,8 +61,8 @@ pub struct FabInfo<'a> {
 
 /// Get cached definitions.
 #[inline]
-fn get_cache<T: DeserializeOwned>(name: &str, cache: &str) -> Result<Option<T>> {
-    if let Ok(bytes) = fs::read(CACHE_DIR.join(cache).join(name.replace("/", "-"))) {
+fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Option<T>> {
+    if let Ok(bytes) = CACHE_STORE.with_borrow(|s| s.bytes(&name.replace("/", "-"), object)) {
         Ok(Some(postcard::from_bytes(&bytes)?))
     } else {
         Ok(None)
@@ -64,14 +71,9 @@ fn get_cache<T: DeserializeOwned>(name: &str, cache: &str) -> Result<Option<T>> 
 
 /// Write the cache file.
 #[inline]
-fn write_cache<T: Serialize>(name: &str, content: &T, cache: &str) -> Result<()> {
+fn write_cache<T: Serialize>(name: &str, content: &T, object: Object) -> Result<()> {
     let bytes = postcard::to_stdvec(content)?;
-    let cache = CACHE_DIR.join(cache);
-    if !cache.exists() {
-        as_effective!(fs::create_dir_all(&cache))??;
-    }
-    let cache = cache.join(name.replace("/", "-"));
-    as_effective!(fs::write(cache, &bytes))??;
+    CACHE_STORE.with_borrow(|s| s.dump(&name.replace("/", "-"), object, &bytes))?;
     Ok(())
 }
 
@@ -89,7 +91,7 @@ fn elf_filter(path: &str) -> Option<String> {
 
 /// Get all executable files in a directory. This is very expensive.
 pub fn get_dir(dir: &str) -> Result<Cache> {
-    if let Ok(Some(libraries)) = get_cache(dir, "directories") {
+    if let Ok(Some(libraries)) = get_cache(dir, Object::Directories) {
         return Ok(libraries);
     }
     let libraries: Cache = Spawner::abs("/usr/bin/find")
@@ -115,7 +117,7 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .flatten()
         .collect();
 
-    write_cache(dir, &libraries, "directories")?;
+    write_cache(dir, &libraries, Object::Directories)?;
     Ok(libraries)
 }
 
@@ -133,7 +135,7 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
             .collect())
     };
 
-    if let Some(libraries) = get_cache(pattern, "wildcards")? {
+    if let Some(libraries) = get_cache(pattern, Object::Wildcards)? {
         return Ok(libraries);
     }
 
@@ -157,13 +159,13 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
         run("/usr/bin", pattern)?
     };
 
-    write_cache(pattern, &libraries, "wildcards")?;
+    write_cache(pattern, &libraries, Object::Wildcards)?;
     Ok(libraries)
 }
 
 /// LDD a path.
 pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
-    let libraries = if let Ok(Some(libraries)) = get_cache(&path, "libraries") {
+    let libraries = if let Ok(Some(libraries)) = get_cache(&path, Object::Libraries) {
         libraries
     } else {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
@@ -204,7 +206,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .collect();
-        write_cache(&path, &libraries, "libraries")?;
+        write_cache(&path, &libraries, Object::Libraries)?;
         libraries
     };
 

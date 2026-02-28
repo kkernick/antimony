@@ -33,6 +33,10 @@ impl super::BackingStore for FileStore {
         Ok(fs::read_to_string(self.path(name, object))?)
     }
 
+    fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, super::Error> {
+        Ok(fs::read(self.path(name, object))?)
+    }
+
     fn get(&self, object: Object) -> Result<Vec<String>, super::Error> {
         Ok(fs::read_dir(self.root_path(object))?
             .filter_map(|file| file.ok())
@@ -45,6 +49,10 @@ impl super::BackingStore for FileStore {
     }
 
     fn store(&self, name: &str, object: Object, content: &str) -> Result<(), super::Error> {
+        self.dump(name, object, content.as_bytes())
+    }
+
+    fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), super::Error> {
         let path = self.path(name, object);
         as_effective!(Result<(), super::Error>, {
             if let Some(parent) = path.parent()
@@ -52,7 +60,7 @@ impl super::BackingStore for FileStore {
             {
                 fs::create_dir_all(parent)?;
             }
-            write!(File::create(path)?, "{content}")?;
+            File::create(path)?.write_all(content)?;
             Ok(())
         })?
     }

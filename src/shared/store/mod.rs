@@ -2,7 +2,7 @@ pub mod file;
 
 use crate::shared::{
     config::CONFIG_FILE,
-    env::{AT_CONFIG, USER_NAME},
+    env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
 use nix::errno;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -15,6 +15,9 @@ thread_local! {
     );
     pub static USER_STORE: RefCell<file::FileStore> = RefCell::new(
         file::FileStore::new(&format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()), "toml")
+    );
+    pub static CACHE_STORE: RefCell<file::FileStore> = RefCell::new(
+        file::FileStore::new(&format!("{}", CACHE_DIR.display()), "cache")
     );
 }
 
@@ -42,24 +45,34 @@ pub enum Store {
 pub enum Object {
     Profile,
     Feature,
+    Directories,
+    Wildcards,
+    Libraries,
+    Binaries,
 }
 impl Object {
     fn name(self) -> &'static str {
         match self {
             Self::Profile => "profiles",
             Self::Feature => "features",
+            Self::Directories => "directories",
+            Self::Wildcards => "wildcards",
+            Self::Libraries => "libraries",
+            Self::Binaries => "binaries",
         }
     }
 }
 
 pub trait BackingStore {
     fn fetch(&self, name: &str, object: Object) -> Result<String, Error>;
+    fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, Error>;
 
     fn get(&self, object: Object) -> Result<Vec<String>, Error>;
 
     fn exists(&self, name: &str, object: Object) -> bool;
 
     fn store(&self, name: &str, object: Object, content: &str) -> Result<(), Error>;
+    fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), Error>;
 
     fn remove(&self, name: &str, object: Object) -> Result<(), Error>;
 }
