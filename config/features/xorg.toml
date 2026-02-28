@@ -5,7 +5,7 @@ conflicts = ["wayland"]
 
 files.resources.ro = [
   "/usr/share/X11",
-  "/tmp/.X11-unix/$DISPLAY",
+  "/tmp/.X11-unix/",
   "$XAUTHORITY",
 ]
 

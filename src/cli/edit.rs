@@ -40,10 +40,11 @@ impl cli::Run for Args {
             .join(&self.name)
             .with_extension("toml");
 
-        let path = if user.exists() {
-            user
+        let (src, path) = if user.exists() {
+            (None, user)
         } else if system.exists() {
-            system
+            fs::copy(&system, &user)?;
+            (Some(system), user)
         } else {
             as_effective!(anyhow::Result<()>, {
                 if let Some(parent) = user.parent() {
@@ -53,7 +54,7 @@ impl cli::Run for Args {
                 fs::copy(AT_CONFIG.join(kind).with_extension("toml"), &user)?;
                 Ok(())
             })??;
-            user
+            (Some(AT_CONFIG.join(kind).with_extension("toml")), user)
         };
 
         if self.feature {
@@ -61,6 +62,12 @@ impl cli::Run for Args {
         } else {
             Profile::edit(&path)?
         };
+
+        if let Some(src) = src
+            && fs::read_to_string(src)? == fs::read_to_string(&path)?
+        {
+            fs::remove_file(path)?;
+        }
         Ok(())
     }
 }

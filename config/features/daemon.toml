@@ -1,0 +1,14 @@
+name = "daemon"
+description = "Catch daemons to wait for spawned children to exit"
+
+conditional = "command -v /usr/bin/sh"
+requires = ["shell"]
+binaries = ["sh", "ps", "wc", "sleep"]
+sandbox_args = ["#", "daemon-wait"]
+
+[files.direct.rx]
+"/usr/bin/daemon-wait" = """
+#!/bin/sh
+$@
+while [[ $(ps | wc -l ) -gt 6 ]]; do sleep 1; done
+"""

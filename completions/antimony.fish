@@ -37,6 +37,7 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "import" -d 'Impor
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "config" -d 'Manage the system configuration file'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l dir -d 'The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d 'Conflicting features' -r
@@ -79,6 +80,7 @@ read-write\t'Allow writes'
 executable\t'Executable files need to be created as copies, so that chmod will work correctly'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r

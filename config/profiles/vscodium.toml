@@ -1,0 +1,10 @@
+features = ["electron", "daemon", "lib", "rust-devel", "bin", "vaapi", "vulkan"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[files]
+passthrough = "rw"

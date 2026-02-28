@@ -31,6 +31,7 @@ _antimony() {
             (run)
 _arguments "${_arguments_options[@]}" : \
 '--path=[The path to the binary]:PATH:_default' \
+'--dir=[The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory]:DIR:_default' \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \
@@ -57,6 +58,7 @@ read-write\:"Allow writes"
 executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
 '*--ro=[Add read-only files]:RO:_default' \
 '*--rw=[Add read-write files]:RW:_default' \
+'*--temp=[Add temporary directories]:TEMP:_default' \
 '*--binaries=[Add binaries]:BINARIES:_default' \
 '*--libraries=[Add libraries]:LIBRARIES:_default' \
 '*--devices=[Add devices]:DEVICES:_default' \

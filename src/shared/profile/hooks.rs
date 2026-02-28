@@ -39,7 +39,7 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
@@ -51,15 +51,22 @@ pub struct Hooks {
     /// The parent Hook is an Attached Pre-Hook who controls the lifespan of the
     /// sandbox. When the parent dies, the sandbox does.
     pub parent: Option<Hook>,
+
+    /// Inherit Hooks from other profiles, or from the parent profile
+    /// in a configuration. Enabled by default, but useful if the
+    /// parent defines hooks the configuration cannot use.
+    pub inherit: Option<bool>,
 }
 impl Hooks {
-    /// Merge two IPC sets together.
+    /// Merge two Hooks together.
     pub fn merge(&mut self, hooks: Self) {
-        append(&mut self.pre, hooks.pre);
-        append(&mut self.post, hooks.post);
+        if self.inherit.unwrap_or(true) {
+            append(&mut self.pre, hooks.pre);
+            append(&mut self.post, hooks.post);
 
-        if self.parent.is_none() {
-            self.parent = hooks.parent;
+            if self.parent.is_none() {
+                self.parent = hooks.parent;
+            }
         }
     }
 
@@ -90,7 +97,7 @@ impl Hooks {
 ///     ANTIMONY_NAME: The name of the current profile.
 ///     ANTIMONY_HOME: The path to the home folder, if it exists.
 ///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Hook {
     /// An optional name to identify the process.

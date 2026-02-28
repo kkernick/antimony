@@ -24,7 +24,11 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             as_real!(File::open(&home_dir)?.unlock())??;
         }
 
-        if home.lock.unwrap_or(false) && !args.args.dry && home_dir.exists() {
+        if home.lock.unwrap_or(false)
+            && !args.args.dry
+            && home_dir.exists()
+            && policy != HomePolicy::Overlay
+        {
             let (file, lock) = as_real!(Result<(File, Result<(), TryLockError>)>, {
                 let file = File::open(&home_dir)?;
                 let lock = file.try_lock();

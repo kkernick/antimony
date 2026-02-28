@@ -48,6 +48,12 @@ pub struct Args {
     #[arg(long)]
     pub path: Option<String>,
 
+    /// The path to start in within the sandbox. Usually, this is not
+    /// necessary unless your binary uses local paths that requires
+    /// being within a specific directory.
+    #[arg(long)]
+    pub dir: Option<String>,
+
     /// Use a configuration within the profile.
     #[arg(short, long)]
     pub config: Option<String>,
@@ -127,6 +133,10 @@ pub struct Args {
     /// Add read-write files.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub rw: Option<Vec<String>>,
+
+    /// Add temporary directories.
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub temp: Option<Vec<String>>,
 
     /// Add binaries
     #[arg(long, value_delimiter = ' ', num_args = 1..)]

@@ -1,0 +1,10 @@
+path = "postgres"
+features = ["network", "locale"]
+binaries = ["initdb", "createuser", "createdb"]
+arguments = ["-D", "/home/antimony/db"]
+
+[home]
+policy = "Enabled"
+
+[files]
+temp = ["/run/postgresql"]

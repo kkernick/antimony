@@ -29,7 +29,7 @@ pub enum Error {
 }
 
 /// A Feature
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.
@@ -103,12 +103,9 @@ impl Feature {
             return Ok(toml::from_str(&str)?);
         }
 
-        if let Ok(str) = fs::read_to_string(
-            AT_CONFIG
-                .join("features")
-                .join(name)
-                .with_extension("toml"),
-        ) {
+        if let Ok(str) =
+            fs::read_to_string(AT_CONFIG.join("features").join(name).with_extension("toml"))
+        {
             return Ok(toml::from_str(&str)?);
         }
 

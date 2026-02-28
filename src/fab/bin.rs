@@ -417,8 +417,12 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         if binaries.contains("/usr/bin") {
             #[rustfmt::skip]
             info.handle.args_i([
-                "--ro-bind", "/usr/bin", "/usr/bin",
-                "--ro-bind", "/usr/sbin", "/usr/sbin",
+                "--overlay-src", "/usr/bin",
+                "--tmp-overlay", "/usr/bin",
+
+                "--overlay-src", "/usr/sbin",
+                "--tmp-overlay", "/usr/sbin",
+
                 "--symlink", "/usr/bin", "/bin",
                 "--symlink", "/usr/sbin", "/sbin",
             ])?;

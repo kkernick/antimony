@@ -5,11 +5,14 @@ use crate::{
     shared::{
         Set,
         env::{AT_CONFIG, USER_NAME},
+        feature::Feature,
         privileged,
+        profile::Profile,
     },
 };
 use anyhow::Result;
 use dialoguer::Confirm;
+use log::debug;
 use std::fs;
 use user::as_effective;
 
@@ -78,10 +81,19 @@ impl cli::Run for Args {
                 .collect();
 
             for thing in user.intersection(&system) {
+                debug!("Custom User Profile for: {}", thing.display());
                 let user = AT_CONFIG.join(USER_NAME.as_str()).join(table).join(thing);
                 let system = AT_CONFIG.join(table).join(thing);
 
-                if fs::read_to_string(&user)? == fs::read_to_string(&system)? {
+                let identical = if self.feature {
+                    toml::from_str::<Feature>(&fs::read_to_string(&user)?)?
+                        == toml::from_str::<Feature>(&fs::read_to_string(&system)?)?
+                } else {
+                    toml::from_str::<Profile>(&fs::read_to_string(&user)?)?
+                        == toml::from_str::<Profile>(&fs::read_to_string(&system)?)?
+                };
+
+                if identical {
                     println!("Removing redundant {kind}: {}", thing.display());
                     as_effective!(fs::remove_file(user))??;
                 }

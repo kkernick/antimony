@@ -85,6 +85,10 @@ pub struct Files {
     /// files in your file explorer or setting it as the default for particular MIME types.
     pub passthrough: Option<FileMode>,
 
+    /// A list of paths in the sandbox to mount as TMPFS.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub temp: Vec<String>,
+
     /// User files assume a root of /home/antimony unless absolute.
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub user: FileList,
@@ -103,7 +107,7 @@ pub struct Files {
 }
 impl Files {
     /// Merge two file sets together.
-    pub fn merge(&mut self, files: Self) {
+    pub fn merge(&mut self, mut files: Self) {
         if files.passthrough.is_some() {
             self.passthrough = files.passthrough;
         }
@@ -140,6 +144,8 @@ impl Files {
                 s_user.entry(mode).or_default().extend(map);
             }
         }
+
+        self.temp.append(&mut files.temp);
     }
 
     /// Construct a file set from the command line.
@@ -170,6 +176,11 @@ impl Files {
                 };
                 list.entry(FileMode::ReadWrite).or_default().insert(file);
             });
+        }
+
+        if let Some(mut temp) = args.temp.take() {
+            let files = files.get_or_insert_default();
+            files.temp.append(&mut temp);
         }
 
         files

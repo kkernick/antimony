@@ -15,3 +15,10 @@ binaries = [
   "ld.lld",
   "strip",
 ]
+
+[files.user]
+rw = ["$RUSTUP_HOME", "$CARGO_HOME"]
+
+[environment]
+"RUSTUP_HOME" = "$RUSTUP_HOME"
+"CARGO_HOME" = "$CARGO_HOME"

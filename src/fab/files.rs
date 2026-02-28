@@ -6,7 +6,6 @@ use crate::{
     },
 };
 use anyhow::Result;
-use log::warn;
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::borrow::Cow;
@@ -14,16 +13,28 @@ use std::borrow::Cow;
 /// Localize and bind
 #[inline]
 fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: bool) -> Result<()> {
-    if let (Some(source), dest) = localize_path(file, home)? {
-        Ok(handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])?)
-    } else {
-        warn!("Failed to resolve: {file}");
-        Ok(())
+    match localize_path(file, home)? {
+        (Some(source), dest) => {
+            Ok(handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])?)
+        }
+        (None, dest) => {
+            let resolved = if home && !file.starts_with("/home") {
+                Cow::Owned(format!("{}/{file}", HOME.as_str()))
+            } else {
+                Cow::Borrowed(file)
+            };
+
+            Ok(handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)])?)
+        }
     }
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     if let Some(files) = &info.profile.lock().files {
+        for temp in &files.temp {
+            info.handle.args_i(["--tmpfs", temp])?;
+        }
+
         let user_files = &files.user;
         for mode in FILE_MODES {
             if let Some(files) = user_files.get(&mode) {

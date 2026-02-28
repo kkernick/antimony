@@ -20,19 +20,14 @@ use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
-    borrow::Cow,
-    env,
-    fs::{self, File},
-    io::Read,
-    path::Path,
-    sync::LazyLock,
+    borrow::Cow, collections::HashSet, env, fs::{self, File}, io::Read, path::Path, sync::LazyLock
 };
 use temp::Temp;
 use user::{as_effective, as_real};
 
 /// What the Cache type is. Through benchmarking, a regular Vec outperforms
 /// both Sets and SmallVec.
-type Cache = Vec<String>;
+type Cache = HashSet<String, ahash::RandomState>;
 
 /// Get the library roots.
 pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
@@ -48,7 +43,7 @@ pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 
-/// Each fabrciator is passed this structure.
+/// Each fabricator is passed this structure.
 pub struct FabInfo<'a> {
     pub profile: &'a Mutex<Profile>,
     pub handle: &'a Spawner,
@@ -106,7 +101,20 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .lines()
         .par_bridge()
         .filter_map(elf_filter)
+        .map(Cow::from)
+        .map(|library| {
+            if let Ok(results) = get_libraries(library) {
+                results
+                    .into_iter()
+                    .filter(|library| !library.starts_with(dir))
+                    .collect()
+            } else {
+                Cache::default()
+            }
+        })
+        .flatten()
         .collect();
+
     write_cache(dir, &libraries, "directories")?;
     Ok(libraries)
 }
@@ -161,6 +169,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
             .arg(path.as_ref())?
             .output(StreamMode::Pipe)
+            .error(StreamMode::Discard)
             .mode(user::Mode::Real)
             .spawn()?
             .output_all()?

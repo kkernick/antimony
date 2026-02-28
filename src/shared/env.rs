@@ -9,7 +9,7 @@ use std::{
     ffi::CString,
     fs,
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::LazyLock,
 };
 use user::{USER, as_effective};
@@ -96,10 +96,16 @@ pub static HOME_PATH: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(HOME.as
 
 /// The runtime directory, as a String.
 pub static RUNTIME_STR: LazyLock<String> = LazyLock::new(|| {
-    if let Ok(runtime) = env::var("XDG_RUNTIME_DIR") {
+    let runtime = if let Ok(runtime) = env::var("XDG_RUNTIME_DIR") {
         runtime
     } else {
         format!("/run/user/{}", user::USER.real)
+    };
+
+    if !Path::new(&runtime).exists() {
+        format!("/tmp/run/{}", user::USER.real)
+    } else {
+        runtime
     }
 });
 

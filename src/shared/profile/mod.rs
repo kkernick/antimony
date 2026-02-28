@@ -111,11 +111,14 @@ pub fn library_info(libraries: &Set<String>, verbose: u8) {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default, Debug)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
     pub path: Option<String>,
+
+    /// The path to start within inside the sandbox.
+    pub dir: Option<String>,
 
     /// The ID of the application is a unique identifier that, when not defined,
     /// defaults to the name of the binary. It should be the name of the associated
@@ -290,6 +293,7 @@ impl Profile {
     pub fn from_args(args: &mut cli::run::Args) -> Result<Self, Error> {
         let mut profile = Self {
             path: args.path.take(),
+            dir: args.dir.take(),
             seccomp: args.seccomp.take(),
             new_privileges: args.new_privileges.take(),
             ..Default::default()
@@ -405,7 +409,13 @@ impl Profile {
             if !profile.configuration.is_empty() {
                 match profile.configuration.swap_remove(&config) {
                     Some(conf) => {
+                        let hooks = conf.hooks.clone();
                         profile = profile.base(conf)?;
+                        if let Some(hooks) = hooks
+                            && !hooks.inherit.unwrap_or(true)
+                        {
+                            profile.hooks = Some(hooks);
+                        }
                     }
                     None => {
                         return Err(Error::NotFound(
@@ -422,10 +432,14 @@ impl Profile {
             }
         };
 
-        if let Some(path) = &profile.path
-            && path.starts_with("~")
-        {
-            profile.path = Some(path.replace("~", HOME.as_str()))
+        if let Some(path) = &profile.path {
+            if path.starts_with("~") {
+                profile.path = Some(path.replace("~", HOME.as_str()))
+            } else if path.starts_with("$AT_HOME")
+                && let Some(home) = &profile.home
+            {
+                profile.path = Some(path.replace("$AT_HOME", &home.path(name).to_string_lossy()));
+            }
         }
 
         // Try and lookup the path. If it doesn't work, then the corresponding application
@@ -481,6 +495,10 @@ impl Profile {
     pub fn merge(&mut self, mut profile: Self) -> Result<(), Error> {
         if self.path.is_none() {
             self.path = profile.path;
+        }
+
+        if self.dir.is_none() {
+            self.dir = profile.dir;
         }
 
         if self.seccomp.is_none() {

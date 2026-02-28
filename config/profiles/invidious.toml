@@ -1,0 +1,43 @@
+# This profile requires setup. Specifically:
+#
+# 1. Download the `invidious_companion` from GitHub and place it in $XDG_DATA_HOME/antimony/invidious
+# 2. Initialize the DB following upstream instructions by dropping into a shell via
+#    `antimony run postgresql --home-name invidious/db`
+# 3. Configuring both Invidious and PostgreSQL following upstream documentation. Importantly, replace
+#    the SEVER_SECRET_KEY using something like `openssl rand -hex 8`.
+# 4. Update the final Pre-Hook in case you changed the default ports for Companion/DB
+
+path = "/usr/lib/invidious/invidious"
+dir = "/usr/lib/invidious"
+features = ["network", "locale"]
+binaries = ["sh"]
+libraries = ["invidious", "libnss*"]
+
+[home]
+name = "invidious/home"
+policy = "Enabled"
+
+[files.resources]
+ro = ["$XDG_DATA_HOME/antimony/invidious/invidious.yml=/etc/invidious.yml"]
+
+[[hooks.pre]]
+content = """
+antimony run postgresql --home-name invidious/db &
+antimony run $XDG_DATA_HOME/antimony/invidious/invidious_companion --env SERVER_SECRET_KEY=1234567890abcdef --features network
+"""
+attach = true
+env = true
+new_privileges = true
+
+[[hooks.pre]]
+content = """
+echo "Waiting for DB"
+while ! nc -z localhost 5432; do
+  sleep 1
+done
+
+echo "Waiting for Companion"
+while ! nc -z localhost 8282; do
+  sleep 1
+done
+"""

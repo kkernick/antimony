@@ -203,6 +203,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
             "--dir", runtime,
             "--chmod", "0700", runtime,
             "--setenv", "HOME", "/home/antimony",
+            "--dir", "/home/antimony",
             "--setenv", "PATH", "/usr/bin",
             "--setenv", "USER", "antimony",
             "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
@@ -212,6 +213,10 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     if profile.new_privileges.unwrap_or(false) {
         handle.new_privileges_i(true);
+    }
+
+    if let Some(dir) = &profile.dir {
+        handle.args_i(["--chdir", dir])?;
     }
 
     debug!("Initializing inotify handle");
@@ -247,9 +252,9 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
                 timer!("::setup_rest", {
                     let a = Arc::clone(&a);
                     let home = timer!("::home", home::setup(&a))?;
-                    timer!("::file", files::setup(&a))?;
                     timer!("::env", env::setup(&a));
                     timer!("::fab", fab::setup(&a))?;
+                    timer!("::file", files::setup(&a))?;
                     timer!("::syscalls", syscalls::setup(&a))?;
                     Ok(home)
                 })
