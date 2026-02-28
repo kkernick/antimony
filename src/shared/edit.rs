@@ -2,16 +2,11 @@
 
 use dialoguer::Confirm;
 use log::error;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 use spawn::Spawner;
-use std::{
-    fs::{self, File},
-    io::{self, Write},
-    path::Path,
-};
+use std::{fs, io};
 use thiserror::Error;
-use user::{Mode, as_effective, as_real};
+use user::{Mode, as_real};
 
 use crate::shared::env::EDITOR;
 
@@ -25,6 +20,10 @@ pub enum Error {
     /// Serialization errors.
     #[error("Failed to serialize file: {0}")]
     Serialize(#[from] toml::ser::Error),
+
+    /// Serialization errors.
+    #[error("Failed to deserialize file: {0}")]
+    Deserialize(#[from] toml::de::Error),
 
     /// Misc Errno errors.
     #[error("System error: {0}")]
@@ -44,7 +43,11 @@ pub enum Error {
 }
 
 /// Edit a file via a temporary, committing the changes back into the file.
-pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, Error> {
+pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
+    original: &str,
+) -> Result<Option<String>, Error> {
+    let digest = toml::from_str(original)?;
+
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
@@ -54,11 +57,9 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
             .extension("toml")
             .create::<temp::File>()?;
 
-        fs::copy(path, temp.full())?;
+        fs::write(temp.full(), original)?;
         Ok(temp)
     })??;
-
-    let original = fs::read_to_string(path)?;
 
     // Loop until the user either:
     //  1. Provides a valid edit.
@@ -93,7 +94,7 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
                         .interact()?;
 
                     if !retry {
-                        return Ok(Some(()));
+                        return Ok(Some(string));
                     }
                 }
             },
@@ -104,14 +105,9 @@ pub fn edit<T: DeserializeOwned + Serialize>(path: &Path) -> Result<Option<()>, 
         }
     };
 
-    as_effective!(Result<(), Error>, {
-        write!(
-            File::create(path)?,
-            "{}",
-            toml::to_string(&buffer)?
-        )?;
-        Ok(())
-    })??;
-
-    Ok(Some(()))
+    Ok(if buffer == digest {
+        None
+    } else {
+        Some(toml::to_string(&buffer)?)
+    })
 }

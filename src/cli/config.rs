@@ -1,9 +1,13 @@
 //! Edit the configuration file.
 
-use crate::shared::{config::ConfigFile, env::AT_HOME, privileged};
+use crate::shared::{
+    config::{CONFIG_FILE, ConfigFile},
+    env::AT_HOME,
+    privileged,
+};
 use anyhow::Result;
 use log::{error, trace};
-use std::fs;
+use std::{fs, ops::Deref};
 use user::as_effective;
 
 #[derive(clap::Args, Default)]
@@ -27,7 +31,7 @@ impl super::Run for Args {
             };
 
             trace!("Editing");
-            if let Err(e) = ConfigFile::edit(&path) {
+            if let Err(e) = ConfigFile::edit(&toml::to_string(CONFIG_FILE.deref())?) {
                 error!("Failed to edit config: {e}");
                 as_effective!(fs::remove_file(&path))??;
                 return Err(e.into());

@@ -16,20 +16,16 @@ use crate::{
         Map, Set,
         config::CONFIG_FILE,
         edit,
-        env::{AT_CONFIG, CACHE_DIR, HOME, USER_NAME},
+        env::{CACHE_DIR, HOME},
+        store::{self, BackingStore, Object, USER_STORE},
     },
     timer,
 };
 use ahash::RandomState;
 use console::style;
-use log::{debug, info};
+use log::debug;
 use serde::{Deserialize, Serialize};
-use std::{
-    borrow::Cow,
-    fs, io,
-    path::{Path, PathBuf},
-    sync::LazyLock,
-};
+use std::{borrow::Cow, fs, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 use user::as_effective;
 use which::which;
@@ -56,8 +52,8 @@ pub enum Error {
     Serialize(#[from] toml::ser::Error),
 
     /// Misc IO errors.
-    #[error("I/O Error: {0}: {1}")]
-    Io(&'static str, io::Error),
+    #[error("I/O Error: {0}")]
+    Io(#[from] io::Error),
 
     /// Misc Errno errors.
     #[error("System error: {0}: {1}")]
@@ -78,6 +74,9 @@ pub enum Error {
     /// Errors incorporating features.
     #[error("Feature error: {0}")]
     Feature(#[from] crate::fab::features::Error),
+
+    #[error("Profile Store Error: {0}")]
+    Store(#[from] store::Error),
 }
 
 /// Append two things together. Used for Profile Merging.
@@ -225,63 +224,6 @@ pub struct Profile {
     pub sandbox_args: Vec<String>,
 }
 impl Profile {
-    pub fn user_profile(name: &str) -> PathBuf {
-        AT_CONFIG
-            .join(USER_NAME.as_str())
-            .join("profiles")
-            .join(name)
-            .with_extension("toml")
-    }
-
-    pub fn system_profile(name: &str) -> PathBuf {
-        AT_CONFIG.join("profiles").join(name).with_extension("toml")
-    }
-
-    /// Load a profile from the database. This does not include any feature fabrication.
-    pub fn load(name: &str) -> Result<Self, Error> {
-        if name == "default" {
-            if !CONFIG_FILE.system_mode()
-                && let Ok(str) = fs::read_to_string(Self::user_profile(name))
-            {
-                return Ok(toml::from_str(&str)?);
-            } else {
-                let str = fs::read_to_string(Self::system_profile(name))
-                    .map_err(|e| Error::Io("Reading default", e))?;
-                as_effective!(fs::write(Self::user_profile(name), &str))?
-                    .map_err(|e| Error::Io("Writing default", e))?;
-                return Ok(toml::from_str(&str)?);
-            }
-        }
-
-        // Try and load a file absolutely if the file is given.
-        if name.ends_with(".toml") {
-            let path = PathBuf::from(name);
-            if path.exists() {
-                info!("Using File");
-                return Ok(toml::from_str(
-                    &fs::read_to_string(path).map_err(|e| Error::Io("reading TOML", e))?,
-                )?);
-            }
-        }
-
-        if !CONFIG_FILE.system_mode()
-            && let Ok(str) = fs::read_to_string(Self::user_profile(name))
-        {
-            info!("Using Profile Cache");
-            return Ok(toml::from_str(&str)?);
-        }
-
-        if let Ok(str) = fs::read_to_string(Self::system_profile(name)) {
-            info!("Using System Cache");
-            return Ok(toml::from_str(&str)?);
-        }
-
-        Err(Error::NotFound(
-            name.to_string(),
-            Cow::Borrowed("No such profile"),
-        ))
-    }
-
     /// Construct a profile from the command line.
     /// Technically, everything needed for a profile can be specified
     /// from the command line that is needed to run a profile, so
@@ -368,7 +310,10 @@ impl Profile {
     pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
         debug!("Loading {name}");
 
-        let mut profile = timer!("::load", Self::load(name))?;
+        let mut profile = timer!(
+            "::load",
+            store::load::<Self, Error>(name, Object::Profile, true)
+        )?;
         if name == "default" {
             return Ok(profile);
         }
@@ -392,7 +337,9 @@ impl Profile {
         let to_inherit: Set<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
-                if !CONFIG_FILE.system_mode() && Self::user_profile("default").exists() {
+                if !CONFIG_FILE.system_mode()
+                    && USER_STORE.with_borrow(|s| s.exists("default", Object::Profile))
+                {
                     Set::from_iter(["default".to_string()])
                 } else {
                     Set::default()
@@ -453,13 +400,11 @@ impl Profile {
         if let Some(parent) = cache.parent()
             && !parent.exists()
         {
-            as_effective!(fs::create_dir_all(parent))?
-                .map_err(|e| Error::Io("create profile cache", e))?;
+            as_effective!(fs::create_dir_all(parent))??;
         }
 
         if let Ok(str) = toml::to_string(&profile) {
-            as_effective!(fs::write(cache, &str))?
-                .map_err(|e| Error::Io("write profile cache", e))?;
+            as_effective!(fs::write(cache, &str))??;
         }
         Ok(profile)
     }
@@ -620,29 +565,24 @@ impl Profile {
     }
 
     /// Edit a profile.
-    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
-        edit::edit::<Self>(path)
+    pub fn edit(profile: &str) -> Result<Option<String>, edit::Error> {
+        edit::edit::<Self>(profile)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::env::AT_HOME;
 
     #[test]
     fn validate_profiles() {
-        let profiles = Path::new(AT_HOME.as_path()).join("profiles");
-        if profiles.exists() {
-            for path in fs::read_dir(profiles)
-                .expect("No profiles to test")
-                .filter_map(|e| e.ok())
-            {
-                toml::from_str::<Profile>(
-                    &fs::read_to_string(path.path()).expect("Failed to read profile"),
-                )
-                .expect("Failed to parse profile");
-            }
+        for profile in store::SYSTEM_STORE
+            .with_borrow(|s| s.get(Object::Profile))
+            .expect("Failed to get profiles")
+        {
+            store::SYSTEM_STORE
+                .with_borrow(|s| s.fetch(&profile, Object::Profile))
+                .expect("Failed to fetch profile");
         }
     }
 }

@@ -151,9 +151,10 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
+'--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':profile -- The path of the profile. Can also be a directory, which will import all files within:_default' \
+':name -- The path of the object. Can also be a directory, which will import all files within:_default' \
 && ret=0
 ;;
 (config)

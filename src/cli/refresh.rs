@@ -2,7 +2,11 @@
 
 use crate::{
     cli::{self, run, run_vec},
-    shared::env::{CACHE_DIR, HOME_PATH},
+    shared::{
+        env::{CACHE_DIR, HOME_PATH},
+        profile::{self, Profile},
+        store::{self, Object},
+    },
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -41,7 +45,7 @@ impl cli::Run for Args {
                     fs::remove_file(cache)?;
                 }
             }
-        } else {
+        } else if self.profile.is_none() {
             let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
@@ -100,15 +104,31 @@ impl cli::Run for Args {
                 .try_for_each(|name| -> Result<()> {
                     pb.set_message(format!("Refreshing {name}"));
 
+                    let profile =
+                        store::load::<Profile, profile::Error>(&name, Object::Profile, true)?;
+
                     let args = run::Args {
                         profile: name.clone(),
                         dry: true,
                         refresh: true,
                         ..Default::default()
                     };
-
                     user::set(user::Mode::Effective)?;
                     args.run()?;
+
+                    for (conf, _) in profile.configuration {
+                        pb.set_message(format!("Refreshing {name} ({conf})"));
+                        let args = run::Args {
+                            profile: name.clone(),
+                            dry: true,
+                            refresh: true,
+                            config: Some(conf),
+                            ..Default::default()
+                        };
+                        user::set(user::Mode::Effective)?;
+                        args.run()?;
+                    }
+
                     Ok(())
                 })?;
         }

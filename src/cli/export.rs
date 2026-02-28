@@ -1,6 +1,9 @@
 //! Export user-profiles
 
-use crate::shared::env::{AT_CONFIG, PWD, USER_NAME};
+use crate::shared::{
+    env::PWD,
+    store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
+};
 use anyhow::{Result, anyhow};
 use std::{fs, path::PathBuf};
 use user::as_real;
@@ -25,26 +28,24 @@ impl super::Run for Args {
         };
 
         let (table, kind) = if self.feature {
-            ("features", "feature")
+            (Object::Feature, "feature")
         } else {
-            ("profiles", "profile")
+            (Object::Profile, "profile")
         };
 
         let export = |name: &str| -> Result<()> {
-            let path = AT_CONFIG
-                .join(USER_NAME.as_str())
-                .join(table)
-                .join(name)
-                .with_extension("toml");
-            if let Ok(content) = fs::read_to_string(path) {
-                as_real!(Result<()>, {
-                    fs::write(dest.join(name).with_extension("toml"), content)?;
-                    Ok(())
-                })??;
+            let content = if let Ok(user) = USER_STORE.with_borrow(|s| s.fetch(name, table)) {
+                user
+            } else if let Ok(system) = SYSTEM_STORE.with_borrow(|s| s.fetch(name, table)) {
+                system
             } else {
-                println!("No such {kind}: {name}");
-            }
-            Ok(())
+                return Err(anyhow::anyhow!("No such {kind}: {name}"));
+            };
+
+            as_real!(Result<()>, {
+                fs::write(dest.join(name).with_extension("toml"), content)?;
+                Ok(())
+            })?
         };
 
         if !dest.exists() {
@@ -52,11 +53,8 @@ impl super::Run for Args {
         } else if let Some(object) = self.name {
             export(&object)
         } else {
-            for object in fs::read_dir(AT_CONFIG.join(USER_NAME.as_str()).join(table))?
-                .filter_map(|e| e.ok())
-                .map(|e| e.file_name())
-            {
-                export(&object.into_string().unwrap())?;
+            for object in USER_STORE.with_borrow(|s| s.get(table))? {
+                export(&object)?;
             }
             Ok(())
         }

@@ -3,6 +3,7 @@ pub mod edit;
 pub mod env;
 pub mod feature;
 pub mod profile;
+pub mod store;
 pub mod syscalls;
 
 use crate::shared::{

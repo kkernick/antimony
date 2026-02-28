@@ -293,7 +293,7 @@ _antimony() {
             return 0
             ;;
         antimony__import)
-            opts="-h --help <PROFILE>"
+            opts="-h --feature --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

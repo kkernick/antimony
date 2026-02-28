@@ -2,14 +2,12 @@
 
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
-    Map, Set,
-    config::CONFIG_FILE,
-    edit,
-    env::{AT_CONFIG, USER_NAME},
+    Map, Set, edit,
     profile::{files::Files, hooks::Hooks},
+    store::{self, Object},
 };
 use serde::{Deserialize, Serialize};
-use std::{fs, io, path::Path};
+use std::io;
 use thiserror::Error;
 
 /// Errors reading feature files
@@ -19,13 +17,13 @@ pub enum Error {
     #[error("Failed to read feature: {0}")]
     Io(#[from] io::Error),
 
-    /// An error if a feature does not exist.
-    #[error("No such feature: {0}")]
-    NotFound(String),
-
     /// An error if the TOML is malformed.
     #[error("Malformed feature file: {0}")]
     Malformed(#[from] toml::de::Error),
+
+    /// Store errors
+    #[error("Failed to access feature store: {0}")]
+    Store(#[from] store::Error),
 }
 
 /// A Feature
@@ -87,54 +85,29 @@ pub struct Feature {
 impl Feature {
     /// Get a feature from its name.
     pub fn new(name: &str) -> Result<Self, Error> {
-        if name.ends_with(".toml") {
-            return Ok(toml::from_str(&fs::read_to_string(name)?)?);
-        }
-
-        if !CONFIG_FILE.system_mode()
-            && let Ok(str) = fs::read_to_string(
-                AT_CONFIG
-                    .join(USER_NAME.as_str())
-                    .join("features")
-                    .join(name)
-                    .with_extension("toml"),
-            )
-        {
-            return Ok(toml::from_str(&str)?);
-        }
-
-        if let Ok(str) =
-            fs::read_to_string(AT_CONFIG.join("features").join(name).with_extension("toml"))
-        {
-            return Ok(toml::from_str(&str)?);
-        }
-
-        Err(Error::NotFound(name.to_string()))
+        store::load::<Self, Error>(name, Object::Feature, false)
     }
+
     /// Edit a feature.
-    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
-        edit::edit::<Self>(path)
+    pub fn edit(feat: &str) -> Result<Option<String>, edit::Error> {
+        edit::edit::<Self>(feat)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::env::AT_HOME;
+    use crate::shared::store::{BackingStore, SYSTEM_STORE};
 
     #[test]
     fn validate_features() {
-        let features = Path::new(AT_HOME.as_path()).join("features");
-        if features.exists() {
-            for path in fs::read_dir(features)
-                .expect("No features to test")
-                .filter_map(|e| e.ok())
-            {
-                toml::from_str::<Feature>(
-                    &fs::read_to_string(path.path()).expect("Failed to read feature"),
-                )
-                .expect("Failed to parse feature");
-            }
+        for feature in SYSTEM_STORE
+            .with_borrow(|s| s.get(Object::Feature))
+            .expect("Failed to get features")
+        {
+            SYSTEM_STORE
+                .with_borrow(|s| s.fetch(&feature, Object::Feature))
+                .expect("Failed to read feature");
         }
     }
 }

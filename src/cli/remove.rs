@@ -4,17 +4,15 @@ use crate::{
     cli,
     shared::{
         Set,
-        env::{AT_CONFIG, USER_NAME},
         feature::Feature,
         privileged,
         profile::Profile,
+        store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
     },
 };
 use anyhow::Result;
 use dialoguer::Confirm;
 use log::debug;
-use std::fs;
-use user::as_effective;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -28,24 +26,19 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
         let (table, kind) = if self.feature {
-            ("features", "feature")
+            (Object::Feature, "feature")
         } else {
-            ("profiles", "profile")
+            (Object::Profile, "profile")
         };
 
         if let Some(name) = self.name {
-            let user = AT_CONFIG
-                .join(USER_NAME.as_str())
-                .join(table)
-                .join(&name)
-                .with_extension("toml");
+            let user = USER_STORE.with_borrow(|s| s.exists(&name, table));
+            let system = SYSTEM_STORE.with_borrow(|s| s.exists(&name, table));
 
-            let system = AT_CONFIG.join(table).join(&name).with_extension("toml");
-
-            if user.exists() && system.exists() {
+            if user && system {
                 println!("Resetting to system {kind}");
-                as_effective!(fs::remove_file(user))??;
-            } else if user.exists() {
+                USER_STORE.with_borrow(|s| s.remove(&name, table))?;
+            } else if user {
                 if Confirm::new()
                     .with_prompt(format!(
                         "{name} is a user-created {kind}. There is no system default to reset to. Are you sure you want to remove it?",
@@ -53,9 +46,9 @@ impl cli::Run for Args {
                     .interact()?
                 {
                     println!("Goodbye, {name}!");
-                    as_effective!(fs::remove_file(user))??;
+                    USER_STORE.with_borrow(|s| s.remove(&name, table))?;
                 }
-            } else if system.exists() && name != "default" {
+            } else if system && name != "default" {
                 if privileged()?
                     && Confirm::new()
                         .with_prompt(format!(
@@ -64,38 +57,36 @@ impl cli::Run for Args {
                         .interact()?
                 {
                     println!("Deleting system {kind}");
-                    as_effective!(fs::remove_file(system))??;
+                    SYSTEM_STORE.with_borrow(|s| s.remove(&name, table))?;
                 }
             } else {
                 println!("No such {kind}")
             }
             Ok(())
         } else {
-            let user: Set<_> = fs::read_dir(AT_CONFIG.join(USER_NAME.as_str()).join(table))?
-                .filter_map(|e| e.ok())
-                .map(|e| e.file_name())
+            let user: Set<_> = USER_STORE
+                .with_borrow(|s| s.get(table))?
+                .into_iter()
                 .collect();
-            let system: Set<_> = fs::read_dir(AT_CONFIG.join(table))?
-                .filter_map(|e| e.ok())
-                .map(|e| e.file_name())
+            let system: Set<_> = SYSTEM_STORE
+                .with_borrow(|s| s.get(table))?
+                .into_iter()
                 .collect();
 
             for thing in user.intersection(&system) {
-                debug!("Custom User Profile for: {}", thing.display());
-                let user = AT_CONFIG.join(USER_NAME.as_str()).join(table).join(thing);
-                let system = AT_CONFIG.join(table).join(thing);
+                debug!("Custom User {kind} for: {thing}");
+                let user = USER_STORE.with_borrow(|s| s.fetch(thing, table))?;
+                let system = SYSTEM_STORE.with_borrow(|s| s.fetch(thing, table))?;
 
                 let identical = if self.feature {
-                    toml::from_str::<Feature>(&fs::read_to_string(&user)?)?
-                        == toml::from_str::<Feature>(&fs::read_to_string(&system)?)?
+                    toml::from_str::<Feature>(&user)? == toml::from_str::<Feature>(&system)?
                 } else {
-                    toml::from_str::<Profile>(&fs::read_to_string(&user)?)?
-                        == toml::from_str::<Profile>(&fs::read_to_string(&system)?)?
+                    toml::from_str::<Profile>(&user)? == toml::from_str::<Profile>(&system)?
                 };
 
                 if identical {
-                    println!("Removing redundant {kind}: {}", thing.display());
-                    as_effective!(fs::remove_file(user))??;
+                    println!("Removing redundant {kind}: {thing}");
+                    USER_STORE.with_borrow(|s| s.remove(thing, table))?;
                 }
             }
             Ok(())

@@ -7,9 +7,10 @@ use user::as_effective;
 use crate::{
     cli,
     shared::{
-        env::{AT_CONFIG, USER_NAME},
+        env::AT_CONFIG,
         feature::Feature,
         profile::Profile,
+        store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
     },
 };
 
@@ -25,49 +26,42 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(self) -> anyhow::Result<()> {
         let (table, kind) = if self.feature {
-            ("features", "feature")
+            (Object::Feature, "feature")
         } else {
-            ("profiles", "profile")
+            (Object::Profile, "profile")
         };
 
-        let user = AT_CONFIG
-            .join(USER_NAME.as_str())
-            .join(table)
-            .join(&self.name)
-            .with_extension("toml");
-        let system = AT_CONFIG
-            .join(table)
-            .join(&self.name)
-            .with_extension("toml");
+        let user = USER_STORE.with_borrow(|s| s.fetch(&self.name, table));
+        let system = SYSTEM_STORE.with_borrow(|s| s.fetch(&self.name, table));
 
-        let (src, path) = if user.exists() {
-            (None, user)
-        } else if system.exists() {
-            fs::copy(&system, &user)?;
-            (Some(system), user)
+        let (buffer, new) = if let Ok(str) = user {
+            (str, false)
+        } else if let Ok(str) = system {
+            USER_STORE.with_borrow(|s| s.store(&self.name, table, &str))?;
+            (str, true)
         } else {
-            as_effective!(anyhow::Result<()>, {
-                if let Some(parent) = user.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-
-                fs::copy(AT_CONFIG.join(kind).with_extension("toml"), &user)?;
-                Ok(())
-            })??;
-            (Some(AT_CONFIG.join(kind).with_extension("toml")), user)
+            (
+                as_effective!(anyhow::Result<String>, {
+                    let str = fs::read_to_string(AT_CONFIG.join(kind).with_extension("toml"))?;
+                    USER_STORE.with_borrow(|s| s.store(&self.name, table, &str))?;
+                    Ok(str)
+                })??,
+                true,
+            )
         };
 
-        if self.feature {
-            Feature::edit(&path)?
+        let commit = if self.feature {
+            Feature::edit(&buffer)?
         } else {
-            Profile::edit(&path)?
+            Profile::edit(&buffer)?
         };
 
-        if let Some(src) = src
-            && fs::read_to_string(src)? == fs::read_to_string(&path)?
-        {
-            fs::remove_file(path)?;
+        if let Some(out) = commit {
+            USER_STORE.with_borrow(|s| s.store(&self.name, table, &out))?;
+        } else if new {
+            USER_STORE.with_borrow(|s| s.remove(&self.name, table))?;
         }
+
         Ok(())
     }
 }

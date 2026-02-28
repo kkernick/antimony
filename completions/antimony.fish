@@ -117,6 +117,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand remove" -s h -l help -
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -s h -l help -d 'Print help'
+complete -c antimony -n "__fish_antimony_using_subcommand import" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand import" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand config" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import config help" -f -a "run" -d 'Run a profile'

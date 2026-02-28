@@ -5,11 +5,11 @@ use crate::shared::{
     env::{AT_HOME, USER_NAME},
 };
 use serde::{Deserialize, Serialize};
-use std::{fs::read_to_string, path::Path, sync::LazyLock};
+use std::{fs::read_to_string, sync::LazyLock};
 
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, PartialEq)]
 pub struct ConfigFile {
     force_temp: Option<bool>,
     system_mode: Option<bool>,
@@ -37,8 +37,8 @@ impl ConfigFile {
         }
     }
 
-    pub fn edit(path: &Path) -> Result<Option<()>, edit::Error> {
-        edit::edit::<Self>(path)
+    pub fn edit(config: &str) -> Result<Option<String>, edit::Error> {
+        edit::edit::<Self>(config)
     }
 }
 impl Default for ConfigFile {
