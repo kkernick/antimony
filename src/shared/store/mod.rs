@@ -1,24 +1,72 @@
+pub mod db;
 pub mod file;
 
 use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
+use clap::ValueEnum;
 use nix::errno;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::{cell::RefCell, error, fs, io, path::PathBuf};
+use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
 use thiserror::Error;
 
+pub fn init_system(store: Store) -> Box<dyn BackingStore> {
+    match store {
+        Store::Database => Box::new(
+            db::Store::new(db::Database::System).expect("Failed to initialize Database Store"),
+        ),
+        Store::File => Box::new(file::Store::new(
+            &format!("{}", AT_CONFIG.display()),
+            "toml",
+        )),
+    }
+}
+
+pub fn init_user(store: Store) -> Box<dyn BackingStore> {
+    match store {
+        Store::Database => Box::new(
+            db::Store::new(db::Database::User).expect("Failed to initialize Database Store"),
+        ),
+        Store::File => Box::new(file::Store::new(
+            &format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()),
+            "toml",
+        )),
+    }
+}
+
+pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
+    match store {
+        Store::Database => Box::new(
+            db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
+        ),
+        Store::File => Box::new(file::Store::new(
+            &format!("{}", CACHE_DIR.display()),
+            "cache",
+        )),
+    }
+}
+
 thread_local! {
-    pub static SYSTEM_STORE: RefCell<file::FileStore> = RefCell::new(
-        file::FileStore::new(&format!("{}", AT_CONFIG.display()), "toml")
+    pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
+        init_system(CONFIG_FILE.config_store())
     );
-    pub static USER_STORE: RefCell<file::FileStore> = RefCell::new(
-        file::FileStore::new(&format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()), "toml")
+
+    pub static USER_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
+        init_user(CONFIG_FILE.config_store())
     );
-    pub static CACHE_STORE: RefCell<file::FileStore> = RefCell::new(
-        file::FileStore::new(&format!("{}", CACHE_DIR.display()), "cache")
+
+    pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
+        init_cache(CONFIG_FILE.cache_store())
+
     );
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Copy, Clone, ValueEnum, Default)]
+pub enum Store {
+    #[default]
+    File,
+    Database,
 }
 
 #[derive(Debug, Error)]
@@ -29,19 +77,23 @@ pub enum Error {
     #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
 
+    #[error("Database Error: {0}")]
+    Database(#[from] rusqlite::Error),
+
     #[error("Failed to change user: {0}")]
     Errno(#[from] errno::Errno),
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Copy, Clone)]
-pub enum Store {
-    #[default]
-    File,
+pub static OBJECTS: [Object; 6] = [
+    Object::Profile,
+    Object::Feature,
+    Object::Directories,
+    Object::Wildcards,
+    Object::Libraries,
+    Object::Binaries,
+];
 
-    SQLite,
-}
-
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Object {
     Profile,
     Feature,
@@ -60,6 +112,11 @@ impl Object {
             Self::Libraries => "libraries",
             Self::Binaries => "binaries",
         }
+    }
+}
+impl fmt::Display for Object {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
     }
 }
 
@@ -114,4 +171,14 @@ pub fn load<
 
     let str = SYSTEM_STORE.with_borrow(|s| s.fetch(name, object))?;
     Ok(toml::from_str(&str)?)
+}
+
+pub fn export(store: &dyn BackingStore) -> HashMap<Object, Vec<String>> {
+    let mut map = HashMap::new();
+    for object in OBJECTS {
+        if let Ok(objects) = store.get(object) {
+            map.insert(object, objects);
+        }
+    }
+    map
 }

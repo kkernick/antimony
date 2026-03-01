@@ -3,7 +3,7 @@
 use crate::shared::{
     feature::{self, Feature},
     profile::{self, Profile},
-    store::{self, BackingStore, Object},
+    store::{self, Object},
 };
 use anyhow::{Result, anyhow};
 use log::warn;

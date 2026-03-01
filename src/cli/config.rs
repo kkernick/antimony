@@ -6,7 +6,7 @@ use crate::shared::{
     privileged,
 };
 use anyhow::Result;
-use log::{error, trace};
+use log::trace;
 use std::{fs, ops::Deref};
 use user::as_effective;
 
@@ -31,10 +31,8 @@ impl super::Run for Args {
             };
 
             trace!("Editing");
-            if let Err(e) = ConfigFile::edit(&toml::to_string(CONFIG_FILE.deref())?) {
-                error!("Failed to edit config: {e}");
-                as_effective!(fs::remove_file(&path))??;
-                return Err(e.into());
+            if let Some(out) = ConfigFile::edit(&toml::to_string(CONFIG_FILE.deref())?)? {
+                fs::write(path, out)?;
             }
             Ok(())
         }

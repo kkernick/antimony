@@ -7,11 +7,11 @@ use user::as_effective;
 
 use crate::shared::store::Object;
 
-pub struct FileStore {
+pub struct Store {
     path: String,
     extension: &'static str,
 }
-impl FileStore {
+impl Store {
     pub fn new(path: &str, extension: &'static str) -> Self {
         Self {
             path: path.to_owned(),
@@ -28,7 +28,7 @@ impl FileStore {
         PathBuf::from(format!("{}/{}", self.path, object.name()))
     }
 }
-impl super::BackingStore for FileStore {
+impl super::BackingStore for Store {
     fn fetch(&self, name: &str, object: Object) -> Result<String, super::Error> {
         Ok(fs::read_to_string(self.path(name, object))?)
     }

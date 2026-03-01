@@ -3,18 +3,28 @@
 use crate::shared::{
     Set, edit,
     env::{AT_HOME, USER_NAME},
+    store,
 };
 use serde::{Deserialize, Serialize};
-use std::{fs::read_to_string, sync::LazyLock};
+use std::{
+    fs::{self, read_to_string},
+    path::PathBuf,
+    sync::LazyLock,
+};
+use user::as_effective;
 
+pub static CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config.toml"));
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
 
-#[derive(Deserialize, Serialize, PartialEq)]
+#[derive(Deserialize, Serialize, PartialEq, Clone)]
 pub struct ConfigFile {
-    force_temp: Option<bool>,
-    system_mode: Option<bool>,
-    auto_refresh: Option<bool>,
-    privileged_users: Option<Set<String>>,
+    pub force_temp: Option<bool>,
+    pub system_mode: Option<bool>,
+    pub auto_refresh: Option<bool>,
+    pub privileged_users: Option<Set<String>>,
+
+    pub config_store: Option<store::Store>,
+    pub cache_store: Option<store::Store>,
 }
 impl ConfigFile {
     pub fn auto_refresh(&self) -> bool {
@@ -37,8 +47,24 @@ impl ConfigFile {
         }
     }
 
+    pub fn cache_store(&self) -> store::Store {
+        self.cache_store.unwrap_or(store::Store::File)
+    }
+
+    pub fn config_store(&self) -> store::Store {
+        self.config_store.unwrap_or(store::Store::File)
+    }
+
     pub fn edit(config: &str) -> Result<Option<String>, edit::Error> {
         edit::edit::<Self>(config)
+    }
+
+    pub fn update(&self) -> anyhow::Result<()> {
+        as_effective!(anyhow::Result<()>, {
+            fs::write(AT_HOME.join("config.toml"), toml::to_string(self)?)?;
+            Ok(())
+        })??;
+        Ok(())
     }
 }
 impl Default for ConfigFile {
@@ -55,6 +81,8 @@ impl Default for ConfigFile {
                 system_mode: None,
                 auto_refresh: None,
                 privileged_users: None,
+                cache_store: None,
+                config_store: None,
             }
         };
 
@@ -67,7 +95,16 @@ impl Default for ConfigFile {
         if let Ok(env) = std::env::var("AT_AUTO_REFRESH") {
             config.auto_refresh = Some(env != "0")
         }
-
+        if let Ok(env) = std::env::var("AT_CACHE_DB")
+            && env != "0"
+        {
+            config.cache_store = Some(store::Store::Database);
+        }
+        if let Ok(env) = std::env::var("AT_CONFIG_DB")
+            && env != "0"
+        {
+            config.config_store = Some(store::Store::Database);
+        }
         config
     }
 }

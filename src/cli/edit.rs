@@ -10,7 +10,7 @@ use crate::{
         env::AT_CONFIG,
         feature::Feature,
         profile::Profile,
-        store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
+        store::{Object, SYSTEM_STORE, USER_STORE},
     },
 };
 

@@ -2,7 +2,7 @@
 
 use crate::shared::{
     env::PWD,
-    store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
+    store::{Object, SYSTEM_STORE, USER_STORE},
 };
 use anyhow::{Result, anyhow};
 use std::{fs, path::PathBuf};

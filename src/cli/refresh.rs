@@ -3,7 +3,7 @@
 use crate::{
     cli::{self, run, run_vec},
     shared::{
-        env::{CACHE_DIR, HOME_PATH},
+        env::{AT_HOME, CACHE_DIR, HOME_PATH},
         profile::{self, Profile},
         store::{self, Object},
     },
@@ -74,6 +74,11 @@ impl cli::Run for Args {
                 }
             }
         }
+
+        let db = AT_HOME.join("db");
+        let _ = fs::remove_file(db.join("cache.db"));
+        let _ = fs::remove_file(db.join("cache.db-shm"));
+        let _ = fs::remove_file(db.join("cache.db-wal"));
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {

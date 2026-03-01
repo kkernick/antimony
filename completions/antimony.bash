@@ -16,6 +16,9 @@ _antimony() {
             ",$1")
                 cmd="antimony"
                 ;;
+            antimony,backend)
+                cmd="antimony__backend"
+                ;;
             antimony,config)
                 cmd="antimony__config"
                 ;;
@@ -45,6 +48,9 @@ _antimony() {
                 ;;
             antimony,seccomp)
                 cmd="antimony__seccomp"
+                ;;
+            antimony__help,backend)
+                cmd="antimony__help__backend"
                 ;;
             antimony__help,config)
                 cmd="antimony__help__config"
@@ -83,8 +89,22 @@ _antimony() {
 
     case "${cmd}" in
         antimony)
-            opts="-h -V --help --version run edit refresh integrate remove seccomp export import config help"
+            opts="-h -V --help --version run edit refresh integrate remove seccomp export import config backend help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        antimony__backend)
+            opts="-h --digest --cache --overwrite --help file database"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -139,8 +159,22 @@ _antimony() {
             return 0
             ;;
         antimony__help)
-            opts="run edit refresh integrate remove seccomp export import config help"
+            opts="run edit refresh integrate remove seccomp export import config backend help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        antimony__help__backend)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi

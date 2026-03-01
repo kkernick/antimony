@@ -17,7 +17,7 @@ use crate::{
         config::CONFIG_FILE,
         edit,
         env::{CACHE_DIR, HOME},
-        store::{self, BackingStore, Object, USER_STORE},
+        store::{self, Object, USER_STORE},
     },
     timer,
 };

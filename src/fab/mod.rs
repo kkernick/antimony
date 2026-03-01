@@ -12,7 +12,7 @@ use crate::shared::{
     Set,
     env::{AT_HOME, HOME},
     profile::Profile,
-    store::{BackingStore, CACHE_STORE, Object},
+    store::{CACHE_STORE, Object},
 };
 use anyhow::Result;
 use log::debug;

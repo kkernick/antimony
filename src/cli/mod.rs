@@ -1,5 +1,6 @@
 //! Antimony's CLI.
 
+pub mod backend;
 pub mod config;
 pub mod edit;
 pub mod export;
@@ -81,6 +82,9 @@ pub enum Command {
 
     /// Manage the system configuration file.
     Config(config::Args),
+    
+    /// Manage the Backend Datastore 
+    Backend(backend::Args),
 }
 impl Default for Command {
     fn default() -> Self {

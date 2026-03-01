@@ -97,7 +97,7 @@ impl Feature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::store::{BackingStore, SYSTEM_STORE};
+    use crate::shared::store::SYSTEM_STORE;
 
     #[test]
     fn validate_features() {

@@ -7,7 +7,7 @@ use crate::{
         feature::Feature,
         privileged,
         profile::Profile,
-        store::{BackingStore, Object, SYSTEM_STORE, USER_STORE},
+        store::{Object, SYSTEM_STORE, USER_STORE},
     },
 };
 use anyhow::Result;
@@ -20,7 +20,7 @@ pub struct Args {
     pub name: Option<String>,
 
     /// Target a feature, rather than a profile. Requires privilege.
-    #[arg(long)]
+    #[arg(long, default_value_t = false)]
     pub feature: bool,
 }
 impl cli::Run for Args {

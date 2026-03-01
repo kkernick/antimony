@@ -163,6 +163,16 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(backend)
+_arguments "${_arguments_options[@]}" : \
+'--digest[Perform the operation in place by destructively removing the existing datastore and digesting it into the new dataset]' \
+'--cache[Configure the cache datastore rather than than the configuration datastore]' \
+'--overwrite[Overwrite existing values without confirmation]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':new -- The new backend to use for the datastore:(file database)' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_antimony__help_commands" \
@@ -211,6 +221,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(backend)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -236,9 +250,15 @@ _antimony_commands() {
 'export:Export user profiles' \
 'import:Import user profiles' \
 'config:Manage the system configuration file' \
+'backend:Manage the Backend Datastore' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony commands' commands "$@"
+}
+(( $+functions[_antimony__backend_commands] )) ||
+_antimony__backend_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony backend commands' commands "$@"
 }
 (( $+functions[_antimony__config_commands] )) ||
 _antimony__config_commands() {
@@ -267,9 +287,15 @@ _antimony__help_commands() {
 'export:Export user profiles' \
 'import:Import user profiles' \
 'config:Manage the system configuration file' \
+'backend:Manage the Backend Datastore' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony help commands' commands "$@"
+}
+(( $+functions[_antimony__help__backend_commands] )) ||
+_antimony__help__backend_commands() {
+    local commands; commands=()
+    _describe -t commands 'antimony help backend commands' commands "$@"
 }
 (( $+functions[_antimony__help__config_commands] )) ||
 _antimony__help__config_commands() {
