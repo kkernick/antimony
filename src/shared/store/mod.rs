@@ -121,6 +121,9 @@ impl fmt::Display for Object {
 }
 
 pub trait BackingStore {
+    /// An intention no-op, as BackingStores are LazyLoaded.
+    fn init(&self) {}
+
     fn fetch(&self, name: &str, object: Object) -> Result<String, Error>;
     fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, Error>;
 

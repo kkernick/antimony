@@ -15,8 +15,10 @@ use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
 use spawn::Spawner;
-use std::{fmt::Display, hash::BuildHasher, path::PathBuf};
-use user::as_real;
+use std::{
+    fmt::Display, fs::metadata, hash::BuildHasher, os::unix::fs::MetadataExt, path::PathBuf,
+};
+use user::{USER, as_real};
 
 #[derive(Default, Copy, Clone)]
 pub struct StaticHash;
@@ -34,6 +36,12 @@ pub type Map<K, V> = IndexMap<K, V, StaticHash>;
 /// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)
 pub fn privileged() -> anyhow::Result<bool> {
     if CONFIG_FILE.is_privileged() {
+        Ok(true)
+
+    // If the running user owns AT_HOME, they don't need permission checks.
+    } else if let Ok(meta) = metadata(AT_HOME.as_path())
+        && meta.uid() == USER.real.as_raw()
+    {
         Ok(true)
     } else {
         Ok(as_real!(anyhow::Result<i32>, {

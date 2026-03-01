@@ -3,10 +3,7 @@
 use crate::shared::{
     config::CONFIG_FILE,
     privileged,
-    store::{
-        self, BackingStore, CACHE_STORE, SYSTEM_STORE, USER_STORE, init_cache, init_system,
-        init_user,
-    },
+    store::{self, BackingStore, SYSTEM_STORE, USER_STORE, init_system, init_user},
 };
 use anyhow::Result;
 use dialoguer::Confirm;
@@ -55,20 +52,18 @@ impl super::Run for Args {
                     store.with_borrow(|s| -> Result<()> {
                         for (object, objects) in store::export(s.as_ref()) {
                             for name in objects {
-                                if dest.exists(&name, object)
-                                    && !self.overwrite
-                                    && !Confirm::new()
+                                if dest.exists(&name, object) && !self.overwrite
+                                    && (dest.fetch(&name, object)? == s.fetch(&name, object)? || !Confirm::new()
                                         .with_prompt(format!(
                                             "{name} already exists in new backend (within {object}). Overwrite?",
                                         ))
-                                        .interact()?
-                                {
-                                    continue;
-                                } else {
-                                    dest.store(&name, object, &s.fetch(&name, object)?)?;
-                                    if self.digest {
-                                        s.remove(&name, object)?;
+                                        .interact()?) {
+                                        continue
                                     }
+
+                                dest.store(&name, object, &s.fetch(&name, object)?)?;
+                                if self.digest {
+                                    s.remove(&name, object)?;
                                 }
                             }
                         }
@@ -78,7 +73,6 @@ impl super::Run for Args {
 
                 let mut update = CONFIG_FILE.clone();
                 if self.cache {
-                    digest(&CACHE_STORE, init_cache(self.new))?;
                     let mut update = CONFIG_FILE.clone();
                     update.cache_store = Some(self.new);
                 } else {

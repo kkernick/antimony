@@ -6,7 +6,10 @@
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
 
-use antimony::{cli::refresh::installed_profiles, shared};
+use antimony::{
+    cli::refresh::installed_profiles,
+    shared::{self, store},
+};
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use dialoguer::Input;
@@ -62,6 +65,14 @@ pub struct Cli {
     /// wherever `antimony` resolves to, and doesn't build.
     #[arg(long)]
     pub recipe: Option<String>,
+
+    /// Specify a cache backend to test.
+    #[arg(long)]
+    pub cache_backend: Option<store::Store>,
+
+    /// Specify a config backend to test.
+    #[arg(long)]
+    pub config_backend: Option<store::Store>,
 
     /// The maximum amount of times hyperfine should run the profile.
     #[arg(long)]
@@ -233,6 +244,15 @@ fn main() -> Result<()> {
         };
 
         println!("Using: {antimony}");
+
+        if let Some(store::Store::Database) = &cli.cache_backend {
+            unsafe { env::set_var("AT_CACHE_DB", "1") }
+        }
+
+        if let Some(store::Store::Database) = &cli.config_backend {
+            unsafe { env::set_var("AT_CONFIG_DB", "1") }
+        }
+
         for profile in &profiles {
             cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
 

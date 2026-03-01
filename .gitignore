@@ -3,4 +3,6 @@
 /codebook.toml
 /config/cache
 /docs
+db
 cache
+config.toml
