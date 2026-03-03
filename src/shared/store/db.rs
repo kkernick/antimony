@@ -5,10 +5,7 @@
 //! 2. The User Database (USER_NAME.db) contains user profiles and features.
 //! 3. The Cache Database (cache.db) is a dumping ground for caching used through the project.
 
-use crate::shared::{
-    Map,
-    env::{AT_HOME, USER_NAME},
-};
+use crate::shared::env::{AT_HOME, USER_NAME};
 use rusqlite::{Connection, params, types::FromSql};
 use std::{fs, path::PathBuf};
 use thiserror::Error;
@@ -34,9 +31,6 @@ pub enum Error {
     #[error("Database could not be initialized: {0}")]
     Initialize(String),
 }
-
-// A map containing all names and values for a particular table.
-pub type DatabaseCache = Result<Map<String, String>, Error>;
 
 /// What Database we're targeting.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]

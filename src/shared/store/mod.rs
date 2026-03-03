@@ -6,6 +6,7 @@ use crate::shared::{
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
 use clap::ValueEnum;
+use log::debug;
 use nix::errno;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
@@ -37,29 +38,31 @@ pub fn init_user(store: Store) -> Box<dyn BackingStore> {
 
 pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
     match store {
-        Store::Database => Box::new(
-            db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
-        ),
-        Store::File => Box::new(file::Store::new(
-            &format!("{}", CACHE_DIR.display()),
-            "cache",
-        )),
+        Store::Database => {
+            debug!("Using Database for Cache Backend");
+            Box::new(
+                db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
+            )
+        }
+        Store::File => {
+            debug!("Using Files for Cache Backend");
+            Box::new(file::Store::new(
+                &format!("{}", CACHE_DIR.display()),
+                "cache",
+            ))
+        }
     }
 }
 
 thread_local! {
-    pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
-        init_system(CONFIG_FILE.config_store())
-    );
+    pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
+        RefCell::new(init_system(CONFIG_FILE.config_store()));
 
-    pub static USER_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
-        init_user(CONFIG_FILE.config_store())
-    );
+    pub static USER_STORE: RefCell<Box<dyn BackingStore>> =
+        RefCell::new(init_user(CONFIG_FILE.config_store()));
 
-    pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> = RefCell::new(
-        init_cache(CONFIG_FILE.cache_store())
-
-    );
+    pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> =
+        RefCell::new(init_cache(CONFIG_FILE.cache_store()));
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Copy, Clone, ValueEnum, Default)]
@@ -121,9 +124,6 @@ impl fmt::Display for Object {
 }
 
 pub trait BackingStore {
-    /// An intention no-op, as BackingStores are LazyLoaded.
-    fn init(&self) {}
-
     fn fetch(&self, name: &str, object: Object) -> Result<String, Error>;
     fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, Error>;
 

@@ -24,11 +24,17 @@ pub struct Cli {
     /// Build with native CPU Flags
     #[arg(long, default_value_t = false)]
     pub native: bool,
+
+    /// Arguments to pass to the profile application.
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub passthrough: Option<Vec<String>>,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init_error()?;
+
+    let passthrough = cli.passthrough.unwrap_or_default();
 
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])?
@@ -69,6 +75,7 @@ fn main() -> Result<()> {
             .args(cargo_flags.clone())?
             .args(["pgo", "build", "--", "--target", target])?
             .args(post_flags.clone())?
+            .args(&passthrough)?
             .spawn()?
             .wait()?;
 
@@ -134,6 +141,7 @@ fn main() -> Result<()> {
                 "--workspace",
             ])?
             .args(post_flags)?
+            .args(&passthrough)?
             .spawn()?
             .wait()?;
     } else {
@@ -146,6 +154,7 @@ fn main() -> Result<()> {
             .arg("build")?
             .args(["--target", target, "--workspace", "--profile", &cli.recipe])?
             .args(post_flags)?
+            .args(&passthrough)?
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
             .spawn()?
@@ -164,13 +173,12 @@ fn main() -> Result<()> {
     println!("{path}");
 
     Spawner::abs(format!("{path}/antimony"))
-        .args(["backend", "database", "--overwrite"])?
+        .args(["backend", "database", "--overwrite", "--dry"])?
         .env("AT_HOME", PWD.to_string_lossy())?
         .output(StreamMode::Discard)
         .error(StreamMode::Discard)
         .new_privileges(true)
         .spawn()?
         .wait()?;
-
     Ok(())
 }

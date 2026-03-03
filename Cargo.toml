@@ -43,7 +43,7 @@ indicatif = { version = "0.18.0", default-features = false }
 inotify = { version = "0.11.0", default-features = false }
 log = { version = "0.4.27", default-features = false }
 nix = { version = "0.30.1", default-features = false, features = ["socket", "uio"] }
-parking_lot = { version = "0.12.5", default-features = false, features = ["deadlock_detection"]}
+parking_lot = { version = "0.12.5", default-features = false, features = ["deadlock_detection"] }
 rayon = { version = "1.10.0", default-features = false }
 rusqlite = { version = "0.37.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive"], default-features = false }

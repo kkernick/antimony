@@ -2,10 +2,7 @@
 
 use antimony::{
     cli::{Run, run::as_symlink},
-    shared::{
-        self,
-        store::{CACHE_STORE, SYSTEM_STORE, USER_STORE},
-    },
+    shared,
 };
 use anyhow::Result;
 use clap::Parser;
@@ -13,13 +10,6 @@ use clap::Parser;
 fn main() -> Result<()> {
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
-
-    // Spin up the Data Stores.
-    rayon::broadcast(|_| {
-        CACHE_STORE.with_borrow(|s| s.init());
-        SYSTEM_STORE.with_borrow(|s| s.init());
-        USER_STORE.with_borrow(|s| s.init());
-    });
 
     #[cfg(debug_assertions)]
     std::thread::spawn(move || {

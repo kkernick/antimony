@@ -168,9 +168,10 @@ _arguments "${_arguments_options[@]}" : \
 '--digest[Perform the operation in place by destructively removing the existing datastore and digesting it into the new dataset]' \
 '--cache[Configure the cache datastore rather than than the configuration datastore]' \
 '--overwrite[Overwrite existing values without confirmation]' \
+'--dry[Replicate the existing backend to new, but don'\''t update the config]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':new -- The new backend to use for the datastore:(file database)' \
+'::new -- The new backend to use for the datastore:(file database)' \
 && ret=0
 ;;
 (help)

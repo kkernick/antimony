@@ -124,6 +124,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand config" -s h -l help -
 complete -c antimony -n "__fish_antimony_using_subcommand backend" -l digest -d 'Perform the operation in place by destructively removing the existing datastore and digesting it into the new dataset'
 complete -c antimony -n "__fish_antimony_using_subcommand backend" -l cache -d 'Configure the cache datastore rather than than the configuration datastore'
 complete -c antimony -n "__fish_antimony_using_subcommand backend" -l overwrite -d 'Overwrite existing values without confirmation'
+complete -c antimony -n "__fish_antimony_using_subcommand backend" -l dry -d 'Replicate the existing backend to new, but don\'t update the config'
 complete -c antimony -n "__fish_antimony_using_subcommand backend" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import config backend help" -f -a "run" -d 'Run a profile'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import config backend help" -f -a "edit" -d 'Edit an existing profile'
