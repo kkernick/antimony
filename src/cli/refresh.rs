@@ -46,31 +46,32 @@ impl cli::Run for Args {
                 }
             }
         } else if self.profile.is_none() {
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
             let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join("binaries"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join("libraries"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join("directories"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join("profiles"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join("wildcards"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
+            let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
+        }
 
-            for cache in fs::read_dir(CACHE_DIR.as_path())? {
-                let cache = cache?;
-                let instances = cache.path().join("instances");
-                if instances.exists() {
-                    for instance in fs::read_dir(&instances)? {
-                        let instance = instance?.path();
-                        match fs::read_link(&instance) {
-                            Ok(e) if !e.exists() => fs::remove_file(&instance)?,
-                            Err(_) => fs::remove_file(&instance)?,
-                            _ => {}
-                        }
+        let _ = fs::remove_dir_all(CACHE_DIR.join("binaries"));
+        let _ = fs::remove_dir_all(CACHE_DIR.join("libraries"));
+        let _ = fs::remove_dir_all(CACHE_DIR.join("directories"));
+        let _ = fs::remove_dir_all(CACHE_DIR.join("profiles"));
+        let _ = fs::remove_dir_all(CACHE_DIR.join("wildcards"));
+
+        for cache in fs::read_dir(CACHE_DIR.as_path())? {
+            let cache = cache?;
+            let instances = cache.path().join("instances");
+            if instances.exists() {
+                for instance in fs::read_dir(&instances)? {
+                    let instance = instance?.path();
+                    match fs::read_link(&instance) {
+                        Ok(e) if !e.exists() => fs::remove_file(&instance)?,
+                        Err(_) => fs::remove_file(&instance)?,
+                        _ => {}
                     }
-                    if fs::read_dir(instances)?.count() == 0 {
-                        fs::remove_dir_all(cache.path())?;
-                    }
+                }
+                if fs::read_dir(instances)?.count() == 0 {
+                    fs::remove_dir_all(cache.path())?;
                 }
             }
         }
