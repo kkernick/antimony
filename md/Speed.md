@@ -95,6 +95,26 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 >[!note]
 >These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
 
+#### Overview
+
+```chart
+type: line
+labels: [4.0.0, 3.0.0, 2.0.0, 1.0.0]
+series:
+	- title: Hot
+	  data: [0.80,0.72,1.02,1.00]
+	- title: Cold
+	  data: [0.81,0.91,0.99,1.00]
+	- title: Real
+	  data: [0.95,1.00]
+	- title: Refresh
+	  data: [1.00]
+tension: 0.5
+spanGaps: true
+xReverse: true
+```
+
+#### Hot
 
 | Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
 | --------------------- | -------- | --- | ------ | --------- | --- |
@@ -119,6 +139,7 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 | 2.6.0                 | 3.2      | 2.8 | 3.1    | 2.7       | 1.9 |
 | 3.0.0                 | 2.0      | 1.7 | 1.5    | 2.1       | 1.5 |
 | 4.0.0                 | 2.0      | 1.8 | 1.8    | 2.1       | 1.6 |
+| 4.1.1                 | 2.0      | 1.8 | 1.8    | 2.0       | 1.5 |
 ^HistoryHot
 
 ```chart
@@ -128,7 +149,10 @@ tension: 0.5
 spanGaps: true
 ```
 
-*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.0 to 2.6.0 have been recorded in the table underneath to now skew the visualization.* 
+*Note: Values for Cold Benchmarks are Normalized to 1.0.0, rounded to the nearest percentage. 2.4.0 to 2.6.0 have been recorded in the table underneath to now skew the visualization.*
+
+
+#### Cold
 
 | Profile Cold / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
 | ---------------------- | -------- | ---- | ------ | --------- | ---- |
@@ -148,6 +172,7 @@ spanGaps: true
 | 2.3.0                  | 1.08     | 0.99 | 1.04   | 1.02      | 1.03 |
 | 3.0.0                  | 0.85     | 0.84 | 1.04   | 0.90      | 0.91 |
 | 4.0.0                  | 0.75     | 1.09 | 1.00   | 0.24      | 0.95 |
+| 4.1.1                  | 0.75     | 1.05 | 1.00   | 0.26      | 1.02 |
 ^HistoryCold
 
 | Profile Cold/Release | Chromium | Zed  | Okular | Syncthing | Sh    |
@@ -165,16 +190,33 @@ tension: 0.5
 spanGaps: true
 ```
 
+#### Real
 
 | Profile Real / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
 | ---------------------- | -------- | ---- | ------ | --------- | --- |
 | 3.0.0                  | 30.6     | 18.9 | 23.3   | 10.4      | 9.0 |
 | 4.0.0                  | 29.0     | 19.9 | 24.2   | 5.1       | 9.5 |
+| 4.1.1                  | 30.0     | 20.5 | 25.6   | 5.2       | 9.6 |
 ^HistoryReal
 
 ```chart
 type: line
 id: HistoryReal
+tension: 0.5
+spanGaps: true
+```
+
+#### Refresh
+
+| Refreshing / Time | Normalized Time |
+| ----------------- | --------------- |
+| 4.0.0             | 1.00            |
+| 4.1.1             | 0.98            |
+^HistoryRefresh
+
+```chart
+type: line
+id: HistoryRefresh
 tension: 0.5
 spanGaps: true
 ```
