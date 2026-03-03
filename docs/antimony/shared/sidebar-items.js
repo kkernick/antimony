@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["direct_path","format_iter","logger","privileged","user_dir","utility"],"macro":["timer"],"mod":["config","edit","env","feature","profile","syscalls"],"struct":["StaticHash"],"type":["Map","Set"]};
+window.SIDEBAR_ITEMS = {"fn":["direct_path","format_iter","logger","privileged","user_dir","utility"],"macro":["timer"],"mod":["config","edit","env","feature","profile","store","syscalls"],"struct":["StaticHash"],"type":["Map","Set"]};

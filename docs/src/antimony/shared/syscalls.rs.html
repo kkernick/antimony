@@ -389,53 +389,51 @@
 <a href=#389 id=389 data-nosnippet>389</a>        Filter::new(Action::KillProcess)<span class="question-mark">?
 <a href=#390 id=390 data-nosnippet>390</a>    </span>};
 <a href=#391 id=391 data-nosnippet>391</a>
-<a href=#392 id=392 data-nosnippet>392</a>    filter.set_attribute(Attribute::NoNewPrivileges(<span class="bool-val">true</span>))<span class="question-mark">?</span>;
-<a href=#393 id=393 data-nosnippet>393</a>    filter.set_attribute(Attribute::ThreadSync(<span class="bool-val">true</span>))<span class="question-mark">?</span>;
-<a href=#394 id=394 data-nosnippet>394</a>    filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))<span class="question-mark">?</span>;
-<a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a>    <span class="kw">for </span>required <span class="kw">in </span>[<span class="string">"execve"</span>, <span class="string">"wait4"</span>, <span class="string">"exit"</span>] {
-<a href=#397 id=397 data-nosnippet>397</a>        syscalls.insert(Syscall::from_name(required)<span class="question-mark">?</span>.get_number());
-<a href=#398 id=398 data-nosnippet>398</a>    }
+<a href=#392 id=392 data-nosnippet>392</a>    filter.set_attribute(Attribute::ThreadSync(<span class="bool-val">true</span>))<span class="question-mark">?</span>;
+<a href=#393 id=393 data-nosnippet>393</a>
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="kw">for </span>required <span class="kw">in </span>[<span class="string">"execve"</span>, <span class="string">"wait4"</span>, <span class="string">"exit"</span>] {
+<a href=#395 id=395 data-nosnippet>395</a>        syscalls.insert(Syscall::from_name(required)<span class="question-mark">?</span>.get_number());
+<a href=#396 id=396 data-nosnippet>396</a>    }
+<a href=#397 id=397 data-nosnippet>397</a>
+<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">let </span>audit = !syscalls.contains(<span class="kw-2">&amp;</span>get_num(<span class="string">"sendmsg"</span>));
 <a href=#399 id=399 data-nosnippet>399</a>
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">let </span>audit = !syscalls.contains(<span class="kw-2">&amp;</span>get_num(<span class="string">"sendmsg"</span>));
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">let </span>syscalls = syscalls.into_iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
-<a href=#403 id=403 data-nosnippet>403</a>    <span class="macro">timer!</span>(<span class="string">"::add_rules"</span>, {
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">for </span>syscall <span class="kw">in </span><span class="kw-2">&amp;</span>syscalls {
-<a href=#405 id=405 data-nosnippet>405</a>            filter.add_rule(Action::Allow, Syscall::from_number(<span class="kw-2">*</span>syscall))<span class="question-mark">?</span>;
-<a href=#406 id=406 data-nosnippet>406</a>        }
-<a href=#407 id=407 data-nosnippet>407</a>    });
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span>fd = <span class="kw">if </span>policy == SeccompPolicy::Enforcing {
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = DefaultHasher::new();
-<a href=#411 id=411 data-nosnippet>411</a>        syscalls.hash(<span class="kw-2">&amp;mut </span>s);
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">let </span>hash = <span class="macro">format!</span>(<span class="string">"{}"</span>, s.finish());
-<a href=#413 id=413 data-nosnippet>413</a>
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="macro">debug!</span>(<span class="string">"Enforcing BPF"</span>);
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>bpf = AT_HOME
-<a href=#416 id=416 data-nosnippet>416</a>            .join(<span class="string">"cache"</span>)
-<a href=#417 id=417 data-nosnippet>417</a>            .join(<span class="string">".seccomp"</span>)
-<a href=#418 id=418 data-nosnippet>418</a>            .join(<span class="macro">format!</span>(<span class="string">"{hash}.bpf"</span>));
-<a href=#419 id=419 data-nosnippet>419</a>
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = bpf.parent()
-<a href=#421 id=421 data-nosnippet>421</a>            &amp;&amp; !parent.exists()
-<a href=#422 id=422 data-nosnippet>422</a>        {
-<a href=#423 id=423 data-nosnippet>423</a>            fs::create_dir_all(parent)<span class="question-mark">?</span>;
-<a href=#424 id=424 data-nosnippet>424</a>        }
-<a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a>        <span class="prelude-val">Some</span>(<span class="kw">if </span>!bpf.exists() {
-<a href=#427 id=427 data-nosnippet>427</a>            <span class="macro">debug!</span>(<span class="string">"Writing filter..."</span>);
-<a href=#428 id=428 data-nosnippet>428</a>            filter.write(<span class="kw-2">&amp;</span>bpf)<span class="question-mark">?
-<a href=#429 id=429 data-nosnippet>429</a>        </span>} <span class="kw">else </span>{
-<a href=#430 id=430 data-nosnippet>430</a>            File::open(<span class="kw-2">&amp;</span>bpf)<span class="question-mark">?</span>.into()
-<a href=#431 id=431 data-nosnippet>431</a>        })
-<a href=#432 id=432 data-nosnippet>432</a>    } <span class="kw">else </span>{
-<a href=#433 id=433 data-nosnippet>433</a>        <span class="prelude-val">None
-<a href=#434 id=434 data-nosnippet>434</a>    </span>};
-<a href=#435 id=435 data-nosnippet>435</a>
-<a href=#436 id=436 data-nosnippet>436</a>    <span class="kw">for </span>syscall <span class="kw">in </span>bwrap {
-<a href=#437 id=437 data-nosnippet>437</a>        filter.add_rule(Action::Allow, Syscall::from_number(syscall))<span class="question-mark">?</span>;
-<a href=#438 id=438 data-nosnippet>438</a>    }
-<a href=#439 id=439 data-nosnippet>439</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((filter, fd, audit)))
-<a href=#440 id=440 data-nosnippet>440</a>}
+<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">let </span>syscalls = syscalls.into_iter().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;();
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="macro">timer!</span>(<span class="string">"::add_rules"</span>, {
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">for </span>syscall <span class="kw">in </span><span class="kw-2">&amp;</span>syscalls {
+<a href=#403 id=403 data-nosnippet>403</a>            filter.add_rule(Action::Allow, Syscall::from_number(<span class="kw-2">*</span>syscall))<span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>        }
+<a href=#405 id=405 data-nosnippet>405</a>    });
+<a href=#406 id=406 data-nosnippet>406</a>
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">let </span>fd = <span class="kw">if </span>policy == SeccompPolicy::Enforcing {
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span><span class="kw-2">mut </span>s = DefaultHasher::new();
+<a href=#409 id=409 data-nosnippet>409</a>        syscalls.hash(<span class="kw-2">&amp;mut </span>s);
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">let </span>hash = <span class="macro">format!</span>(<span class="string">"{}"</span>, s.finish());
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">debug!</span>(<span class="string">"Enforcing BPF"</span>);
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">let </span>bpf = AT_HOME
+<a href=#414 id=414 data-nosnippet>414</a>            .join(<span class="string">"cache"</span>)
+<a href=#415 id=415 data-nosnippet>415</a>            .join(<span class="string">".seccomp"</span>)
+<a href=#416 id=416 data-nosnippet>416</a>            .join(<span class="macro">format!</span>(<span class="string">"{hash}.bpf"</span>));
+<a href=#417 id=417 data-nosnippet>417</a>
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = bpf.parent()
+<a href=#419 id=419 data-nosnippet>419</a>            &amp;&amp; !parent.exists()
+<a href=#420 id=420 data-nosnippet>420</a>        {
+<a href=#421 id=421 data-nosnippet>421</a>            fs::create_dir_all(parent)<span class="question-mark">?</span>;
+<a href=#422 id=422 data-nosnippet>422</a>        }
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="prelude-val">Some</span>(<span class="kw">if </span>!bpf.exists() {
+<a href=#425 id=425 data-nosnippet>425</a>            <span class="macro">debug!</span>(<span class="string">"Writing filter..."</span>);
+<a href=#426 id=426 data-nosnippet>426</a>            filter.write(<span class="kw-2">&amp;</span>bpf)<span class="question-mark">?
+<a href=#427 id=427 data-nosnippet>427</a>        </span>} <span class="kw">else </span>{
+<a href=#428 id=428 data-nosnippet>428</a>            File::open(<span class="kw-2">&amp;</span>bpf)<span class="question-mark">?</span>.into()
+<a href=#429 id=429 data-nosnippet>429</a>        })
+<a href=#430 id=430 data-nosnippet>430</a>    } <span class="kw">else </span>{
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="prelude-val">None
+<a href=#432 id=432 data-nosnippet>432</a>    </span>};
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">for </span>syscall <span class="kw">in </span>bwrap {
+<a href=#435 id=435 data-nosnippet>435</a>        filter.add_rule(Action::Allow, Syscall::from_number(syscall))<span class="question-mark">?</span>;
+<a href=#436 id=436 data-nosnippet>436</a>    }
+<a href=#437 id=437 data-nosnippet>437</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>((filter, fd, audit)))
+<a href=#438 id=438 data-nosnippet>438</a>}
 </code></pre></div></section></main></body></html>
