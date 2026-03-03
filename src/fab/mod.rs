@@ -103,18 +103,6 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .lines()
         .par_bridge()
         .filter_map(elf_filter)
-        .map(Cow::from)
-        .map(|library| {
-            if let Ok(results) = get_libraries(library) {
-                results
-                    .into_iter()
-                    .filter(|library| !library.starts_with(dir))
-                    .collect()
-            } else {
-                Cache::default()
-            }
-        })
-        .flatten()
         .collect();
 
     write_cache(dir, &libraries, Object::Directories)?;
