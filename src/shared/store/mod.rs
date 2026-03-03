@@ -1,3 +1,8 @@
+//! Antimony can use different backends for its file and cache store.
+//! Currently, the available options are loose files, and a SQLite database.
+//! By defining a common interface, they can be swapped out relatively easily,
+//! and migrating from one to the other.
+
 pub mod db;
 pub mod file;
 
@@ -12,6 +17,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
 use thiserror::Error;
 
+/// Initialize the system store based on the defined configuration.
 pub fn init_system(store: Store) -> Box<dyn BackingStore> {
     match store {
         Store::Database => Box::new(
@@ -24,6 +30,7 @@ pub fn init_system(store: Store) -> Box<dyn BackingStore> {
     }
 }
 
+/// Initialize the user store based on the defined configuration.
 pub fn init_user(store: Store) -> Box<dyn BackingStore> {
     match store {
         Store::Database => Box::new(
@@ -36,6 +43,7 @@ pub fn init_user(store: Store) -> Box<dyn BackingStore> {
     }
 }
 
+/// Initialize the cache store based on the defined configuration.
 pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
     match store {
         Store::Database => {
@@ -54,6 +62,8 @@ pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
     }
 }
 
+// Each thread gets its own. Useful for databases, but does nothing
+// for files.
 thread_local! {
     pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
         RefCell::new(init_system(CONFIG_FILE.config_store()));
@@ -65,6 +75,7 @@ thread_local! {
         RefCell::new(init_cache(CONFIG_FILE.cache_store()));
 }
 
+/// Which store is in use for a given backend.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Copy, Clone, ValueEnum, Default)]
 pub enum Store {
     #[default]
@@ -72,6 +83,7 @@ pub enum Store {
     Database,
 }
 
+/// Store errors
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Failed to initialize {0} store")]
@@ -87,6 +99,7 @@ pub enum Error {
     Errno(#[from] errno::Errno),
 }
 
+/// Each Object, for iteration.
 pub static OBJECTS: [Object; 6] = [
     Object::Profile,
     Object::Feature,
@@ -96,6 +109,7 @@ pub static OBJECTS: [Object; 6] = [
     Object::Binaries,
 ];
 
+/// The kinds of things a backend can store.
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Object {
     Profile,
@@ -123,17 +137,28 @@ impl fmt::Display for Object {
     }
 }
 
+/// The abstraction layer that each backend must implement. This simply defines
+/// an interface that Antimony can use to read/write to a backend.
 pub trait BackingStore {
+    /// Fetch an object as a string.
     fn fetch(&self, name: &str, object: Object) -> Result<String, Error>;
+
+    /// Fetch an object as raw bytes.
     fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, Error>;
 
+    /// Get all objects of a certain type
     fn get(&self, object: Object) -> Result<Vec<String>, Error>;
 
+    /// Check if an object exists.
     fn exists(&self, name: &str, object: Object) -> bool;
 
+    /// Store a string into the data-store with the given name.
     fn store(&self, name: &str, object: Object, content: &str) -> Result<(), Error>;
+
+    /// Store bytes into the data-store with the given name.
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), Error>;
 
+    /// Remove an object from the data-store
     fn remove(&self, name: &str, object: Object) -> Result<(), Error>;
 }
 
@@ -176,6 +201,7 @@ pub fn load<
     Ok(toml::from_str(&str)?)
 }
 
+/// Export the entire store into memory.
 pub fn export(store: &dyn BackingStore) -> HashMap<Object, Vec<String>> {
     let mut map = HashMap::new();
     for object in OBJECTS {

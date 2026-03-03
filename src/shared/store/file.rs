@@ -1,3 +1,9 @@
+//! The File Backend.
+//! This is the default Backend for Antimony, where Configurations are stored as files
+//! in $AT_HOME/config, and Caches are stored in $AT_HOME/cache.
+//! This Backend is best for fast disks.
+
+use crate::shared::store::Object;
 use std::{
     fs::{self, File},
     io::Write,
@@ -5,25 +11,28 @@ use std::{
 };
 use user::as_effective;
 
-use crate::shared::store::Object;
-
+/// The File Store
 pub struct Store {
     path: String,
     extension: &'static str,
 }
 impl Store {
+    
+    /// Construct a new File Store
     pub fn new(path: &str, extension: &'static str) -> Self {
         Self {
             path: path.to_owned(),
             extension,
         }
     }
-
+    
+    /// Get the path to an object
     fn path(&self, name: &str, object: Object) -> PathBuf {
         PathBuf::from(format!("{}/{}/{}", self.path, object.name(), name))
             .with_extension(self.extension)
     }
 
+    /// Get the path of a category of objects
     fn root_path(&self, object: Object) -> PathBuf {
         PathBuf::from(format!("{}/{}", self.path, object.name()))
     }

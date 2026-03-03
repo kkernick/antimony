@@ -13,6 +13,11 @@
 # to provide an absolute path if the value can be resolved).
 # path = "/path/to/app"
 
+# Where to execute the application from within the sandbox. Usually, you won't need
+# to modify this, but some applications expect to be run from a specific location,
+# and use relative paths.
+# dir = /home/antimony
+
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
 # the desktop file installed in /usr/share/applications, which in many cases is
@@ -188,6 +193,9 @@
 # passthrough = "rw"
 # passthrough = "rx"
 #
+# Locations to mount a tmpfs in the sandbox.
+# temp = []
+#
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
 # [files.user]
@@ -237,44 +245,47 @@
 # [configuration.clean]
 # home.policy = "None"
 
-# Hooks are external commands that are run before/during/after the sandbox. They can be 
+# Hooks are external commands that are run before/during/after the sandbox. They can be
 # used to run dependencies, setup the environment, and perform additional cleanup.
 # [hooks]
-# 
+#
+# Whether to inherit hooks from the default/parent (For configurations).
+# inherits = false
+#
 # A pre-hook is run before the sandbox starts.
 # [[pre]]
-# 
+#
 # An explicit path to a binary to execute. This is run
 # under the regular user.
 # path = "/path/to/script"
-# 
+#
 # The contents of a shell script to execute instead of a
 # path. This is interpreted by bash as the regular user.
 # If a hook defines both path and content, the path is
 # used.
 # content = "echo 'Hello, world!'"
-# 
+#
 # Arguments for the hook rx
 # args = []
-# 
-# Whether to attach the pre-hook to the sandbox. 
+#
+# Whether to attach the pre-hook to the sandbox.
 # By default, Antimony will wait until all
 # pre-hooks have executed before running the sandbox.
 # If attach is set to true, the sandbox will run
 # alongside the hook.
 # attach = false
-# 
-# By default, the hook does not get provided the 
+#
+# By default, the hook does not get provided the
 # environment (Such as PATH, HOME, etc). Regardless
 # of this setting, the hook is provided the following:
 #   1. ANTIMONY_NAME: The name of the profile
 #   2. ANTIMONY_CACHE: The directory to the SOF
 #   3. ANTIMONY_HOME: The path to the home, if it exists.
 # env = false
-# 
+#
 # By default, a failed hook will abort sandbox startup.
 # can_fail = false
-# 
+#
 # Post hooks run after the sandbox has finished, but before
 # Antimony performs its own cleanup. Syntactically, they are
 # identical to pre-hooks, but cannot be attached for obvious
@@ -285,7 +296,7 @@
 # args = []
 # env = false
 # can_fail = false
-# 
+#
 # The parent hook (Notice, this is a single value, not a list),
 # is a specialized Pre-Hook that takes ownership of the sandbox.
 # It operates identically to an attach-pre-hook, but with the change
@@ -293,7 +304,7 @@
 # the parent remains alive. Contrast with a regular pre-hook, and
 # when an attached hook dies, the sandbox remains, whereas the sandbox
 # dying tears the hooks down with it.
-# 
+#
 # You can only have a single parent hook defined for a profile.
 # [parent]
 # path = "/path/to/hook"

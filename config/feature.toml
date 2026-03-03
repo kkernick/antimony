@@ -124,6 +124,9 @@ description = ""
 # passthrough = "ro"
 # passthrough = "rw"
 # passthrough = "rx"
+# 
+# Locations to mount a tmpfs in the sandbox.
+# temp = []
 #
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
