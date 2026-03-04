@@ -1,5 +1,5 @@
 use crate::{
-    fab::{localize_path, resolve_env},
+    fab::{localize_path, resolve},
     shared::{
         direct_path,
         profile::{
@@ -73,7 +73,7 @@ pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) ->
             && let Some(parent) = path.parent()
         {
             fs::create_dir_all(parent)?;
-            let contents = resolve_env(Cow::Borrowed(&contents));
+            let contents = resolve(Cow::Borrowed(&contents));
             fs::write(&path, contents.as_ref())?;
         }
 

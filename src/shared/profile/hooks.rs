@@ -1,4 +1,4 @@
-use crate::{fab::resolve_env, shared::profile::append};
+use crate::{fab::resolve, shared::profile::append};
 use console::style;
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
@@ -149,7 +149,7 @@ impl Hook {
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
         let handle = if let Some(path) = self.path {
-            Spawner::new(resolve_env(Cow::Owned(path)))?
+            Spawner::new(resolve(Cow::Owned(path)))?
         } else if let Some(content) = self.content {
             Spawner::abs("/usr/bin/bash").args(["-c", content.as_str()])?
         } else {

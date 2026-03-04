@@ -4,7 +4,7 @@ use anyhow::Result;
 #[test]
 fn test() -> Result<()> {
     let cmd = antimony::cli::run::Args {
-        profile: "sh".to_string(),
+        profile: "/usr/bin/sh".to_string(),
         passthrough: Some(
             vec!["-c", "echo", "Hello, world!"]
                 .into_iter()
