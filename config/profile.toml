@@ -18,6 +18,22 @@
 # and use relative paths.
 # dir = /home/antimony
 
+# Lockdown mode offers an enhanced security barrier from typical operations by running sandboxes
+# in an isolated, permissive-less environment under a dedicated lockdown user. This differs from
+# typical construction, in which the sandbox is run underneath the user--and has full access to
+# user files. In lockdown mode, user files are passed through FDs, and the sandbox cannot make
+# changes to the underlying source.
+#
+# Lockdown mode offers an additional layer of defense for applications that do not use user files.
+# This includes everything in $HOME, and everything in /run/$UID (IE the wayland socket). Because
+# it is run under a separate user, the sandbox home is also separated from the user home and placed
+# in /usr/share/antimony/lockdown.
+#
+# The threat model for this setting is to combat a potential sandbox escape. Under normal operations,
+# such an exploit would allow unfettered access to the user's home, which constitutes a privacy risk.
+# Under lockdown, the attack would be thwarted, as the user only has access to /usr/share/antimony/lockdown.
+# lockdown = false
+
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
 # the desktop file installed in /usr/share/applications, which in many cases is

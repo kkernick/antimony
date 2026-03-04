@@ -265,7 +265,10 @@ pub fn localize_path(file: &str, home: bool) -> Result<(Option<Cow<'_, str>>, St
         (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
     } else {
         let mut resolved = resolve(Cow::Borrowed(file));
-        if home && !resolved.starts_with("/home") {
+        if home
+            && !resolved.starts_with("/home")
+            && (!resolved.starts_with('/') || !as_real!({ Path::new(resolved.as_ref()).exists() })?)
+        {
             resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
         }
         (resolved.clone(), resolved)

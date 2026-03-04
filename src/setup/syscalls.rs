@@ -15,9 +15,10 @@ pub fn install_filter(
     binaries: &Set<String>,
     main: &Spawner,
     monitor_parent: &Spawner,
+    lockdown: bool,
 ) -> Result<()> {
     // Get our syscalls for this process.
-    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, binaries)? {
+    if let Some((filter, fd, audit)) = syscalls::new(name, instance, policy, binaries, lockdown)? {
         // Attach it.
         main.seccomp_i(filter);
 
@@ -31,6 +32,11 @@ pub fn install_filter(
         if monitor_parent.get_associate("monitor").is_none()
             && (policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying)
         {
+            if lockdown {
+                return Err(anyhow::anyhow!(
+                    "SECCOMP monitoring is disallowed in Lockdown. To use a SECCOMP policy, you must monitor without Lockdown, then use Enforcing."
+                ));
+            }
             debug!("Spawning SECCOMP Monitor");
             let handle = Spawner::abs(utility("monitor"))
                 .name("monitor")
@@ -66,9 +72,12 @@ pub fn install_filter(
 pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     debug!("Setting up SECCOMP");
     // SECCOMP uses the elf binaries populated by the binary fabricator.
-    let seccomp = {
+    let (seccomp, lockdown) = {
         let lock = args.profile.lock();
-        lock.seccomp.unwrap_or_default()
+        (
+            lock.seccomp.unwrap_or_default(),
+            lock.lockdown.unwrap_or(false),
+        )
     };
 
     match seccomp {
@@ -83,6 +92,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
                     binaries,
                     &args.handle,
                     &args.handle,
+                    lockdown,
                 )?;
             }
         }

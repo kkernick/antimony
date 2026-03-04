@@ -119,6 +119,9 @@ pub struct Profile {
     /// The path to start within inside the sandbox.
     pub dir: Option<String>,
 
+    /// Run in lockdown mode.
+    pub lockdown: Option<bool>,
+
     /// The ID of the application is a unique identifier that, when not defined,
     /// defaults to the name of the binary. It should be the name of the associated
     /// .desktop file installed in /usr/share/applications used to launch the
@@ -236,6 +239,7 @@ impl Profile {
         let mut profile = Self {
             path: args.path.take(),
             dir: args.dir.take(),
+            lockdown: args.lockdown.take(),
             seccomp: args.seccomp.take(),
             new_privileges: args.new_privileges.take(),
             ..Default::default()
@@ -444,6 +448,10 @@ impl Profile {
 
         if self.dir.is_none() {
             self.dir = profile.dir;
+        }
+
+        if self.lockdown.is_none() {
+            self.lockdown = profile.lockdown;
         }
 
         if self.seccomp.is_none() {

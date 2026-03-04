@@ -251,6 +251,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                         &Set::default(),
                         &proxy,
                         &args.handle,
+                        false,
                     )?
                 })
             }

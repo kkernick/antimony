@@ -13,6 +13,7 @@ use crate::{
         config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
+        utility,
     },
     timer,
 };
@@ -193,7 +194,13 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
 
     // Start the command.
     #[rustfmt::skip]
-    let handle = Spawner::abs("/usr/bin/bwrap")
+    let handle = Spawner::abs(
+            if profile.lockdown.unwrap_or(false) {
+                utility("lockdown")
+            } else {
+                "/usr/bin/bwrap".to_string()
+            }
+        )
         .name(&args.profile)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",

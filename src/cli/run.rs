@@ -54,6 +54,10 @@ pub struct Args {
     #[arg(long)]
     pub dir: Option<String>,
 
+    /// Run in lockdown mode
+    #[arg(short, long)]
+    pub lockdown: Option<bool>,
+
     /// Use a configuration within the profile.
     #[arg(short, long)]
     pub config: Option<String>,
@@ -253,6 +257,21 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         {
             debug!("Waiting for document portal");
             wait_for_doc();
+        }
+
+        if info.profile.lockdown.unwrap_or(false) {
+            log::trace!("Configuring lockdown");
+            let fds: Vec<String> = info
+                .handle
+                .get_fds()
+                .into_iter()
+                .map(|raw| format!("{raw:?}"))
+                .collect();
+            info.handle.env_i("FDS", fds.join(","))?;
+
+            // We run as Antimony, since Lockdown takes over.
+            info.handle.mode_i(user::Mode::Effective);
+            info.handle.new_privileges_i(true);
         }
 
         if let Some(hooks) = &mut info.profile.hooks {

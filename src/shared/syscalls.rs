@@ -375,6 +375,7 @@ pub fn new(
     instance: &str,
     policy: SeccompPolicy,
     binaries: &Set<String>,
+    lockdown: bool,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
@@ -390,6 +391,12 @@ pub fn new(
     };
 
     filter.set_attribute(Attribute::ThreadSync(true))?;
+
+    // Bubblewrap already sets NoNewPrivileges anyways, so this is mostly redundant.
+    // Lockdown runs SetUID, so it necessarily needs new privileges.
+    if lockdown {
+        filter.set_attribute(Attribute::NoNewPrivileges(false))?;
+    }
 
     for required in ["execve", "wait4", "exit"] {
         syscalls.insert(Syscall::from_name(required)?.get_number());

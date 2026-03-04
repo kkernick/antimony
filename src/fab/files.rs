@@ -30,26 +30,30 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
+    let lockdown = info.profile.lock().lockdown.unwrap_or(false);
+
     if let Some(files) = &info.profile.lock().files {
         for temp in &files.temp {
             info.handle.args_i(["--tmpfs", temp])?;
         }
 
-        let user_files = &files.user;
-        for mode in FILE_MODES {
-            if let Some(files) = user_files.get(&mode) {
-                files
-                    .into_par_iter()
-                    .try_for_each(|file| {
-                        localize(
-                            mode,
-                            &file.replace("~", HOME.as_str()),
-                            true,
-                            info.handle,
-                            true,
-                        )
-                    })
-                    .ok();
+        if !lockdown {
+            let user_files = &files.user;
+            for mode in FILE_MODES {
+                if let Some(files) = user_files.get(&mode) {
+                    files
+                        .into_par_iter()
+                        .try_for_each(|file| {
+                            localize(
+                                mode,
+                                &file.replace("~", HOME.as_str()),
+                                true,
+                                info.handle,
+                                true,
+                            )
+                        })
+                        .ok();
+                }
             }
         }
 

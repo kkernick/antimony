@@ -8,6 +8,10 @@ use std::{
 use user::as_real;
 
 pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
+    if args.profile.lock().lockdown.unwrap_or(false) {
+        return Ok(None);
+    }
+
     if let Some(home) = &args.profile.lock().home
         && let Some(policy) = home.policy
         && policy != HomePolicy::None

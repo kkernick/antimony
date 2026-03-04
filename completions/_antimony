@@ -32,6 +32,8 @@ _antimony() {
 _arguments "${_arguments_options[@]}" : \
 '--path=[The path to the binary]:PATH:_default' \
 '--dir=[The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory]:DIR:_default' \
+'-l+[Run in lockdown mode]:LOCKDOWN:(true false)' \
+'--lockdown=[Run in lockdown mode]:LOCKDOWN:(true false)' \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \

@@ -31,7 +31,7 @@ sudo cp --remove-destination -v "$DIR/antimony-monitor" "/usr/share/antimony/uti
 sudo cp --remove-destination -v "$DIR/antimony-dumper" "/usr/share/antimony/utilities/antimony-dumper"
 sudo cp --remove-destination -v "$DIR/antimony-open" "/usr/share/antimony/utilities/antimony-open"
 sudo cp --remove-destination -v "$DIR/antimony-tracer" "/usr/share/antimony/utilities/antimony-tracer"
-
+sudo cp --remove-destination -v "$DIR/antimony-lockdown" "/usr/share/antimony/utilities/antimony-lockdown"
 sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/antimony-notify"
 
 echo "Setting SetUID"
@@ -48,6 +48,11 @@ if [[ ! -d /usr/share/antimony/config ]]; then
   sudo mkdir /usr/share/antimony/config
 fi
 
+echo "Setting up lockdown"
+if [[ ! -d /usr/share/antimony/lockdown ]]; then
+  sudo mkdir /usr/share/antimony/lockdown
+fi
+
 sudo cp -vr $ROOT/config/features /usr/share/antimony/config
 sudo cp -vr $ROOT/config/profiles /usr/share/antimony/config
 sudo cp $ROOT/config/default.toml /usr/share/antimony/config/profiles
@@ -57,8 +62,15 @@ sudo cp $ROOT/config/profile.toml /usr/share/antimony/config
 sudo cp $ROOT/config/config.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
+
+
 sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
 sudo setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
+
+sudo chown -R antimony-lockdown:antimony-lockdown /usr/share/antimony/lockdown
+sudo chmod 700 /usr/share/antimony/lockdown
+sudo chown antimony-lockdown:antimony-lockdown /usr/share/antimony/utilities/antimony-lockdown
+sudo chmod ug+s /usr/share/antimony/utilities/antimony-lockdown
 
 "${DIR}/antimony_completions"
 sudo cp $ROOT/completions/antimony.bash /usr/share/bash-completion/completions

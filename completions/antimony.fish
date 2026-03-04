@@ -39,6 +39,8 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "backend" -d 'Mana
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l dir -d 'The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -s l -l lockdown -d 'Run in lockdown mode' -r -f -a "true\t''
+false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d 'Conflicting features' -r

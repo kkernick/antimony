@@ -5,7 +5,7 @@ files.resources.ro = [
   "/usr/share/X11/xkb",
 ]
 
-files.platform.ro = [
+files.user.ro = [
   "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY",
 ]
 

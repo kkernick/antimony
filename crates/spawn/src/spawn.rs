@@ -10,6 +10,8 @@ use nix::{
     unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork},
 };
 use parking_lot::Mutex;
+#[cfg(feature = "fd")]
+use std::os::fd::RawFd;
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
@@ -540,6 +542,12 @@ impl<'a> Spawner {
         S: Into<OwnedFd>,
     {
         self.fds.lock().extend(fds.into_iter().map(Into::into));
+    }
+
+    /// Get all currently stored FDs as RawFDs
+    #[cfg(feature = "fd")]
+    pub fn get_fds(&self) -> Vec<RawFd> {
+        self.fds.lock().iter().map(|fd| fd.as_raw_fd()).collect()
     }
 
     /// Move an iterator of arguments to the `Spawner` in-place.
