@@ -102,12 +102,12 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         let profile_libraries = &info.profile.lock().libraries;
         if profile_libraries.contains("/usr/lib") {
             #[rustfmt::skip]
-        info.handle.args_i([
-            "--ro-bind", "/usr/lib", "/usr/lib",
-            "--ro-bind", "/usr/lib64", "/usr/lib64",
-            "--symlink", "/usr/lib", "/lib",
-            "--symlink", "/usr/lib64", "/lib64",
-        ])?;
+            info.handle.args_i([
+                "--ro-bind", "/usr/lib", "/usr/lib",
+                "--ro-bind", "/usr/lib64", "/usr/lib64",
+                "--symlink", "/usr/lib", "/lib",
+                "--symlink", "/usr/lib64", "/lib64",
+            ])?;
             return Ok(());
         }
     }

@@ -88,6 +88,9 @@ pub struct Cli {
 }
 
 fn main() -> Result<()> {
+    // Try and init the logger
+    let _ = notify::init();
+
     // Set a new AT_HOME in temp.
     unsafe { env::set_var("AT_HOME", "/tmp/antimony-spawn") };
 

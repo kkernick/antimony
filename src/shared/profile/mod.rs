@@ -393,12 +393,6 @@ impl Profile {
             }
         }
 
-        // Try and lookup the path. If it doesn't work, then the corresponding application
-        // isn't installed. This is fine, as long as the user doesn't try and run the profile.
-        if !name.ends_with(".toml") && profile.path.is_none() {
-            profile.path = Some(which::which(&profile.app_path(name))?.to_string());
-        }
-
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
         if let Some(parent) = cache.parent()

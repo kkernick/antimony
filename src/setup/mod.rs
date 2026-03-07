@@ -64,25 +64,27 @@ pub struct Info {
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
 pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
-    let profile = timer!("::profile", {
-        let profile = match Profile::new(&name, args.config.take()) {
-            Ok(profile) => profile,
-            Err(e) => {
-                debug!("No profile: {name}: {e}, assuming binary");
-                Profile {
-                    path: Some(which::which(&name)?.to_string()),
-                    ..Default::default()
-                }
+    let mut profile = match Profile::new(&name, args.config.take()) {
+        Ok(profile) => profile,
+        Err(e) => {
+            debug!("No profile: {name}: {e}, assuming binary");
+            Profile {
+                path: Some(which::which(&name)?.to_string()),
+                ..Default::default()
             }
-        };
-
-        if !CONFIG_FILE.system_mode() {
-            let cmd_profile = Profile::from_args(args)?;
-            profile.base(cmd_profile)
-        } else {
-            Ok(profile)
         }
-    })?;
+    };
+
+    if !CONFIG_FILE.system_mode() {
+        let cmd_profile = Profile::from_args(args)?;
+        profile = profile.base(cmd_profile)?
+    }
+    if !name.ends_with(".toml") && profile.path.is_none() {
+        profile.path = Some(which::which(&profile.app_path(&name))?.to_string());
+    }
+
+    // Try and lookup the path. If it doesn't work, then the corresponding application
+    // isn't installed. This is fine, as long as the user doesn't try and run the profile.
 
     let hash = profile.hash_str()?;
     info!("Profile Hash: {hash}");
