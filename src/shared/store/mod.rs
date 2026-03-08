@@ -211,3 +211,51 @@ pub fn export(store: &dyn BackingStore) -> HashMap<Object, Vec<String>> {
     }
     map
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::{
+        env::{AT_CONFIG, AT_HOME, PWD},
+        store::{BackingStore, Object, db, file},
+    };
+
+    fn backend_test(store: Box<dyn BackingStore>) {
+        let object = Object::Profile;
+        for profile in store.get(object).expect("Failed to get profiles") {
+            store
+                .fetch(&profile, object)
+                .expect("Failed to get profile");
+        }
+
+        let content = "This is a test!";
+        store
+            .store("test", object, content)
+            .expect("Failed to store profile");
+
+        assert!(store.exists("test", object));
+
+        assert!(store.fetch("test", object).expect("Failed to get profile") == content);
+
+        store
+            .remove("test", object)
+            .expect("Failed to delete profile");
+        assert!(!store.exists("test", object));
+    }
+
+    #[test]
+    fn db_backend() {
+        if AT_HOME.as_path() == PWD.as_path() && PWD.join("db").exists() {
+            let store =
+                db::Store::new(db::Database::System).expect("Failed to initialize Database Store");
+            backend_test(Box::new(store));
+        }
+    }
+
+    #[test]
+    fn file_backend() {
+        if AT_HOME.as_path() == PWD.as_path() && PWD.join("config").exists() {
+            let store = file::Store::new(&format!("{}", AT_CONFIG.display()), "toml");
+            backend_test(Box::new(store));
+        }
+    }
+}
