@@ -105,6 +105,10 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub inspect: bool,
 
+    /// Give Antimony SetUID like in a system installation.
+    #[arg(long, default_value_t = false)]
+    pub system: bool,
+
     /// Where to point AT_HOME. If not set, defaults to the repository root.
     #[arg(long)]
     pub home: Option<String>,
@@ -176,8 +180,10 @@ fn main() -> Result<()> {
 
     if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
-        unsafe { env::set_var("AT_HOME", cli.home.unwrap_or(root.to_string())) }
-        unsafe { env::set_var("AT_FORCE_TEMP", "1") }
+        if !cli.system {
+            unsafe { env::set_var("AT_HOME", cli.home.unwrap_or(root.to_string())) }
+            unsafe { env::set_var("AT_FORCE_TEMP", "1") }
+        }
     }
 
     let term = Arc::new(AtomicBool::new(false));
@@ -200,7 +206,7 @@ fn main() -> Result<()> {
             .wait()?;
     }
 
-    let result = || -> Result<()> {
+    let antimony = || -> Result<String> {
         let benchmarks =
             cli.bench
                 .unwrap_or(vec![Benchmark::Cold, Benchmark::Hot, Benchmark::Real]);
@@ -228,17 +234,68 @@ fn main() -> Result<()> {
             format!("{root}/target")
         };
 
-        let antimony = if let Some(recipe) = cli.recipe {
+        let antimony = if let Some(recipe) = &cli.recipe {
             println!("Building recipe");
             let antimony = Spawner::abs(format!("{target_dir}/debug/antimony_build"))
-                .args(["--recipe", &recipe])?
+                .args(["--recipe", recipe])?
                 .args(cli.builder_args.unwrap_or_default())?
                 .preserve_env(true)
                 .output(spawn::StreamMode::Pipe)
                 .new_privileges(true)
                 .spawn()?
                 .output_all()?;
-            antimony[..antimony.len() - 1].to_string() + "/antimony"
+            let antimony = antimony[..antimony.len() - 1].to_string() + "/antimony";
+            if cli.system {
+                Spawner::abs("/usr/bin/sudo")
+                    .args(["chown", "antimony:antimony", &antimony])?
+                    .new_privileges(true)
+                    .spawn()?
+                    .wait()?;
+
+                Spawner::abs("/usr/bin/sudo")
+                    .args(["chmod", "ug+s", &antimony])?
+                    .new_privileges(true)
+                    .spawn()?
+                    .wait()?;
+
+                Spawner::abs("/usr/bin/sudo")
+                    .args([
+                        "mount",
+                        "--bind",
+                        &format!("{root}/config"),
+                        "/usr/share/antimony/config",
+                    ])?
+                    .new_privileges(true)
+                    .spawn()?
+                    .wait()?;
+
+                if !Path::new("/usr/share/antimony/profiles").exists() {
+                    Spawner::abs("/usr/bin/sudo")
+                        .args([
+                            "ln",
+                            "-s",
+                            "/usr/share/antimony/config/profiles",
+                            "/usr/share/antimony/profiles",
+                        ])?
+                        .new_privileges(true)
+                        .spawn()?
+                        .wait()?;
+                }
+
+                if !Path::new("/usr/share/antimony/features").exists() {
+                    Spawner::abs("/usr/bin/sudo")
+                        .args([
+                            "ln",
+                            "-s",
+                            "/usr/share/antimony/config/features",
+                            "/usr/share/antimony/features",
+                        ])?
+                        .new_privileges(true)
+                        .spawn()?
+                        .wait()?;
+                }
+            }
+            antimony
         } else {
             "antimony".to_string()
         };
@@ -257,10 +314,29 @@ fn main() -> Result<()> {
             cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
 
             if benchmarks.contains(&Benchmark::Cold) {
-                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry", "--hard"]
+                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
                     .into_iter()
                     .map(String::from)
                     .collect();
+
+                let hard = match &cli.checkout {
+                    Some(version) => match version.strip_prefix("tags/") {
+                        Some(version) => {
+                            let split = version
+                                .split(".")
+                                .filter_map(|f| f.parse::<u32>().ok())
+                                .collect::<Vec<_>>();
+                            (split[0] > 2) || (split[0] == 2 && split[1] >= 1)
+                        }
+                        None => true,
+                    },
+                    None => true,
+                };
+
+                if hard {
+                    command.push("--hard".to_string());
+                }
+
                 if let Some(add) = &cli.antimony_args {
                     command.push("--".to_string());
                     command.extend(add.clone());
@@ -345,7 +421,7 @@ fn main() -> Result<()> {
                 .spawn()?
                 .wait()?;
         }
-        Ok(())
+        Ok(antimony)
     }();
 
     if cli.checkout.is_some() {
@@ -368,5 +444,37 @@ fn main() -> Result<()> {
             .wait()?;
     }
 
-    result
+    if cli.system {
+        Spawner::abs("/usr/bin/sudo")
+            .args(["umount", "/usr/share/antimony/config"])?
+            .new_privileges(true)
+            .spawn()?
+            .wait()?;
+
+        if Path::new("/usr/share/antimony/profiles").is_symlink() {
+            Spawner::abs("/usr/bin/sudo")
+                .args(["rm", "/usr/share/antimony/profiles"])?
+                .new_privileges(true)
+                .spawn()?
+                .wait()?;
+        }
+
+        if Path::new("/usr/share/antimony/features").is_symlink() {
+            Spawner::abs("/usr/bin/sudo")
+                .args(["rm", "/usr/share/antimony/features"])?
+                .new_privileges(true)
+                .spawn()?
+                .wait()?;
+        }
+    }
+
+    let antimony = antimony?;
+    if cli.system {
+        Spawner::abs("/usr/bin/sudo")
+            .args(["rm", &antimony])?
+            .new_privileges(true)
+            .spawn()?
+            .wait()?;
+    }
+    Ok(())
 }

@@ -5,13 +5,13 @@
 
 pub mod db;
 pub mod file;
+pub mod mem;
 
 use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
 use clap::ValueEnum;
-use log::debug;
 use nix::errno;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
@@ -27,6 +27,7 @@ pub fn init_system(store: Store) -> Box<dyn BackingStore> {
             &format!("{}", AT_CONFIG.display()),
             "toml",
         )),
+        Store::Memory => Box::new(mem::Store::new("system")),
     }
 }
 
@@ -40,25 +41,21 @@ pub fn init_user(store: Store) -> Box<dyn BackingStore> {
             &format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()),
             "toml",
         )),
+        Store::Memory => Box::new(mem::Store::new("user")),
     }
 }
 
 /// Initialize the cache store based on the defined configuration.
 pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
     match store {
-        Store::Database => {
-            debug!("Using Database for Cache Backend");
-            Box::new(
-                db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
-            )
-        }
-        Store::File => {
-            debug!("Using Files for Cache Backend");
-            Box::new(file::Store::new(
-                &format!("{}", CACHE_DIR.display()),
-                "cache",
-            ))
-        }
+        Store::Database => Box::new(
+            db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
+        ),
+        Store::File => Box::new(file::Store::new(
+            &format!("{}", CACHE_DIR.display()),
+            "cache",
+        )),
+        Store::Memory => Box::new(mem::Store::new("cache")),
     }
 }
 
@@ -66,13 +63,13 @@ pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
 // for files.
 thread_local! {
     pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_system(CONFIG_FILE.config_store()));
+        RefCell::new(init_system(CONFIG_FILE.lock().config_store()));
 
     pub static USER_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_user(CONFIG_FILE.config_store()));
+        RefCell::new(init_user(CONFIG_FILE.lock().config_store()));
 
     pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_cache(CONFIG_FILE.cache_store()));
+        RefCell::new(init_cache(CONFIG_FILE.lock().cache_store()));
 }
 
 /// Which store is in use for a given backend.
@@ -81,6 +78,7 @@ pub enum Store {
     #[default]
     File,
     Database,
+    Memory,
 }
 
 /// Store errors
@@ -88,6 +86,9 @@ pub enum Store {
 pub enum Error {
     #[error("Failed to initialize {0} store")]
     Init(&'static str),
+
+    #[error("Memory Backend Error: {0}")]
+    Mem(&'static str),
 
     #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
@@ -97,6 +98,9 @@ pub enum Error {
 
     #[error("Failed to change user: {0}")]
     Errno(#[from] errno::Errno),
+
+    #[error("Pulling raw bytes from this backend cannot be returned as a string: {0}")]
+    UTF(#[from] std::string::FromUtf8Error),
 }
 
 /// Each Object, for iteration.
@@ -110,7 +114,7 @@ pub static OBJECTS: [Object; 6] = [
 ];
 
 /// The kinds of things a backend can store.
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub enum Object {
     Profile,
     Feature,
@@ -140,6 +144,9 @@ impl fmt::Display for Object {
 /// The abstraction layer that each backend must implement. This simply defines
 /// an interface that Antimony can use to read/write to a backend.
 pub trait BackingStore {
+    /// Whether the store is resident to the instance, or is non-memory backed.
+    fn resident(&self) -> bool;
+
     /// Fetch an object as a string.
     fn fetch(&self, name: &str, object: Object) -> Result<String, Error>;
 
@@ -158,6 +165,8 @@ pub trait BackingStore {
     /// Store bytes into the data-store with the given name.
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), Error>;
 
+    fn bulk(&mut self, entries: HashMap<String, Vec<u8>>, object: Object) -> Result<(), Error>;
+
     /// Remove an object from the data-store
     fn remove(&self, name: &str, object: Object) -> Result<(), Error>;
 }
@@ -172,7 +181,7 @@ pub fn load<
     def: bool,
 ) -> Result<T, E> {
     if def && name == "default" {
-        if !CONFIG_FILE.system_mode()
+        if !CONFIG_FILE.lock().system_mode()
             && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
         {
             return Ok(toml::from_str::<T>(&str)?);
@@ -191,7 +200,7 @@ pub fn load<
         }
     }
 
-    if !CONFIG_FILE.system_mode()
+    if !CONFIG_FILE.lock().system_mode()
         && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
     {
         return Ok(toml::from_str(&str)?);

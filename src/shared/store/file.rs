@@ -5,6 +5,7 @@
 
 use crate::shared::store::Object;
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::Write,
     path::PathBuf,
@@ -17,7 +18,6 @@ pub struct Store {
     extension: &'static str,
 }
 impl Store {
-    
     /// Construct a new File Store
     pub fn new(path: &str, extension: &'static str) -> Self {
         Self {
@@ -25,7 +25,7 @@ impl Store {
             extension,
         }
     }
-    
+
     /// Get the path to an object
     fn path(&self, name: &str, object: Object) -> PathBuf {
         PathBuf::from(format!("{}/{}/{}", self.path, object.name(), name))
@@ -38,6 +38,10 @@ impl Store {
     }
 }
 impl super::BackingStore for Store {
+    fn resident(&self) -> bool {
+        false
+    }
+
     fn fetch(&self, name: &str, object: Object) -> Result<String, super::Error> {
         Ok(fs::read_to_string(self.path(name, object))?)
     }
@@ -59,6 +63,16 @@ impl super::BackingStore for Store {
 
     fn store(&self, name: &str, object: Object, content: &str) -> Result<(), super::Error> {
         self.dump(name, object, content.as_bytes())
+    }
+
+    fn bulk(
+        &mut self,
+        entries: HashMap<String, Vec<u8>>,
+        object: super::Object,
+    ) -> Result<(), super::Error> {
+        entries
+            .into_iter()
+            .try_for_each(|(name, content)| self.dump(&name, object, &content))
     }
 
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), super::Error> {

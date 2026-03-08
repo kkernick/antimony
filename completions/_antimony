@@ -173,7 +173,7 @@ _arguments "${_arguments_options[@]}" : \
 '--dry[Replicate the existing backend to new, but don'\''t update the config]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::new -- The new backend to use for the datastore:(file database)' \
+'::new -- The new backend to use for the datastore:(file database memory)' \
 && ret=0
 ;;
 (help)

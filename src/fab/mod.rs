@@ -215,7 +215,11 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
                 }
             })
             .collect();
-        write_cache(&path, &libraries, Object::Libraries)?;
+
+        if CACHE_STORE.with_borrow(|s| s.resident()) {
+            write_cache(&path, &libraries, Object::Libraries)?;
+        }
+
         libraries
     };
 

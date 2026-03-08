@@ -1,7 +1,7 @@
 //! Build antimony.
 //! This is just a cargo wrapper that uses predefined values.
 
-use antimony::shared::env::{HOME_PATH, PWD};
+use antimony::shared::env::HOME_PATH;
 use anyhow::Result;
 use clap::Parser;
 use spawn::{Spawner, StreamMode};
@@ -171,14 +171,5 @@ fn main() -> Result<()> {
     );
 
     println!("{path}");
-
-    Spawner::abs(format!("{path}/antimony"))
-        .args(["backend", "database", "--overwrite", "--dry"])?
-        .env("AT_HOME", PWD.to_string_lossy())?
-        .output(StreamMode::Discard)
-        .error(StreamMode::Discard)
-        .new_privileges(true)
-        .spawn()?
-        .wait()?;
     Ok(())
 }

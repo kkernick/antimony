@@ -3,14 +3,16 @@
 use crate::{
     cli::{self, run, run_vec},
     shared::{
+        config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME_PATH},
         profile::{self, Profile},
-        store::{self, Object},
+        store::{self, CACHE_STORE, OBJECTS, Object, Store, init_cache},
     },
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
+use rayon::prelude::*;
 use std::{fs, time::Duration};
 use user::as_real;
 
@@ -96,47 +98,72 @@ impl cli::Run for Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
+            let old = {
+                let mut config = CONFIG_FILE.lock();
+                let old = config.cache_store();
+                config.cache_store = Some(Store::Memory);
+                old
+            };
+
             let profiles = installed_profiles()?;
 
             // DO NOT TRY AND RUN THIS IN PARALLEL. ANTIMONY WILL
             // CAUSE A KERNEL PANIC IF YOU RUN IT IN PARALLEL!
-            let pb = ProgressBar::new(profiles.len() as u64);
+            let pb = ProgressBar::new(profiles.len() as u64 + 1);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
             );
             pb.enable_steady_tick(Duration::from_millis(100));
-            pb.wrap_iter(profiles.into_iter())
-                .try_for_each(|name| -> Result<()> {
-                    pb.set_message(format!("Refreshing {name}"));
+            profiles.into_iter().try_for_each(|name| -> Result<()> {
+                pb.set_message(format!("Refreshing {name}"));
 
-                    let profile =
-                        store::load::<Profile, profile::Error>(&name, Object::Profile, true)?;
+                let profile = store::load::<Profile, profile::Error>(&name, Object::Profile, true)?;
 
+                let args = run::Args {
+                    profile: name.clone(),
+                    dry: true,
+                    refresh: true,
+                    ..Default::default()
+                };
+                user::set(user::Mode::Effective)?;
+                args.run()?;
+
+                for (conf, _) in profile.configuration {
+                    pb.set_message(format!("Refreshing {name} ({conf})"));
                     let args = run::Args {
                         profile: name.clone(),
                         dry: true,
                         refresh: true,
+                        config: Some(conf),
                         ..Default::default()
                     };
                     user::set(user::Mode::Effective)?;
                     args.run()?;
+                }
+                pb.inc(1);
+                Ok(())
+            })?;
 
-                    for (conf, _) in profile.configuration {
-                        pb.set_message(format!("Refreshing {name} ({conf})"));
-                        let args = run::Args {
-                            profile: name.clone(),
-                            dry: true,
-                            refresh: true,
-                            config: Some(conf),
-                            ..Default::default()
-                        };
-                        user::set(user::Mode::Effective)?;
-                        args.run()?;
-                    }
-
-                    Ok(())
-                })?;
+            pb.set_message(format!("Flushing to {old:?}"));
+            pb.inc(1);
+            let mut out = init_cache(old);
+            OBJECTS.into_iter().try_for_each(|object| -> Result<()> {
+                if let Ok(map) = CACHE_STORE.with_borrow(|s| s.get(object)) {
+                    out.bulk(
+                        map.into_par_iter()
+                            .filter_map(|name| {
+                                match CACHE_STORE.with_borrow(|s| s.bytes(&name, object)) {
+                                    Ok(content) => Some((name, content)),
+                                    Err(_) => None,
+                                }
+                            })
+                            .collect(),
+                        object,
+                    )?;
+                }
+                Ok(())
+            })?;
         }
         Ok(())
     }

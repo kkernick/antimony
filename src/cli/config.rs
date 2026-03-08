@@ -31,7 +31,7 @@ impl super::Run for Args {
             };
 
             trace!("Editing");
-            if let Some(out) = ConfigFile::edit(&toml::to_string(CONFIG_FILE.deref())?)? {
+            if let Some(out) = ConfigFile::edit(&toml::to_string(CONFIG_FILE.lock().deref())?)? {
                 fs::write(path, out)?;
             }
             Ok(())

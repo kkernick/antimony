@@ -310,7 +310,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let code = info.handle.spawn()?.wait()?;
 
         if code != 0 {
-            if CONFIG_FILE.auto_refresh() && !args.refresh {
+            if CONFIG_FILE.lock().auto_refresh() && !args.refresh {
                 Spawner::abs(utility("notify"))
                     .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                     .mode(user::Mode::Real)

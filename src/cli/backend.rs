@@ -84,17 +84,17 @@ impl super::Run for Args {
             ))
         } else {
             let current = if self.cache {
-                CONFIG_FILE.cache_store()
+                CONFIG_FILE.lock().cache_store()
             } else {
-                CONFIG_FILE.config_store()
+                CONFIG_FILE.lock().config_store()
             };
 
             match self.new {
                 Some(new) => {
                     let current = if self.cache {
-                        CONFIG_FILE.cache_store()
+                        CONFIG_FILE.lock().cache_store()
                     } else {
-                        CONFIG_FILE.config_store()
+                        CONFIG_FILE.lock().config_store()
                     };
 
                     if current == new {
@@ -125,7 +125,7 @@ impl super::Run for Args {
                         })
                         };
 
-                        let mut update = CONFIG_FILE.clone();
+                        let mut update = CONFIG_FILE.lock().clone();
                         if self.cache {
                             update.cache_store = Some(new);
                         } else {
@@ -143,6 +143,7 @@ impl super::Run for Args {
                     let alt = match current {
                         Store::File => Store::Database,
                         Store::Database => Store::File,
+                        Store::Memory => return Err(anyhow::anyhow!("Memory cannot be used.")),
                     };
 
                     // Update the alternate cache_store

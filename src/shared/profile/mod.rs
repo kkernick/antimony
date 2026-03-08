@@ -327,7 +327,7 @@ impl Profile {
             if let Some(config) = &config {
                 hash += config;
             }
-            hash += &CONFIG_FILE.system_mode().to_string();
+            hash += &CONFIG_FILE.lock().system_mode().to_string();
             hash
         });
 
@@ -341,7 +341,7 @@ impl Profile {
         let to_inherit: Set<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
-                if !CONFIG_FILE.system_mode()
+                if !CONFIG_FILE.lock().system_mode()
                     && USER_STORE.with_borrow(|s| s.exists("default", Object::Profile))
                 {
                     Set::from_iter(["default".to_string()])

@@ -5,6 +5,7 @@ use crate::shared::{
     env::{AT_HOME, USER_NAME},
     store,
 };
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, read_to_string},
@@ -14,7 +15,8 @@ use std::{
 use user::as_effective;
 
 pub static CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config.toml"));
-pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
+pub static CONFIG_FILE: LazyLock<Mutex<ConfigFile>> =
+    LazyLock::new(|| Mutex::new(ConfigFile::default()));
 
 #[derive(Deserialize, Serialize, PartialEq, Clone)]
 pub struct ConfigFile {

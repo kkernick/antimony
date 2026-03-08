@@ -75,7 +75,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     };
 
-    if !CONFIG_FILE.system_mode() {
+    if !CONFIG_FILE.lock().system_mode() {
         let cmd_profile = Profile::from_args(args)?;
         profile = profile.base(cmd_profile)?
     }

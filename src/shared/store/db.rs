@@ -7,7 +7,7 @@
 
 use crate::shared::env::{AT_HOME, USER_NAME};
 use rusqlite::{Connection, params, types::FromSql};
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 use thiserror::Error;
 use user::as_effective;
 
@@ -128,6 +128,10 @@ impl Store {
     }
 }
 impl super::BackingStore for Store {
+    fn resident(&self) -> bool {
+        false
+    }
+
     fn fetch(&self, name: &str, object: super::Object) -> Result<String, super::Error> {
         self.retrieve(name, object)
     }
@@ -163,6 +167,27 @@ impl super::BackingStore for Store {
             &format!("INSERT OR REPLACE INTO {object} (name, value) VALUES (?1, ?2)",),
             params![name, content],
         )?;
+        Ok(())
+    }
+
+    fn bulk(
+        &mut self,
+        entries: HashMap<String, Vec<u8>>,
+        object: super::Object,
+    ) -> Result<(), super::Error> {
+        // Start a transaction – all inserts succeed or all fail together.
+        let tx = self.connection.transaction()?;
+
+        {
+            let mut stmt = tx.prepare(&format!(
+                "INSERT OR IGNORE INTO {object} (name, value) VALUES (?1, ?2)"
+            ))?;
+            for (name, content) in entries {
+                stmt.execute(params![name, content])?;
+            }
+        }
+
+        tx.commit()?;
         Ok(())
     }
 

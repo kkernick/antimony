@@ -32,7 +32,7 @@ pub fn in_lib(path: &str) -> bool {
 
 /// Determine dependencies for directories.
 #[inline]
-fn dir_resolve(library: Cow<'_, str>, directories: Arc<DashSet<String>>) -> Result<Vec<String>> {
+fn dir_resolve(library: Cow<'_, str>, directories: &DashSet<String>) -> Result<Vec<String>> {
     let mut dependencies = Vec::new();
     let path = Path::new(library.as_ref());
 
@@ -124,7 +124,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     }
 
     // Libraries needed by the program. No Binaries.
-    let dependencies: Arc<DashSet<String, ahash::RandomState>> = Arc::default();
+    let dependencies: DashSet<String, ahash::RandomState> = DashSet::default();
 
     // Scope the lock. We do binaries first, since we piggy-back off the LDD call
     // to find library roots.
@@ -132,10 +132,9 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
         let binaries = &info.profile.lock().binaries;
         timer!("::binaries", {
             binaries.par_iter().for_each(|binary| {
-                let dep = dependencies.clone();
                 if let Ok(libraries) = get_libraries(Cow::Owned(binary.clone())) {
                     for library in libraries {
-                        dep.insert(library);
+                        dependencies.insert(library);
                     }
                 }
             })
@@ -152,16 +151,16 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     }
 
     // Libraries and Binaries, Wildcard and Directories Resolved
-    let resolved = Arc::new(DashSet::new());
+    let resolved = DashSet::new();
 
     // Directories to exclude and attach
-    let directories = Arc::from(DashSet::new());
+    let directories: DashSet<String> = DashSet::new();
 
     for lib_root in LIB_ROOTS.iter() {
         let app_lib = format!("{lib_root}/{}", info.name);
         if Path::new(&app_lib).exists() {
             debug!("Adding program lib folder");
-            for exe in dir_resolve(Cow::Owned(app_lib), directories.clone())? {
+            for exe in dir_resolve(Cow::Owned(app_lib), &directories)? {
                 resolved.insert(Cow::Owned(exe));
             }
         }
@@ -203,27 +202,23 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     });
 
     let files = timer!("::directories", {
-        Arc::into_inner(resolved)
-            .unwrap()
+        resolved
             .into_par_iter()
-            .filter_map(|e| dir_resolve(e, directories.clone()).ok())
+            .filter_map(|e| dir_resolve(e, &directories).ok())
             .flatten()
             .collect::<Set<_>>()
     });
 
     timer!("::resolve", {
         files.into_par_iter().for_each(|file| {
-            let dep = dependencies.clone();
-            dep.insert(file.clone());
-            if let Ok(libraries) = get_libraries(Cow::Owned(file)) {
-                for library in libraries {
-                    dep.insert(library);
+            dependencies.insert(file.clone());
+            if let Ok(libraries) = get_libraries(Cow::Borrowed(&file)) {
+                for library in &libraries {
+                    dependencies.insert(library.clone());
                 }
             }
         });
     });
-
-    let dependencies = Arc::into_inner(dependencies).unwrap();
 
     timer!("::writing", {
         dependencies
@@ -291,7 +286,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     timer!("::mount_directories", {
         directories.par_iter().try_for_each(|dir| -> Result<()> {
             if in_lib(&dir) {
-                let sof_path = get_sof_path(&sof, dir.as_str(), "/usr");
+                let sof_path = get_sof_path(&sof, dir.as_ref(), "/usr");
                 if !sof_path.exists() {
                     fs::create_dir_all(sof_path)?;
                 }
@@ -303,8 +298,8 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                 } else {
                     "--ro-bind"
                 },
-                dir.as_str(),
-                localize_home(dir.as_str()).as_ref(),
+                dir.as_ref(),
+                localize_home(dir.as_ref()).as_ref(),
             ])?;
             Ok(())
         })?;
