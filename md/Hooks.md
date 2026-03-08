@@ -12,32 +12,29 @@ Hooks are defined in the profile, particularly using either the `[[hooks.pre]]` 
 ```toml
 [[hooks.pre]]  
 path = "/usr/bin/prepare"  
-attach = true  
-system = "User"  
+attach = true 
 env = true  
 can_fail = false  
   
 [[hooks.pre]]  
-content = """  
-echo "Starting up!"
-"""  
+content = "echo 'Starting up!'"
 attach = false  
-system = "User"  
 env = true  
 can_fail = false
 
 [[hooks.post]]
-content = """
-echo "Shutting down!"
-"""
+content = "echo 'Shutting down!'"
 attach = false
-system = "System"
 env = false
 can_fail = true
 ```
 
 
 ## Hook Components
+
+## Name
+
+You can optionally give your Hook a name, which is chiefly used for logging. It can help with troubleshooting, but isn’t strictly necessary.
 
 ## Path/Content
 Antimony can execute hooks in one of two ways:
@@ -47,6 +44,10 @@ Antimony can execute hooks in one of two ways:
 
 >[!warning]
 >You must provided *either* a `path`, or `content`. If both are provided, the `path` is used.
+
+## Args
+
+As with profiles, you can define additional arguments to the hook, though this is really only useful when using `path` semantics. 
 
 ## Attach
 
@@ -71,6 +72,40 @@ By default, if any hook fails, Antimony will bail execution. For Pre-Hooks, this
 
 If your hook is not essential, this behavior can be relaxed by setting the `no_fail` flag.  Failures in hooks will be ignored.
 
+## New Privileges
+
+If your hook requires privileges (Such as a hook that calls Antimony itself), you can allow new privileges.
+
+## Capture
+
+Antimony can pass the Standard Output or Standard Error of the sandbox directly to your hook. This is done by connecting the respective stream to your hook’s standard input. For example, Antimony’s `trace` feature uses this:
+
+```toml
+[hooks.parent]  
+name = "tracer"  
+path = "$AT_HOME/utilities/antimony-tracer"  
+capture_error = true
+env = true
+```
+
+Which then uses the following logic:
+
+```rust
+let mut err = Vec::<String>::new();
+let stdin = stdin();
+loop {
+		let mut line = String::new();
+		match stdin.read_line(&mut line)? {
+				0 => break,
+				_ => {
+						print!("{line}");
+						err.push(line);
+				}
+		}
+}
+```
+
+Note that because Antimony uses your Hook’s Standard Input, you can only capture one stream. If you select both, Standard Error is used.
 ## Examples
 
 ### Managed Dependencies
@@ -83,6 +118,7 @@ path = "antimony"
 args = ["run", "syncthing"]  
 attach = true  
 env = true
+new_privileges = true
 ```
 
 
@@ -96,7 +132,8 @@ Another use-case is when a service is sandboxed, to have a web-browser or simila
 [hooks.parent]  
 path = "antimony"  
 args = ["run", "chromium", "http://localhost:7070"]  
-env = true  
+env = true
+new_privileges = true
 ```
 
 Again, we use Antimony to sandbox the browser as well. In this setup, the `yarr` profile automatically launches `chromium`, and when that instance of Chromium closes, the profile goes with it. You can use the `--create-desktop` argument for the `integrate` sub-command to create a `.desktop` entry for `yarr`, that way you can launch both service and browser from your DE.

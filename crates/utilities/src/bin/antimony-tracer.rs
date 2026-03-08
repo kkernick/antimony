@@ -1,6 +1,13 @@
 use antimony::{
     fab::{get_libraries, get_wildcards, resolve},
-    shared::{Set, env::AT_HOME, feature::Feature, profile::files::FileMode, utility},
+    shared::{
+        Set,
+        env::AT_HOME,
+        feature::Feature,
+        profile::files::FileMode,
+        store::{Object, SYSTEM_STORE, USER_STORE},
+        utility,
+    },
 };
 use dashmap::DashMap;
 use rayon::prelude::*;
@@ -51,12 +58,15 @@ fn main() -> anyhow::Result<()> {
 
         // Get all features on the system.
         let feature_database: DashMap<String, Feature> = DashMap::new();
-        let feature_dir = Path::new(AT_HOME.as_path()).join("features");
-        for path in fs::read_dir(feature_dir)?.filter_map(|e| e.ok()) {
-            feature_database.insert(
-                path.file_name().to_string_lossy().into_owned(),
-                toml::from_str(&fs::read_to_string(path.path())?)?,
-            );
+        for name in SYSTEM_STORE.with_borrow(|s| s.get(Object::Feature))? {
+            let feature = SYSTEM_STORE.with_borrow(|s| s.fetch(&name, Object::Feature))?;
+            feature_database.insert(name, toml::from_str(&feature)?);
+        }
+
+        // Replace user override
+        for name in USER_STORE.with_borrow(|s| s.get(Object::Feature))? {
+            let feature = USER_STORE.with_borrow(|s| s.fetch(&name, Object::Feature))?;
+            feature_database.insert(name, toml::from_str(&feature)?);
         }
 
         let arc = Arc::new(feature_database);

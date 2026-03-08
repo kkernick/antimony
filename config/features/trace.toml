@@ -8,3 +8,4 @@ binaries = ["strace"]
 name = "tracer"
 path = "$AT_HOME/utilities/antimony-tracer"
 capture_error = true
+env = true

@@ -1,9 +1,12 @@
 use crate::shared::profile::home::HomePolicy;
 use anyhow::{Result, anyhow};
+use inotify::WatchMask;
 use log::debug;
 use std::{
     fs::{self, File, TryLockError},
+    io::ErrorKind,
     sync::Arc,
+    time::{Duration, Instant},
 };
 use user::as_real;
 
@@ -42,9 +45,41 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
             match lock {
                 Ok(_) => args.handle.fd_i(file),
                 Err(TryLockError::WouldBlock) => {
-                    return Err(anyhow!(
-                        "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
-                    ));
+                    {
+                        // Attach a notify watch on the directory to see if the running instance closes it.
+                        let mut inotify = args.inotify.lock();
+                        let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
+                        let current = Instant::now();
+                        let mut buffer = [0; 1024];
+
+                        // 2 seconds is arbitrary; there's a balance between enough time for the
+                        // application to close, but also without wasting time when we didn't
+                        // close the app.
+                        while current.elapsed() < Duration::from_secs(2) {
+                            match inotify.read_events(&mut buffer) {
+                                Ok(events) => {
+                                    for event in events {
+                                        if event.wd == wd {
+                                            break;
+                                        }
+                                    }
+                                }
+                                Err(error) if error.kind() == ErrorKind::WouldBlock => continue,
+                                _ => panic!("Error while reading events"),
+                            }
+                        }
+
+                        inotify.watches().remove(wd)?;
+                    }
+
+                    match file.try_lock() {
+                        Ok(_) => args.handle.fd_i(file),
+                        Err(_) => {
+                            return Err(anyhow!(
+                                "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
+                            ));
+                        }
+                    }
                 }
                 Err(e) => return Err(anyhow!("Failed to get lock on home folder: {e}")),
             }
