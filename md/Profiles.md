@@ -76,13 +76,13 @@ The takeaway from this is that Profiles are not particularly verbose, nor do the
 Antimony provides a set of debugging tools to help make profile creation easier.
 
 #### Tracing
-`strace` is a program that traces a binary, printing syscall information. You can trace an application in the sandbox using the `trace` command:
+`strace` is a program that traces a binary, printing syscall information. You can trace an application in the sandbox using the `trace` feature:
 
 ```bash
-antimony trace my_profile errors/all --report
+antimony my_profile ---features trace
 ```
 
-`trace` dumps the output of `strace` to your console, which is *very* verbose, so you have the option of only logging errors, or outputting the entire thing. If you don’t know how to parse `strace`, you can optionally provide the `--report` flag, which will give you a summary at the end of program execution. This report informs you of every file that the sandbox tried to access, but couldn’t because the file didn’t exist, yet the same file *does* exist on the Host. This can help pin-point files that the profile needs to run, but that the sandbox doesn’t provide. If a Feature can provide that file, they will be listed underneath the file in question, as it can be excessively permissive. Consider the following report:
+`trace` dumps the output of `strace` to your console, and will give you a summary at the end of program execution. This report informs you of every file that the sandbox tried to access, but couldn’t because the file didn’t exist, yet the same file *does* exist on the Host. This can help pin-point files that the profile needs to run, but that the sandbox doesn’t provide. If a Feature can provide that file, they will be listed underneath the file in question, as it can be excessively permissive. Consider the following report:
 
 ```
 /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq can be provided with the following features
@@ -103,6 +103,10 @@ You can use it via `antimony run $PROFILE --features debug-shell`
 
 You can use `antimony edit` to edit a profile. Trying to edit  *System Profile* will create a copy for the user, allowing you to customize the behavior without affecting other users. This will open the TOML in your editor of choice.
 
+>[!note]
+>You can also edit features with the `--feature` argument!
+
+
 ## Running a Profile
 
 Once you’ve defined a Profile, you can run it with `antimony run profile_name`.  The `run` command has arguments for every aspect of the Profile which you can override (Options specified on the command line overrule Profile definitions). There is a lot, which you can view with either `-h` for a more concise summary, or `--help` for a verbose one. For example, you can set `seccomp` for a single instance via:
@@ -113,7 +117,18 @@ antimony run profile_name --seccomp enforcing
 
 ## Deleting a Profile
 
-You cannot delete *System Profiles* (You can undo Integration, mentioned below), but you *can* delete *User Profiles*. The command of interest is `antimony reset`, which—as the name suggests—is designed to be used to remove a User’s version of a System Profile—one created by editing a system profile. If the Profile was made by the User, and has no System counterpart, you can delete it with the `--remove` option.
+Antimony has two stores for configuration (Profiles and Features):
+
+1. The *System Store* includes all the definitions that are installed along with Antimony. These include a bevy of features to assist with Profile creation, as well as some predefined Profiles for popular applications.
+2. The *User Store* is unique to each user on the system, and includes two kinds of configuration:
+	1. *Novel Configurations* are Profiles are Features you create with `antimony edit` that have no system analog. If you use an application without a predefined Profile, you’d make one from scratch, and it would be located here.
+	2. *User Modifications* are edits to an existing configuration. For example, you would likely tweak the `syncthing` profile to add the paths you want to share. This would create a new profile based off the system definition.
+
+Unless you have privilege, you can only delete from the User Store. Even if you do, there’s little reason to remove system definitions; the only way to get those back is to reinstall Antimony. You have absolute control over the User Store, and you can use `antimony remove` to delete them. There is three distinct behaviors for this sub-command:
+
+1. If this is a *Novel Configuration*, you will need to confirm the deletion. There is no system version to fall back on!
+2. If this is a *User Modification*, you are effectively returning back to the System default. 
+3. If you don’t provide a name, Antimony will scan the User Store for profiles that are identical to their System counterparts, and remove them for you.
 
 ## Integrating a Profile
 Antimony supports integrating Profiles into your environment; this makes sandboxed versions of applications seamlessly replace the original versions. There are two components to this, depending on what kind of application you are integrating:

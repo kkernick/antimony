@@ -2,7 +2,6 @@ use antimony::{
     fab::{get_libraries, get_wildcards, resolve},
     shared::{
         Set,
-        env::AT_HOME,
         feature::Feature,
         profile::files::FileMode,
         store::{Object, SYSTEM_STORE, USER_STORE},
@@ -13,7 +12,6 @@ use dashmap::DashMap;
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
-    fs,
     io::{self, Write, stdin},
     path::Path,
     sync::{Arc, atomic::AtomicBool},
