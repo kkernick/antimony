@@ -139,13 +139,13 @@ fn parse(
     let ret = ParseReturn::new();
 
     let dest = run_as!(user::Mode::Real, Result<String>, {
-        let dest = fs::read_link(resolved.as_ref())?;
+        let dest = fs::read_link(resolved.as_ref())?.canonicalize()?;
         let canon = Path::new(resolved.as_ref())
             .canonicalize()?
             .parent()
             .ok_or(anyhow!("Binary does not have parent!"))?
             .join(&dest);
-        Ok(canon.to_string_lossy().into_owned())
+        Ok(resolve_bin(&canon.to_string_lossy().into_owned())?.into_owned())
     })?;
 
     // Ensure it's a valid binary.
@@ -153,9 +153,16 @@ fn parse(
         if let Ok(dest) = dest {
             if include_self {
                 match resolve_bin(dest.as_ref()) {
-                    Ok(dest) => ret
-                        .symlinks
-                        .insert(resolved.into_owned(), dest.into_owned()),
+                    Ok(dest) => {
+                        if !dest.contains("bin")
+                            && let Some(i) = dest.rfind("/")
+                        {
+                            ret.directories.insert(dest[..i].to_string());
+                        }
+
+                        ret.symlinks
+                            .insert(resolved.into_owned(), dest.into_owned());
+                    }
 
                     Err(e) => {
                         warn!("Could not resolve symlink destination {dest}: {e}");
@@ -497,7 +504,8 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             .into_par_iter()
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
                 if !in_lib(&link) {
-                    info.handle.args_i(["--ro-bind", &dest, &link])?;
+                    info.handle
+                        .args_i(["--ro-bind", &dest, &dest, "--symlink", &dest, &link])?;
                 }
                 Ok(())
             })
@@ -516,12 +524,18 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         })
     }
 
-    #[rustfmt::skip]
-    info.handle.args_i([
-        "--symlink", "/usr/bin", "/bin",
-        "--symlink", "/usr/bin", "/usr/sbin",
-        "--symlink", "/usr/bin", "/sbin",
-    ])?;
+    info.handle.args_i(["--symlink", "/usr/bin", "/bin"])?;
+
+    if fs::read_link("/usr/sbin").is_ok() {
+        info.handle.args_i([
+            "--symlink",
+            "/usr/bin",
+            "/usr/sbin",
+            "--symlink",
+            "/usr/bin",
+            "/sbin",
+        ])?;
+    }
 
     info.profile.lock().binaries = Arc::into_inner(elf_binaries)
         .expect("Failed to get elf binaries")

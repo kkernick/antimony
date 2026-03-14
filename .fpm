@@ -19,6 +19,7 @@
 ./target/x86_64-unknown-linux-gnu/release/antimony-spawn=/usr/share/antimony/utilities/antimony-spawn
 ./target/x86_64-unknown-linux-gnu/release/antimony-open=/usr/share/antimony/utilities/antimony-open
 ./target/x86_64-unknown-linux-gnu/release/antimony-tracer=/usr/share/antimony/utilities/antimony-tracer
+./target/x86_64-unknown-linux-gnu/release/antimony-lockdown=/usr/share/antimony/utilities/antimony-lockdown
 ./target/x86_64-unknown-linux-gnu/release/notify=/usr/share/antimony/utilities/antimony-notify
 
 ./config/profiles=/usr/share/antimony/config

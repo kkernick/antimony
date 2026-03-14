@@ -29,9 +29,9 @@ fn main() -> anyhow::Result<()> {
 
     loop {
         let mut line = String::new();
-        match stdin.read_line(&mut line)? {
-            0 => break,
-            _ => {
+        match stdin.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {
                 print!("{line}");
                 err.push(line);
             }

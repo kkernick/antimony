@@ -1,0 +1,10 @@
+path = "kiwix-desktop"
+id = "org.kiwix.desktop"
+features = ["network", "kf6"]
+binaries = ["aria2c"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["ProxyResolver", "NetworkMonitor"]

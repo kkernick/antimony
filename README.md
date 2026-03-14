@@ -89,4 +89,3 @@ You have two options:
 
 > [!note] 
 > Newer versions of Ubuntu configure AppArmor such that *any* application without a profile defined is run confined. This not only breaks `bwrap`, but `antimony` and any profile you run within it. While the above choices are still valid, you can also opt-out of this behavior by setting the sysctl `kernel.apparmor_restrict_unprivileged_userns` to `0`
-

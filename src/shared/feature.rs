@@ -81,6 +81,14 @@ pub struct Feature {
     /// here, but when they run in relation to other features and profiles you cannot
     /// count on.
     pub hooks: Option<Hooks>,
+
+    /// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+    /// Note that this does grant privileges, it merely allows an application with existing privileges to
+    /// keep them when running within the sandbox. However, this property being allowed in the sandbox
+    /// means that an other unprivileged process could gain extra privilege if there's a binary in the
+    /// sandbox with privilege, and this flag is enabled (Though note the sandbox cannot elevate to root,
+    /// regardless of privilege).
+    pub new_privileges: Option<bool>,
 }
 impl Feature {
     /// Get a feature from its name.

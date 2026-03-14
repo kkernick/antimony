@@ -1,8 +1,6 @@
 name = "qt6"
 description = "Provide necessary files for QT6 applications"
-
-requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
-
+requires = ["wayland", "fonts", "themes", "mime", "dri", "locale", "vaapi"]
 libraries = ["qt6", "libQt6*"]
 
 [files]

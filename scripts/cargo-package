@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 VERSION="${1}"
 ROOT=$(git rev-parse --show-toplevel)

@@ -184,7 +184,6 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                     let path = format!("{root}/{e}");
                     if Path::new(&path).exists() {
                         resolved.insert(Cow::Owned(path));
-                        return;
                     }
                 }
                 warn!("Failed to find library: {e}");

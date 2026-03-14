@@ -370,6 +370,11 @@ fn add_feature(
             p_hooks.parent = hooks.parent;
         }
     }
+
+    profile.new_privileges = match profile.new_privileges {
+        Some(false) | None => feature.new_privileges,
+        Some(true) => Some(true),
+    };
     Ok(())
 }
 

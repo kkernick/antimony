@@ -5,6 +5,7 @@ chown antimony:antimony -R /usr/share/antimony
 chown antimony:antimony /usr/bin/antimony
 
 useradd -r antimony-lockdown
+mkdir /usr/share/antimony/lockdown
 chown antimony-lockdown:antimony-lockdown -R /usr/share/antimony/lockdown
 chown antimony-lockdown:antimony-lockdown -R /usr/share/antimony/utilities/antimony-lockdown
 
