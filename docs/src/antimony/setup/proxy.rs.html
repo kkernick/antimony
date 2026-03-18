@@ -251,99 +251,100 @@
 <a href=#251 id=251 data-nosnippet>251</a>                        <span class="kw-2">&amp;</span>Set::default(),
 <a href=#252 id=252 data-nosnippet>252</a>                        <span class="kw-2">&amp;</span>proxy,
 <a href=#253 id=253 data-nosnippet>253</a>                        <span class="kw-2">&amp;</span>args.handle,
-<a href=#254 id=254 data-nosnippet>254</a>                    )<span class="question-mark">?
-<a href=#255 id=255 data-nosnippet>255</a>                </span>})
-<a href=#256 id=256 data-nosnippet>256</a>            }
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a>            <span class="comment">// Create the flatpak-info, but don't bother if we're running dry.
-<a href=#259 id=259 data-nosnippet>259</a>            </span><span class="macro">timer!</span>(<span class="string">"::flatpak_info"</span>, {
-<a href=#260 id=260 data-nosnippet>260</a>                <span class="kw">let </span>namespaces = {
-<a href=#261 id=261 data-nosnippet>261</a>                    <span class="kw">let </span>lock = args.profile.lock();
-<a href=#262 id=262 data-nosnippet>262</a>                    lock.namespaces.clone()
-<a href=#263 id=263 data-nosnippet>263</a>                };
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a>                <span class="comment">// https://docs.flatpak.org/en/latest/flatpak-command-reference.html
-<a href=#266 id=266 data-nosnippet>266</a>                </span><span class="attr">#[rustfmt::skip]
-<a href=#267 id=267 data-nosnippet>267</a>                </span><span class="kw">let </span><span class="kw-2">mut </span>info_contents: Vec&lt;String&gt; = <span class="macro">vec!</span>[
-<a href=#268 id=268 data-nosnippet>268</a>                    <span class="string">"[Application]"</span>,
-<a href=#269 id=269 data-nosnippet>269</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"name={id}"</span>),
-<a href=#270 id=270 data-nosnippet>270</a>                    <span class="string">"[Instance]"</span>,
-<a href=#271 id=271 data-nosnippet>271</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"instance-id={instance}"</span>),
-<a href=#272 id=272 data-nosnippet>272</a>                    <span class="string">"app-path=/usr"</span>,
-<a href=#273 id=273 data-nosnippet>273</a>                    <span class="string">"[Context]"</span>,
-<a href=#274 id=274 data-nosnippet>274</a>                    <span class="string">"sockets=session-bus;system-bus;"</span>,
-<a href=#275 id=275 data-nosnippet>275</a>                ].into_iter().map(|e| e.to_string()).collect();
-<a href=#276 id=276 data-nosnippet>276</a>
-<a href=#277 id=277 data-nosnippet>277</a>                <span class="kw">if </span>namespaces.contains(<span class="kw-2">&amp;</span>Namespace::Net) || namespaces.contains(<span class="kw-2">&amp;</span>Namespace::All) {
-<a href=#278 id=278 data-nosnippet>278</a>                    info_contents.push(<span class="string">"shared=network;"</span>.to_string());
-<a href=#279 id=279 data-nosnippet>279</a>                }
-<a href=#280 id=280 data-nosnippet>280</a>
-<a href=#281 id=281 data-nosnippet>281</a>                <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;()&gt;, {
-<a href=#282 id=282 data-nosnippet>282</a>                    <span class="macro">debug!</span>(<span class="string">"Creating flatpak info"</span>);
-<a href=#283 id=283 data-nosnippet>283</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = info.parent()
-<a href=#284 id=284 data-nosnippet>284</a>                        &amp;&amp; !parent.exists()
-<a href=#285 id=285 data-nosnippet>285</a>                    {
-<a href=#286 id=286 data-nosnippet>286</a>                        fs::create_dir_all(parent)<span class="question-mark">?</span>;
-<a href=#287 id=287 data-nosnippet>287</a>                    }
-<a href=#288 id=288 data-nosnippet>288</a>                    <span class="kw">let </span>out = fs::File::create_new(<span class="kw-2">&amp;</span>info)<span class="question-mark">?</span>;
-<a href=#289 id=289 data-nosnippet>289</a>                    <span class="macro">write!</span>(<span class="kw-2">&amp;</span>out, <span class="string">"{}"</span>, info_contents.join(<span class="string">"\n"</span>))<span class="question-mark">?</span>;
-<a href=#290 id=290 data-nosnippet>290</a>                    <span class="prelude-val">Ok</span>(())
-<a href=#291 id=291 data-nosnippet>291</a>                })<span class="question-mark">??</span>;
-<a href=#292 id=292 data-nosnippet>292</a>
-<a href=#293 id=293 data-nosnippet>293</a>                <span class="attr">#[rustfmt::skip]
-<a href=#294 id=294 data-nosnippet>294</a>                </span>arguments.extend([
-<a href=#295 id=295 data-nosnippet>295</a>                    <span class="string">"--bind"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/doc"</span>), <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/doc"</span>),
-<a href=#296 id=296 data-nosnippet>296</a>                    <span class="string">"--ro-bind"</span>, <span class="string">"/run/dbus"</span>, <span class="string">"/run/dbus"</span>,
-<a href=#297 id=297 data-nosnippet>297</a>                    <span class="string">"--setenv"</span>, <span class="string">"DBUS_SESSION_BUS_ADDRESS"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"unix:path=/run/user/{}/bus"</span>, user::USER.real),
-<a href=#298 id=298 data-nosnippet>298</a>                    <span class="string">"--ro-bind"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{instance_dir_str}/.flatpak-info"</span>), <span class="string">"/.flatpak-info"</span>,
-<a href=#299 id=299 data-nosnippet>299</a>                    <span class="string">"--symlink"</span>, <span class="string">"/.flatpak-info"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/flatpak-info"</span>),
-<a href=#300 id=300 data-nosnippet>300</a>                ].map(String::from).map(Cow::Owned));
-<a href=#301 id=301 data-nosnippet>301</a>            });
-<a href=#302 id=302 data-nosnippet>302</a>
-<a href=#303 id=303 data-nosnippet>303</a>            <span class="macro">timer!</span>(<span class="string">"::flapak_dir"</span>, {
-<a href=#304 id=304 data-nosnippet>304</a>                <span class="macro">debug!</span>(<span class="string">"Creating flatpak directory"</span>);
-<a href=#305 id=305 data-nosnippet>305</a>                <span class="kw">let </span>flatpak_dir = RUNTIME_DIR.join(<span class="string">".flatpak"</span>).join(instance);
-<a href=#306 id=306 data-nosnippet>306</a>
-<a href=#307 id=307 data-nosnippet>307</a>                <span class="kw">let </span>file = <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;File&gt;, {
-<a href=#308 id=308 data-nosnippet>308</a>                    <span class="kw">if </span>!flatpak_dir.exists() {
-<a href=#309 id=309 data-nosnippet>309</a>                        fs::create_dir_all(<span class="kw-2">&amp;</span>flatpak_dir)<span class="question-mark">?</span>;
-<a href=#310 id=310 data-nosnippet>310</a>                    }
-<a href=#311 id=311 data-nosnippet>311</a>                    <span class="kw">let </span>file = File::create(flatpak_dir.join(<span class="string">"bwrapinfo.json"</span>))<span class="question-mark">?</span>;
-<a href=#312 id=312 data-nosnippet>312</a>                    <span class="prelude-val">Ok</span>(file)
-<a href=#313 id=313 data-nosnippet>313</a>                })<span class="question-mark">??</span>;
-<a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a>                arguments.extend(
-<a href=#316 id=316 data-nosnippet>316</a>                    [<span class="string">"--json-status-fd"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, file.as_raw_fd())]
-<a href=#317 id=317 data-nosnippet>317</a>                        .map(String::from)
-<a href=#318 id=318 data-nosnippet>318</a>                        .map(Cow::Owned),
-<a href=#319 id=319 data-nosnippet>319</a>                );
-<a href=#320 id=320 data-nosnippet>320</a>                args.handle.fd_i(file);
-<a href=#321 id=321 data-nosnippet>321</a>            });
-<a href=#322 id=322 data-nosnippet>322</a>
-<a href=#323 id=323 data-nosnippet>323</a>            <span class="comment">// Watch for the proxy to expose its bus to give to the sandbox.
-<a href=#324 id=324 data-nosnippet>324</a>            </span><span class="macro">debug!</span>(<span class="string">"Creating proxy watch"</span>);
-<a href=#325 id=325 data-nosnippet>325</a>            <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;()&gt;, {
-<a href=#326 id=326 data-nosnippet>326</a>                args.watches.insert(args.inotify.lock().watches().add(
-<a href=#327 id=327 data-nosnippet>327</a>                    user_dir(args.instance.name()).join(<span class="string">"proxy"</span>),
-<a href=#328 id=328 data-nosnippet>328</a>                    WatchMask::CREATE,
-<a href=#329 id=329 data-nosnippet>329</a>                )<span class="question-mark">?</span>);
-<a href=#330 id=330 data-nosnippet>330</a>                <span class="prelude-val">Ok</span>(())
-<a href=#331 id=331 data-nosnippet>331</a>            })<span class="question-mark">??</span>;
-<a href=#332 id=332 data-nosnippet>332</a>
-<a href=#333 id=333 data-nosnippet>333</a>            args.handle.associate(proxy.spawn()<span class="question-mark">?</span>);
-<a href=#334 id=334 data-nosnippet>334</a>        }
-<a href=#335 id=335 data-nosnippet>335</a>
-<a href=#336 id=336 data-nosnippet>336</a>        arguments.extend(
-<a href=#337 id=337 data-nosnippet>337</a>            [
-<a href=#338 id=338 data-nosnippet>338</a>                <span class="string">"--ro-bind"</span>,
-<a href=#339 id=339 data-nosnippet>339</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{instance_dir_str}/proxy/bus"</span>),
-<a href=#340 id=340 data-nosnippet>340</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/bus"</span>),
-<a href=#341 id=341 data-nosnippet>341</a>            ]
-<a href=#342 id=342 data-nosnippet>342</a>            .map(String::from)
-<a href=#343 id=343 data-nosnippet>343</a>            .map(Cow::Owned),
-<a href=#344 id=344 data-nosnippet>344</a>        );
-<a href=#345 id=345 data-nosnippet>345</a>    }
-<a href=#346 id=346 data-nosnippet>346</a>
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(arguments))
-<a href=#348 id=348 data-nosnippet>348</a>}
+<a href=#254 id=254 data-nosnippet>254</a>                        <span class="bool-val">false</span>,
+<a href=#255 id=255 data-nosnippet>255</a>                    )<span class="question-mark">?
+<a href=#256 id=256 data-nosnippet>256</a>                </span>})
+<a href=#257 id=257 data-nosnippet>257</a>            }
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>            <span class="comment">// Create the flatpak-info, but don't bother if we're running dry.
+<a href=#260 id=260 data-nosnippet>260</a>            </span><span class="macro">timer!</span>(<span class="string">"::flatpak_info"</span>, {
+<a href=#261 id=261 data-nosnippet>261</a>                <span class="kw">let </span>namespaces = {
+<a href=#262 id=262 data-nosnippet>262</a>                    <span class="kw">let </span>lock = args.profile.lock();
+<a href=#263 id=263 data-nosnippet>263</a>                    lock.namespaces.clone()
+<a href=#264 id=264 data-nosnippet>264</a>                };
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="comment">// https://docs.flatpak.org/en/latest/flatpak-command-reference.html
+<a href=#267 id=267 data-nosnippet>267</a>                </span><span class="attr">#[rustfmt::skip]
+<a href=#268 id=268 data-nosnippet>268</a>                </span><span class="kw">let </span><span class="kw-2">mut </span>info_contents: Vec&lt;String&gt; = <span class="macro">vec!</span>[
+<a href=#269 id=269 data-nosnippet>269</a>                    <span class="string">"[Application]"</span>,
+<a href=#270 id=270 data-nosnippet>270</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"name={id}"</span>),
+<a href=#271 id=271 data-nosnippet>271</a>                    <span class="string">"[Instance]"</span>,
+<a href=#272 id=272 data-nosnippet>272</a>                    <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"instance-id={instance}"</span>),
+<a href=#273 id=273 data-nosnippet>273</a>                    <span class="string">"app-path=/usr"</span>,
+<a href=#274 id=274 data-nosnippet>274</a>                    <span class="string">"[Context]"</span>,
+<a href=#275 id=275 data-nosnippet>275</a>                    <span class="string">"sockets=session-bus;system-bus;"</span>,
+<a href=#276 id=276 data-nosnippet>276</a>                ].into_iter().map(|e| e.to_string()).collect();
+<a href=#277 id=277 data-nosnippet>277</a>
+<a href=#278 id=278 data-nosnippet>278</a>                <span class="kw">if </span>namespaces.contains(<span class="kw-2">&amp;</span>Namespace::Net) || namespaces.contains(<span class="kw-2">&amp;</span>Namespace::All) {
+<a href=#279 id=279 data-nosnippet>279</a>                    info_contents.push(<span class="string">"shared=network;"</span>.to_string());
+<a href=#280 id=280 data-nosnippet>280</a>                }
+<a href=#281 id=281 data-nosnippet>281</a>
+<a href=#282 id=282 data-nosnippet>282</a>                <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;()&gt;, {
+<a href=#283 id=283 data-nosnippet>283</a>                    <span class="macro">debug!</span>(<span class="string">"Creating flatpak info"</span>);
+<a href=#284 id=284 data-nosnippet>284</a>                    <span class="kw">if let </span><span class="prelude-val">Some</span>(parent) = info.parent()
+<a href=#285 id=285 data-nosnippet>285</a>                        &amp;&amp; !parent.exists()
+<a href=#286 id=286 data-nosnippet>286</a>                    {
+<a href=#287 id=287 data-nosnippet>287</a>                        fs::create_dir_all(parent)<span class="question-mark">?</span>;
+<a href=#288 id=288 data-nosnippet>288</a>                    }
+<a href=#289 id=289 data-nosnippet>289</a>                    <span class="kw">let </span>out = fs::File::create_new(<span class="kw-2">&amp;</span>info)<span class="question-mark">?</span>;
+<a href=#290 id=290 data-nosnippet>290</a>                    <span class="macro">write!</span>(<span class="kw-2">&amp;</span>out, <span class="string">"{}"</span>, info_contents.join(<span class="string">"\n"</span>))<span class="question-mark">?</span>;
+<a href=#291 id=291 data-nosnippet>291</a>                    <span class="prelude-val">Ok</span>(())
+<a href=#292 id=292 data-nosnippet>292</a>                })<span class="question-mark">??</span>;
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a>                <span class="attr">#[rustfmt::skip]
+<a href=#295 id=295 data-nosnippet>295</a>                </span>arguments.extend([
+<a href=#296 id=296 data-nosnippet>296</a>                    <span class="string">"--bind"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/doc"</span>), <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/doc"</span>),
+<a href=#297 id=297 data-nosnippet>297</a>                    <span class="string">"--ro-bind"</span>, <span class="string">"/run/dbus"</span>, <span class="string">"/run/dbus"</span>,
+<a href=#298 id=298 data-nosnippet>298</a>                    <span class="string">"--setenv"</span>, <span class="string">"DBUS_SESSION_BUS_ADDRESS"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"unix:path=/run/user/{}/bus"</span>, user::USER.real),
+<a href=#299 id=299 data-nosnippet>299</a>                    <span class="string">"--ro-bind"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{instance_dir_str}/.flatpak-info"</span>), <span class="string">"/.flatpak-info"</span>,
+<a href=#300 id=300 data-nosnippet>300</a>                    <span class="string">"--symlink"</span>, <span class="string">"/.flatpak-info"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/flatpak-info"</span>),
+<a href=#301 id=301 data-nosnippet>301</a>                ].map(String::from).map(Cow::Owned));
+<a href=#302 id=302 data-nosnippet>302</a>            });
+<a href=#303 id=303 data-nosnippet>303</a>
+<a href=#304 id=304 data-nosnippet>304</a>            <span class="macro">timer!</span>(<span class="string">"::flapak_dir"</span>, {
+<a href=#305 id=305 data-nosnippet>305</a>                <span class="macro">debug!</span>(<span class="string">"Creating flatpak directory"</span>);
+<a href=#306 id=306 data-nosnippet>306</a>                <span class="kw">let </span>flatpak_dir = RUNTIME_DIR.join(<span class="string">".flatpak"</span>).join(instance);
+<a href=#307 id=307 data-nosnippet>307</a>
+<a href=#308 id=308 data-nosnippet>308</a>                <span class="kw">let </span>file = <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;File&gt;, {
+<a href=#309 id=309 data-nosnippet>309</a>                    <span class="kw">if </span>!flatpak_dir.exists() {
+<a href=#310 id=310 data-nosnippet>310</a>                        fs::create_dir_all(<span class="kw-2">&amp;</span>flatpak_dir)<span class="question-mark">?</span>;
+<a href=#311 id=311 data-nosnippet>311</a>                    }
+<a href=#312 id=312 data-nosnippet>312</a>                    <span class="kw">let </span>file = File::create(flatpak_dir.join(<span class="string">"bwrapinfo.json"</span>))<span class="question-mark">?</span>;
+<a href=#313 id=313 data-nosnippet>313</a>                    <span class="prelude-val">Ok</span>(file)
+<a href=#314 id=314 data-nosnippet>314</a>                })<span class="question-mark">??</span>;
+<a href=#315 id=315 data-nosnippet>315</a>
+<a href=#316 id=316 data-nosnippet>316</a>                arguments.extend(
+<a href=#317 id=317 data-nosnippet>317</a>                    [<span class="string">"--json-status-fd"</span>, <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{}"</span>, file.as_raw_fd())]
+<a href=#318 id=318 data-nosnippet>318</a>                        .map(String::from)
+<a href=#319 id=319 data-nosnippet>319</a>                        .map(Cow::Owned),
+<a href=#320 id=320 data-nosnippet>320</a>                );
+<a href=#321 id=321 data-nosnippet>321</a>                args.handle.fd_i(file);
+<a href=#322 id=322 data-nosnippet>322</a>            });
+<a href=#323 id=323 data-nosnippet>323</a>
+<a href=#324 id=324 data-nosnippet>324</a>            <span class="comment">// Watch for the proxy to expose its bus to give to the sandbox.
+<a href=#325 id=325 data-nosnippet>325</a>            </span><span class="macro">debug!</span>(<span class="string">"Creating proxy watch"</span>);
+<a href=#326 id=326 data-nosnippet>326</a>            <span class="macro">as_real!</span>(<span class="prelude-ty">Result</span>&lt;()&gt;, {
+<a href=#327 id=327 data-nosnippet>327</a>                args.watches.insert(args.inotify.lock().watches().add(
+<a href=#328 id=328 data-nosnippet>328</a>                    user_dir(args.instance.name()).join(<span class="string">"proxy"</span>),
+<a href=#329 id=329 data-nosnippet>329</a>                    WatchMask::CREATE,
+<a href=#330 id=330 data-nosnippet>330</a>                )<span class="question-mark">?</span>);
+<a href=#331 id=331 data-nosnippet>331</a>                <span class="prelude-val">Ok</span>(())
+<a href=#332 id=332 data-nosnippet>332</a>            })<span class="question-mark">??</span>;
+<a href=#333 id=333 data-nosnippet>333</a>
+<a href=#334 id=334 data-nosnippet>334</a>            args.handle.associate(proxy.spawn()<span class="question-mark">?</span>);
+<a href=#335 id=335 data-nosnippet>335</a>        }
+<a href=#336 id=336 data-nosnippet>336</a>
+<a href=#337 id=337 data-nosnippet>337</a>        arguments.extend(
+<a href=#338 id=338 data-nosnippet>338</a>            [
+<a href=#339 id=339 data-nosnippet>339</a>                <span class="string">"--ro-bind"</span>,
+<a href=#340 id=340 data-nosnippet>340</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{instance_dir_str}/proxy/bus"</span>),
+<a href=#341 id=341 data-nosnippet>341</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"{runtime}/bus"</span>),
+<a href=#342 id=342 data-nosnippet>342</a>            ]
+<a href=#343 id=343 data-nosnippet>343</a>            .map(String::from)
+<a href=#344 id=344 data-nosnippet>344</a>            .map(Cow::Owned),
+<a href=#345 id=345 data-nosnippet>345</a>        );
+<a href=#346 id=346 data-nosnippet>346</a>    }
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(arguments))
+<a href=#349 id=349 data-nosnippet>349</a>}
 </code></pre></div></section></main></body></html>

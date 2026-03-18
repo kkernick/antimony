@@ -81,34 +81,42 @@
 <a href=#81 id=81 data-nosnippet>81</a>    /// here, but when they run in relation to other features and profiles you cannot
 <a href=#82 id=82 data-nosnippet>82</a>    /// count on.
 <a href=#83 id=83 data-nosnippet>83</a>    </span><span class="kw">pub </span>hooks: <span class="prelude-ty">Option</span>&lt;Hooks&gt;,
-<a href=#84 id=84 data-nosnippet>84</a>}
-<a href=#85 id=85 data-nosnippet>85</a><span class="kw">impl </span>Feature {
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Get a feature from its name.
-<a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">pub fn </span>new(name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, Error&gt; {
-<a href=#88 id=88 data-nosnippet>88</a>        store::load::&lt;<span class="self">Self</span>, Error&gt;(name, Object::Feature, <span class="bool-val">false</span>)
-<a href=#89 id=89 data-nosnippet>89</a>    }
-<a href=#90 id=90 data-nosnippet>90</a>
-<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Edit a feature.
-<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub fn </span>edit(feat: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;, edit::Error&gt; {
-<a href=#93 id=93 data-nosnippet>93</a>        edit::edit::&lt;<span class="self">Self</span>&gt;(feat)
-<a href=#94 id=94 data-nosnippet>94</a>    }
-<a href=#95 id=95 data-nosnippet>95</a>}
-<a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a><span class="attr">#[cfg(test)]
-<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">mod </span>tests {
-<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">use </span><span class="kw">crate</span>::shared::store::SYSTEM_STORE;
-<a href=#101 id=101 data-nosnippet>101</a>
-<a href=#102 id=102 data-nosnippet>102</a>    <span class="attr">#[test]
-<a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">fn </span>validate_features() {
-<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">for </span>feature <span class="kw">in </span>SYSTEM_STORE
-<a href=#105 id=105 data-nosnippet>105</a>            .with_borrow(|s| s.get(Object::Feature))
-<a href=#106 id=106 data-nosnippet>106</a>            .expect(<span class="string">"Failed to get features"</span>)
-<a href=#107 id=107 data-nosnippet>107</a>        {
-<a href=#108 id=108 data-nosnippet>108</a>            SYSTEM_STORE
-<a href=#109 id=109 data-nosnippet>109</a>                .with_borrow(|s| s.fetch(<span class="kw-2">&amp;</span>feature, Object::Feature))
-<a href=#110 id=110 data-nosnippet>110</a>                .expect(<span class="string">"Failed to read feature"</span>);
-<a href=#111 id=111 data-nosnippet>111</a>        }
-<a href=#112 id=112 data-nosnippet>112</a>    }
-<a href=#113 id=113 data-nosnippet>113</a>}
+<a href=#84 id=84 data-nosnippet>84</a>
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="doccomment">/// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+<a href=#86 id=86 data-nosnippet>86</a>    /// Note that this does grant privileges, it merely allows an application with existing privileges to
+<a href=#87 id=87 data-nosnippet>87</a>    /// keep them when running within the sandbox. However, this property being allowed in the sandbox
+<a href=#88 id=88 data-nosnippet>88</a>    /// means that an other unprivileged process could gain extra privilege if there's a binary in the
+<a href=#89 id=89 data-nosnippet>89</a>    /// sandbox with privilege, and this flag is enabled (Though note the sandbox cannot elevate to root,
+<a href=#90 id=90 data-nosnippet>90</a>    /// regardless of privilege).
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub </span>new_privileges: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#92 id=92 data-nosnippet>92</a>}
+<a href=#93 id=93 data-nosnippet>93</a><span class="kw">impl </span>Feature {
+<a href=#94 id=94 data-nosnippet>94</a>    <span class="doccomment">/// Get a feature from its name.
+<a href=#95 id=95 data-nosnippet>95</a>    </span><span class="kw">pub fn </span>new(name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, Error&gt; {
+<a href=#96 id=96 data-nosnippet>96</a>        store::load::&lt;<span class="self">Self</span>, Error&gt;(name, Object::Feature, <span class="bool-val">false</span>)
+<a href=#97 id=97 data-nosnippet>97</a>    }
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// Edit a feature.
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">pub fn </span>edit(feat: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;String&gt;, edit::Error&gt; {
+<a href=#101 id=101 data-nosnippet>101</a>        edit::edit::&lt;<span class="self">Self</span>&gt;(feat)
+<a href=#102 id=102 data-nosnippet>102</a>    }
+<a href=#103 id=103 data-nosnippet>103</a>}
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a><span class="attr">#[cfg(test)]
+<a href=#106 id=106 data-nosnippet>106</a></span><span class="kw">mod </span>tests {
+<a href=#107 id=107 data-nosnippet>107</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="kw">use </span><span class="kw">crate</span>::shared::store::SYSTEM_STORE;
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a>    <span class="attr">#[test]
+<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">fn </span>validate_features() {
+<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">for </span>feature <span class="kw">in </span>SYSTEM_STORE
+<a href=#113 id=113 data-nosnippet>113</a>            .with_borrow(|s| s.get(Object::Feature))
+<a href=#114 id=114 data-nosnippet>114</a>            .expect(<span class="string">"Failed to get features"</span>)
+<a href=#115 id=115 data-nosnippet>115</a>        {
+<a href=#116 id=116 data-nosnippet>116</a>            SYSTEM_STORE
+<a href=#117 id=117 data-nosnippet>117</a>                .with_borrow(|s| s.fetch(<span class="kw-2">&amp;</span>feature, Object::Feature))
+<a href=#118 id=118 data-nosnippet>118</a>                .expect(<span class="string">"Failed to read feature"</span>);
+<a href=#119 id=119 data-nosnippet>119</a>        }
+<a href=#120 id=120 data-nosnippet>120</a>    }
+<a href=#121 id=121 data-nosnippet>121</a>}
 </code></pre></div></section></main></body></html>

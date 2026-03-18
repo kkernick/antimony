@@ -370,17 +370,22 @@
 <a href=#370 id=370 data-nosnippet>370</a>            p_hooks.parent = hooks.parent;
 <a href=#371 id=371 data-nosnippet>371</a>        }
 <a href=#372 id=372 data-nosnippet>372</a>    }
-<a href=#373 id=373 data-nosnippet>373</a>    <span class="prelude-val">Ok</span>(())
-<a href=#374 id=374 data-nosnippet>374</a>}
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a><span class="kw">pub fn </span>fabricate(profile: <span class="kw-2">&amp;mut </span>Profile, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">let </span><span class="kw-2">mut </span>map = Map::default();
-<a href=#378 id=378 data-nosnippet>378</a>    map.insert(<span class="string">"{name}"</span>, name.to_string());
-<a href=#379 id=379 data-nosnippet>379</a>    map.insert(<span class="string">"{desktop}"</span>, profile.desktop(name).to_string());
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a>    profile.new_privileges = <span class="kw">match </span>profile.new_privileges {
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="prelude-val">Some</span>(<span class="bool-val">false</span>) | <span class="prelude-val">None </span>=&gt; feature.new_privileges,
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="prelude-val">Some</span>(<span class="bool-val">true</span>) =&gt; <span class="prelude-val">Some</span>(<span class="bool-val">true</span>),
+<a href=#377 id=377 data-nosnippet>377</a>    };
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="prelude-val">Ok</span>(())
+<a href=#379 id=379 data-nosnippet>379</a>}
 <a href=#380 id=380 data-nosnippet>380</a>
-<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">for </span>feature <span class="kw">in </span>resolve_features(<span class="kw-2">&amp;</span>profile.features, <span class="kw-2">&amp;</span>profile.conflicts)<span class="question-mark">? </span>{
-<a href=#382 id=382 data-nosnippet>382</a>        add_feature(profile, <span class="kw-2">&amp;</span>map, feature)<span class="question-mark">?</span>;
-<a href=#383 id=383 data-nosnippet>383</a>    }
-<a href=#384 id=384 data-nosnippet>384</a>    <span class="prelude-val">Ok</span>(())
-<a href=#385 id=385 data-nosnippet>385</a>}
+<a href=#381 id=381 data-nosnippet>381</a><span class="kw">pub fn </span>fabricate(profile: <span class="kw-2">&amp;mut </span>Profile, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;(), Error&gt; {
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">let </span><span class="kw-2">mut </span>map = Map::default();
+<a href=#383 id=383 data-nosnippet>383</a>    map.insert(<span class="string">"{name}"</span>, name.to_string());
+<a href=#384 id=384 data-nosnippet>384</a>    map.insert(<span class="string">"{desktop}"</span>, profile.desktop(name).to_string());
+<a href=#385 id=385 data-nosnippet>385</a>
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">for </span>feature <span class="kw">in </span>resolve_features(<span class="kw-2">&amp;</span>profile.features, <span class="kw-2">&amp;</span>profile.conflicts)<span class="question-mark">? </span>{
+<a href=#387 id=387 data-nosnippet>387</a>        add_feature(profile, <span class="kw-2">&amp;</span>map, feature)<span class="question-mark">?</span>;
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="prelude-val">Ok</span>(())
+<a href=#390 id=390 data-nosnippet>390</a>}
 </code></pre></div></section></main></body></html>
