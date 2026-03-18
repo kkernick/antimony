@@ -211,9 +211,9 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     timer!("::resolve", {
         files.into_par_iter().for_each(|file| {
             dependencies.insert(file.clone());
-            if let Ok(libraries) = get_libraries(Cow::Borrowed(&file)) {
-                for library in &libraries {
-                    dependencies.insert(library.clone());
+            if let Ok(libraries) = get_libraries(Cow::Owned(file)) {
+                for library in libraries {
+                    dependencies.insert(library);
                 }
             }
         });

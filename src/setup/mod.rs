@@ -13,6 +13,7 @@ use crate::{
         config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
+        store::{CACHE_STORE, mem},
         utility,
     },
     timer,
@@ -63,7 +64,11 @@ pub struct Info {
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
-pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Result<Info> {
+pub fn setup<'a>(
+    name: Cow<'a, str>,
+    args: &'a mut super::cli::run::Args,
+    global_refresh: bool,
+) -> Result<Info> {
     let mut profile = match Profile::new(&name, args.config.take()) {
         Ok(profile) => profile,
         Err(e) => {
@@ -75,7 +80,7 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
         }
     };
 
-    if !CONFIG_FILE.lock().system_mode() {
+    if !CONFIG_FILE.system_mode() {
         let cmd_profile = Profile::from_args(args)?;
         profile = profile.base(cmd_profile)?
     }
@@ -270,6 +275,16 @@ pub fn setup<'a>(name: Cow<'a, str>, args: &'a mut super::cli::run::Args) -> Res
             },
         )
     );
+
+    // Flush to disk in a separate thread after everything has been calculated.
+    // This lets us update the cache while the sandbox is running, effectively
+    // eliminating its overhead.
+    if !global_refresh && CACHE_STORE.with_borrow(|s| s.resident()) {
+        debug!("Flushing to disk");
+        rayon::spawn(|| {
+            let _ = mem::flush();
+        })
+    }
 
     let home = home?;
     let mut a = Arc::into_inner(a).expect("Failed to unwrap fabricator");

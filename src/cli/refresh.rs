@@ -3,16 +3,14 @@
 use crate::{
     cli::{self, run, run_vec},
     shared::{
-        config::CONFIG_FILE,
-        env::{AT_HOME, CACHE_DIR, HOME_PATH},
+        env::{CACHE_DIR, HOME_PATH},
         profile::{self, Profile},
-        store::{self, CACHE_STORE, OBJECTS, Object, Store, init_cache},
+        store::{self, Object, mem},
     },
 };
 use anyhow::Result;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use rayon::prelude::*;
 use std::{fs, time::Duration};
 use user::as_real;
 
@@ -48,11 +46,6 @@ impl cli::Run for Args {
                 }
             }
         } else if self.profile.is_none() {
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".proxy"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".seccomp"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".direct"));
-            let _ = fs::remove_dir_all(CACHE_DIR.join(".lib"));
-
             for cache in fs::read_dir(CACHE_DIR.as_path())? {
                 let cache = cache?;
                 let instances = cache.path().join("instances");
@@ -72,16 +65,10 @@ impl cli::Run for Args {
             }
         }
 
-        let _ = fs::remove_dir_all(CACHE_DIR.join("binaries"));
-        let _ = fs::remove_dir_all(CACHE_DIR.join("libraries"));
-        let _ = fs::remove_dir_all(CACHE_DIR.join("directories"));
-        let _ = fs::remove_dir_all(CACHE_DIR.join("profiles"));
-        let _ = fs::remove_dir_all(CACHE_DIR.join("wildcards"));
-
-        let db = AT_HOME.join("db");
-        let _ = fs::remove_file(db.join("cache.db"));
-        let _ = fs::remove_file(db.join("cache.db-shm"));
-        let _ = fs::remove_file(db.join("cache.db-wal"));
+        // The cache is in-memory for all refresh operations.
+        // When profile-specific, the cache is flushed right after starting the sandbox.
+        // When refreshing everything, the cache is flushed after everything has gone.
+        mem::setup()?;
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {
@@ -98,17 +85,7 @@ impl cli::Run for Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
-            let old = {
-                let mut config = CONFIG_FILE.lock();
-                let old = config.cache_store();
-                config.cache_store = Some(Store::Memory);
-                old
-            };
-
             let profiles = installed_profiles()?;
-
-            // DO NOT TRY AND RUN THIS IN PARALLEL. ANTIMONY WILL
-            // CAUSE A KERNEL PANIC IF YOU RUN IT IN PARALLEL!
             let pb = ProgressBar::new(profiles.len() as u64 + 1);
             pb.set_style(
                 ProgressStyle::default_spinner()
@@ -127,7 +104,7 @@ impl cli::Run for Args {
                     ..Default::default()
                 };
                 user::set(user::Mode::Effective)?;
-                args.run()?;
+                args.refresh()?;
 
                 for (conf, _) in profile.configuration {
                     pb.set_message(format!("Refreshing {name} ({conf})"));
@@ -139,31 +116,15 @@ impl cli::Run for Args {
                         ..Default::default()
                     };
                     user::set(user::Mode::Effective)?;
-                    args.run()?;
+                    args.refresh()?;
                 }
                 pb.inc(1);
                 Ok(())
             })?;
 
-            pb.set_message(format!("Flushing to {old:?}"));
             pb.inc(1);
-            let mut out = init_cache(old);
-            OBJECTS.into_iter().try_for_each(|object| -> Result<()> {
-                if let Ok(map) = CACHE_STORE.with_borrow(|s| s.get(object)) {
-                    out.bulk(
-                        map.into_par_iter()
-                            .filter_map(|name| {
-                                match CACHE_STORE.with_borrow(|s| s.bytes(&name, object)) {
-                                    Ok(content) => Some((name, content)),
-                                    Err(_) => None,
-                                }
-                            })
-                            .collect(),
-                        object,
-                    )?;
-                }
-                Ok(())
-            })?;
+            pb.set_message("Flushing to disk");
+            mem::flush()?;
         }
         Ok(())
     }

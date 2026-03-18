@@ -12,6 +12,7 @@ use crate::shared::{
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
 use clap::ValueEnum;
+use log::info;
 use nix::errno;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
@@ -19,6 +20,7 @@ use thiserror::Error;
 
 /// Initialize the system store based on the defined configuration.
 pub fn init_system(store: Store) -> Box<dyn BackingStore> {
+    info!("Using {store:?} for System Store");
     match store {
         Store::Database => Box::new(
             db::Store::new(db::Database::System).expect("Failed to initialize Database Store"),
@@ -33,6 +35,7 @@ pub fn init_system(store: Store) -> Box<dyn BackingStore> {
 
 /// Initialize the user store based on the defined configuration.
 pub fn init_user(store: Store) -> Box<dyn BackingStore> {
+    info!("Using {store:?} for User Store");
     match store {
         Store::Database => Box::new(
             db::Store::new(db::Database::User).expect("Failed to initialize Database Store"),
@@ -47,6 +50,7 @@ pub fn init_user(store: Store) -> Box<dyn BackingStore> {
 
 /// Initialize the cache store based on the defined configuration.
 pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
+    info!("Using {store:?} for Cache Store");
     match store {
         Store::Database => Box::new(
             db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
@@ -63,13 +67,13 @@ pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
 // for files.
 thread_local! {
     pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_system(CONFIG_FILE.lock().config_store()));
+        RefCell::new(init_system(CONFIG_FILE.config_store()));
 
     pub static USER_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_user(CONFIG_FILE.lock().config_store()));
+        RefCell::new(init_user(CONFIG_FILE.config_store()));
 
     pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_cache(CONFIG_FILE.lock().cache_store()));
+        RefCell::new(init_cache(CONFIG_FILE.cache_store()));
 }
 
 /// Which store is in use for a given backend.
@@ -181,7 +185,7 @@ pub fn load<
     def: bool,
 ) -> Result<T, E> {
     if def && name == "default" {
-        if !CONFIG_FILE.lock().system_mode()
+        if !CONFIG_FILE.system_mode()
             && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
         {
             return Ok(toml::from_str::<T>(&str)?);
@@ -200,7 +204,7 @@ pub fn load<
         }
     }
 
-    if !CONFIG_FILE.lock().system_mode()
+    if !CONFIG_FILE.system_mode()
         && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
     {
         return Ok(toml::from_str(&str)?);

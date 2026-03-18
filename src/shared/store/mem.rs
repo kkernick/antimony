@@ -3,10 +3,16 @@
 //! so that profiles can share a cache entirely in memory, which is then dumped to the
 //! actual backing store all in one go.
 
-use crate::shared::store::Object;
+use crate::shared::CONFIG_FILE;
+use crate::shared::store::{CACHE_STORE, OBJECTS, Object, init_cache};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
-use std::{collections::HashMap, sync::LazyLock};
+use log::debug;
+use rayon::prelude::*;
+use std::{
+    collections::HashMap,
+    sync::{LazyLock, OnceLock},
+};
 
 type Table = HashMap<String, Vec<u8>>;
 
@@ -15,6 +21,52 @@ static CACHE: CacheStatic<String, DashMap<Object, Table>> = LazyLock::new(DashMa
 
 static MEM_STORE: LazyLock<cache::Cache<String, DashMap<Object, Table>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
+
+pub static FLUSH_STORE: OnceLock<super::Store> = OnceLock::new();
+
+pub fn setup() -> anyhow::Result<()> {
+    let old = CONFIG_FILE
+        .cache_store
+        .lock()
+        .replace(super::Store::Memory)
+        .unwrap_or_default();
+
+    if FLUSH_STORE.set(old).is_err() {
+        Err(anyhow::anyhow!("Cannot setup mem cache more than once!"))
+    } else {
+        Ok(())
+    }
+}
+
+pub fn flush() -> anyhow::Result<()> {
+    if let Some(old) = FLUSH_STORE.get() {
+        debug!("Flushing cache to disk...");
+        let mut out = init_cache(*old);
+
+        OBJECTS
+            .into_iter()
+            .try_for_each(|object| -> anyhow::Result<()> {
+                if let Ok(map) = CACHE_STORE.with_borrow(|s| s.get(object)) {
+                    out.bulk(
+                        map.into_par_iter()
+                            .filter_map(|name| {
+                                match CACHE_STORE.with_borrow(|s| s.bytes(&name, object)) {
+                                    Ok(content) => Some((name, content)),
+                                    Err(_) => None,
+                                }
+                            })
+                            .collect(),
+                        object,
+                    )?;
+                }
+                Ok(())
+            })
+    } else {
+        Err(anyhow::anyhow!(
+            "Flush store not initalized! Call setup() first!"
+        ))
+    }
+}
 
 /// The File Store
 pub struct Store {

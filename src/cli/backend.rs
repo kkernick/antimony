@@ -84,17 +84,17 @@ impl super::Run for Args {
             ))
         } else {
             let current = if self.cache {
-                CONFIG_FILE.lock().cache_store()
+                CONFIG_FILE.cache_store()
             } else {
-                CONFIG_FILE.lock().config_store()
+                CONFIG_FILE.config_store()
             };
 
             match self.new {
                 Some(new) => {
                     let current = if self.cache {
-                        CONFIG_FILE.lock().cache_store()
+                        CONFIG_FILE.cache_store()
                     } else {
-                        CONFIG_FILE.lock().config_store()
+                        CONFIG_FILE.config_store()
                     };
 
                     if current == new {
@@ -125,13 +125,14 @@ impl super::Run for Args {
                         })
                         };
 
-                        let mut update = CONFIG_FILE.lock().clone();
+                        let update = CONFIG_FILE.clone();
+
                         if self.cache {
-                            update.cache_store = Some(new);
+                            update.cache_store.lock().replace(new);
                         } else {
                             digest(&USER_STORE, init_user(new))?;
                             digest(&SYSTEM_STORE, init_system(new))?;
-                            update.config_store = Some(new);
+                            update.config_store.lock().replace(new);
                         }
 
                         if !self.dry {

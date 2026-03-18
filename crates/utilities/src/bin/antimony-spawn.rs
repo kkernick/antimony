@@ -118,7 +118,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
 
-        let info = antimony::setup::setup(Cow::Owned(cli.command), &mut args)?;
+        let info = antimony::setup::setup(Cow::Owned(cli.command), &mut args, false)?;
 
         // Forward FDs.
         if let Some(fds) = cli.forward_fd {

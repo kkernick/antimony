@@ -33,7 +33,7 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
 
-    let writeable = if CONFIG_FILE.lock().force_temp() {
+    let writeable = if CONFIG_FILE.force_temp() {
         false
     } else {
         if !cache_dir.exists() {

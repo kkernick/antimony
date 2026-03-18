@@ -3,3 +3,6 @@ description = "Provide all host libraries to the sandbox"
 caveat = "All host libraries are accessible in the sandbox"
 
 libraries = ["/usr/lib"]
+
+[files.platform]
+ro = ["/usr/libexec"]

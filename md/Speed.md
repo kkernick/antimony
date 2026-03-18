@@ -2,27 +2,29 @@
 
 Antimony is *fast*. This document outlines the techniques used to optimize a very slow process, and to highlight Antimony’s improvements over its predecessors.
 
+>[!tip]
+>This document uses extensive use of charts to visualize the data. It’s best viewed in Obsidian with the *Charts* plugin!
+
 ## Comparisons
 
 ### Configuration
 
 The configuration of Antimony’s installation can have a profound effect on performance. These are divided into *Build Time* configuration, and *Run Time* configuration.
 
-1. *Build Time*: Choosing to compile Antimony yourself, and using `-Ctarget-cpu=native` in your `RUSTFLAGS` optimizing the resulting binary for your architecture, and can drastically improve performance. Antimony publishes binaries for each release, but these are tailored to work on all x86 machines. Additionally, further optimization can be squeezed out of the binary for your particular workflow and profiles using the `pgo` or `bolt` helper scripts (Which require additional dependencies).
-2. *Run Time*: The most important performance consideration is the privileges given to the `antimony` executable, and the location of `AT_HOME`. By default, Antimony creates hard-links for library files in a cache located within `AT_HOME`. If it cannot do this, such as if its lacking the `FOWNER` capability, or if `AT_HOME` isn’t on the same partition as `/usr/lib`, then it will create copies in `/tmp`. This has a drastic toll on performance.
+1. *Build Time*: Choosing to compile Antimony yourself, and using `-Ctarget-cpu=native` in your `RUSTFLAGS` optimizing the resulting binary for your architecture, and can drastically improve performance. Antimony publishes binaries for each release, but these are tailored to work on all x86 machines. Additionally, further optimization can be squeezed out of the binary for your particular workflow and profiles using `pgo`.
+2. *Run Time*: The most important performance consideration is the privileges given to the `antimony` executable, and the location of `AT_HOME`. By default, Antimony creates hard-links for library files in a cache located within `AT_HOME`. If it cannot do this then it will create copies in `/tmp`. This has a drastic toll on performance.
 
 >[!warning]
 >Creating files in `/tmp` can have security considerations on top of performance if Antimony is not `setuid`. If running as a regular user, Antimony’s cache folder will globally accessible to all programs running as the user. With `setuid`, Antimony can protect write-access to to its temporary cache.
 
-The following table illustrates the relative performance of applying various configurations. Note that the new-features column applies to all subsequent columns (So after `--privileged` is first mentioned, it is implied in all further tests). All testing was performed with `./bench $PROFILES --checkout tags/2.4.0 --antimony-args='hard'`
+The following table illustrates the relative performance of applying various configurations. Note that the new-features column applies to all subsequent columns (So after `--system` is first mentioned, it is implied in all further tests).
 
 | Profile (Hot)/ Configuration | Chromium | Zed | Okular | Syncthing | Sh  | New Feature        |
 | ---------------------------- | -------- | --- | ------ | --------- | --- | ------------------ |
-| Debug                        | 6.1      | 5.5 | 5.2    | 4.2       | 3.3 | `--recipe dev`     |
-| Debug (System)               | 6.3      | 5.6 | 5.5    | 3.8       | 3.4 | `--privileged`     |
-| Release                      | 3.1      | 3.0 | 2.9    | 2.1       | 1.9 | `--recipe release` |
-| PGO                          | 3.1      | 3.0 | 2.9    | 2.0       | 1.9 | `--recipe pgo`     |
-| PGO + BOLT                   | 3.0      | 2.1 | 3.0    | 1.9       | 1.7 | `--recipe bolt`    |
+| Debug                        | 6.0      | 5.8 | 5.5    | 4.2       | 4.2 | `--recipe dev`     |
+| Debug (System)               | 6.1      | 5.8 | 5.5    | 4.3       | 4.4 | `--system`         |
+| Release                      | 4.3      | 4.2 | 3.9    | 2.9       | 3.3 | `--recipe release` |
+| PGO                          | 4.2      | 4.1 | 3.8    | 2.8       | 3.1 | `--recipe pgo`     |
 ^ConfigHot
 
 ```chart
@@ -31,13 +33,26 @@ select: [Chromium, Zed, Okular, Syncthing, Sh]
 id: ConfigHot
 ```
 
-| Profile (Cold)/ Configuration | Chromium | Zed   | Okular | Syncthing | Sh   | New Feature        |
-| ----------------------------- | -------- | ----- | ------ | --------- | ---- | ------------------ |
-| Debug                         | 648.5    | 302.6 | 2166.3 | 55.4      | 11.1 | `--recipe dev`     |
-| Debug (System)                | 408.5    | 56.1  | 1407.8 | 29.1      | 9.7  | `--privileged`     |
-| Release                       | 361.3    | 48.7  | 1280.2 | 24.5      | 7.1  | `--recipe release` |
-| PGO                           | 374.9    | 48.6  | 1291.7 | 24.4      | 7.2  | `--recipe pgo`     |
-| PGO + BOLT                    | 378.3    | 48.4  | 1290.4 | 23.9      | 6.8  | `--recipe bolt`    |
+
+| Profile (Real)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   | New Feature        |
+| ----------------------------- | -------- | ---- | ------ | --------- | ---- | ------------------ |
+| Debug                         | 23.3     | 19.8 | 20.7   | 11.3      | 11.1 | `--recipe dev`     |
+| Debug (System)                | 23.3     | 19.6 | 21.2   | 11.4      | 11.0 | `--system`         |
+| Release                       | 18.3     | 14.8 | 15.9   | 7.5       | 7.2  | `--recipe release` |
+| PGO                           | 17.8     | 14.7 | 15.6   | 7.4       | 7.6  | `--recipe pgo`     |
+^ConfigReal
+
+```chart
+type: bar
+select: [Chromium, Zed, Okular, Syncthing, Sh]
+id: ConfigReal
+```
+
+| Profile (Cold)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   | New Feature        |
+| ----------------------------- | -------- | ---- | ------ | --------- | ---- | ------------------ |
+| Debug (System)                | 0.27     | 0.17 | 0.37   | 0.88      | 0.76 | `--system`         |
+| Release                       | 0.24     | 0.14 | 0.32   | 0.62      | 0.56 | `--recipe release` |
+| PGO                           | 0.23     | 0.14 | 0.31   | 0.59      | 0.54 | `--recipe pgo`     |
 ^ConfigCold
 
 ```chart
@@ -45,6 +60,7 @@ type: bar
 select: [Chromium, Zed, Okular, Syncthing, Sh]
 id: ConfigCold
 ```
+*Normalized to a Debug, Non-System Build*.
 ### Older Implementations
 
 Antimony is the final iteration of a several year long object to create fast, usable, and function sandboxes for Linux. This project initially started as a Shell Script, borrowing from an example provided on the [Arch Wiki](https://wiki.archlinux.org/title/Bubblewrap) describing a way to coordinate a `bubblewrap` invocation with `xdg-dbus-proxy` to get Portals to work outside of Flatpak. That script eventually became too complicated, and turned into SB, a Python program. Speed and complexity eventually lead to a re-implementation in C++. 
@@ -69,12 +85,12 @@ id: SBHot
 
 *Comparison between Hot Startup, in Milliseconds. Each application has cached definitions, and this benchmark largely shows how quickly the program can read its caches and launch bubblewrap.*
 
-| Profile Cold | SB     | SB++   | Antimony | Improvement |
-| ------------ | ------ | ------ | -------- | ----------- |
-| Chromium     | 862.5  | 633.8  | 521.1    | 1.2X        |
-| Zed          | 418.2  | 177.8  | 45.6     | 3.9X        |
-| Okular       | 3792.9 | 2107.6 | 1604.8   | 1.3X        |
-| Syncthing    | 170.4  | 37.0   | 25.9     | 1.4X        |
+| Profile Cold | SB  | SB++ | Antimony | Improvement |
+| ------------ | --- | ---- | -------- | ----------- |
+| Chromium     | 1   | 0.73 | 0.60     | 1.2X        |
+| Zed          | 1   | 0.43 | 0.11     | 3.9X        |
+| Okular       | 1   | 0.56 | 0.42     | 1.3X        |
+| Syncthing    | 1   | 0.22 | 0.15     | 1.4X        |
 ^SBCold
 
 ```chart
@@ -86,7 +102,7 @@ id: SBCold
 
 \* SB is run via `benchmark.sh python main $PROFILE` from the [SB](https://github.com/kkernick/sb) repository.
 \** SB++ is run via `benchmark.sh cpp main $PROFILE`.
-\*** Antimony is run via `bench $PROFILE` from this repository, using a system installation from `deploy`.
+\*** Antimony is run via `cargo bencher $PROFILE` from this repository, using a system installation from `deploy`.
 
 ### Older Versions
 
@@ -94,6 +110,13 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 
 >[!note]
 >These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
+
+>[!warning]
+>While these benchmarks can be informative, and are immensely useful in finding regressions, there is a risk of over-fitting the benchmark by taking them at face value. For example, version 4.2.1 introduced using the memory backend for single-profile refreshing, such that cache information would be stored in memory until the application was launched, and would then silently commit the data to the actual backend in the background. From a real-world perspective, this effectively eliminates the cost of writing to disk, as it is done *after* the application is launched, and is not resource-intensive to the point that it would degrade the sandbox’s performance. 
+>
+>*However*, when the sandbox only runs a dummy profile (IE the `dry` feature), or not at all (IE `--dry`), the writing *does* become noticeable, since there is nothing else to do, and as such this would appear as a performance regression in these benchmarks. Note this isn’t an issue with the global refresh, since the memory backend is expressly used to allow the profiles to read/write directly from memory, and then commit the entire cache in one transaction.
+>
+> This, and the previous note, is all to say take these numbers with as grain of salt. Has Okular really regressed 40% on refreshing? Looking at this table, yes. Taking into account bug fixes, features, and the fact that these numbers invariably become nonsensical as they have to be normalized off each other? Not so clear.
 
 #### Hot
 
@@ -123,6 +146,7 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 | 4.1.0                 | 4.1      | 4.0 | 3.7    | 2.7       | 3.1 |
 | 4.1.1                 | 4.1      | 4.1 | 3.7    | 2.7       | 3.1 |
 | 4.2.0                 | 4.2      | 4.1 | 3.9    | 2.9       | 3.2 |
+| 4.2.1                 | 4.3      | 4.1 | 3.9    | 2.9       | 3.3 |
 ^HistoryHot
 
 ```chart
@@ -160,6 +184,7 @@ spanGaps: true
 | 4.1.0                  | 316.2    | 91.0 | 1727.0 | 12.7      | 9.6 |
 | 4.1.1                  | 212.4    | 58.8 | 1196.3 | 13.0      | 9.6 |
 | 4.2.0                  | 189.9    | 56.5 | 911.9  | 13.1      | 9.5 |
+| 4.2.1                  | 188.3    | 55.9 | 1136.3 | 12.5      | 9.1 |
 ^HistoryCold
 
 ```chart
@@ -210,6 +235,7 @@ spanGaps: true
 | 4.1.0                  | 17.6     | 14.5 | 15.2   | 7.2       | 7.5 |
 | 4.1.1                  | 18.1     | 14.6 | 15.5   | 7.3       | 7.7 |
 | 4.2.0                  | 18.8     | 15.3 | 13.5   | 7.6       | 7.9 |
+| 4.2.1                  | 19.0     | 15.0 | 13.5   | 7.6       | 7.9 |
 ^HistoryReal
 
 ```chart
@@ -219,22 +245,6 @@ tension: 0.5
 spanGaps: true
 ```
 
-#### Refresh
-
-| Refreshing / Time | Time   |
-| ----------------- | ------ |
-| 4.0.0             | 2350.4 |
-| 4.1.0             | 2981.5 |
-| 4.1.1             | 2323.0 |
-| 4.2.0             | 2568.0 |
-^HistoryRefresh
-
-```chart
-type: line
-id: HistoryRefresh
-tension: 0.5
-spanGaps: true
-```
 
 ## Techniques
 

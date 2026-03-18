@@ -35,7 +35,7 @@ pub type Map<K, V> = IndexMap<K, V, StaticHash>;
 /// Check that the Real User is privileged. This is used to allow modifying the
 /// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)
 pub fn privileged() -> anyhow::Result<bool> {
-    if CONFIG_FILE.lock().is_privileged() {
+    if CONFIG_FILE.is_privileged() {
         Ok(true)
 
     // If the running user owns AT_HOME, they don't need permission checks.

@@ -4,6 +4,7 @@
 //! This Backend is best for fast disks.
 
 use crate::shared::store::Object;
+use rayon::prelude::*;
 use std::{
     collections::HashMap,
     fs::{self, File},
@@ -71,7 +72,7 @@ impl super::BackingStore for Store {
         object: super::Object,
     ) -> Result<(), super::Error> {
         entries
-            .into_iter()
+            .into_par_iter()
             .try_for_each(|(name, content)| self.dump(&name, object, &content))
     }
 

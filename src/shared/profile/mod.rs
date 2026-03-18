@@ -16,8 +16,8 @@ use crate::{
         Map, Set,
         config::CONFIG_FILE,
         edit,
-        env::{CACHE_DIR, HOME},
-        store::{self, Object, USER_STORE},
+        env::HOME,
+        store::{self, CACHE_STORE, Object, USER_STORE},
     },
     timer,
 };
@@ -25,12 +25,9 @@ use ahash::RandomState;
 use console::style;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fs, io, path::PathBuf, sync::LazyLock};
+use std::{borrow::Cow, io};
 use thiserror::Error;
-use user::as_effective;
 use which::which;
-
-static PROFILE_CACHE: LazyLock<PathBuf> = LazyLock::new(|| CACHE_DIR.join("profiles"));
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -327,12 +324,11 @@ impl Profile {
             if let Some(config) = &config {
                 hash += config;
             }
-            hash += &CONFIG_FILE.lock().system_mode().to_string();
+            hash += &CONFIG_FILE.system_mode().to_string();
             hash
         });
 
-        let cache = PROFILE_CACHE.join(hash);
-        if let Ok(str) = fs::read_to_string(&cache) {
+        if let Ok(str) = CACHE_STORE.with_borrow(|s| s.fetch(&hash, Object::Profile)) {
             debug!("Using cached profile");
             return Ok(timer!("::cache_parse", toml::from_str(&str)?));
         }
@@ -341,7 +337,7 @@ impl Profile {
         let to_inherit: Set<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
-                if !CONFIG_FILE.lock().system_mode()
+                if !CONFIG_FILE.system_mode()
                     && USER_STORE.with_borrow(|s| s.exists("default", Object::Profile))
                 {
                     Set::from_iter(["default".to_string()])
@@ -395,14 +391,8 @@ impl Profile {
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
-        if let Some(parent) = cache.parent()
-            && !parent.exists()
-        {
-            as_effective!(fs::create_dir_all(parent))??;
-        }
-
         if let Ok(str) = toml::to_string(&profile) {
-            as_effective!(fs::write(cache, &str))??;
+            CACHE_STORE.with_borrow(|s| s.store(&hash, Object::Profile, &str))?;
         }
         Ok(profile)
     }

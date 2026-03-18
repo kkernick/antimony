@@ -10,7 +10,7 @@ pub mod ns;
 
 use crate::shared::{
     Set,
-    env::{AT_HOME, HOME},
+    env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
     profile::Profile,
     store::{CACHE_STORE, Object},
 };
@@ -32,8 +32,6 @@ use std::{
 use temp::Temp;
 use user::as_real;
 
-/// What the Cache type is. Through benchmarking, a regular Vec outperforms
-/// both Sets and SmallVec.
 type Cache = HashSet<String, ahash::RandomState>;
 
 /// Get the library roots.
@@ -180,7 +178,6 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
         let libraries: Cache = Spawner::abs("/usr/bin/ldd")
             .arg(path.as_ref())?
             .output(StreamMode::Pipe)
-            .error(StreamMode::Discard)
             .mode(user::Mode::Real)
             .spawn()?
             .output_all()?
@@ -216,10 +213,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
             })
             .collect();
 
-        if CACHE_STORE.with_borrow(|s| s.resident()) {
-            write_cache(&path, &libraries, Object::Libraries)?;
-        }
-
+        write_cache(&path, &libraries, Object::Libraries)?;
         libraries
     };
 
@@ -273,7 +267,9 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
                     // values Antimony can fill.
                     let val = match var_name.as_str() {
                         "UID" => format!("{}", user::USER.real),
-                        "AT_HOME" => format!("{}", AT_HOME.display()),
+                        "AT_HOME" => AT_HOME.display().to_string(),
+                        "XDG_CONFIG_HOME" => CONFIG_HOME.display().to_string(),
+                        "XDG_DATA_HOME" => DATA_HOME.display().to_string(),
                         name => env::var(name).unwrap_or_else(|_| format!("${name}")),
                     };
                     resolved.push_str(&val);

@@ -180,7 +180,26 @@ impl cli::Run for Args {
         let result = || -> Result<()> {
             let info = timer!(
                 "::setup",
-                setup(Cow::Owned(self.profile.clone()), &mut self)
+                setup(Cow::Owned(self.profile.clone()), &mut self, false)
+            )?;
+            timer!("::run", run(info, &mut self))?;
+            Ok(())
+        }();
+
+        if let Err(e) = result {
+            error!("{e}");
+            return Err(e);
+        }
+        Ok(())
+    }
+}
+impl Args {
+    pub fn refresh(mut self) -> Result<()> {
+        user::set(user::Mode::Effective)?;
+        let result = || -> Result<()> {
+            let info = timer!(
+                "::setup",
+                setup(Cow::Owned(self.profile.clone()), &mut self, true)
             )?;
             timer!("::run", run(info, &mut self))?;
             Ok(())
@@ -310,7 +329,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         let code = info.handle.spawn()?.wait()?;
 
         if code != 0 {
-            if CONFIG_FILE.lock().auto_refresh() && !args.refresh {
+            if CONFIG_FILE.auto_refresh() && !args.refresh {
                 Spawner::abs(utility("notify"))
                     .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                     .mode(user::Mode::Real)

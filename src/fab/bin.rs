@@ -145,7 +145,7 @@ fn parse(
             .parent()
             .ok_or(anyhow!("Binary does not have parent!"))?
             .join(&dest);
-        Ok(resolve_bin(&canon.to_string_lossy().into_owned())?.into_owned())
+        Ok(resolve_bin(&canon.to_string_lossy())?.into_owned())
     })?;
 
     // Ensure it's a valid binary.
