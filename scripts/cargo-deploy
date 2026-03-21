@@ -63,7 +63,6 @@ sudo cp $ROOT/config/config.toml /usr/share/antimony/config
 
 sudo chown -R antimony:antimony /usr/share/antimony
 
-
 sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
 sudo setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
 

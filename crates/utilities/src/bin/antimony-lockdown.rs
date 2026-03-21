@@ -13,7 +13,7 @@ use std::{
         fd::{FromRawFd, OwnedFd},
         unix::fs::MetadataExt,
     },
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use user::{USER, as_effective};
 
@@ -51,7 +51,7 @@ fn main() -> Result<()> {
 
     // The Lockdown user has to make the HOME itself.
     if let Ok(home) = env::var("LOCKDOWN_HOME") {
-        let path = Path::new(&home);
+        let path = PathBuf::from(format!("/usr/share/antimony/lockdown/{home}"));
         if !path.exists() {
             as_effective!(fs::create_dir_all(path))??;
         }

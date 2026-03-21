@@ -98,12 +98,9 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
         && let Some(policy) = home.policy
         && policy == HomePolicy::Enabled
     {
-        let path = format!(
-            "/usr/share/antimony/lockdown/{}/{}",
-            USER.real.as_raw(),
-            args.name
-        );
-        args.handle.env_i("LOCKDOWN_HOME", &path)?;
+        let suffix = format!("{}/{}", USER.real.as_raw(), args.name);
+        let path = format!("/usr/share/antimony/lockdown/{suffix}",);
+        args.handle.env_i("LOCKDOWN_HOME", suffix)?;
         args.handle.args_i(["--bind", &path, "/home/antimony"])?;
     }
 

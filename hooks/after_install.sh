@@ -7,7 +7,7 @@ chown antimony:antimony /usr/bin/antimony
 useradd -r antimony-lockdown
 mkdir /usr/share/antimony/lockdown
 chown antimony-lockdown:antimony-lockdown -R /usr/share/antimony/lockdown
-chown antimony-lockdown:antimony-lockdown -R /usr/share/antimony/utilities/antimony-lockdown
+chown antimony-lockdown:antimony-lockdown /usr/share/antimony/utilities/antimony-lockdown
 
 chmod ug+s /usr/bin/antimony
 chmod ug+s /usr/share/antimony/utilities/antimony-lockdown
