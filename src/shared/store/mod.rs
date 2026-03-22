@@ -14,52 +14,55 @@ use crate::shared::{
 use clap::ValueEnum;
 use log::info;
 use nix::errno;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::{cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
+use std::{any::Any, cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
 use thiserror::Error;
 
+pub static CACHE: Mutex<Option<bool>> = Mutex::new(None);
+
 /// Initialize the system store based on the defined configuration.
-pub fn init_system(store: Store) -> Box<dyn BackingStore> {
-    info!("Using {store:?} for System Store");
-    match store {
-        Store::Database => Box::new(
-            db::Store::new(db::Database::System).expect("Failed to initialize Database Store"),
-        ),
-        Store::File => Box::new(file::Store::new(
-            &format!("{}", AT_CONFIG.display()),
-            "toml",
-        )),
-        Store::Memory => Box::new(mem::Store::new("system")),
-    }
-}
+pub fn init(t: StoreType, store: Store) -> Box<dyn BackingStore> {
+    info!("Using {store:?} for {t:?}");
 
-/// Initialize the user store based on the defined configuration.
-pub fn init_user(store: Store) -> Box<dyn BackingStore> {
-    info!("Using {store:?} for User Store");
-    match store {
-        Store::Database => Box::new(
-            db::Store::new(db::Database::User).expect("Failed to initialize Database Store"),
-        ),
-        Store::File => Box::new(file::Store::new(
-            &format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()),
-            "toml",
-        )),
-        Store::Memory => Box::new(mem::Store::new("user")),
-    }
-}
-
-/// Initialize the cache store based on the defined configuration.
-pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
-    info!("Using {store:?} for Cache Store");
-    match store {
-        Store::Database => Box::new(
-            db::Store::new(db::Database::Cache).expect("Failed to initialize Database Store"),
-        ),
-        Store::File => Box::new(file::Store::new(
-            &format!("{}", CACHE_DIR.display()),
-            "cache",
-        )),
-        Store::Memory => Box::new(mem::Store::new("cache")),
+    match t {
+        StoreType::System => match store {
+            Store::Database => Box::new(
+                db::Store::new(db::Database::System).expect("Failed to initialize Database Store"),
+            ),
+            Store::File => Box::new(file::Store::new(
+                &format!("{}", AT_CONFIG.display()),
+                "toml",
+            )),
+        },
+        StoreType::User => match store {
+            Store::Database => Box::new(
+                db::Store::new(db::Database::User).expect("Failed to initialize Database Store"),
+            ),
+            Store::File => Box::new(file::Store::new(
+                &format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()),
+                "toml",
+            )),
+        },
+        StoreType::Cache => {
+            let cache: Box<dyn BackingStore> = match store {
+                Store::Database => Box::new(
+                    db::Store::new(db::Database::Cache)
+                        .expect("Failed to initialize Database Store"),
+                ),
+                Store::File => Box::new(file::Store::new(
+                    &format!("{}", CACHE_DIR.display()),
+                    "cache",
+                )),
+            };
+            if let Some(read) = *CACHE.lock() {
+                info!("{t:?} in Memory");
+                let name = format!("{t:?}_cache");
+                Box::new(mem::Store::new(&name, cache, read))
+            } else {
+                cache
+            }
+        }
     }
 }
 
@@ -67,13 +70,20 @@ pub fn init_cache(store: Store) -> Box<dyn BackingStore> {
 // for files.
 thread_local! {
     pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_system(CONFIG_FILE.config_store()));
+        RefCell::new(init(StoreType::System, CONFIG_FILE.config_store()));
 
     pub static USER_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_user(CONFIG_FILE.config_store()));
+        RefCell::new(init(StoreType::User, CONFIG_FILE.config_store()));
 
     pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init_cache(CONFIG_FILE.cache_store()));
+        RefCell::new(init(StoreType::Cache, CONFIG_FILE.cache_store()));
+}
+
+#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
+pub enum StoreType {
+    System,
+    User,
+    Cache,
 }
 
 /// Which store is in use for a given backend.
@@ -82,7 +92,6 @@ pub enum Store {
     #[default]
     File,
     Database,
-    Memory,
 }
 
 /// Store errors
@@ -148,6 +157,9 @@ impl fmt::Display for Object {
 /// The abstraction layer that each backend must implement. This simply defines
 /// an interface that Antimony can use to read/write to a backend.
 pub trait BackingStore {
+    /// Resolve the Store as an Any for down-casting
+    fn as_any(&self) -> &dyn Any;
+
     /// Whether the store is resident to the instance, or is non-memory backed.
     fn resident(&self) -> bool;
 
@@ -169,7 +181,7 @@ pub trait BackingStore {
     /// Store bytes into the data-store with the given name.
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), Error>;
 
-    fn bulk(&mut self, entries: HashMap<String, Vec<u8>>, object: Object) -> Result<(), Error>;
+    fn bulk(&self, entries: HashMap<String, Vec<u8>>, object: Object) -> Result<(), Error>;
 
     /// Remove an object from the data-store
     fn remove(&self, name: &str, object: Object) -> Result<(), Error>;

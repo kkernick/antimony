@@ -68,7 +68,7 @@ impl cli::Run for Args {
         // The cache is in-memory for all refresh operations.
         // When profile-specific, the cache is flushed right after starting the sandbox.
         // When refreshing everything, the cache is flushed after everything has gone.
-        mem::setup()?;
+        store::CACHE.lock().replace(false);
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {
@@ -124,7 +124,7 @@ impl cli::Run for Args {
 
             pb.inc(1);
             pb.set_message("Flushing to disk");
-            mem::flush()?;
+            mem::flush();
         }
         Ok(())
     }

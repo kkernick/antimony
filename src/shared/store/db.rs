@@ -7,7 +7,7 @@
 
 use crate::shared::env::{AT_HOME, USER_NAME};
 use rusqlite::{Connection, params, types::FromSql};
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{any::Any, cell::UnsafeCell, collections::HashMap, fs, path::PathBuf};
 use thiserror::Error;
 use user::as_effective;
 
@@ -50,7 +50,7 @@ impl Database {
 }
 
 pub struct Store {
-    connection: Connection,
+    connection: UnsafeCell<Connection>,
 }
 impl Store {
     /// Get a new connection.
@@ -117,17 +117,38 @@ impl Store {
         })
         .map_err(|e| Error::Errno("user", e))??;
 
-        Ok(Self { connection })
+        Ok(Self {
+            connection: UnsafeCell::new(connection),
+        })
+    }
+
+    /// Get a mutable connection.
+    ///
+    /// Because all Backing Stores are thread-unique via thread_local!,
+    /// and none of them share an underlying connection, there is no
+    /// risk in utilizing interior-mutability for the underlying connection.
+    ///
+    /// We could also fix this by placing the Connection in a Mutex,
+    /// but--again--each instance is thread-local, so that would only
+    /// impose an unnecessary penalty.
+    ///
+    #[allow(clippy::mut_from_ref)]
+    fn get_connection(&self) -> &mut Connection {
+        unsafe { &mut *self.connection.get() }
     }
 
     fn retrieve<T: FromSql>(&self, name: &str, object: super::Object) -> Result<T, super::Error> {
         let mut stmt = self
-            .connection
+            .get_connection()
             .prepare(&format!("SELECT value FROM {object} WHERE name = ?1"))?;
         Ok(stmt.query_row(params![name], |row| row.get(0))?)
     }
 }
 impl super::BackingStore for Store {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn resident(&self) -> bool {
         false
     }
@@ -143,7 +164,7 @@ impl super::BackingStore for Store {
     fn get(&self, object: super::Object) -> Result<Vec<String>, super::Error> {
         let mut things = Vec::default();
         let mut stmt = self
-            .connection
+            .get_connection()
             .prepare(&format!("SELECT name FROM {object}"))?;
         let rows = stmt.query_map([], |row| row.get(0))?;
         for name in rows {
@@ -153,7 +174,7 @@ impl super::BackingStore for Store {
     }
 
     fn exists(&self, name: &str, object: super::Object) -> bool {
-        self.connection
+        self.get_connection()
             .query_row(
                 &format!("SELECT EXISTS(SELECT 1 FROM {object} WHERE name = ?1)"),
                 params![name],
@@ -163,7 +184,7 @@ impl super::BackingStore for Store {
     }
 
     fn store(&self, name: &str, object: super::Object, content: &str) -> Result<(), super::Error> {
-        self.connection.execute(
+        self.get_connection().execute(
             &format!("INSERT OR REPLACE INTO {object} (name, value) VALUES (?1, ?2)",),
             params![name, content],
         )?;
@@ -171,12 +192,12 @@ impl super::BackingStore for Store {
     }
 
     fn bulk(
-        &mut self,
+        &self,
         entries: HashMap<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {
         // Start a transaction – all inserts succeed or all fail together.
-        let tx = self.connection.transaction()?;
+        let tx = self.get_connection().transaction()?;
 
         {
             let mut stmt = tx.prepare(&format!(
@@ -192,7 +213,7 @@ impl super::BackingStore for Store {
     }
 
     fn dump(&self, name: &str, object: super::Object, content: &[u8]) -> Result<(), super::Error> {
-        self.connection.execute(
+        self.get_connection().execute(
             &format!("INSERT OR REPLACE INTO {object} (name, value) VALUES (?1, ?2)",),
             params![name, content],
         )?;
@@ -200,7 +221,7 @@ impl super::BackingStore for Store {
     }
 
     fn remove(&self, name: &str, object: super::Object) -> Result<(), super::Error> {
-        self.connection.execute(
+        self.get_connection().execute(
             &format!("DELETE FROM {object} WHERE name = ?1"),
             params![name],
         )?;

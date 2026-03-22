@@ -103,7 +103,7 @@ _antimony() {
             return 0
             ;;
         antimony__backend)
-            opts="-h --digest --cache --overwrite --dry --help file database memory"
+            opts="-h --digest --cache --overwrite --dry --help file database"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

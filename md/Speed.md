@@ -112,41 +112,24 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 >These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
 
 >[!warning]
->While these benchmarks can be informative, and are immensely useful in finding regressions, there is a risk of over-fitting the benchmark by taking them at face value. For example, version 4.2.1 introduced using the memory backend for single-profile refreshing, such that cache information would be stored in memory until the application was launched, and would then silently commit the data to the actual backend in the background. From a real-world perspective, this effectively eliminates the cost of writing to disk, as it is done *after* the application is launched, and is not resource-intensive to the point that it would degrade the sandbox’s performance. 
->
->*However*, when the sandbox only runs a dummy profile (IE the `dry` feature), or not at all (IE `--dry`), the writing *does* become noticeable, since there is nothing else to do, and as such this would appear as a performance regression in these benchmarks. Note this isn’t an issue with the global refresh, since the memory backend is expressly used to allow the profiles to read/write directly from memory, and then commit the entire cache in one transaction.
->
-> This, and the previous note, is all to say take these numbers with as grain of salt. Has Okular really regressed 40% on refreshing? Looking at this table, yes. Taking into account bug fixes, features, and the fact that these numbers invariably become nonsensical as they have to be normalized off each other? Not so clear.
+>Versions before 2.6.0 utilized a naive, 100 millisecond timeout when waiting for the sandbox to terminate This imposes a considerable performance penalty in these benchmarks. To try and reconcile this, the below charts have elected to eliminate that delay wholesale, and as such versions in **bold** have had this correction made.
 
 #### Hot
 
-| Profile Hot / Release | Chromium | Zed | Okular | Syncthing | Sh  |
-| --------------------- | -------- | --- | ------ | --------- | --- |
-| 1.0.0                 | 3.4      | 3.1 | 2.9    | 2.1       | 2.0 |
-| 1.0.1                 | 3.4      | 3.1 | 2.9    | 2.2       | 1.9 |
-| 1.1.0                 | 3.4      | 3.1 | 2.9    | 2.2       | 1.9 |
-| 1.1.1                 | 3.4      | 3.1 | 2.9    | 2.1       | 1.9 |
-| 1.1.2                 | 3.4      | 3.1 | 2.9    | 2.1       | 1.9 |
-| 1.2.0                 | 3.4      | 3.1 | 3.0    | 2.2       | 2.0 |
-| 1.3.0                 | 3.4      | 3.1 | 3.0    | 2.2       | 1.9 |
-| 2.0.0                 | 3.5      | 3.2 | 3.1    | 2.3       | 2.1 |
-| 2.0.1                 | 3.4      | 3.1 | 2.9    | 2.2       | 1.9 |
-| 2.1.0                 | 3.6      | 3.2 | 3.1    | 2.3       | 2.1 |
-| 2.2.0                 | 3.7      | 3.3 | 3.1    | 2.3       | 2.2 |
-| 2.2.1                 | 3.8      | 3.3 | 3.2    | 2.4       | 2.2 |
-| 2.2.2                 | 3.7      | 3.4 | 3.2    | 2.4       | 2.2 |
-| 2.3.0                 | 3.6      | 3.3 | 3.2    | 2.4       | 2.2 |
-| 2.4.0                 | 4.0      | 3.7 | 3.5    | 2.2       | 2.0 |
-| 2.4.2                 | 4.2      | 4.1 | 3.7    | 2.8       | 3.1 |
-| 2.4.3                 | 3.6      | 3.2 | 3.3    | 2.3       | 2.0 |
-| 2.5.0                 | 3.5      | 3.2 | 3.2    | 2.3       | 2.1 |
-| 2.6.0                 | 3.7      | 3.3 | 3.4    | 2.4       | 2.2 |
-| 3.0.0                 | 2.9      | 2.6 | 2.7    | 2.3       | 2.3 |
-| 4.0.0                 | 4.0      | 3.8 | 3.6    | 2.7       | 3.0 |
-| 4.1.0                 | 4.1      | 4.0 | 3.7    | 2.7       | 3.1 |
-| 4.1.1                 | 4.1      | 4.1 | 3.7    | 2.7       | 3.1 |
-| 4.2.0                 | 4.2      | 4.1 | 3.9    | 2.9       | 3.2 |
-| 4.2.1                 | 4.3      | 4.1 | 3.9    | 2.9       | 3.3 |
+| Profile Hot / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
+| --------------------- | -------- | ---- | ------ | --------- | ---- |
+| 2.4.1                 | 16.5     | 16.5 | 17.0   | 11.0      | 10.2 |
+| 2.4.2                 | 17.0     | 15.8 | 15.9   | 10.8      | 10.0 |
+| 2.4.3                 | 16.1     | 16.3 | 16.8   | 11.1      | 10.1 |
+| 2.5.0                 | 17.5     | 16.6 | 16.6   | 10.5      | 10.7 |
+| 2.6.0                 | 22.8     | 17.4 | 19.0   | 10.8      | 10.1 |
+| 3.0.0                 | 21.8     | 17.8 | 18.9   | 10.6      | 10.5 |
+| 4.0.0                 | 21.7     | 19.3 | 19.1   | 11.4      | 11.1 |
+| 4.1.0                 | 22.6     | 19.1 | 19.6   | 11.6      | 11.9 |
+| 4.1.1                 | 23.2     | 19.4 | 20.5   | 11.4      | 11.2 |
+| 4.2.0                 | 22.8     | 19.0 | 19.8   | 10.8      | 12.0 |
+| 4.2.1                 | 22.7     | 20.3 | 20.7   | 11.5      | 12.2 |
+| 5.0.0                 | 20.7     | 17.3 | 17.4   | 9.4       | 9.6  |
 ^HistoryHot
 
 ```chart
@@ -158,33 +141,23 @@ spanGaps: true
 
 #### Cold
 
-| Profile Cold / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
-| ---------------------- | -------- | ---- | ------ | --------- | --- |
-| 1.0.0                  | 262.2    | 37.7 | 807.6  | 19.3      | 6.6 |
-| 1.0.1                  | 254.5    | 38.0 | 805.2  | 19.3      | 6.6 |
-| 1.1.0                  | 255.9    | 38.2 | 800.8  | 19.3      | 6.5 |
-| 1.1.1                  | 254.7    | 38.7 | 799.6  | 19.5      | 6.6 |
-| 1.1.2                  | 257.0    | 37.6 | 791.9  | 19.3      | 6.5 |
-| 1.2.0                  | 255.1    | 38.3 | 800.6  | 19.5      | 6.7 |
-| 1.3.0                  | 255.8    | 37.7 | 803.2  | 19.5      | 6.6 |
-| 2.0.0                  | 256.7    | 38.0 | 797.8  | 19.6      | 6.8 |
-| 2.0.1                  | 255.1    | 38.3 | 795.6  | 19.4      | 6.7 |
-| 2.1.0                  | 253.3    | 38.1 | 788.8  | 19.4      | 6.8 |
-| 2.2.0                  | 258.6    | 39.1 | 793.0  | 19.6      | 6.9 |
-| 2.2.1                  | 264.4    | 38.1 | 795.4  | 19.8      | 7.0 |
-| 2.2.2                  | 256.6    | 38.8 | 803.1  | 19.8      | 6.9 |
-| 2.3.0                  | 256.5    | 39.7 | 791.3  | 19.6      | 7.0 |
-| 2.4.0                  | 254.4    | 38.8 | 789.5  | 19.2      | 6.5 |
-| 2.4.2                  | 225.7    | 60.8 | 1205.2 | 12.8      | 9.5 |
-| 2.4.3                  | 260.3    | 42.2 | 803.1  | 23.5      | 9.9 |
-| 2.5.0                  | 261.0    | 42.4 | 808.2  | 23.3      | 9.7 |
-| 2.6.0                  | 293.5    | 44.4 | 895.1  | 24.2      | 9.8 |
-| 3.0.0                  | 319.6    | 64.3 | 1501.8 | 38.6      | 7.9 |
-| 4.0.0                  | 201.4    | 64.0 | 1220.7 | 13.3      | 9.8 |
-| 4.1.0                  | 316.2    | 91.0 | 1727.0 | 12.7      | 9.6 |
-| 4.1.1                  | 212.4    | 58.8 | 1196.3 | 13.0      | 9.6 |
-| 4.2.0                  | 189.9    | 56.5 | 911.9  | 13.1      | 9.5 |
-| 4.2.1                  | 188.3    | 55.9 | 1136.3 | 12.5      | 9.1 |
+>[!note] 
+>Significant regressions have been prefixed with an `X.` to not skew the chart.
+
+| Profile Cold / Release | Chromium | Zed   | Okular | Syncthing | Sh   |
+| ---------------------- | -------- | ----- | ------ | --------- | ---- |
+| 2.4.1                  | 444.9    | 109.0 | 948.0  | 86.8      | 75.3 |
+| 2.4.2                  | 447.0    | 110.0 | 965.4  | 78.7      | 63.9 |
+| 2.4.3                  | 392.9    | 56.7  | 891.2  | 34.9      | 12.4 |
+| 2.5.0                  | 395.3    | 55.8  | 902.0  | 24.9      | 12.2 |
+| 2.6.0                  | 451.4    | 58.2  | 996.4  | 35.4      | 22.1 |
+| 3.0.0                  | 362.0    | 82.2  | 514.1  | 53.7      | 19.0 |
+| 4.0.0                  | 241.3    | 80.2  | 329.9  | 26.4      | 22.1 |
+| 4.1.0                  | 371.3    | 114.5 | 912.6  | 25.8      | 21.7 |
+| 4.1.1                  | 248.8    | 79.9  | 324.7  | 25.9      | 22.1 |
+| 4.2.0                  | 217.5    | 73.7  | 919.7  | 25.9      | 21.0 |
+| 4.2.1                  | 209.9    | 71.0  | 168.1  | 23.2      | 19.4 |
+| 5.0.0                  | 206.4    | 66.7  | 157.1  | 20.9      | 17.1 |
 ^HistoryCold
 
 ```chart
@@ -226,26 +199,6 @@ id: HistoryCold
 tension: 0.5
 spanGaps: true
 ```
-#### Real
-
-| Profile Real / Release | Chromium | Zed  | Okular | Syncthing | Sh  |
-| ---------------------- | -------- | ---- | ------ | --------- | --- |
-| 3.0.0                  | 17.1     | 12.8 | 14.0   | 7.0       | 6.6 |
-| 4.0.0                  | 17.7     | 14.4 | 15.1   | 7.2       | 7.5 |
-| 4.1.0                  | 17.6     | 14.5 | 15.2   | 7.2       | 7.5 |
-| 4.1.1                  | 18.1     | 14.6 | 15.5   | 7.3       | 7.7 |
-| 4.2.0                  | 18.8     | 15.3 | 13.5   | 7.6       | 7.9 |
-| 4.2.1                  | 19.0     | 15.0 | 13.5   | 7.6       | 7.9 |
-^HistoryReal
-
-```chart
-type: line
-id: HistoryReal
-tension: 0.5
-spanGaps: true
-```
-
-
 ## Techniques
 
 Antimony needs to do a lot of things very quickly. Creating a sandbox, especially a secure one, takes time, but the primary objective of Antimony in terms of speed is being unnoticeable compared to running it natively. The most expensive tasks Antimony performs, in descending order, include:

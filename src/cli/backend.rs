@@ -5,7 +5,7 @@ use crate::{
     shared::{
         config::CONFIG_FILE,
         privileged,
-        store::{self, BackingStore, SYSTEM_STORE, Store, USER_STORE, init_system, init_user},
+        store::{self, BackingStore, SYSTEM_STORE, Store, StoreType, USER_STORE, init},
     },
 };
 use anyhow::Result;
@@ -130,8 +130,8 @@ impl super::Run for Args {
                         if self.cache {
                             update.cache_store.lock().replace(new);
                         } else {
-                            digest(&USER_STORE, init_user(new))?;
-                            digest(&SYSTEM_STORE, init_system(new))?;
+                            digest(&USER_STORE, init(StoreType::User, new))?;
+                            digest(&SYSTEM_STORE, init(StoreType::System, new))?;
                             update.config_store.lock().replace(new);
                         }
 
@@ -144,7 +144,6 @@ impl super::Run for Args {
                     let alt = match current {
                         Store::File => Store::Database,
                         Store::Database => Store::File,
-                        Store::Memory => return Err(anyhow::anyhow!("Memory cannot be used.")),
                     };
 
                     // Update the alternate cache_store

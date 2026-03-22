@@ -6,6 +6,7 @@
 use crate::shared::store::Object;
 use rayon::prelude::*;
 use std::{
+    any::Any,
     collections::HashMap,
     fs::{self, File},
     io::Write,
@@ -39,6 +40,10 @@ impl Store {
     }
 }
 impl super::BackingStore for Store {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn resident(&self) -> bool {
         false
     }
@@ -67,7 +72,7 @@ impl super::BackingStore for Store {
     }
 
     fn bulk(
-        &mut self,
+        &self,
         entries: HashMap<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {

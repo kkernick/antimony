@@ -10,7 +10,7 @@ use antimony::{
     cli::refresh::installed_profiles,
     shared::{self, store},
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::{Parser, ValueEnum};
 use dialoguer::Input;
 use nix::unistd::chdir;
@@ -32,16 +32,6 @@ pub enum Benchmark {
 
     /// Run the profile with a cache.
     Hot,
-
-    /// Run the profile with a cache, but with the real execution pipeline.
-    /// --dry disables some parts of sandbox setup, as its primary purpose is just to populate caches.
-    /// This means things like creating the proxy and waiting for it, creating and applying SECCOMP filters, and
-    /// others parts are skipped over. This is important for ensuring refresh is fast, but means that the Hot
-    /// benchmark does not reflect the time it takes for end users to get their application from startup.
-    ///
-    /// This benchmark runs the sandbox as usual, but passes the dry feature, which simply spawns a shell in the
-    /// environment, then immediately exits.
-    Real,
 
     /// This benchmark performs a refresh of all system integrated profiles (So the ones specified on the command line
     /// are not used). This is used to evaluate the shared cache of profiles, namely:
@@ -108,6 +98,10 @@ pub struct Cli {
     /// Give Antimony SetUID like in a system installation.
     #[arg(long, default_value_t = false)]
     pub system: bool,
+
+    /// How long to sleep for. Defaults to 1 second.
+    #[arg(long)]
+    pub sleep: Option<u32>,
 
     /// Where to point AT_HOME. If not set, defaults to the repository root.
     #[arg(long)]
@@ -190,6 +184,28 @@ fn main() -> Result<()> {
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
     if let Some(checkout) = &cli.checkout {
+        // We need to impose a minimum to ensure --sandbox-args is supported. This also allows us to use --hard without
+        // recourse. Unfortunately, there's no real way to benchmark the older versions with how we benchmark now,
+        // since we're not effectively *always* running under the "real" mode.
+        //
+        // What is the point of benchmarking if the test is not real in the first place?
+        match checkout.strip_prefix("tags/") {
+            Some(version) => {
+                let split = version
+                    .split(".")
+                    .filter_map(|f| f.parse::<u32>().ok())
+                    .collect::<Vec<_>>();
+                if (split[0] < 2) || (split[0] == 2 && split[1] < 4) {
+                    return Err(anyhow!(
+                        "This version of the benchmark requires Antimony 2.4.0. If you need to benchmark older versions, you can checkout the repo at 4.2.1, but note output between these versions are not comparable."
+                    ));
+                }
+            }
+            None => {
+                return Err(anyhow!("Checkout only works with tagged versions!"));
+            }
+        }
+
         // Stash our working edits
         Spawner::new("git")?.arg("stash")?.spawn()?.wait()?;
 
@@ -207,14 +223,23 @@ fn main() -> Result<()> {
     }
 
     let antimony = || -> Result<String> {
-        let benchmarks =
-            cli.bench
-                .unwrap_or(vec![Benchmark::Cold, Benchmark::Hot, Benchmark::Real]);
+        let benchmarks = cli.bench.unwrap_or(vec![Benchmark::Cold, Benchmark::Hot]);
 
         let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
             .into_iter()
             .map(Cow::Borrowed)
             .collect();
+
+        let timeout = cli.sleep.unwrap_or(1);
+        let sleep: Vec<String> = [
+            &format!("--sandbox-args='# sleep {timeout} !'"),
+            "--binaries",
+            "sleep",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
         if cli.output {
             args.push(Cow::Borrowed("--show-output"));
         }
@@ -314,28 +339,11 @@ fn main() -> Result<()> {
             cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
 
             if benchmarks.contains(&Benchmark::Cold) {
-                let mut command: Vec<String> = [&antimony, "refresh", profile, "--dry"]
+                let mut command: Vec<String> = [&antimony, "refresh", profile, "--hard", "--"]
                     .into_iter()
                     .map(String::from)
                     .collect();
-
-                let hard = match &cli.checkout {
-                    Some(version) => match version.strip_prefix("tags/") {
-                        Some(version) => {
-                            let split = version
-                                .split(".")
-                                .filter_map(|f| f.parse::<u32>().ok())
-                                .collect::<Vec<_>>();
-                            (split[0] > 2) || (split[0] == 2 && split[1] >= 1)
-                        }
-                        None => true,
-                    },
-                    None => true,
-                };
-
-                if hard {
-                    command.push("--hard".to_string());
-                }
+                command.extend(sleep.iter().cloned());
 
                 if let Some(add) = &cli.antimony_args {
                     command.push("--".to_string());
@@ -359,20 +367,17 @@ fn main() -> Result<()> {
             }
 
             if benchmarks.contains(&Benchmark::Hot) {
-                let mut command: Vec<String> = [&antimony, "run", profile, "--dry"]
+                let mut command: Vec<String> = [&antimony, "run", profile]
                     .into_iter()
                     .map(String::from)
                     .collect();
+                command.extend(sleep.iter().cloned());
+
                 if let Some(add) = &cli.antimony_args {
                     command.extend(add.clone());
                 }
                 Spawner::new("hyperfine")?
-                    .args([
-                        "--command-name",
-                        &format!("Hot {profile}"),
-                        "--warmup",
-                        "10",
-                    ])?
+                    .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])?
                     .args(args.clone())?
                     .arg(command.join(" "))?
                     .preserve_env(true)
@@ -381,33 +386,6 @@ fn main() -> Result<()> {
                     .wait()?;
 
                 cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
-            }
-
-            if benchmarks.contains(&Benchmark::Real) {
-                let mut command: Vec<String> = [&antimony, "run", profile]
-                    .into_iter()
-                    .map(String::from)
-                    .collect();
-                if let Some(add) = &cli.antimony_args {
-                    command.extend(add.clone());
-                }
-                command.push("--features=dry".to_string());
-                command.push("--home-policy=none".to_string());
-                command.push("--home-lock=false".to_string());
-
-                Spawner::new("hyperfine")?
-                    .args([
-                        "--command-name",
-                        &format!("Real {profile}"),
-                        "--warmup",
-                        "10",
-                    ])?
-                    .args(args.clone())?
-                    .arg(command.join(" "))?
-                    .preserve_env(true)
-                    .new_privileges(true)
-                    .spawn()?
-                    .wait()?;
             }
         }
 

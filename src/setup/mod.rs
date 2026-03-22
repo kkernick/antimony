@@ -13,7 +13,7 @@ use crate::{
         config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
-        store::{CACHE_STORE, mem},
+        store::mem,
         utility,
     },
     timer,
@@ -67,7 +67,7 @@ pub struct Info {
 pub fn setup<'a>(
     name: Cow<'a, str>,
     args: &'a mut super::cli::run::Args,
-    global_refresh: bool,
+    flush_defer: bool,
 ) -> Result<Info> {
     let mut profile = match Profile::new(&name, args.config.take()) {
         Ok(profile) => profile,
@@ -276,14 +276,13 @@ pub fn setup<'a>(
         )
     );
 
-    // Flush to disk in a separate thread after everything has been calculated.
-    // This lets us update the cache while the sandbox is running, effectively
-    // eliminating its overhead.
-    if !global_refresh && CACHE_STORE.with_borrow(|s| s.resident()) {
-        debug!("Flushing to disk");
-        rayon::spawn(|| {
-            let _ = mem::flush();
-        })
+    // If we're dry-running, and are running under a single profile, flush as
+    // soon as possible--as then we don't waste time waiting for the writing
+    // to finish. We can't rely on the user interacting with the application
+    // to conceal the flush, so we have to do it early.
+    if !flush_defer && a.args.dry {
+        info!("Early Flush");
+        mem::flush();
     }
 
     let home = home?;

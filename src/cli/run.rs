@@ -10,6 +10,7 @@ use crate::{
         profile::{
             files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace, seccomp::SeccompPolicy,
         },
+        store::{self, mem},
         utility,
     },
     timer,
@@ -177,6 +178,14 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
         user::set(user::Mode::Effective)?;
+
+        {
+            let mut cache = store::CACHE.lock();
+            if cache.is_none() {
+                cache.replace(true);
+            }
+        }
+
         let result = || -> Result<()> {
             let info = timer!(
                 "::setup",
@@ -326,7 +335,9 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         }
 
         log::trace!("Spawning");
-        let code = info.handle.spawn()?.wait()?;
+        let handle = info.handle.spawn()?;
+        mem::flush();
+        let code = handle.wait()?;
 
         if code != 0 {
             if CONFIG_FILE.auto_refresh() && !args.refresh {

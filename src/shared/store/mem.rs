@@ -3,18 +3,21 @@
 //! so that profiles can share a cache entirely in memory, which is then dumped to the
 //! actual backing store all in one go.
 
-use crate::shared::CONFIG_FILE;
-use crate::shared::store::{CACHE_STORE, OBJECTS, Object, init_cache};
+use crate::shared::store::{BackingStore, CACHE_STORE, OBJECTS, Object};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use log::debug;
-use rayon::prelude::*;
-use std::{
-    collections::HashMap,
-    sync::{LazyLock, OnceLock},
-};
+use std::{any::Any, collections::HashMap, sync::LazyLock};
 
 type Table = HashMap<String, Vec<u8>>;
+
+pub fn flush() {
+    CACHE_STORE.with_borrow(|s| {
+        if let Some(cache) = s.as_any().downcast_ref::<Store>() {
+            let _ = cache.flush();
+        }
+    })
+}
 
 /// The cache store.
 static CACHE: CacheStatic<String, DashMap<Object, Table>> = LazyLock::new(DashMap::default);
@@ -22,59 +25,24 @@ static CACHE: CacheStatic<String, DashMap<Object, Table>> = LazyLock::new(DashMa
 static MEM_STORE: LazyLock<cache::Cache<String, DashMap<Object, Table>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
-pub static FLUSH_STORE: OnceLock<super::Store> = OnceLock::new();
-
-pub fn setup() -> anyhow::Result<()> {
-    let old = CONFIG_FILE
-        .cache_store
-        .lock()
-        .replace(super::Store::Memory)
-        .unwrap_or_default();
-
-    if FLUSH_STORE.set(old).is_err() {
-        Err(anyhow::anyhow!("Cannot setup mem cache more than once!"))
-    } else {
-        Ok(())
-    }
-}
-
-pub fn flush() -> anyhow::Result<()> {
-    if let Some(old) = FLUSH_STORE.get() {
-        debug!("Flushing cache to disk...");
-        let mut out = init_cache(*old);
-
-        OBJECTS
-            .into_iter()
-            .try_for_each(|object| -> anyhow::Result<()> {
-                if let Ok(map) = CACHE_STORE.with_borrow(|s| s.get(object)) {
-                    out.bulk(
-                        map.into_par_iter()
-                            .filter_map(|name| {
-                                match CACHE_STORE.with_borrow(|s| s.bytes(&name, object)) {
-                                    Ok(content) => Some((name, content)),
-                                    Err(_) => None,
-                                }
-                            })
-                            .collect(),
-                        object,
-                    )?;
-                }
-                Ok(())
-            })
-    } else {
-        Err(anyhow::anyhow!(
-            "Flush store not initalized! Call setup() first!"
-        ))
-    }
-}
-
 /// The File Store
 pub struct Store {
     name: String,
+    backend: Box<dyn BackingStore>,
+    read: bool,
 }
 impl Store {
     /// Construct a new Memory Store
-    pub fn new(name: &str) -> Self {
+    ///
+    /// The Memory Store always acts as as write-cache. dump/store will write into
+    /// memory, with an explicit call to Store::flush() required to write to the
+    /// underlying disk.
+    ///
+    /// It can *also* act as a read-cache. Though this depends on correctly setting
+    /// the read argument. When read is true, get/fetch will query the cache, and
+    /// if it's empty will fetch from disk and load that data into memory. If read
+    /// is false, only memory is checked.
+    pub fn new(name: &str, backend: Box<dyn BackingStore>, read: bool) -> Self {
         if MEM_STORE.get(name).is_none() {
             MEM_STORE.insert(name.to_string(), DashMap::default());
             let db = MEM_STORE.get(name).unwrap();
@@ -85,10 +53,36 @@ impl Store {
 
         Self {
             name: name.to_string(),
+            backend,
+            read,
         }
+    }
+
+    pub fn flush(&self) -> Result<(), super::Error> {
+        debug!("Flushing to disk...");
+        OBJECTS
+            .into_iter()
+            .try_for_each(|object| -> Result<(), super::Error> {
+                if let Ok(map) = self.get(object) {
+                    self.backend.bulk(
+                        map.into_iter()
+                            .filter_map(|name| match self.bytes(&name, object) {
+                                Ok(content) => Some((name, content)),
+                                Err(_) => None,
+                            })
+                            .collect(),
+                        object,
+                    )?;
+                }
+                Ok(())
+            })
     }
 }
 impl super::BackingStore for Store {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
     fn resident(&self) -> bool {
         true
     }
@@ -103,6 +97,11 @@ impl super::BackingStore for Store {
             && let Some(value) = db.get(&object).unwrap().get(name)
         {
             Ok(value.clone())
+        } else if self.read
+            && let Ok(bytes) = self.backend.bytes(name, object)
+        {
+            self.dump(name, object, &bytes)?;
+            Ok(bytes)
         } else {
             Err(super::Error::Mem("No such value"))
         }
@@ -111,6 +110,10 @@ impl super::BackingStore for Store {
     fn get(&self, object: Object) -> Result<Vec<String>, super::Error> {
         if let Some(db) = MEM_STORE.get(&self.name) {
             Ok(db.get(&object).unwrap().keys().cloned().collect())
+        } else if self.read
+            && let Ok(disk) = self.backend.get(object)
+        {
+            Ok(disk)
         } else {
             Err(super::Error::Mem("No such object"))
         }
@@ -121,7 +124,7 @@ impl super::BackingStore for Store {
     }
 
     fn bulk(
-        &mut self,
+        &self,
         entries: HashMap<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {
@@ -148,6 +151,8 @@ impl super::BackingStore for Store {
             && table.contains_key(name)
         {
             true
+        } else if !self.read {
+            self.backend.exists(name, object)
         } else {
             false
         }
