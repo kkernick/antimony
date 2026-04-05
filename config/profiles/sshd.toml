@@ -19,7 +19,7 @@
 features = ["network", "passwd"]
 seccomp = "Disabled"
 binaries = ["sh"]
-libraries = ["/usr/lib/ssh"]
+libraries.directories = ["ssh"]
 arguments = ["-D"]
 
 [home]

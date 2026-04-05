@@ -1,10 +1,7 @@
 name = "locale"
 description = "Provide localization information"
 
-libraries = [
-  "locale",
-  "gconv",
-]
+libraries.directories = ["locale"]
 
 [files]
 platform.ro = [

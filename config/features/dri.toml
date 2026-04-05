@@ -1,15 +1,10 @@
 name = "dri"
 description = "DRI for accelerated video rendering"
-
-libraries = [
-  "dri",
-  "gbm",
-  "libMesa*",
-  "libGL*",
-  "libEGL*"
-]
-
 devices = ["/dev/dri"]
+
+[libraries]
+directories = ["dri", "gbm"]
+files = ["libMesa*", "libGL*", "libEGL*"]
 
 [files]
 platform.ro = [

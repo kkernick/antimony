@@ -1,5 +1,5 @@
 features = ["network"]
-libraries = ["libsecret*"]
+libraries.files = ["libsecret*"]
 
 [home]
 policy = "Enabled"

@@ -1,5 +1,4 @@
 name = "gcc"
 description = "The GNU Compiler Collection."
-requires = ["lib"]
-
 binaries = ["cc", "ld", "ldconfig", "gcc", "objdump"]
+libraries.no_sof = true

@@ -3,7 +3,10 @@ description = "Provide necessary files for QT5 applications"
 
 requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
 
-libraries = ["qt", "libQt5*"]
+[libraries]
+directories = ["qt/plugins", "qt/qml"]
+files = ["libQt5*"]
+roots = ["/usr/lib/qt"]
 
 [files]
 user.ro = [

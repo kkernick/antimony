@@ -11,7 +11,10 @@ path = "/usr/lib/invidious/invidious"
 dir = "/usr/lib/invidious"
 features = ["network", "locale"]
 binaries = ["sh"]
-libraries = ["invidious", "libnss*"]
+
+[libraries]
+directories = ["invidious"]
+files = ["libnss*"]
 
 [home]
 name = "invidious/home"

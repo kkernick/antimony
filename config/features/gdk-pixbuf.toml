@@ -1,4 +1,7 @@
 name = "gdk-pixbuf"
 description = "Gnome Image Loading"
 requires = ["gir", "glycin"]
-libraries = ["gdk-pixbuf-2.0", "libgdk_pixbuf*", "librsvg-2*"]
+
+[libraries]
+directories = ["gdk-pixbuf-2.0"]
+files = ["libgdk_pixbuf*"]

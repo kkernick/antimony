@@ -2,10 +2,9 @@ name = "gtk4"
 description = "For GTK4 applications"
 requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
 
-libraries = [
-  "gtk-4.0", "tinysparql-3.0",
-  "libgdk-4*", "libgtk-4*"
-]
+[libraries]
+directories = ["gtk-4.0", "tinysparql-3.0"]
+files = ["libgdk-4*", "libgtk-4*"]
 
 [files]
 resources.ro = [

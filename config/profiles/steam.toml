@@ -1,19 +1,15 @@
-features = ["network", "xorg", "lib", "bin", "electron", "vulkan", "ld", "passwd", "pipewire", "tray"]
+features = ["network", "xorg", "bin", "electron", "vulkan", "ld", "passwd", "pipewire", "tray"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 new_privileges = true
 
-[home]
-policy = "Enabled"
+home.policy = "Enabled"
+ipc.user_bus = true
 
-[ipc]
-user_bus = true
+[libraries]
+no_sof = true
+roots = ["/usr/lib32"]
 
-[files.user]
-rw = ["/.local/share/Steam"]
-
-[files.platform]
-ro = ["/etc/machine-id"]
-
-[files.resources]
-ro = ["/usr/lib32"]
+[files]
+user.rw = ["/.local/share/Steam"]
+platform.ro = ["/etc/machine-id"]

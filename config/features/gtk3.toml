@@ -2,10 +2,9 @@ name = "gtk3"
 description = "For GTK3 applications"
 requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
 
-libraries = [
-  "gtk-3.0", "tinysparql-3.0",
-  "libgdk-3*", "libgtk-3*"
-]
+[libraries]
+directories = ["gtk-3.0", "tinysparql-3.0"]
+files = ["libgdk-3*", "libgtk-3*"]
 
 [files]
 resources.ro = [

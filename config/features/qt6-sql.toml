@@ -1,0 +1,6 @@
+name = "qt6-sql"
+description = "Provide necessary files for QT6 SQL"
+requires = ["qt6"]
+
+[libraries]
+directories = ["qt6/plugins/sqldrivers"]

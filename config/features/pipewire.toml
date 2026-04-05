@@ -14,9 +14,6 @@ files.user.ro = [
   "$XDG_CONFIG_HOME/pulse"
 ]
 
-libraries = [
-  "libpipewire*",
-  "pipewire-0.3",
-  "spa-0.2",
-  "pulseaudio",
-]
+[libraries]
+directories = ["pipewire-0.3", "spa-0.2", "pulseaudio"]
+files = ["libpipewire*"]

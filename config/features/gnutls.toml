@@ -2,10 +2,9 @@ name = "gnutls"
 description = "TLS for secure network communications."
 requires = ["gir", "locale"]
 
-libraries = [
-  "libgnutls*",
-  "pkcs11"
-]
+[libraries]
+files = ["libgnutls*"]
+directories = ["pkcs11"]
 
 [files]
 platform.ro = [

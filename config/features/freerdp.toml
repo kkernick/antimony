@@ -2,9 +2,6 @@ name = "freerdp"
 description = "RDP support via FreeRDP"
 requires = ["network"]
 
-libraries = [
-  "libwinpr*",
-  "libfreerdp3*",
-  "freerdp",
-  "ossl-modules"
-]
+[libraries]
+files = ["libwinpr*", "libfreerdp3*"]
+directories = ["freerdp", "ossl-modules"]

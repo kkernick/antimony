@@ -2,7 +2,7 @@ path = "/opt/cryptomator/bin/cryptomator"
 id = "org.cryptomator.Cryptomator"
 features = ["gtk3", "xorg"]
 binaries = ["sh"]
-libraries = ["libpthread*", "librt*", "libgthread*", "libX*", "libappindicator*"]
+libraries.files = ["libpthread*", "librt*", "libgthread*", "libX*", "libappindicator*"]
 
 [home]
 policy = "Enabled"

@@ -91,9 +91,6 @@ fn main() -> Result<()> {
     // Try and init the logger
     let _ = notify::init();
 
-    // Set a new AT_HOME in temp.
-    unsafe { env::set_var("AT_HOME", "/tmp/antimony-spawn") };
-
     // If we're running within Antimony itself
     if env::var("USER").is_err() {
         unsafe { env::set_var("USER", "antimony") };
@@ -114,7 +111,7 @@ fn main() -> Result<()> {
             ro: cli.sandbox_expose_ro,
             rw: cli.sandbox_expose,
             env: cli.env,
-            libraries: Some(vec!["/usr/lib".to_string()]),
+            no_sof: true,
             ..Default::default()
         };
 

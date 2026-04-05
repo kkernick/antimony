@@ -1,12 +1,5 @@
 id =  "org.gnome.Evince"
 home.policy = "Enabled"
-
 features = ["gtk3"]
-
-libraries = [
-  "/usr/lib/libevdocument3.so*",
-  "/usr/lib/libevview3.so*",
-
-]
-
+libraries.files = ["libevdocument3.so*", "libevview3.so*"]
 ipc.portals = ["FileChooser"]

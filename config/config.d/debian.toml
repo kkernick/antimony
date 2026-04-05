@@ -1,0 +1,2 @@
+
+library_roots = ["/usr/lib", "/usr/lib/libexec", "/usr/lib/x86_64-linux-gnu"]

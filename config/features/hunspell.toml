@@ -1,7 +1,6 @@
 name = "hunspell"
 description = "Spell Checking Library"
-
-libraries = ["libhunspell*"]
+libraries.files = ["libhunspell*"]
 
 [files.resources]
 ro = ["/usr/share/hunspell/"]

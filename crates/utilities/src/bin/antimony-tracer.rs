@@ -93,7 +93,7 @@ fn main() -> anyhow::Result<()> {
                     let found = if file.is_empty() {
                         false
                     } else if d_name.contains("*") {
-                        match get_wildcards(&d_name, true) {
+                        match get_wildcards(&d_name, true, "f,l,d") {
                             Ok(cards) => cards.contains(file),
                             Err(_) => false,
                         }
@@ -161,7 +161,12 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                     if let Some(libraries) = &feature.libraries {
-                        for d_name in libraries {
+                        for d_name in &libraries.files {
+                            if matches(&FileMode::Executable, d_name, &file).is_some() {
+                                break 'feature_loop;
+                            }
+                        }
+                        for d_name in &libraries.directories {
                             if matches(&FileMode::Executable, d_name, &file).is_some() {
                                 break 'feature_loop;
                             }

@@ -1,6 +1,6 @@
 id = "org.kde.plasma-systemmonitor"
 features = ["cgroup", "kf6", "ksysguard", "network"]
-libraries = ["libPlasmaSystemMonitor*"]
+libraries.files = ["libPlasmaSystemMonitor*"]
 namespaces = ["Pid"]
 
 [home]

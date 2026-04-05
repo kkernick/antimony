@@ -1,7 +1,7 @@
 name = "hardened_malloc"
 description = "Enforce Hardened Malloc as the memory allocator within the sandbox"
 caveat = "Hardened Malloc can cause noticeable performance degredation."
-libraries = ["libhardened_malloc.so"]
+libraries.files = ["libhardened_malloc.so"]
 
 [files.direct.ro]
 "/etc/ld.so.preload" = "libhardened_malloc.so"

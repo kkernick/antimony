@@ -2,7 +2,10 @@
 //! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
 
 use crate::{
-    fab::{get_libraries, lib::add_sof},
+    fab::{
+        get_libraries,
+        lib::{add_sof, mount_roots},
+    },
     setup::syscalls,
     shared::{
         Set,
@@ -65,7 +68,7 @@ pub fn run(
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"))?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache, "/usr"))?;
+                .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache))?;
         });
     }
 
@@ -91,19 +94,7 @@ pub fn run(
         ])?;
 
         let sof_str = sof.to_string_lossy();
-        proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"])?;
-        let path = &format!("{sof_str}/lib64");
-        if Path::new(path).exists() {
-            proxy.args_i(["--ro-bind-try", path, "/usr/lib64"])?;
-        } else {
-            proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"])?;
-        }
-
-        #[rustfmt::skip]
-        proxy.args_i([
-            "--symlink", "/usr/lib", "/lib",
-            "--symlink", "/usr/lib64","/lib64",
-        ])?;
+        mount_roots(&sof_str, &proxy)?;
         proxy
     });
 

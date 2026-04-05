@@ -1,10 +1,8 @@
 path = "kiwix-desktop"
 id = "org.kiwix.desktop"
-features = ["network", "kf6"]
+features = ["network", "kf6", "qt6-webengine"]
+conflicts = ["hardened_malloc"]
 binaries = ["aria2c"]
 
 [home]
 policy = "Enabled"
-
-[ipc]
-portals = ["ProxyResolver", "NetworkMonitor"]

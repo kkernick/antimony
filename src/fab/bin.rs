@@ -4,8 +4,10 @@
 
 use crate::{
     fab::{
-        ELF_MAGIC, FabInfo, get_cache, get_dir, get_wildcards, lib::in_lib, localize_path,
-        write_cache,
+        ELF_MAGIC, FabInfo, ThreadCache, elf_filter, etc, get_cache, get_dir, get_libraries,
+        get_wildcards,
+        lib::{self, in_lib},
+        localize_path, write_cache,
     },
     shared::{
         Set, direct_path,
@@ -15,7 +17,7 @@ use crate::{
     },
     timer,
 };
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use dashmap::{DashMap, DashSet};
 use log::{debug, info, warn};
 use parking_lot::Mutex;
@@ -48,13 +50,13 @@ pub enum Type {
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
-    pub elf: DashSet<String>,
+    pub elf: ThreadCache,
 
     /// Regular files, which act as heuristics for library folders.
-    pub files: DashSet<String>,
+    pub files: ThreadCache,
 
     /// Script files, which need no further parsing, but must be mounted.
-    pub scripts: DashSet<String>,
+    pub scripts: ThreadCache,
 
     /// Symlinks
     pub symlinks: DashMap<String, String>,
@@ -63,7 +65,7 @@ pub struct ParseReturn {
     pub localized: DashMap<String, String>,
 
     /// Library directories.
-    pub directories: DashSet<String>,
+    pub directories: ThreadCache,
 }
 impl ParseReturn {
     fn new() -> Self {
@@ -117,7 +119,7 @@ fn parse(
     path: &str,
     instance: &str,
     global: &ParseReturn,
-    done: Arc<DashSet<String>>,
+    done: Arc<ThreadCache>,
     mut include_self: bool,
 ) -> Result<Type> {
     // Avoid duplicate work
@@ -139,38 +141,30 @@ fn parse(
     let ret = ParseReturn::new();
 
     let dest = run_as!(user::Mode::Real, Result<String>, {
-        let dest = fs::read_link(resolved.as_ref())?.canonicalize()?;
-        let canon = Path::new(resolved.as_ref())
-            .canonicalize()?
-            .parent()
-            .ok_or(anyhow!("Binary does not have parent!"))?
-            .join(&dest);
-        Ok(resolve_bin(&canon.to_string_lossy())?.into_owned())
+        let mut dest = fs::read_link(resolved.as_ref())?;
+        if !dest.is_absolute()
+            && let Some(parent) = Path::new(resolved.as_ref()).parent()
+        {
+            dest = parent.join(dest)
+        }
+
+        let dest = dest.canonicalize()?;
+        Ok(resolve_bin(&dest.to_string_lossy())?.into_owned())
     })?;
 
     // Ensure it's a valid binary.
     let t = {
         if let Ok(dest) = dest {
-            if include_self {
-                match resolve_bin(dest.as_ref()) {
-                    Ok(dest) => {
-                        if !dest.contains("bin")
-                            && let Some(i) = dest.rfind("/")
-                        {
-                            ret.directories.insert(dest[..i].to_string());
-                        }
-
-                        ret.symlinks
-                            .insert(resolved.into_owned(), dest.into_owned());
-                    }
-
-                    Err(e) => {
-                        warn!("Could not resolve symlink destination {dest}: {e}");
-                        return Ok(Type::None);
-                    }
-                };
-            }
             parse(&dest, instance, global, done.clone(), true)?;
+            if include_self {
+                if !dest.contains("bin")
+                    && let Some(i) = dest.rfind("/")
+                {
+                    ret.directories.insert(dest[..i].to_string());
+                }
+
+                ret.symlinks.insert(resolved.into_owned(), dest);
+            }
             Type::Link
         } else {
             if in_lib(path) {
@@ -300,7 +294,7 @@ fn handle_localize(
     home: bool,
     include_self: bool,
     parsed: &ParseReturn,
-    done: Arc<DashSet<String>>,
+    done: Arc<ThreadCache>,
 ) -> Result<()> {
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
@@ -354,7 +348,7 @@ pub fn collect(
 
             wildcards
                 .into_par_iter()
-                .for_each(|w| match get_wildcards(w, false) {
+                .for_each(|w| match get_wildcards(w, false, "f,l") {
                     Ok(cards) => {
                         for card in cards {
                             resolved.insert(card);
@@ -365,7 +359,7 @@ pub fn collect(
         });
     }
 
-    let done = Arc::new(DashSet::new());
+    let done = Arc::new(ThreadCache::default());
 
     // Read direct files so we can determine dependencies.
     timer!("::collect::files", {
@@ -489,23 +483,34 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             .into_iter()
             .try_for_each(|(src, dst)| -> anyhow::Result<()> {
                 info.handle.args_i(["--ro-bind", &src, &dst])?;
-                elf_binaries.insert(src);
+
+                if let Some(src) = elf_filter(&src) {
+                    elf_binaries.insert(src);
+                }
                 Ok(())
             })
     })?;
 
-    timer!("::libraries", {
-        info.profile.lock().libraries.extend(parsed.directories)
-    });
+    if !parsed.directories.is_empty() {
+        timer!("::libraries", {
+            parsed
+                .directories
+                .into_par_iter()
+                .for_each(|dir| etc::resolve(&PathBuf::from(dir)));
+        });
+    }
 
     timer!("::symlinks", {
         parsed
             .symlinks
             .into_par_iter()
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
+                if !elf_binaries.contains(&dest) {
+                    info.handle.args_i(["--ro-bind", &dest, &dest])?;
+                    elf_binaries.insert(dest.clone());
+                }
                 if !in_lib(&link) {
-                    info.handle
-                        .args_i(["--ro-bind", &dest, &dest, "--symlink", &dest, &link])?;
+                    info.handle.args_i(["--symlink", &dest, &link])?;
                 }
                 Ok(())
             })
@@ -516,9 +521,9 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
                 let home_str = home_dir.to_string_lossy();
-                let home_binaries = get_dir(&home_str)?;
-                for binary in home_binaries {
-                    elf_binaries.insert(binary);
+                let libraries = get_dir(&home_str)?;
+                for library in libraries {
+                    let _ = lib::FILES.insert(library);
                 }
             }
         })
@@ -537,9 +542,18 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         ])?;
     }
 
-    info.profile.lock().binaries = Arc::into_inner(elf_binaries)
-        .expect("Failed to get elf binaries")
-        .into_iter()
-        .collect();
+    timer!("::binaries", {
+        Arc::into_inner(elf_binaries)
+            .expect("Failed to get elf binaries")
+            .into_par_iter()
+            .for_each(|binary| {
+                if let Ok(libraries) = get_libraries(Cow::Owned(binary)) {
+                    libraries.into_iter().for_each(|lib| {
+                        let _ = lib::FILES.insert(lib);
+                    });
+                }
+            });
+    });
+
     Ok(())
 }

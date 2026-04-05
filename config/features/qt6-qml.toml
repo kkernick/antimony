@@ -1,0 +1,6 @@
+name = "qt6-qml"
+description = "Provide necessary files for QT6 QML Applications"
+requires = ["qt6"]
+
+[libraries]
+directories = ["qt6/qml"]

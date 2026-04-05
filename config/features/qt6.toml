@@ -1,7 +1,17 @@
 name = "qt6"
 description = "Provide necessary files for QT6 applications"
 requires = ["wayland", "fonts", "themes", "mime", "dri", "locale", "vaapi"]
-libraries = ["qt6", "libQt6*"]
+
+[libraries]
+directories = [
+    "qt6/plugins/wayland-*",
+    "qt6/plugins/platform*",
+    "qt6/plugins/styles",
+    "qt6/plugins/iconengines",
+    "qt6/plugins/kiconthemes6",
+    "qt6/plugins/imageformats"
+]
+roots = ["/usr/lib/qt6/plugins"]
 
 [files]
 user.ro = [

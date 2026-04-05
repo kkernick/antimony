@@ -1,8 +1,7 @@
 name = "gtksourceview"
 description = "GTK Syntax Highlighting"
 requires = ["gtk4"]
-
-libraries = ["libgtksourceview*"]
+libraries.files = ["libgtksourceview*"]
 
 [files]
 resources.ro = [

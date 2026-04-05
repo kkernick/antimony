@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use common::singleton::Singleton;
+use common::singleton::{Semaphore, Singleton};
 use nix::{
     errno::Errno,
     unistd::{ResGid, ResUid, getresgid, getresuid, setresgid, setresuid},
@@ -16,6 +16,8 @@ pub static GROUP: LazyLock<ResGid> = LazyLock::new(|| getresgid().expect("Failed
 /// Whether the system is actually running under SetUid. If false, all functions here
 /// are no-ops.
 pub static SETUID: LazyLock<bool> = LazyLock::new(|| USER.effective != USER.real);
+
+static SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
 
 /// An error when trying to change UID/GID.
 #[derive(Debug)]
@@ -196,7 +198,7 @@ pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
 
 pub fn obtain_lock() -> Option<Singleton> {
     if *crate::SETUID {
-        Singleton::new()
+        Singleton::new(&SEMAPHORE)
     } else {
         None
     }

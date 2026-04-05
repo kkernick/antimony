@@ -1,3 +1,3 @@
 name = "libpeas"
 description = "GObject Plugin System"
-libraries = ["libpeas*"]
+libraries.files = ["libpeas*"]

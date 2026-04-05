@@ -151,6 +151,18 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub libraries: Option<Vec<String>>,
 
+    /// Add library directories
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub directories: Option<Vec<String>>,
+
+    /// Add library roots
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub roots: Option<Vec<String>>,
+
+    /// Add libraries
+    #[arg(long, default_value_t = false)]
+    pub no_sof: bool,
+
     /// Add devices
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub devices: Option<Vec<String>>,

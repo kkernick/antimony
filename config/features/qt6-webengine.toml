@@ -1,0 +1,9 @@
+name = "qt6-webengine"
+description = "Provide necessary files for QT6 WebEngine"
+requires = ["qt6"]
+
+[libraries]
+files = ["qt6/QtWebEngineProcess"]
+
+[ipc]
+portals = ["ProxyResolver", "NetworkMonitor"]

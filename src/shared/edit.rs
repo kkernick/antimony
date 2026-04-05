@@ -106,8 +106,10 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
     };
 
     Ok(if buffer == digest {
+        println!("No changes made");
         None
     } else {
+        println!("Updating file");
         Some(toml::to_string(&buffer)?)
     })
 }

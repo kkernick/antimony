@@ -6,63 +6,54 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{LIB_ROOTS, elf_filter, get_dir, get_libraries, get_wildcards, localize_home},
+    fab::{ThreadCache, get_dir, get_libraries, get_wildcards, localize_home},
     shared::{
         Set,
-        env::{AT_HOME, HOME},
+        config::CONFIG_FILE,
+        env::{AT_HOME, CACHE_DIR, HOME},
     },
     timer,
 };
+use ahash::RandomState;
 use anyhow::Result;
-use dashmap::DashSet;
+use dashmap::{DashSet, iter_set::OwningIter};
 use log::{debug, error, warn};
 use rayon::prelude::*;
+use spawn::Spawner;
 use std::{
     borrow::Cow,
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::LazyLock,
 };
-use user::{as_effective, as_real};
+use user::as_effective;
+
+pub static FILES: LazyLock<ThreadCache> = LazyLock::new(DashSet::default);
+pub static DIRS: LazyLock<ThreadCache> = LazyLock::new(DashSet::default);
+pub static ROOTS: LazyLock<ThreadCache> = LazyLock::new(|| {
+    CONFIG_FILE
+        .library_roots()
+        .par_iter()
+        .map(|root| root.to_string())
+        .collect()
+});
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    LIB_ROOTS.iter().any(|r| path.starts_with(r))
-}
-
-/// Determine dependencies for directories.
-#[inline]
-fn dir_resolve(library: Cow<'_, str>, directories: &DashSet<String>) -> Result<Vec<String>> {
-    let mut dependencies = Vec::new();
-    let path = Path::new(library.as_ref());
-
-    // Resolve directories.
-    if path.is_dir() {
-        dependencies.extend(get_dir(&library)?.iter().cloned());
-        directories.insert(library.to_string());
-    } else if let Some(library) = elf_filter(&library) {
-        dependencies.push(library);
-    }
-
-    Ok(dependencies)
-}
-
-/// Resolve a regular path to its path in the SOF.
-#[inline]
-pub fn get_sof_path(sof: &Path, library: &str, prefix: &str) -> PathBuf {
-    PathBuf::from(library.replace(prefix, &sof.to_string_lossy()))
+    ROOTS.par_iter().any(|r| path.starts_with(r.as_str()))
 }
 
 /// Add a file to the SOF.
-pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) -> Result<()> {
-    let sof_path = get_sof_path(sof, &library, prefix);
-
+pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
+    let sof_path = sof.join(&library.as_ref()[1..]);
     if let Some(parent) = sof_path.parent() {
         if !parent.exists() {
             as_effective!(fs::create_dir_all(parent))??;
         }
         let path = PathBuf::from(library.as_ref());
         let canon = fs::canonicalize(&path)?;
+
         if !sof_path.exists()
             && let Err(e) = fs::hard_link(&canon, &sof_path)
         {
@@ -77,7 +68,7 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
             //
             // This reduces redundancy between profiles, and since shared exists
             // in the CACHE_DIR, hard links will work.
-            let shared_path = get_sof_path(&cache.join("shared"), &library, prefix);
+            let shared_path = &cache.join("shared").join(&library.as_ref()[1..]);
             if let Some(parent) = shared_path.parent() {
                 as_effective!(Result<()>, {
                     if !parent.exists() {
@@ -85,9 +76,9 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
                     }
 
                     if !shared_path.exists() {
-                        fs::copy(&canon, &shared_path)?;
+                        fs::copy(&canon, shared_path)?;
                     }
-                    fs::hard_link(&shared_path, &sof_path)?;
+                    fs::hard_link(shared_path, &sof_path)?;
                     Ok(())
                 })??;
             }
@@ -96,140 +87,148 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path, prefix: &str) ->
     Ok(())
 }
 
-/// Generate the libraries for a program.
-pub fn fabricate(info: &super::FabInfo) -> Result<()> {
-    {
-        let profile_libraries = &info.profile.lock().libraries;
-        if profile_libraries.contains("/usr/lib") {
-            #[rustfmt::skip]
-            info.handle.args_i([
-                "--ro-bind", "/usr/lib", "/usr/lib",
-                "--ro-bind", "/usr/lib64", "/usr/lib64",
-                "--symlink", "/usr/lib", "/lib",
-                "--symlink", "/usr/lib64", "/lib64",
-            ])?;
-            return Ok(());
+pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
+    ROOTS.par_iter().try_for_each(|root| -> Result<()> {
+        let path = PathBuf::from(format!("{sof}{}", root.as_str()));
+        if path.exists() {
+            handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()])?;
         }
-    }
+        Ok(())
+    })?;
 
-    let cache = Arc::new(crate::shared::env::CACHE_DIR.join(".lib"));
-    if !cache.exists() {
-        as_effective!({ fs::create_dir_all(cache.as_path()) })??;
-    }
+    for root in ["/lib", "/lib64", "/usr/lib64"] {
+        if let Ok(link) = fs::read_link(root) {
+            let link = if !link.is_absolute() {
+                Path::new(root).parent().unwrap().join(link)
+            } else {
+                link
+            }
+            .canonicalize()?;
 
-    debug!("Creating SOF");
-    let sof = info.sys_dir.join("sof");
-    if !sof.exists() {
-        as_effective!(fs::create_dir(&sof))??;
-    }
-
-    // Libraries needed by the program. No Binaries.
-    let dependencies: DashSet<String, ahash::RandomState> = DashSet::default();
-
-    // Scope the lock. We do binaries first, since we piggy-back off the LDD call
-    // to find library roots.
-    {
-        let binaries = &info.profile.lock().binaries;
-        timer!("::binaries", {
-            binaries.par_iter().for_each(|binary| {
-                if let Ok(libraries) = get_libraries(Cow::Owned(binary.clone())) {
-                    for library in libraries {
-                        dependencies.insert(library);
-                    }
-                }
-            })
-        });
-    }
-
-    // We do need the cache on disk in case we need to use a shared SOF source.
-    if !cache.starts_with(AT_HOME.as_path()) {
-        let shared = cache.join("shared");
-        if !shared.exists() {
-            debug!("Creating shared directory at {}", shared.display());
-            fs::create_dir(&shared)?;
-        }
-    }
-
-    // Libraries and Binaries, Wildcard and Directories Resolved
-    let resolved = DashSet::new();
-
-    // Directories to exclude and attach
-    let directories: DashSet<String> = DashSet::new();
-
-    for lib_root in LIB_ROOTS.iter() {
-        let app_lib = format!("{lib_root}/{}", info.name);
-        if Path::new(&app_lib).exists() {
-            debug!("Adding program lib folder");
-            for exe in dir_resolve(Cow::Owned(app_lib), &directories)? {
-                resolved.insert(Cow::Owned(exe));
+            if let Some(str) = link.to_str()
+                && ROOTS.contains(str)
+            {
+                handle.args_i(["--symlink", str, root])?;
             }
         }
     }
 
-    timer!("::wildcards", {
-        let profile_libraries = &info.profile.lock().libraries;
-        // Separate the wildcards from the files/dirs.
-        let (wildcards, flat): (Set<_>, Set<_>) = profile_libraries
-            .into_par_iter()
-            .partition(|e| e.contains('*'));
+    Ok(())
+}
 
-        debug!("Formatting flat");
+pub fn resolve_wildcards(
+    set: Set<String>,
+    filter: &'static str,
+) -> OwningIter<String, RandomState> {
+    let resolved = ThreadCache::default();
+
+    let (wildcards, flat): (HashSet<_>, HashSet<_>) = timer!(
+        "::wildcard::partition",
+        set.into_par_iter().partition(|e| e.contains('*'))
+    );
+
+    timer!("::wildcard::localize", {
         flat.into_par_iter().for_each(|e| {
             if e.starts_with("/") {
-                resolved.insert(Cow::Owned(e.to_string()));
+                resolved.insert(e.to_string());
             } else if e.starts_with("~") {
-                resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
+                resolved.insert(e.replace("~", HOME.as_str()));
             } else {
-                for root in LIB_ROOTS.iter() {
-                    let path = format!("{root}/{e}");
+                ROOTS.par_iter().for_each(|root| {
+                    let path = format!("{}/{e}", root.as_str());
                     if Path::new(&path).exists() {
-                        resolved.insert(Cow::Owned(path));
+                        resolved.insert(path);
                     }
-                }
-                warn!("Failed to find library: {e}");
-            }
-        });
-
-        debug!("Resolving wildcards");
-        wildcards.into_par_iter().for_each(|w| {
-            if let Ok(cards) = get_wildcards(w, true) {
-                cards.into_par_iter().for_each(|card| {
-                    resolved.insert(Cow::Owned(card));
                 });
             }
-        });
+        })
     });
 
-    let files = timer!("::directories", {
-        resolved
-            .into_par_iter()
-            .filter_map(|e| dir_resolve(e, &directories).ok())
-            .flatten()
-            .collect::<Set<_>>()
-    });
-
-    timer!("::resolve", {
-        files.into_par_iter().for_each(|file| {
-            dependencies.insert(file.clone());
-            if let Ok(libraries) = get_libraries(Cow::Owned(file)) {
-                for library in libraries {
-                    dependencies.insert(library);
-                }
+    timer!("::wildcard::resolve", {
+        wildcards.into_par_iter().for_each(|w| {
+            if let Ok(cards) = get_wildcards(&w, true, filter) {
+                cards.into_par_iter().for_each(|card| {
+                    resolved.insert(card);
+                });
             }
-        });
+        })
     });
 
-    timer!("::writing", {
-        dependencies
-            .into_par_iter()
+    resolved.into_iter()
+}
+
+#[inline]
+pub fn cache_dir() -> PathBuf {
+    CACHE_DIR.join(".lib")
+}
+
+#[inline]
+pub fn sof_dir(sys_dir: &Path) -> PathBuf {
+    sys_dir.join("sof")
+}
+
+/// Generate the libraries for a program.
+pub fn fabricate(info: &super::FabInfo) -> Result<()> {
+    if let Some(libraries) = info.profile.lock().libraries.take() {
+        if libraries.no_sof.unwrap_or(false) {
+            return mount_roots("", info.handle);
+        }
+
+        let cache = cache_dir();
+        if !cache.exists() {
+            let _ = as_effective!({ fs::create_dir_all(cache.as_path()) });
+        }
+
+        let sof = sof_dir(info.sys_dir);
+        if !sof.exists() {
+            let _ = as_effective!(fs::create_dir(&sof));
+        }
+
+        // We do need the cache on disk in case we need to use a shared SOF source.
+        if !cache.starts_with(AT_HOME.as_path()) {
+            let shared = cache.join("shared");
+            if !shared.exists() {
+                debug!("Creating shared directory at {}", shared.display());
+                let _ = fs::create_dir(&shared);
+            }
+        }
+
+        timer!("::resolve", {
+            rayon::join(
+                move || {
+                    resolve_wildcards(libraries.directories, "d")
+                        .par_bridge()
+                        .for_each(|e| {
+                            if let Ok(libraries) = get_dir(&e) {
+                                libraries.into_par_iter().for_each(|lib| {
+                                    let _ = FILES.insert(lib);
+                                });
+                            }
+                            DIRS.insert(e);
+                        });
+                },
+                move || {
+                    resolve_wildcards(libraries.files, "f,l")
+                        .par_bridge()
+                        .for_each(|file| {
+                            if let Ok(libraries) = get_libraries(Cow::Borrowed(&file)) {
+                                libraries.into_par_iter().for_each(|lib| {
+                                    let _ = FILES.insert(lib);
+                                });
+                            }
+                            FILES.insert(file);
+                        })
+                },
+            );
+        });
+
+        let sof = sof_dir(info.sys_dir);
+        let cache = cache_dir();
+
+        FILES
+            .par_iter()
             .filter(|library| {
-                let parent = Path::new(library).parent().unwrap().to_string_lossy();
-                if directories
-                    .iter()
-                    .any(|dir| parent.starts_with(dir.as_str()))
-                {
-                    false
-                } else if in_lib(library) {
+                if in_lib(library) {
                     true
                 } else {
                     let _ = info.handle.args_i([
@@ -246,63 +245,35 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             })
             // Write the SOF version, as a hard link preferably.
             .for_each(|lib| {
-                if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache, "/usr") {
-                    error!("Failed to add {lib} to SOF: {e}")
+                if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache) {
+                    error!("Failed to add {} to SOF: {e}", lib.as_str())
                 }
             });
-    });
 
-    let sof_str = sof.to_string_lossy();
-    for root in sof.read_dir()? {
-        let root = root?.file_name();
-        let name = root.to_string_lossy();
-        info.handle.args_i([
-            "--ro-bind-try",
-            &format!("{sof_str}/{name}"),
-            &format!("/usr/{name}"),
-            "--symlink",
-            &format!("/usr/{name}"),
-            &format!("/{name}"),
-        ])?;
-    }
-    if !LIB_ROOTS.contains("/usr/lib64") {
-        let source = match as_real!({ fs::read_link("/usr/lib64") })? {
-            Ok(symlink) => Cow::Owned(symlink.to_string_lossy().into_owned()),
-            Err(_) => Cow::Borrowed("/usr/lib"),
-        };
+        let sof_str = sof.to_string_lossy();
+        mount_roots(&sof_str, info.handle)?;
 
-        debug!("Symlinking lib64 to {source}");
-        info.handle.args_i([
-            "--symlink",
-            &source,
-            "/usr/lib64",
-            "--symlink",
-            "/usr/lib64",
-            "/lib64",
-        ])?;
-    }
-
-    timer!("::mount_directories", {
-        directories.par_iter().try_for_each(|dir| -> Result<()> {
-            if in_lib(&dir) {
-                let sof_path = get_sof_path(&sof, dir.as_ref(), "/usr");
-                if !sof_path.exists() {
-                    fs::create_dir_all(sof_path)?;
+        timer!("::mount_directories", {
+            DIRS.par_iter().try_for_each(|dir| -> Result<()> {
+                if in_lib(dir.as_ref()) {
+                    let sof_path = sof.join(&dir[1..]);
+                    if !sof_path.exists() {
+                        fs::create_dir_all(sof_path)?;
+                    }
                 }
-            }
 
-            info.handle.args_i([
-                if dir.starts_with("/home/") {
-                    "--bind"
-                } else {
-                    "--ro-bind"
-                },
-                dir.as_ref(),
-                localize_home(dir.as_ref()).as_ref(),
-            ])?;
-            Ok(())
-        })?;
-    });
-
+                info.handle.args_i([
+                    if dir.starts_with("/home/") {
+                        "--bind"
+                    } else {
+                        "--ro-bind"
+                    },
+                    dir.as_ref(),
+                    localize_home(dir.as_ref()).as_ref(),
+                ])?;
+                Ok(())
+            })?;
+        });
+    }
     Ok(())
 }

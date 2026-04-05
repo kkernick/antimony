@@ -8,14 +8,18 @@ pub mod files;
 pub mod lib;
 pub mod ns;
 
-use crate::shared::{
-    Set,
-    env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
-    profile::Profile,
-    store::{CACHE_STORE, Object},
+use crate::{
+    fab::lib::ROOTS,
+    shared::{
+        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
+        profile::Profile,
+        store::{CACHE_STORE, Object},
+    },
 };
 use anyhow::Result;
+use dashmap::DashSet;
 use log::debug;
+use nix::unistd::{AccessFlags, access};
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
@@ -26,24 +30,13 @@ use std::{
     env,
     fs::{self, File},
     io::Read,
-    path::Path,
-    sync::LazyLock,
+    path::{Path, PathBuf},
 };
 use temp::Temp;
 use user::as_real;
 
-type Cache = HashSet<String, ahash::RandomState>;
-
-/// Get the library roots.
-pub static LIB_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
-    let mut roots = Set::default();
-    for known_root in ["/usr/lib", "/usr/lib64", "/usr/lib/x86_64-linux-gnu"] {
-        if Path::new(known_root).exists() && fs::read_link(known_root).is_err() {
-            roots.insert(known_root.to_string());
-        }
-    }
-    roots
-});
+pub type Cache = HashSet<String, ahash::RandomState>;
+pub type ThreadCache = DashSet<String, ahash::RandomState>;
 
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
@@ -98,6 +91,7 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
     if let Ok(Some(libraries)) = get_cache(dir, Object::Directories) {
         return Ok(libraries);
     }
+
     let libraries: Cache = Spawner::abs("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(StreamMode::Pipe)
@@ -107,6 +101,8 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .lines()
         .par_bridge()
         .filter_map(elf_filter)
+        .filter_map(|lib| get_libraries(Cow::Owned(lib)).ok())
+        .flatten()
         .collect();
 
     write_cache(dir, &libraries, Object::Directories)?;
@@ -120,10 +116,23 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
 /// ```rust
 /// antimony::fab::get_wildcards("glib*", true).expect("Failed to find Glib");
 /// ```
-pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
+pub fn get_wildcards(pattern: &str, lib: bool, what: &'static str) -> Result<Cache> {
     let run = |dir: &str, base: &str| -> Result<Cache> {
-        Ok(Spawner::abs("/usr/bin/find")
-            .args([dir, "-maxdepth", "1", "-mindepth", "1", "-name", base])?
+        let handle = Spawner::abs("/usr/bin/find").arg(dir)?;
+
+        if base.contains("/") {
+            let whole = PathBuf::from(format!("{dir}/{base}"));
+            if !whole.parent().unwrap().exists() {
+                return Ok(Cache::default());
+            }
+            let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
+            handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()])?;
+        } else {
+            handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base])?;
+        }
+
+        Ok(handle
+            .args(["-type", what])?
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?
@@ -145,8 +154,8 @@ pub fn get_wildcards(pattern: &str, lib: bool) -> Result<Cache> {
     // If we're looking for libraries, check each library root.
     } else if lib {
         let mut libraries = Cache::default();
-        LIB_ROOTS.iter().for_each(|root| {
-            if let Ok(lib) = run(root, pattern) {
+        ROOTS.iter().for_each(|root| {
+            if let Ok(lib) = run(&root, pattern) {
                 libraries.extend(lib);
             }
         });
@@ -175,43 +184,46 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
     let libraries = if let Ok(Some(libraries)) = get_cache(&path, Object::Libraries) {
         libraries
     } else {
-        let libraries: Cache = Spawner::abs("/usr/bin/ldd")
-            .arg(path.as_ref())?
-            .output(StreamMode::Pipe)
-            .mode(user::Mode::Real)
-            .spawn()?
-            .output_all()?
-            .lines()
-            .par_bridge()
-            .filter_map(|e| {
-                if let Some(start) = e.find("/")
-                    && let Some(end) = e[start..].find(' ')
-                {
-                    Some(String::from(&e[start..start + end]))
-                } else {
-                    None
-                }
-            })
-            .map(|e| {
-                let path = Path::new(&e);
-                if let Some(parent) = path.parent()
-                    && let Ok(canon) = fs::canonicalize(parent)
-                {
-                    let canon = canon.join(path.file_name().unwrap());
-                    canon.to_string_lossy().into_owned()
-                } else {
-                    e
-                }
-            })
-            .map(|e| {
-                let formatted = format!("/usr{e}");
-                if Path::new(&formatted).exists() {
-                    formatted
-                } else {
-                    e
-                }
-            })
-            .collect();
+        let libraries: Cache = match access(path.as_ref(), AccessFlags::X_OK) {
+            Ok(_) => Spawner::abs("/usr/bin/ldd")
+                .arg(path.as_ref())?
+                .output(StreamMode::Pipe)
+                .mode(user::Mode::Real)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .par_bridge()
+                .filter_map(|e| {
+                    if let Some(start) = e.find("/")
+                        && let Some(end) = e[start..].find(' ')
+                    {
+                        Some(String::from(&e[start..start + end]))
+                    } else {
+                        None
+                    }
+                })
+                .map(|e| {
+                    let path = Path::new(&e);
+                    if let Some(parent) = path.parent()
+                        && let Ok(canon) = fs::canonicalize(parent)
+                    {
+                        let canon = canon.join(path.file_name().unwrap());
+                        canon.to_string_lossy().into_owned()
+                    } else {
+                        e
+                    }
+                })
+                .map(|e| {
+                    let formatted = format!("/usr{e}");
+                    if Path::new(&formatted).exists() {
+                        formatted
+                    } else {
+                        e
+                    }
+                })
+                .collect(),
+            Err(_) => Cache::default(),
+        };
 
         write_cache(&path, &libraries, Object::Libraries)?;
         libraries

@@ -7,12 +7,21 @@ use crate::{
 };
 use anyhow::Result;
 use log::debug;
-use std::{fs, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use user::as_effective;
+
+#[inline]
+pub fn cmd_cache(sys_dir: &Path) -> PathBuf {
+    sys_dir.join(USER_NAME.as_str()).join("cmd.cache")
+}
 
 pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // The fabricators are cached, but on disk.
-    let cmd_cache = args.sys_dir.join(USER_NAME.as_str()).join("cmd.cache");
+    let cmd_cache = cmd_cache(&args.sys_dir);
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
     {
@@ -49,6 +58,6 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     timer!("::ns", fab::ns::fabricate(&info))?;
     timer!("::dev", fab::dev::fabricate(&info))?;
 
-    timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
+    timer!("::cache_write", as_effective!({args.handle.cache_write(&cmd_cache)}))??;
     Ok(())
 }

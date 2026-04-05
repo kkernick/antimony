@@ -1,5 +1,5 @@
 features = ["gdk-pixbuf", "gir", "kf6", "python", "tray"]
-libraries = ["libnotify*"]
+libraries.files = ["libnotify*"]
 
 [ipc]
 system_bus = true

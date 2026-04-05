@@ -9,6 +9,7 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
+    fab::lib::ROOTS,
     shared::{
         config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
@@ -94,6 +95,12 @@ pub fn setup<'a>(
     let hash = profile.hash_str()?;
     info!("Profile Hash: {hash}");
     let mut sys_dir = CACHE_DIR.join(&hash);
+
+    if let Some(libraries) = &mut profile.libraries {
+        libraries.roots.drain(..).for_each(|root| {
+            let _ = ROOTS.insert(root);
+        });
+    }
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
     let mut instance = temp::Builder::new()

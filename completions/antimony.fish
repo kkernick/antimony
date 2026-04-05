@@ -86,6 +86,8 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add rea
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l directories -d 'Add library directories' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l roots -d 'Add library roots' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t'Enable all namespaces'
 user\t'The user namespace is needed to create additional sandboxes (Such as chromium)'
@@ -103,6 +105,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'Provide the user bus. xdg-dbus-proxy is not run'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Add libraries'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'

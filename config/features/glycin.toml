@@ -9,9 +9,8 @@ files.resources.ro = [
   "/usr/share/glycin-loaders/"
 ]
 
-libraries = [
-  "glycin-loaders",
-  "libglycin*"
-]
-
 binaries = ["prlimit"]
+
+[libraries]
+directories = ["glycin-loaders"]
+files = ["libglycin*", "librsvg*"]

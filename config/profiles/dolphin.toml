@@ -1,6 +1,6 @@
 id = "org.kde.dolphin"
 features = ["kf6", "xdg-open"]
-libraries = ["libdolphin*"]
+libraries.files = ["libdolphin*"]
 
 [ipc]
 own = ["org.kde.dolphin.*"]

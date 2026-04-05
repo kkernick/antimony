@@ -18,11 +18,15 @@ pub static CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("confi
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
 
 #[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConfigFile {
     pub force_temp: Option<bool>,
     pub system_mode: Option<bool>,
     pub auto_refresh: Option<bool>,
     pub privileged_users: Option<Set<String>>,
+
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub library_roots: Set<String>,
 
     pub config_store: Mutex<Option<store::Store>>,
     pub cache_store: Mutex<Option<store::Store>>,
@@ -46,6 +50,10 @@ impl ConfigFile {
         } else {
             false
         }
+    }
+
+    pub fn library_roots(&self) -> &Set<String> {
+        &self.library_roots
     }
 
     pub fn cache_store(&self) -> store::Store {
@@ -73,15 +81,18 @@ impl Default for ConfigFile {
         let config_path = AT_HOME.join("config.toml");
         let mut config = if config_path.exists()
             && let Ok(content) = read_to_string(config_path)
-            && let Ok(parsed) = toml::from_str(&content)
         {
-            parsed
+            match toml::from_str(&content) {
+                Ok(parsed) => parsed,
+                Err(e) => panic!("Failed to read config: {e}"),
+            }
         } else {
             Self {
                 force_temp: None,
                 system_mode: None,
                 auto_refresh: None,
                 privileged_users: None,
+                library_roots: Set::default(),
                 cache_store: Mutex::default(),
                 config_store: Mutex::default(),
             }
@@ -96,6 +107,9 @@ impl Default for ConfigFile {
         if let Ok(env) = std::env::var("AT_AUTO_REFRESH") {
             config.auto_refresh = Some(env != "0")
         }
+        if let Ok(env) = std::env::var("AT_LIB_ROOTS") {
+            config.library_roots = env.split(" ").map(String::from).collect()
+        }
         if let Ok(env) = std::env::var("AT_CACHE_DB")
             && env != "0"
         {
@@ -106,6 +120,7 @@ impl Default for ConfigFile {
         {
             config.config_store = Mutex::new(Some(store::Store::Database));
         }
+        log::trace!("Returning");
         config
     }
 }
@@ -115,6 +130,7 @@ impl PartialEq for ConfigFile {
             && self.system_mode == other.system_mode
             && self.auto_refresh == other.auto_refresh
             && self.privileged_users == other.privileged_users
+            && self.library_roots == other.library_roots
             && self.config_store.lock().as_ref() == other.config_store.lock().as_ref()
             && self.cache_store.lock().as_ref() == other.cache_store.lock().as_ref()
     }
@@ -125,6 +141,7 @@ impl Clone for ConfigFile {
             force_temp: self.force_temp,
             system_mode: self.system_mode,
             auto_refresh: self.auto_refresh,
+            library_roots: self.library_roots.clone(),
             privileged_users: self.privileged_users.clone(),
             config_store: Mutex::new(*self.config_store.lock()),
             cache_store: Mutex::new(*self.cache_store.lock()),

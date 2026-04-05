@@ -1,0 +1,10 @@
+name = "qt6-network"
+description = "Provide necessary files for QT6 Networking"
+requires = ["qt6", "network"]
+
+[libraries]
+directories = [
+  "qt6/plugins/tls",
+  "qt6/plugins/networkinformation",
+  "qt6/plugins/crypto"
+]

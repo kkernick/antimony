@@ -1,10 +1,8 @@
 name = "gst"
 description = "GStreamer for video/audio playback"
 requires = ["gir", "passwd", "python"]
-
-libraries = [
-  "gstreamer-1.0",
-  "libgst*",
-]
-
 files.resources.ro = ["/usr/share/gstreamer-1.0/"]
+
+[libraries]
+directories = ["gstreamer-1.0"]
+files = ["libgst*"]

@@ -267,9 +267,6 @@ fn add_feature(
     if let Some(binaries) = feature.binaries.take() {
         profile.binaries.extend(binaries);
     }
-    if let Some(libraries) = feature.libraries.take() {
-        profile.libraries.extend(libraries);
-    }
     if let Some(devices) = feature.devices.take() {
         profile.devices.extend(devices);
     }
@@ -278,6 +275,17 @@ fn add_feature(
     }
     if let Some(args) = feature.sandbox_args.take() {
         profile.sandbox_args.extend(args);
+    }
+
+    if let Some(libraries) = feature.libraries.take() {
+        let p_lib = profile.libraries.get_or_insert_default();
+        p_lib.directories.extend(libraries.directories);
+        p_lib.files.extend(libraries.files);
+        p_lib.roots.extend(libraries.roots);
+        p_lib.no_sof = match p_lib.no_sof {
+            Some(false) | None => libraries.no_sof,
+            Some(true) => Some(true),
+        };
     }
 
     if let Some(ipc) = feature.ipc.take() {

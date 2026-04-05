@@ -42,14 +42,10 @@
 use parking_lot::{Condvar, Mutex, MutexGuard, ReentrantMutex, ReentrantMutexGuard};
 use std::sync::{Arc, LazyLock};
 
-/// The global semaphore controls which thread is allowed to change users.
-static SEMAPHORE: LazyLock<Semaphore> =
-    LazyLock::new(|| Arc::new((ReentrantMutex::new(()), Mutex::new(false), Condvar::new())));
-
 /// A Semaphore implementation. Includes A ReentrantMutex to check if the current thread owns
 /// the Singleton, a regular Mutex that holds a boolean we can modify to save whether the current
 /// mutex is held, and a condition variable to alert waiting threads when the Singleton is available.
-type Semaphore = Arc<(ReentrantMutex<()>, Mutex<bool>, Condvar)>;
+pub type Semaphore = Arc<(ReentrantMutex<()>, Mutex<bool>, Condvar)>;
 
 /// More concise Mutex Guard types.
 type Guard = MutexGuard<'static, bool>;
@@ -66,9 +62,9 @@ impl Singleton {
     /// If the current thread already owns the Singleton, this function will
     /// return None. Otherwise, it will return an instance that, when dropped,
     /// will free the Singleton for another thread.
-    pub fn new() -> Option<Self> {
+    pub fn new(sem: &'static LazyLock<Semaphore>) -> Option<Self> {
         // Get the semaphore.
-        let sem = Arc::clone(&SEMAPHORE);
+        let sem = Arc::clone(sem);
         let (thread_lock, mutex, cvar) = &*sem;
 
         // If we already own it, just return

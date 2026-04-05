@@ -1,7 +1,7 @@
 id =  "org.fooyin.fooyin"
 home.policy = "Enabled"
 
-features = ["kf6", "mpris", "sdl", "pipewire"]
+features = ["kf6", "mpris", "sdl", "pipewire", "qt6-multimedia", "qt6-sql"]
 
 [ipc]
 portals = ["FileChooser", "Realtime"]

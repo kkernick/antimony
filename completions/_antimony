@@ -63,6 +63,8 @@ executable\:"Executable files need to be created as copies, so that chmod will w
 '*--temp=[Add temporary directories]:TEMP:_default' \
 '*--binaries=[Add binaries]:BINARIES:_default' \
 '*--libraries=[Add libraries]:LIBRARIES:_default' \
+'*--directories=[Add library directories]:DIRECTORIES:_default' \
+'*--roots=[Add library roots]:ROOTS:_default' \
 '*--devices=[Add devices]:DEVICES:_default' \
 '*--namespaces=[Add namespaces]:NAMESPACES:((all\:"Enable all namespaces"
 user\:"The user namespace is needed to create additional sandboxes (Such as chromium)"
@@ -81,6 +83,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
 '--system-bus[Provide the system bus]' \
 '--user-bus[Provide the user bus. xdg-dbus-proxy is not run]' \
+'--no-sof[Add libraries]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
 ':profile -- The name of the profile, or a command to sandbox:_default' \

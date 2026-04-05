@@ -6,6 +6,7 @@ pub mod files;
 pub mod home;
 pub mod hooks;
 pub mod ipc;
+pub mod lib;
 pub mod ns;
 pub mod seccomp;
 
@@ -17,6 +18,7 @@ use crate::{
         config::CONFIG_FILE,
         edit,
         env::HOME,
+        profile::lib::Libraries,
         store::{self, CACHE_STORE, Object, USER_STORE},
     },
     timer,
@@ -92,7 +94,7 @@ pub fn library_info(libraries: &Set<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true) {
+            match get_wildcards(library, true, "f,s") {
                 Ok(wilds) => {
                     for wild in wilds {
                         println!("\t\t- {}", style(wild).italic());
@@ -184,8 +186,7 @@ pub struct Profile {
     /// 1. Files (eg /usr/lib/lib.so)
     /// 2. Directories (eg /usr/lib/mylib) to which all contents will be resolved
     /// 3. Wildcards (eg lib*), which can match directories and files.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub libraries: Set<String>,
+    pub libraries: Option<Libraries>,
 
     /// Devices needed in the sandbox, at /dev.
     #[serde(skip_serializing_if = "Set::is_empty")]
@@ -266,10 +267,6 @@ impl Profile {
             profile.binaries.extend(binaries)
         }
 
-        if let Some(libraries) = args.libraries.take() {
-            profile.libraries.extend(libraries)
-        }
-
         if let Some(devices) = args.devices.take() {
             profile.devices.extend(devices)
         }
@@ -278,6 +275,7 @@ impl Profile {
             profile.namespaces.extend(namespaces)
         }
 
+        profile.libraries = lib::Libraries::from_args(args);
         profile.files = files::Files::from_args(args);
         profile.ipc = ipc::Ipc::from_args(args);
 
@@ -478,6 +476,14 @@ impl Profile {
             }
         }
 
+        if let Some(libraries) = profile.libraries {
+            if let Some(s_lib) = &mut self.libraries {
+                s_lib.merge(libraries)
+            } else {
+                self.libraries = Some(libraries)
+            }
+        }
+
         for (name, config) in profile.configuration {
             self.configuration.insert(name, config);
         }
@@ -488,7 +494,6 @@ impl Profile {
 
         self.namespaces.extend(profile.namespaces);
         self.binaries.extend(profile.binaries);
-        self.libraries.extend(profile.libraries);
         self.devices.extend(profile.devices);
         self.features.extend(profile.features);
         self.conflicts.extend(profile.conflicts);
@@ -573,8 +578,12 @@ mod tests {
             .expect("Failed to get profiles")
         {
             store::SYSTEM_STORE
-                .with_borrow(|s| s.fetch(&profile, Object::Profile))
-                .expect("Failed to fetch profile");
+                .with_borrow(|s| {
+                    toml::from_str::<Profile>(
+                        &s.fetch(&profile, Object::Profile).expect("Failed to fetch"),
+                    )
+                })
+                .expect("Failed to fetch {profile}");
         }
     }
 }

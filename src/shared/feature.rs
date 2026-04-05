@@ -3,7 +3,7 @@
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
     Map, Set, edit,
-    profile::{files::Files, hooks::Hooks},
+    profile::{files::Files, hooks::Hooks, lib::Libraries},
     store::{self, Object},
 };
 use serde::{Deserialize, Serialize};
@@ -64,7 +64,7 @@ pub struct Feature {
     pub binaries: Option<Set<String>>,
 
     /// Required libraries
-    pub libraries: Option<Set<String>>,
+    pub libraries: Option<Libraries>,
 
     /// Required devices.
     pub devices: Option<Set<String>>,
@@ -114,8 +114,12 @@ mod tests {
             .expect("Failed to get features")
         {
             SYSTEM_STORE
-                .with_borrow(|s| s.fetch(&feature, Object::Feature))
-                .expect("Failed to read feature");
+                .with_borrow(|s| {
+                    toml::from_str::<Feature>(
+                        &s.fetch(&feature, Object::Feature).expect("Failed to fetch"),
+                    )
+                })
+                .expect("Failed to read {feature}");
         }
     }
 }

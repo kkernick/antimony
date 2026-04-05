@@ -131,6 +131,7 @@ macro_rules! timer {
     ($name:literal, $body:block) => {{
         #[cfg(debug_assertions)]
         {
+            log::debug!("Starting {}", $name);
             let start = std::time::Instant::now();
             let result = $body;
             log::info!("{}: {}us", $name, start.elapsed().as_micros());

@@ -8,4 +8,7 @@ binaries = [
 ]
 
 [files]
-resources.ro = ["/usr/share/antimony/db/antimony.db"]
+resources.ro = [
+  "/usr/share/antimony/db/antimony.db",
+  "/usr/share/antimony/config.toml",
+]

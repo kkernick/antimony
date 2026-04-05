@@ -1,2 +1,2 @@
 features = ["network", "sdl"]
-libraries = ["libmpv*"]
+libraries.files = ["libmpv*"]
