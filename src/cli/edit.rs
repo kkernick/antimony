@@ -2,8 +2,6 @@
 
 use std::fs;
 
-use user::as_effective;
-
 use crate::{
     cli,
     shared::{
@@ -41,11 +39,11 @@ impl cli::Run for Args {
             (str, true)
         } else {
             (
-                as_effective!(anyhow::Result<String>, {
+                {
                     let str = fs::read_to_string(AT_CONFIG.join(kind).with_extension("toml"))?;
                     USER_STORE.with_borrow(|s| s.store(&self.name, table, &str))?;
-                    Ok(str)
-                })??,
+                    str
+                },
                 true,
             )
         };

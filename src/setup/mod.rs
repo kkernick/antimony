@@ -11,6 +11,7 @@ use crate::{
     cli::run::mounted,
     fab::lib::ROOTS,
     shared::{
+        Set,
         config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
@@ -20,7 +21,6 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
-use dashmap::DashSet;
 use dbus::{
     Message,
     blocking::{BlockingSender, LocalConnection},
@@ -28,13 +28,11 @@ use dbus::{
 };
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info};
-use parking_lot::Mutex;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
     time::Duration,
 };
 use temp::Temp;
@@ -42,12 +40,12 @@ use user::as_real;
 
 /// The information passed to the various setup functions.
 struct Args<'a> {
-    pub profile: Mutex<Profile>,
+    pub profile: Profile,
     pub id: String,
     pub name: Cow<'a, str>,
     pub handle: Spawner,
-    pub inotify: Mutex<Inotify>,
-    pub watches: DashSet<WatchDescriptor>,
+    pub inotify: Inotify,
+    pub watches: Set<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: &'a Temp,
     pub args: &'a mut super::cli::run::Args,
@@ -70,16 +68,19 @@ pub fn setup<'a>(
     args: &'a mut super::cli::run::Args,
     flush_defer: bool,
 ) -> Result<Info> {
-    let mut profile = match Profile::new(&name, args.config.take()) {
-        Ok(profile) => profile,
-        Err(e) => {
-            debug!("No profile: {name}: {e}, assuming binary");
-            Profile {
-                path: Some(which::which(&name)?.to_string()),
-                ..Default::default()
+    let mut profile = timer!(
+        "::profile_load",
+        match Profile::new(&name, args.config.take()) {
+            Ok(profile) => profile,
+            Err(e) => {
+                debug!("No profile: {name}: {e}, assuming binary");
+                Profile {
+                    path: Some(which::which(&name)?.to_string()),
+                    ..Default::default()
+                }
             }
         }
-    };
+    );
 
     if !CONFIG_FILE.system_mode() {
         let cmd_profile = Profile::from_args(args)?;
@@ -241,12 +242,12 @@ pub fn setup<'a>(
     }
 
     debug!("Initializing inotify handle");
-    let inotify = Mutex::new(as_real!(Inotify::init())??);
-    let watches = DashSet::new();
+    let inotify = as_real!(Inotify::init())??;
+    let watches = Set::default();
     let id = profile.id(&name);
 
-    let a = Arc::new(Args {
-        profile: Mutex::new(profile),
+    let mut a = Args {
+        profile,
         id,
         name: name.clone(),
         handle,
@@ -255,65 +256,37 @@ pub fn setup<'a>(
         sys_dir: sys_dir.clone(),
         instance: &instance,
         args,
-    });
+    };
 
-    // This is the fastest arrangement of setup functions.
-    // The proxy should be run in a separate thread, because its detached
-    // from the rest, and pretty slow (However, note that it *cannot* directly
-    // modify the Spawner, as it can cause the cache to contain its arguments.
-    //
-    // The Fabricator and Syscalls are the most expensive, to the point that
-    // there's no difference moving the rest into another thread. Unfortunately,
-    // and like with bin-lib fabricators, they also depend on each other.
-    let (proxy, home) = timer!(
-        "::setup_total",
-        rayon::join(
-            || timer!("::proxy", proxy::setup(Arc::clone(&a))),
-            || -> Result<Option<String>> {
-                timer!("::setup_rest", {
-                    let a = Arc::clone(&a);
-                    let home = timer!("::home", home::setup(&a))?;
-                    timer!("::env", env::setup(&a));
-                    timer!("::fab", fab::setup(&a))?;
-                    timer!("::file", files::setup(&a))?;
-                    timer!("::syscalls", syscalls::setup(&a))?;
-                    Ok(home)
-                })
-            },
-        )
-    );
+    timer!("::proxy", proxy::setup(&mut a))?;
+    let home = timer!("::home", home::setup(&mut a))?;
+    timer!("::env", env::setup(&a));
+    timer!("::fab", fab::setup(&mut a))?;
+    timer!("::file", files::setup(&mut a))?;
+    timer!("::syscalls", syscalls::setup(&a))?;
 
     // If we're dry-running, and are running under a single profile, flush as
     // soon as possible--as then we don't waste time waiting for the writing
     // to finish. We can't rely on the user interacting with the application
     // to conceal the flush, so we have to do it early.
     if !flush_defer && a.args.dry {
-        info!("Early Flush");
-        mem::flush();
+        timer!("::flush", mem::flush());
     }
 
-    let home = home?;
-    let mut a = Arc::into_inner(a).expect("Failed to unwrap fabricator");
-
-    // Add the proxy arguments. We couldn't add them directly, because they'd
-    // be added to the fabricator cache.
-    if let Some(arguments) = proxy? {
-        a.handle.args_i(arguments)?;
-    }
     let post = timer!("::post", post::setup(&mut a))?;
 
     // Unfortunately, the proxy is slower than Antimony, so we need to wait for it
     // to be ready. I should probably just write my own.
     timer!(
         "::wait",
-        wait::setup(a.watches, a.inotify.into_inner(), &mut a.handle, a.args.dry)
+        wait::setup(a.watches, a.inotify, &mut a.handle, a.args.dry)
     )?;
 
     Ok(Info {
         name: name.into_owned(),
         handle: a.handle,
         post,
-        profile: a.profile.into_inner(),
+        profile: a.profile,
         instance,
         home,
         sys_dir,

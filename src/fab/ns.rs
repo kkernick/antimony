@@ -1,8 +1,8 @@
 use crate::shared::profile::ns::Namespace;
 use spawn::SpawnError;
 
-pub fn fabricate(info: &super::FabInfo) -> Result<(), SpawnError> {
-    let namespaces = &mut info.profile.lock().namespaces;
+pub fn fabricate(info: &mut super::FabInfo) -> Result<(), SpawnError> {
+    let namespaces = &mut info.profile.namespaces;
     // All overrules None.
     if namespaces.contains(&Namespace::All) {
         namespaces.extend([

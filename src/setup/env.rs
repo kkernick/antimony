@@ -1,12 +1,10 @@
 use crate::shared::env::HOME;
 use log::debug;
 use rayon::prelude::*;
-use std::sync::Arc;
 
-pub fn setup(args: &Arc<super::Args>) {
+pub fn setup(args: &super::Args) {
     debug!("Setting up environment");
     args.profile
-        .lock()
         .environment
         .par_iter()
         .try_for_each(|(key, val)| {

@@ -46,6 +46,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
+    time::Duration,
 };
 
 #[derive(Parser, Debug)]
@@ -289,13 +290,18 @@ pub fn runner(args: RunArgs) -> Result<()> {
     });
 
     // Spawn the program under our Notify policy.
-    Spawner::new(args.path)?
+    let handle = Spawner::new(args.path)?
         .preserve_env(true)
         .output(spawn::StreamMode::Pipe)
         .error(spawn::StreamMode::Pipe)
         .seccomp(filter)
-        .spawn()?
-        .wait()?;
+        .spawn()?;
+
+    if args.no_timeout {
+        handle.wait()?;
+    } else {
+        handle.wait_timeout(Duration::from_millis(100))?;
+    }
 
     Ok(())
 }

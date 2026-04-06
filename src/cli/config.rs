@@ -8,7 +8,6 @@ use crate::shared::{
 use anyhow::Result;
 use log::trace;
 use std::{fs, ops::Deref};
-use user::as_effective;
 
 #[derive(clap::Args, Default)]
 pub struct Args {}
@@ -23,9 +22,7 @@ impl super::Run for Args {
             let path = {
                 let path = AT_HOME.join("config.toml");
                 if !path.exists() {
-                    as_effective!({
-                        fs::copy(AT_HOME.join("config").join("config.toml"), &path)
-                    })??;
+                    fs::copy(AT_HOME.join("config").join("config.toml"), &path)?;
                 }
                 path
             };

@@ -4,9 +4,7 @@
 
 use crate::{
     fab::{
-        ELF_MAGIC, FabInfo, ThreadCache, elf_filter, etc, get_cache, get_dir, get_libraries,
-        get_wildcards,
-        lib::{self, in_lib},
+        ELF_MAGIC, FabInfo, ThreadCache, elf_filter, get_cache, get_wildcards, in_lib, lib,
         localize_path, write_cache,
     },
     shared::{
@@ -20,7 +18,6 @@ use crate::{
 use anyhow::{Context, Result};
 use dashmap::{DashMap, DashSet};
 use log::{debug, info, warn};
-use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
@@ -31,7 +28,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use user::{as_real, run_as};
+use user::as_real;
 use which::which;
 
 /// The kind of thing we just analyzed.
@@ -94,7 +91,7 @@ impl ParseReturn {
 /// Resolve the path of a binary, canonicalized to /usr/bin.
 fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     let resolved: Cow<'_, str> = if path.contains("..") {
-        let path = run_as!(user::Mode::Real, Result<String>, {
+        let path = as_real!(Result<String>, {
             Ok(Path::new(path)
                 .canonicalize()?
                 .to_string_lossy()
@@ -140,7 +137,7 @@ fn parse(
 
     let ret = ParseReturn::new();
 
-    let dest = run_as!(user::Mode::Real, Result<String>, {
+    let dest = as_real!(Result<String>, {
         let mut dest = fs::read_link(resolved.as_ref())?;
         if !dest.is_absolute()
             && let Some(parent) = Path::new(resolved.as_ref()).parent()
@@ -325,18 +322,13 @@ fn handle_localize(
 /// Collection takes all the binaries defined in the profiles, and parses them.
 /// This includes resolving wildcards, and parsing files tagged as Executable
 /// in the files header.
-pub fn collect(
-    profile: &Mutex<Profile>,
-    name: &str,
-    instance: &str,
-    parsed: &ParseReturn,
-) -> Result<()> {
+pub fn collect(profile: &Profile, name: &str, instance: &str, parsed: &ParseReturn) -> Result<()> {
     let resolved = Arc::new(DashSet::new());
-    resolved.insert(profile.lock().app_path(name).to_string());
+    resolved.insert(profile.app_path(name).to_string());
 
     // Scope so the lock falls out of scope.
     {
-        let binaries = &profile.lock().binaries;
+        let binaries = &profile.binaries;
         timer!("::collect::wildcard", {
             // Separate the wildcards from the files/dirs.
             let (wildcards, flat): (Set<_>, Set<_>) =
@@ -363,7 +355,7 @@ pub fn collect(
 
     // Read direct files so we can determine dependencies.
     timer!("::collect::files", {
-        if let Some(files) = &profile.lock().files {
+        if let Some(files) = &profile.files {
             if let Some(x) = files.user.get(&FileMode::Executable) {
                 x.iter().try_for_each(|file| {
                     handle_localize(file, instance, true, true, parsed, done.clone())
@@ -396,11 +388,10 @@ pub fn collect(
     });
 
     // Parse the binaries
-    // Parallelizing this causes deadlocks. Perhaps handle_localize calls itself with other parallelization too aggressively.
     timer!("::collect::localization", {
         Arc::into_inner(resolved)
             .unwrap()
-            .into_iter()
+            .into_par_iter()
             .for_each(|binary| {
                 if let Err(e) =
                     handle_localize(binary.as_str(), instance, false, true, parsed, done.clone())
@@ -413,9 +404,9 @@ pub fn collect(
 }
 
 /// Fabricate the binaries.
-pub fn fabricate(info: &FabInfo) -> Result<()> {
+pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     {
-        let binaries = &info.profile.lock().binaries;
+        let binaries = &info.profile.binaries;
         if binaries.contains("/usr/bin") {
             #[rustfmt::skip]
             info.handle.args_i([
@@ -480,11 +471,10 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     timer!("::localized", {
         parsed
             .localized
-            .into_iter()
+            .into_par_iter()
             .try_for_each(|(src, dst)| -> anyhow::Result<()> {
                 info.handle.args_i(["--ro-bind", &src, &dst])?;
-
-                if let Some(src) = elf_filter(&src) {
+                if elf_filter(&src) {
                     elf_binaries.insert(src);
                 }
                 Ok(())
@@ -492,11 +482,11 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
     })?;
 
     if !parsed.directories.is_empty() {
+        let libraries = info.profile.libraries.get_or_insert_default();
         timer!("::libraries", {
-            parsed
-                .directories
-                .into_par_iter()
-                .for_each(|dir| etc::resolve(&PathBuf::from(dir)));
+            parsed.directories.into_iter().for_each(|dir| {
+                let _ = libraries.directories.insert(dir);
+            });
         });
     }
 
@@ -516,15 +506,12 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
             })
     })?;
 
-    if let Some(home) = &info.profile.lock().home {
+    if let Some(home) = &info.profile.home {
         timer!("::home_binaries", {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
                 let home_str = home_dir.to_string_lossy();
-                let libraries = get_dir(&home_str)?;
-                for library in libraries {
-                    let _ = lib::FILES.insert(library);
-                }
+                lib::DIRS.insert(home_str.into_owned());
             }
         })
     }
@@ -542,18 +529,6 @@ pub fn fabricate(info: &FabInfo) -> Result<()> {
         ])?;
     }
 
-    timer!("::binaries", {
-        Arc::into_inner(elf_binaries)
-            .expect("Failed to get elf binaries")
-            .into_par_iter()
-            .for_each(|binary| {
-                if let Ok(libraries) = get_libraries(Cow::Owned(binary)) {
-                    libraries.into_iter().for_each(|lib| {
-                        let _ = lib::FILES.insert(lib);
-                    });
-                }
-            });
-    });
-
+    info.profile.binaries = Arc::into_inner(elf_binaries).unwrap().into_iter().collect();
     Ok(())
 }

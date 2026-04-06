@@ -12,7 +12,6 @@ use std::{
     path::PathBuf,
     sync::LazyLock,
 };
-use user::as_effective;
 
 pub static CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config.toml"));
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(ConfigFile::default);
@@ -69,10 +68,7 @@ impl ConfigFile {
     }
 
     pub fn update(&self) -> anyhow::Result<()> {
-        as_effective!(anyhow::Result<()>, {
-            fs::write(AT_HOME.join("config.toml"), toml::to_string(self)?)?;
-            Ok(())
-        })??;
+        fs::write(AT_HOME.join("config.toml"), toml::to_string(self)?)?;
         Ok(())
     }
 }
@@ -120,7 +116,6 @@ impl Default for ConfigFile {
         {
             config.config_store = Mutex::new(Some(store::Store::Database));
         }
-        log::trace!("Returning");
         config
     }
 }

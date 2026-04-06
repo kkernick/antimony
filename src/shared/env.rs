@@ -37,15 +37,14 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         false
     } else {
         if !cache_dir.exists() {
-            as_effective!(fs::create_dir(&cache_dir).is_ok())
+            fs::create_dir(&cache_dir).is_ok()
         } else {
-            Ok(temp::Builder::new()
+            temp::Builder::new()
                 .within(&cache_dir)
                 .owner(user::Mode::Effective)
                 .create::<temp::File>()
-                .is_ok())
+                .is_ok()
         }
-        .expect("Failed to create cache dir")
     };
 
     if !writeable {

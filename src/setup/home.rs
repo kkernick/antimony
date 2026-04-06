@@ -5,17 +5,16 @@ use log::debug;
 use std::{
     fs::{self, File, TryLockError},
     io::ErrorKind,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use user::as_real;
 
-pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
-    if args.profile.lock().lockdown.unwrap_or(false) {
+pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
+    if args.profile.lockdown.unwrap_or(false) {
         return Ok(None);
     }
 
-    if let Some(home) = &args.profile.lock().home
+    if let Some(home) = &args.profile.home
         && let Some(policy) = home.policy
         && policy != HomePolicy::None
     {
@@ -47,7 +46,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<Option<String>> {
                 Err(TryLockError::WouldBlock) => {
                     {
                         // Attach a notify watch on the directory to see if the running instance closes it.
-                        let mut inotify = args.inotify.lock();
+                        let inotify = &mut args.inotify;
                         let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
                         let current = Instant::now();
                         let mut buffer = [0; 1024];

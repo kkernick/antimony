@@ -2,7 +2,6 @@
 
 pub mod bin;
 pub mod dev;
-pub mod etc;
 pub mod features;
 pub mod files;
 pub mod lib;
@@ -19,8 +18,6 @@ use crate::{
 use anyhow::Result;
 use dashmap::DashSet;
 use log::debug;
-use nix::unistd::{AccessFlags, access};
-use parking_lot::Mutex;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
@@ -43,7 +40,7 @@ pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
 
 /// Each fabricator is passed this structure.
 pub struct FabInfo<'a> {
-    pub profile: &'a Mutex<Profile>,
+    pub profile: &'a mut Profile,
     pub handle: &'a Spawner,
     pub name: &'a str,
     pub instance: &'a Temp,
@@ -68,16 +65,66 @@ fn write_cache<T: Serialize>(name: &str, content: &T, object: Object) -> Result<
     Ok(())
 }
 
+#[inline]
+pub fn in_lib(path: &str) -> bool {
+    ROOTS.par_iter().any(|r| path.starts_with(r.as_str()))
+}
+
 /// Filter non-elf files.
 #[inline]
-fn elf_filter(path: &str) -> Option<String> {
-    let mut file = File::open(path).ok()?;
-    let mut magic = [0u8; 4];
-    file.read_exact(&mut magic).ok()?;
-    if magic != ELF_MAGIC {
-        return None;
+fn elf_filter(path: &str) -> bool {
+    if let Ok(mut file) = File::open(path) {
+        let mut magic = [0u8; 4];
+        if file.read_exact(&mut magic).is_ok() && magic == ELF_MAGIC {
+            return true;
+        }
     }
-    Some(path.to_string())
+    false
+}
+
+#[inline]
+pub fn ldd(path: &str) -> Result<Cache> {
+    if elf_filter(path) {
+        Ok(Spawner::abs("/usr/bin/ldd")
+            .arg(path)?
+            .output(StreamMode::Pipe)
+            .mode(user::Mode::Real)
+            .spawn()?
+            .output_all()?
+            .lines()
+            .par_bridge()
+            .filter_map(|e| {
+                if let Some(start) = e.find("/")
+                    && let Some(end) = e[start..].find(' ')
+                {
+                    Some(String::from(&e[start..start + end]))
+                } else {
+                    None
+                }
+            })
+            .map(|e| {
+                let path = Path::new(&e);
+                if let Some(parent) = path.parent()
+                    && let Ok(canon) = fs::canonicalize(parent)
+                {
+                    let canon = canon.join(path.file_name().unwrap());
+                    canon.to_string_lossy().into_owned()
+                } else {
+                    e
+                }
+            })
+            .map(|e| {
+                let formatted = format!("/usr{e}");
+                if Path::new(&formatted).exists() {
+                    formatted
+                } else {
+                    e
+                }
+            })
+            .collect())
+    } else {
+        Ok(Cache::default())
+    }
 }
 
 /// Get all executable files in a directory. This is very expensive.
@@ -100,8 +147,7 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
         .output_all()?
         .lines()
         .par_bridge()
-        .filter_map(elf_filter)
-        .filter_map(|lib| get_libraries(Cow::Owned(lib)).ok())
+        .filter_map(|lib| ldd(lib).ok())
         .flatten()
         .collect();
 
@@ -184,47 +230,7 @@ pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
     let libraries = if let Ok(Some(libraries)) = get_cache(&path, Object::Libraries) {
         libraries
     } else {
-        let libraries: Cache = match access(path.as_ref(), AccessFlags::X_OK) {
-            Ok(_) => Spawner::abs("/usr/bin/ldd")
-                .arg(path.as_ref())?
-                .output(StreamMode::Pipe)
-                .mode(user::Mode::Real)
-                .spawn()?
-                .output_all()?
-                .lines()
-                .par_bridge()
-                .filter_map(|e| {
-                    if let Some(start) = e.find("/")
-                        && let Some(end) = e[start..].find(' ')
-                    {
-                        Some(String::from(&e[start..start + end]))
-                    } else {
-                        None
-                    }
-                })
-                .map(|e| {
-                    let path = Path::new(&e);
-                    if let Some(parent) = path.parent()
-                        && let Ok(canon) = fs::canonicalize(parent)
-                    {
-                        let canon = canon.join(path.file_name().unwrap());
-                        canon.to_string_lossy().into_owned()
-                    } else {
-                        e
-                    }
-                })
-                .map(|e| {
-                    let formatted = format!("/usr{e}");
-                    if Path::new(&formatted).exists() {
-                        formatted
-                    } else {
-                        e
-                    }
-                })
-                .collect(),
-            Err(_) => Cache::default(),
-        };
-
+        let libraries = ldd(&path)?;
         write_cache(&path, &libraries, Object::Libraries)?;
         libraries
     };

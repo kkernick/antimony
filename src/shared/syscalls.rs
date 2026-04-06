@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use user::{as_effective, as_real};
+use user::as_real;
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug, Error)]
@@ -57,18 +57,17 @@ pub enum Error {
 
 /// Get a new connection to the database.
 fn new_connection() -> Result<Connection, Error> {
-    as_effective!({
-        let db = AT_HOME.join("seccomp").join("syscalls.db");
-        if let Some(parent) = db.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
+    let db = AT_HOME.join("seccomp").join("syscalls.db");
+    if let Some(parent) = db.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
 
-        let conn = if !db.exists() {
-            let conn = Connection::open(db)?;
-            conn.execute_batch(
-                r#"
+    let conn = if !db.exists() {
+        let conn = Connection::open(db)?;
+        conn.execute_batch(
+            r#"
                 PRAGMA foreign_keys = ON;
                 CREATE TABLE IF NOT EXISTS binaries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,19 +100,18 @@ fn new_connection() -> Result<Connection, Error> {
                     FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
                 );
                 "#,
-            )?;
-            conn
-        } else {
-            Connection::open(db)?
-        };
+        )?;
+        conn
+    } else {
+        Connection::open(db)?
+    };
 
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.pragma_update(None, "temp_store", "MEMORY")?;
-        conn.pragma_update(None, "cache_size", "-20000")?;
-        conn.set_prepared_statement_cache_capacity(100);
-        Ok(conn)
-    })?
+    conn.pragma_update(None, "journal_mode", "WAL")?;
+    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
+    conn.pragma_update(None, "cache_size", "-20000")?;
+    conn.set_prepared_statement_cache_capacity(100);
+    Ok(conn)
 }
 
 thread_local! {

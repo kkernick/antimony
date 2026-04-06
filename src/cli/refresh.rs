@@ -34,8 +34,6 @@ pub struct Args {
 }
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
-        user::set(user::Mode::Effective)?;
-
         if self.hard {
             for cache in fs::read_dir(CACHE_DIR.as_path())? {
                 let cache = cache?.path();
@@ -103,7 +101,6 @@ impl cli::Run for Args {
                     refresh: true,
                     ..Default::default()
                 };
-                user::set(user::Mode::Effective)?;
                 args.refresh()?;
 
                 for (conf, _) in profile.configuration {
@@ -115,7 +112,6 @@ impl cli::Run for Args {
                         config: Some(conf),
                         ..Default::default()
                     };
-                    user::set(user::Mode::Effective)?;
                     args.refresh()?;
                 }
                 pb.inc(1);

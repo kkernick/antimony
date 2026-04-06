@@ -5,7 +5,6 @@ use anyhow::Result;
 use caps::Capability;
 use log::debug;
 use spawn::Spawner;
-use std::sync::Arc;
 
 /// Install a filter onto a handle.
 pub fn install_filter(
@@ -69,22 +68,17 @@ pub fn install_filter(
 }
 
 // Install the filter, if we need it.
-pub fn setup(args: &Arc<super::Args>) -> Result<()> {
+pub fn setup(args: &super::Args) -> Result<()> {
     debug!("Setting up SECCOMP");
     // SECCOMP uses the elf binaries populated by the binary fabricator.
-    let (seccomp, lockdown) = {
-        let lock = args.profile.lock();
-        (
-            lock.seccomp.unwrap_or_default(),
-            lock.lockdown.unwrap_or(false),
-        )
-    };
+    let seccomp = args.profile.seccomp.unwrap_or_default();
+    let lockdown = args.profile.lockdown.unwrap_or(false);
 
     match seccomp {
         SeccompPolicy::Disabled => {}
         policy => {
             if !args.args.dry {
-                let binaries = &args.profile.lock().binaries;
+                let binaries = &args.profile.binaries;
                 install_filter(
                     &args.name,
                     args.instance.name(),

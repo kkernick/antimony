@@ -9,4 +9,3 @@ directories = [
   "qt6/qml/org/kde/desktop",
   "qt6/plugins/kstyle_config"
 ]
-roots = ["/usr/lib/qt6/qml/org/kde"]

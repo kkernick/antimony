@@ -17,9 +17,8 @@ use std::{
     fs::{self, File},
     os::fd::{AsRawFd, OwnedFd},
     path::Path,
-    sync::Arc,
 };
-use user::{USER, as_effective, as_real};
+use user::{USER, as_real};
 
 /// Open a file and pass it as executable to the sandbox.
 #[inline]
@@ -68,33 +67,30 @@ fn lockdown_file<'a>(
 /// Add a file to the sandbox.
 pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
     let path = direct_path(file);
-    let fd = as_effective!(Result<OwnedFd>, {
-        if !path.exists()
-            && let Some(parent) = path.parent()
-        {
-            fs::create_dir_all(parent)?;
-            let contents = resolve(Cow::Borrowed(&contents));
-            fs::write(&path, contents.as_ref())?;
-        }
+    if !path.exists()
+        && let Some(parent) = path.parent()
+    {
+        fs::create_dir_all(parent)?;
+        let contents = resolve(Cow::Borrowed(&contents));
+        fs::write(&path, contents.as_ref())?;
+    }
 
-        Ok(OwnedFd::from(File::open(path)?))
-    })??;
-
+    let fd = OwnedFd::from(File::open(path)?);
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file])?;
     handle.fd_i(fd);
     handle.args_i(["--chmod", op.chmod(), file])?;
     Ok(())
 }
 
-pub fn setup(args: &Arc<super::Args>) -> Result<()> {
+pub fn setup(args: &mut super::Args) -> Result<()> {
     debug!("Setting up files");
     // Add direct files.
 
     // Grab the lockdown value
-    let lockdown = args.profile.lock().lockdown.unwrap_or(false);
+    let lockdown = args.profile.lockdown.unwrap_or(false);
 
     if lockdown
-        && let Some(home) = &args.profile.lock().home
+        && let Some(home) = &args.profile.home
         && let Some(policy) = home.policy
         && policy == HomePolicy::Enabled
     {
@@ -104,7 +100,7 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
         args.handle.args_i(["--bind", &path, "/home/antimony"])?;
     }
 
-    if let Some(files) = &mut args.profile.lock().files {
+    if let Some(files) = &mut args.profile.files {
         let user = &mut files.user;
         if let Some(exe) = user.swap_remove(&FileMode::Executable) {
             exe.into_par_iter().try_for_each(|file| {

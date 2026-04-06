@@ -18,7 +18,6 @@ use crate::{
 use anyhow::Result;
 use inotify::WatchMask;
 use log::debug;
-use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -28,14 +27,13 @@ use std::{
     io::Write,
     os::fd::AsRawFd,
     path::Path,
-    sync::Arc,
 };
-use user::{as_effective, as_real};
+use user::as_real;
 
 /// Get the Spawner used to run Proxy.
 pub fn run(
     sys_dir: &Path,
-    profile: &Mutex<Profile>,
+    profile: &Profile,
     instance: &str,
     info: &Path,
     id: &str,
@@ -47,12 +45,15 @@ pub fn run(
     let proxy = user_dir(instance).join("proxy");
 
     timer!("::directory_setup", {
-        if !proxy.exists() {
-            as_real!(fs::create_dir_all(&proxy))??;
-        }
-        if !app_dir.exists() {
-            as_real!(fs::create_dir_all(&app_dir))??;
-        }
+        as_real!(Result<()>, {
+            if !proxy.exists() {
+                fs::create_dir_all(&proxy)?;
+            }
+            if !app_dir.exists() {
+                fs::create_dir_all(&app_dir)?;
+            }
+            Ok(())
+        })??;
     });
 
     // Create an SOF for the proxy.
@@ -63,7 +64,7 @@ pub fn run(
     // have the means to do this, so might as well. The real
     // paranoia is below.
     if !sof.exists() {
-        as_effective!(fs::create_dir_all(&sof))??;
+        fs::create_dir_all(&sof)?;
         timer!("::sof", {
             let libraries = get_libraries(Cow::Borrowed("/usr/bin/xdg-dbus-proxy"))?;
             libraries
@@ -126,7 +127,7 @@ pub fn run(
                 format!("--call={portal}=org.freedesktop.DBus.Properties.*@{path}")
             };
 
-            if let Some(ipc) = &profile.lock().ipc {
+            if let Some(ipc) = &profile.ipc {
                 if !ipc.portals.is_empty() {
                     let desktop = "org.freedesktop.portal.Desktop";
                     let path = "/org/freedesktop/portal/desktop";
@@ -160,42 +161,36 @@ pub fn run(
                     proxy.arg_i(format!("--call={portal}"))?;
                 }
             }
-            as_effective!(proxy.cache_write(&cache))??;
+            proxy.cache_write(&cache)?;
         })
     }
     Ok(proxy)
 }
 
-pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
+pub fn setup(args: &mut super::Args) -> Result<()> {
     // Scope the lock
     let ipc = {
-        let lock = args.profile.lock();
-        if let Some(ipc) = &lock.ipc {
+        if let Some(ipc) = &args.profile.ipc {
             ipc.clone()
         } else {
-            return Ok(None);
+            return Ok(());
         }
     };
 
     if ipc.disable.unwrap_or(false) {
-        return Ok(None);
+        return Ok(());
     }
-
-    let mut arguments = Vec::new();
 
     debug!("Setting up proxy");
     let runtime = RUNTIME_STR.as_str();
 
     // Add the system bus.
     if ipc.system_bus.unwrap_or(false) {
-        arguments.extend(
-            [
-                "--ro-bind",
-                "/var/run/dbus/system_bus_socket",
-                "/var/run/dbus/system_bus_socket",
-            ]
-            .map(Cow::Borrowed),
-        );
+        args.handle.args_i([
+            "--ro-bind",
+            "/var/run/dbus/system_bus_socket",
+            "/var/run/dbus/system_bus_socket",
+        ])?;
     }
 
     let instance = args.instance.name();
@@ -207,15 +202,11 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
     debug!("Setting up user bus");
     // Either mount the bus directly
     if ipc.user_bus.unwrap_or(false) {
-        arguments.extend(
-            [
-                "--ro-bind",
-                &format!("{}/bus", RUNTIME_STR.as_str()),
-                &format!("{}/bus", RUNTIME_STR.as_str()),
-            ]
-            .map(String::from)
-            .map(Cow::Owned),
-        );
+        args.handle.args_i([
+            "--ro-bind",
+            &format!("{}/bus", RUNTIME_STR.as_str()),
+            &format!("{}/bus", RUNTIME_STR.as_str()),
+        ])?;
 
     // Or mediate via the proxy.
     } else {
@@ -233,7 +224,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
         if !args.args.dry {
             // This is *very* paranoid, but the proxy gets confined by its
             // own policy when SECCOMP is enabled.
-            if let Some(policy) = args.profile.lock().seccomp {
+            if let Some(policy) = args.profile.seccomp {
                 timer!("::seccomp", {
                     syscalls::install_filter(
                         "xdg-dbus-proxy",
@@ -249,10 +240,7 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
 
             // Create the flatpak-info, but don't bother if we're running dry.
             timer!("::flatpak_info", {
-                let namespaces = {
-                    let lock = args.profile.lock();
-                    lock.namespaces.clone()
-                };
+                let namespaces = args.profile.namespaces.clone();
 
                 // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
                 #[rustfmt::skip]
@@ -283,13 +271,13 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                 })??;
 
                 #[rustfmt::skip]
-                arguments.extend([
+                args.handle.args_i([
                     "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
                     "--ro-bind", "/run/dbus", "/run/dbus",
                     "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
                     "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
                     "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-                ].map(String::from).map(Cow::Owned));
+                ])?;
             });
 
             timer!("::flapak_dir", {
@@ -304,18 +292,15 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
                     Ok(file)
                 })??;
 
-                arguments.extend(
-                    ["--json-status-fd", &format!("{}", file.as_raw_fd())]
-                        .map(String::from)
-                        .map(Cow::Owned),
-                );
+                args.handle
+                    .args_i(["--json-status-fd", &format!("{}", file.as_raw_fd())])?;
                 args.handle.fd_i(file);
             });
 
             // Watch for the proxy to expose its bus to give to the sandbox.
             debug!("Creating proxy watch");
             as_real!(Result<()>, {
-                args.watches.insert(args.inotify.lock().watches().add(
+                args.watches.insert(args.inotify.watches().add(
                     user_dir(args.instance.name()).join("proxy"),
                     WatchMask::CREATE,
                 )?);
@@ -325,16 +310,12 @@ pub fn setup(args: Arc<super::Args>) -> Result<Option<Vec<Cow<'static, str>>>> {
             args.handle.associate(proxy.spawn()?);
         }
 
-        arguments.extend(
-            [
-                "--ro-bind",
-                &format!("{instance_dir_str}/proxy/bus"),
-                &format!("{runtime}/bus"),
-            ]
-            .map(String::from)
-            .map(Cow::Owned),
-        );
+        args.handle.args_i([
+            "--ro-bind",
+            &format!("{instance_dir_str}/proxy/bus"),
+            &format!("{runtime}/bus"),
+        ])?;
     }
 
-    Ok(Some(arguments))
+    Ok(())
 }

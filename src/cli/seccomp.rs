@@ -51,8 +51,6 @@ impl super::Run for Args {
                 "Modifying the SECCOMP database is a privileged operation"
             ))
         } else {
-            user::set(user::Mode::Effective)?;
-
             match self.operation {
                 Operation::Optimize => syscalls::CONNECTION.with_borrow_mut(|conn| {
                     conn.execute("VACUUM;", [])?;

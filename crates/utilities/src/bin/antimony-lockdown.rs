@@ -15,7 +15,7 @@ use std::{
     },
     path::PathBuf,
 };
-use user::{USER, as_effective};
+use user::USER;
 
 fn main() -> Result<()> {
     let self_path = PathBuf::from("/usr/share/antimony/utilities/antimony-lockdown");
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
     if let Ok(home) = env::var("LOCKDOWN_HOME") {
         let path = PathBuf::from(format!("/usr/share/antimony/lockdown/{home}"));
         if !path.exists() {
-            as_effective!(fs::create_dir_all(path))??;
+            fs::create_dir_all(path)?;
         }
     }
 

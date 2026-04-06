@@ -10,22 +10,20 @@ use log::debug;
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
 };
-use user::as_effective;
 
 #[inline]
 pub fn cmd_cache(sys_dir: &Path) -> PathBuf {
     sys_dir.join(USER_NAME.as_str()).join("cmd.cache")
 }
 
-pub fn setup(args: &Arc<super::Args>) -> Result<()> {
+pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached, but on disk.
     let cmd_cache = cmd_cache(&args.sys_dir);
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
     {
-        as_effective!(fs::create_dir_all(parent))??;
+        fs::create_dir_all(parent)?;
     }
 
     if cmd_cache.exists() {
@@ -38,8 +36,8 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
 
     debug!("Fabricating sandbox");
 
-    let info = FabInfo {
-        profile: &args.profile,
+    let mut info = FabInfo {
+        profile: &mut args.profile,
         handle: &args.handle,
         name: &args.name,
         instance: args.instance,
@@ -52,12 +50,11 @@ pub fn setup(args: &Arc<super::Args>) -> Result<()> {
     // These can't be readily done in parallel, since
     // the heaviest ones (bin and lib) rely on each other.
     timer!("::files", fab::files::fabricate(&info))?;
-    timer!("::etc", fab::etc::fabricate(&info));
-    timer!("::bin", fab::bin::fabricate(&info))?;
-    timer!("::lib", fab::lib::fabricate(&info))?;
-    timer!("::ns", fab::ns::fabricate(&info))?;
+    timer!("::bin", fab::bin::fabricate(&mut info))?;
+    timer!("::lib", fab::lib::fabricate(&mut info))?;
+    timer!("::ns", fab::ns::fabricate(&mut info))?;
     timer!("::dev", fab::dev::fabricate(&info))?;
 
-    timer!("::cache_write", as_effective!({args.handle.cache_write(&cmd_cache)}))??;
+    timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
     Ok(())
 }

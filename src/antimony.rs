@@ -6,10 +6,18 @@ use antimony::{
 };
 use anyhow::Result;
 use clap::Parser;
+use rayon::ThreadPoolBuilder;
+use std::thread::available_parallelism;
 
 fn main() -> Result<()> {
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
+
+    // Somehow, using half the available parallel drastically improves performance.
+    // However, 3 causes a massive regression.
+    ThreadPoolBuilder::new()
+        .num_threads(available_parallelism()?.get() / 2)
+        .build_global()?;
 
     #[cfg(debug_assertions)]
     std::thread::spawn(move || {

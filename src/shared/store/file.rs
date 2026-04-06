@@ -12,7 +12,6 @@ use std::{
     io::Write,
     path::PathBuf,
 };
-use user::as_effective;
 
 /// The File Store
 pub struct Store {
@@ -83,15 +82,13 @@ impl super::BackingStore for Store {
 
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), super::Error> {
         let path = self.path(name, object);
-        as_effective!(Result<(), super::Error>, {
-            if let Some(parent) = path.parent()
-                && !parent.exists()
-            {
-                fs::create_dir_all(parent)?;
-            }
-            File::create(path)?.write_all(content)?;
-            Ok(())
-        })?
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
+        File::create(path)?.write_all(content)?;
+        Ok(())
     }
 
     fn exists(&self, name: &str, object: Object) -> bool {
@@ -99,7 +96,7 @@ impl super::BackingStore for Store {
     }
 
     fn remove(&self, name: &str, object: Object) -> Result<(), super::Error> {
-        as_effective!({ fs::remove_file(self.path(name, object)) })??;
+        fs::remove_file(self.path(name, object))?;
         Ok(())
     }
 }

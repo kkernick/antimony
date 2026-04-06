@@ -30,9 +30,9 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
-    let lockdown = info.profile.lock().lockdown.unwrap_or(false);
+    let lockdown = info.profile.lockdown.unwrap_or(false);
 
-    if let Some(files) = &info.profile.lock().files {
+    if let Some(files) = &info.profile.files {
         for temp in &files.temp {
             info.handle.args_i(["--tmpfs", temp])?;
         }

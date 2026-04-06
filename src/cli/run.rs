@@ -189,8 +189,6 @@ pub struct Args {
 }
 impl cli::Run for Args {
     fn run(mut self) -> Result<()> {
-        user::set(user::Mode::Effective)?;
-
         {
             let mut cache = store::CACHE.lock();
             if cache.is_none() {
@@ -216,7 +214,6 @@ impl cli::Run for Args {
 }
 impl Args {
     pub fn refresh(mut self) -> Result<()> {
-        user::set(user::Mode::Effective)?;
         let result = || -> Result<()> {
             let info = timer!(
                 "::setup",
