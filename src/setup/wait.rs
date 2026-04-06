@@ -31,7 +31,7 @@ pub fn setup(
                         if let Some(path) = event.name {
                             debug!("Finished Notify Event: {}", path.display());
                         }
-                        watches.swap_remove(&event.wd);
+                        watches.remove(&event.wd);
                     }
                 }
             }

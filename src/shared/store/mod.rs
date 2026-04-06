@@ -8,6 +8,7 @@ pub mod file;
 pub mod mem;
 
 use crate::shared::{
+    Map,
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
@@ -16,7 +17,7 @@ use log::info;
 use nix::errno;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::{any::Any, cell::RefCell, collections::HashMap, error, fmt, fs, io, path::PathBuf};
+use std::{any::Any, cell::RefCell, error, fmt, fs, io, path::PathBuf};
 use thiserror::Error;
 
 pub static CACHE: Mutex<Option<bool>> = Mutex::new(None);
@@ -181,7 +182,7 @@ pub trait BackingStore {
     /// Store bytes into the data-store with the given name.
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), Error>;
 
-    fn bulk(&self, entries: HashMap<String, Vec<u8>>, object: Object) -> Result<(), Error>;
+    fn bulk(&self, entries: Map<String, Vec<u8>>, object: Object) -> Result<(), Error>;
 
     /// Remove an object from the data-store
     fn remove(&self, name: &str, object: Object) -> Result<(), Error>;
@@ -227,8 +228,8 @@ pub fn load<
 }
 
 /// Export the entire store into memory.
-pub fn export(store: &dyn BackingStore) -> HashMap<Object, Vec<String>> {
-    let mut map = HashMap::new();
+pub fn export(store: &dyn BackingStore) -> Map<Object, Vec<String>> {
+    let mut map = Map::default();
     for object in OBJECTS {
         if let Ok(objects) = store.get(object) {
             map.insert(object, objects);

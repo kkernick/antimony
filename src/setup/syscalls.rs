@@ -1,6 +1,6 @@
 //! Note the bulk of SECCOMP logic is in shared. This just attaches the Filter to a process.
 
-use crate::shared::{Set, profile::seccomp::SeccompPolicy, syscalls, utility};
+use crate::shared::{StableSet, profile::seccomp::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
@@ -11,7 +11,7 @@ pub fn install_filter(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &Set<String>,
+    binaries: &StableSet<String>,
     main: &Spawner,
     monitor_parent: &Spawner,
     lockdown: bool,

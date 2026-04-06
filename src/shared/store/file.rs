@@ -3,11 +3,10 @@
 //! in $AT_HOME/config, and Caches are stored in $AT_HOME/cache.
 //! This Backend is best for fast disks.
 
-use crate::shared::store::Object;
+use crate::shared::{Map, store::Object};
 use rayon::prelude::*;
 use std::{
     any::Any,
-    collections::HashMap,
     fs::{self, File},
     io::Write,
     path::PathBuf,
@@ -72,7 +71,7 @@ impl super::BackingStore for Store {
 
     fn bulk(
         &self,
-        entries: HashMap<String, Vec<u8>>,
+        entries: Map<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {
         entries

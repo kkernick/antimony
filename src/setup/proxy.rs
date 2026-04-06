@@ -8,7 +8,7 @@ use crate::{
     },
     setup::syscalls,
     shared::{
-        Set,
+        StableSet,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::{Profile, ipc::Portal, ns::Namespace},
         user_dir,
@@ -230,7 +230,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                         "xdg-dbus-proxy",
                         instance,
                         policy,
-                        &Set::default(),
+                        &StableSet::default(),
                         &proxy,
                         &args.handle,
                         false,

@@ -684,7 +684,7 @@ impl<'a> Spawner {
         let fds = self.fds.into_inner();
 
         let mut cmd_c: Option<CString> = None;
-        let mut args_c = Vec::<CString>::new();
+        let mut args_c = Vec::new();
 
         // Launch with pkexec if we're elevated.
         #[cfg(feature = "elevate")]

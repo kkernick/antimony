@@ -12,9 +12,9 @@ pub mod seccomp;
 
 use crate::{
     cli,
-    fab::{self, get_wildcards},
+    fab::{self, get_wildcards, lib::WildcardFilter},
     shared::{
-        Map, Set,
+        StableMap, StableSet,
         config::CONFIG_FILE,
         edit,
         env::HOME,
@@ -90,11 +90,11 @@ fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
 }
 
 /// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &Set<String>, verbose: u8) {
+pub fn library_info(libraries: &StableSet<String>, verbose: u8) {
     println!("\t- Libraries:");
     for library in libraries {
         if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true, "f,s") {
+            match get_wildcards(library, true, WildcardFilter::Files) {
                 Ok(wilds) => {
                     for wild in wilds {
                         println!("\t\t- {}", style(wild).italic());
@@ -137,12 +137,12 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub features: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub features: StableSet<String>,
 
     /// Features that should be excluded from running under the profile.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub conflicts: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub conflicts: StableSet<String>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -163,7 +163,7 @@ pub struct Profile {
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    pub inherits: Option<Set<String>>,
+    pub inherits: Option<StableSet<String>>,
 
     /// Configuration for the profile's home.
     pub home: Option<home::Home>,
@@ -179,8 +179,8 @@ pub struct Profile {
     pub files: Option<files::Files>,
 
     /// Binaries needed in the sandbox.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub binaries: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub binaries: StableSet<String>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
@@ -189,24 +189,24 @@ pub struct Profile {
     pub libraries: Option<Libraries>,
 
     /// Devices needed in the sandbox, at /dev.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub devices: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub devices: StableSet<String>,
 
     /// Namespaces, such as User and Net.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub namespaces: Set<ns::Namespace>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub namespaces: StableSet<ns::Namespace>,
 
     /// Environment Variable Keypairs
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub environment: Map<String, String>,
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    pub environment: StableMap<String, String>,
 
     /// Arguments to pass to the sandboxed application directly.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub configuration: Map<String, Profile>,
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    pub configuration: StableMap<String, Profile>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
@@ -332,15 +332,15 @@ impl Profile {
         }
 
         debug!("No cache available");
-        let to_inherit: Set<String> = match &profile.inherits {
+        let to_inherit: StableSet<String> = match &profile.inherits {
             Some(i) => i.clone(),
             None => {
                 if !CONFIG_FILE.system_mode()
                     && USER_STORE.with_borrow(|s| s.exists("default", Object::Profile))
                 {
-                    Set::from_iter(["default".to_string()])
+                    StableSet::from_iter(["default".to_string()])
                 } else {
-                    Set::default()
+                    StableSet::default()
                 }
             }
         };

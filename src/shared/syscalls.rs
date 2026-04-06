@@ -1,16 +1,16 @@
 //! The bulk of the SECCOMP Logic.
 
 use crate::{
-    shared::{Set, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
+    shared::{Set, StableSet, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
     timer,
 };
-use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
 use nix::{
     errno,
     sys::socket::{self, ControlMessage, MsgFlags},
 };
+use rayon::prelude::*;
 use rusqlite::{Connection, Transaction};
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
@@ -119,7 +119,7 @@ thread_local! {
 }
 
 /// Cache syscall names.
-static CACHE: LazyLock<DashMap<String, i32, ahash::RandomState>> = LazyLock::new(DashMap::default);
+static CACHE: LazyLock<ThreadMap<String, i32>> = LazyLock::new(ThreadMap::default);
 
 /// Get the number for a given name.
 pub fn get_num(name: &str) -> i32 {
@@ -256,7 +256,7 @@ pub fn insert_binary(tx: &Transaction, path: &str) -> Result<i64, Error> {
 /// Map syscall names.
 pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
     syscalls
-        .into_iter()
+        .into_par_iter()
         .filter_map(|i| Syscall::get_name(i).ok())
         .collect()
 }
@@ -316,7 +316,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
+pub fn get_calls(name: &str, p_binaries: &StableSet<String>) -> PolicyPair {
     let mut syscalls = Set::default();
     let mut bwrap = Set::default();
 
@@ -372,7 +372,7 @@ pub fn new(
     name: &str,
     instance: &str,
     policy: SeccompPolicy,
-    binaries: &Set<String>,
+    binaries: &StableSet<String>,
     lockdown: bool,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));

@@ -2,7 +2,7 @@
 //! Database to be used for profile generation.
 
 use antimony::shared::{
-    self, Set,
+    self, Set, ThreadMap,
     env::{DATA_HOME, RUNTIME_DIR},
     format_iter,
     profile::seccomp::SeccompPolicy,
@@ -11,7 +11,7 @@ use antimony::shared::{
 use anyhow::{Context, Result};
 use clap::Parser;
 use common::stream::receive_fd;
-use dashmap::{DashMap, mapref::one::RefMut};
+use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
 use log::{debug, warn};
 use nix::{
@@ -185,7 +185,7 @@ fn commit_or_defer(
 pub fn audit_reader(
     profile: String,
     term: Arc<AtomicBool>,
-    log: Arc<DashMap<String, Set<i32>>>,
+    log: Arc<ThreadMap<String, Set<i32>>>,
 ) -> Result<()> {
     const BUFFER_SIZE: usize = 4096;
 
@@ -203,7 +203,7 @@ pub fn audit_reader(
     println!("Listening to Audit.");
     let mut buf = vec![0u8; BUFFER_SIZE];
 
-    let allow = Arc::new(DashMap::<String, Set<i32>>::new());
+    let allow = Arc::new(ThreadMap::<String, Set<i32>>::default());
 
     while !term.load(Ordering::Relaxed) {
         match recv(sock_fd.as_raw_fd(), &mut buf, MsgFlags::MSG_DONTWAIT) {
@@ -296,16 +296,16 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
 /// and binaries.
 pub fn notify_reader(
     term: Arc<AtomicBool>,
-    stats: Arc<DashMap<String, Set<i32>>>,
+    stats: Arc<ThreadMap<String, Set<i32>>>,
     fd: OwnedFd,
     name: String,
     ask: AtomicBool,
 ) -> Result<()> {
     // Things the user has already denied, and which we shouldn't prompt again.
-    let deny = Arc::new(DashMap::<String, Set<i32>>::new());
+    let deny = Arc::new(ThreadMap::<String, Set<i32>>::default());
 
     // Same for deny, but vice-versa.
-    let allow = Arc::new(DashMap::<String, Set<i32>>::new());
+    let allow = Arc::new(ThreadMap::<String, Set<i32>>::default());
 
     // Whether we should ask the user via Notify, or just save them via Permissive.
     // If the user selects "Save All," this mode can change during execution.
@@ -523,13 +523,13 @@ fn main() -> Result<()> {
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
     // Shared DashSet for stats.
-    let stats = DashMap::<String, Arc<DashMap<String, Set<i32>>>>::new();
+    let stats = ThreadMap::default();
     let mut threads = Vec::new();
 
     if cli.audit {
         let audit = stats
             .entry("audit".to_string())
-            .or_insert_with(|| Arc::new(DashMap::new()))
+            .or_insert_with(|| Arc::new(ThreadMap::default()))
             .clone();
 
         println!("Spawning audit reader");
@@ -549,7 +549,7 @@ fn main() -> Result<()> {
                 let term_clone = term.clone();
                 let profile = stats
                     .entry(name.clone())
-                    .or_insert_with(|| Arc::new(DashMap::new()))
+                    .or_insert_with(|| Arc::new(ThreadMap::default()))
                     .clone();
 
                 threads.push(thread::spawn(move || {

@@ -5,9 +5,12 @@
 //! 2. The User Database (USER_NAME.db) contains user profiles and features.
 //! 3. The Cache Database (cache.db) is a dumping ground for caching used through the project.
 
-use crate::shared::env::{AT_HOME, USER_NAME};
+use crate::shared::{
+    Map,
+    env::{AT_HOME, USER_NAME},
+};
 use rusqlite::{Connection, params, types::FromSql};
-use std::{any::Any, cell::UnsafeCell, collections::HashMap, fs, path::PathBuf};
+use std::{any::Any, cell::UnsafeCell, fs, path::PathBuf};
 use thiserror::Error;
 use user::as_effective;
 
@@ -193,7 +196,7 @@ impl super::BackingStore for Store {
 
     fn bulk(
         &self,
-        entries: HashMap<String, Vec<u8>>,
+        entries: Map<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {
         // Start a transaction – all inserts succeed or all fail together.

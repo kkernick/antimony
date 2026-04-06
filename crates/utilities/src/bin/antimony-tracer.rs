@@ -1,14 +1,13 @@
 use antimony::{
-    fab::{get_libraries, get_wildcards, resolve},
+    fab::{get_libraries, get_wildcards, lib::WildcardFilter, resolve},
     shared::{
-        Set,
+        Set, ThreadMap,
         feature::Feature,
         profile::files::FileMode,
         store::{Object, SYSTEM_STORE, USER_STORE},
         utility,
     },
 };
-use dashmap::DashMap;
 use rayon::prelude::*;
 use std::{
     borrow::Cow,
@@ -21,7 +20,7 @@ fn main() -> anyhow::Result<()> {
     let term = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
 
-    let mut err = Vec::<String>::new();
+    let mut err = Vec::new();
     let stdin = stdin();
 
     // We need to populate the library roots ;)
@@ -55,7 +54,7 @@ fn main() -> anyhow::Result<()> {
         println!("Generating Report...");
 
         // Get all features on the system.
-        let feature_database: DashMap<String, Feature> = DashMap::new();
+        let feature_database: ThreadMap<String, Feature> = ThreadMap::default();
         for name in SYSTEM_STORE.with_borrow(|s| s.get(Object::Feature))? {
             let feature = SYSTEM_STORE.with_borrow(|s| s.fetch(&name, Object::Feature))?;
             feature_database.insert(name, toml::from_str(&feature)?);
@@ -72,8 +71,7 @@ fn main() -> anyhow::Result<()> {
         println!("============== FILES ==============");
         not_found.into_par_iter().try_for_each(|file| {
             let database = arc.clone();
-
-            let mut features = Set::<(String, String, FileMode)>::default();
+            let mut features = Set::default();
 
             // For each file, try and see if any part of the file path
             // is provided:
@@ -93,7 +91,7 @@ fn main() -> anyhow::Result<()> {
                     let found = if file.is_empty() {
                         false
                     } else if d_name.contains("*") {
-                        match get_wildcards(&d_name, true, "f,l,d") {
+                        match get_wildcards(&d_name, true, WildcardFilter::Files) {
                             Ok(cards) => cards.contains(file),
                             Err(_) => false,
                         }

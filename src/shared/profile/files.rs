@@ -1,12 +1,9 @@
 use crate::{
     cli,
-    fab::resolve,
-    shared::{Map, Set},
+    shared::{StableMap, StableSet},
 };
 use clap::ValueEnum;
-use console::style;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
 
 /// How a file should be exposed in the sandbox.
 #[derive(Debug, Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
@@ -74,7 +71,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 ];
 
 /// For each file mode, we have a list of files.
-pub type FileList = Map<FileMode, Set<String>>;
+pub type FileList = StableMap<FileMode, StableSet<String>>;
 
 /// Files, RO/RW, and Modes.
 #[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -90,20 +87,20 @@ pub struct Files {
     pub temp: Vec<String>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    #[serde(skip_serializing_if = "Map::is_empty")]
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
     pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    #[serde(skip_serializing_if = "Map::is_empty")]
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
     pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
-    #[serde(skip_serializing_if = "Map::is_empty")]
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
     pub resources: FileList,
 
     /// Direct files take a path, and file contents.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub direct: Map<FileMode, Map<String, String>>,
+    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    pub direct: StableMap<FileMode, StableMap<String, String>>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -184,38 +181,5 @@ impl Files {
         }
 
         files
-    }
-
-    /// Get info about the installed files.
-    pub fn info(&self) {
-        let get_files = |list: &FileList, mode| -> Set<String> {
-            let mut ret = Set::default();
-            if let Some(files) = list.get(&mode) {
-                for file in files {
-                    ret.insert(format!(
-                        "\t\t- {}",
-                        style(resolve(Cow::Borrowed(file))).italic()
-                    ));
-                }
-            }
-            ret
-        };
-
-        for mode in FILE_MODES {
-            let mut files = Set::default();
-            files.extend(get_files(&self.platform, mode));
-            files.extend(get_files(&self.resources, mode));
-            files.extend(get_files(&self.user, mode));
-
-            if let Some(mode_files) = self.direct.get(&mode) {
-                for file in mode_files.keys() {
-                    files.insert(format!("\t\t- {}", style(file).italic()));
-                }
-            }
-            if !files.is_empty() {
-                println!("\t- {mode} Files:");
-                files.into_iter().for_each(|file| println!("{file}"))
-            }
-        }
     }
 }

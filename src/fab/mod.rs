@@ -8,22 +8,21 @@ pub mod lib;
 pub mod ns;
 
 use crate::{
-    fab::lib::ROOTS,
+    fab::lib::{ROOTS, WildcardFilter},
     shared::{
+        ThreadSet,
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
 };
 use anyhow::Result;
-use dashmap::DashSet;
 use log::debug;
 use rayon::prelude::*;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
-    collections::HashSet,
     env,
     fs::{self, File},
     io::Read,
@@ -31,9 +30,6 @@ use std::{
 };
 use temp::Temp;
 use user::as_real;
-
-pub type Cache = HashSet<String, ahash::RandomState>;
-pub type ThreadCache = DashSet<String, ahash::RandomState>;
 
 /// The magic for an ELF file.
 pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
@@ -83,7 +79,7 @@ fn elf_filter(path: &str) -> bool {
 }
 
 #[inline]
-pub fn ldd(path: &str) -> Result<Cache> {
+pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
     if elf_filter(path) {
         Ok(Spawner::abs("/usr/bin/ldd")
             .arg(path)?
@@ -123,7 +119,7 @@ pub fn ldd(path: &str) -> Result<Cache> {
             })
             .collect())
     } else {
-        Ok(Cache::default())
+        Ok(ThreadSet::default())
     }
 }
 
@@ -134,12 +130,12 @@ pub fn ldd(path: &str) -> Result<Cache> {
 /// ```rust
 /// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
 /// ```
-pub fn get_dir(dir: &str) -> Result<Cache> {
+pub fn get_dir(dir: &str) -> Result<ThreadSet<String>> {
     if let Ok(Some(libraries)) = get_cache(dir, Object::Directories) {
         return Ok(libraries);
     }
 
-    let libraries: Cache = Spawner::abs("/usr/bin/find")
+    let libraries: ThreadSet<String> = Spawner::abs("/usr/bin/find")
         .args([dir, "-executable", "-type", "f"])?
         .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
@@ -162,14 +158,18 @@ pub fn get_dir(dir: &str) -> Result<Cache> {
 /// ```rust
 /// antimony::fab::get_wildcards("glib*", true).expect("Failed to find Glib");
 /// ```
-pub fn get_wildcards(pattern: &str, lib: bool, what: &'static str) -> Result<Cache> {
-    let run = |dir: &str, base: &str| -> Result<Cache> {
+pub fn get_wildcards(
+    pattern: &str,
+    lib: bool,
+    filter: WildcardFilter,
+) -> Result<ThreadSet<String>> {
+    let run = |dir: &str, base: &str| -> Result<ThreadSet<String>> {
         let handle = Spawner::abs("/usr/bin/find").arg(dir)?;
 
         if base.contains("/") {
             let whole = PathBuf::from(format!("{dir}/{base}"));
             if !whole.parent().unwrap().exists() {
-                return Ok(Cache::default());
+                return Ok(ThreadSet::default());
             }
             let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
             handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()])?;
@@ -178,7 +178,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, what: &'static str) -> Result<Cac
         }
 
         Ok(handle
-            .args(["-type", what])?
+            .args(["-type", filter.find_filter()])?
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?
@@ -199,12 +199,15 @@ pub fn get_wildcards(pattern: &str, lib: bool, what: &'static str) -> Result<Cac
 
     // If we're looking for libraries, check each library root.
     } else if lib {
-        let mut libraries = Cache::default();
-        ROOTS.iter().for_each(|root| {
+        let mut libraries = ThreadSet::default();
+        for root in ROOTS.iter() {
             if let Ok(lib) = run(&root, pattern) {
                 libraries.extend(lib);
+                if filter == WildcardFilter::Files {
+                    break;
+                }
             }
-        });
+        }
 
         libraries
     // Otherwise, we assume we're looking for binaries.
@@ -226,7 +229,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, what: &'static str) -> Result<Cac
 ///
 /// get_libraries(Cow::Borrowed("/proc/self/exe")).expect("Failed to LDD self");
 /// ```
-pub fn get_libraries(path: Cow<'_, str>) -> Result<Cache> {
+pub fn get_libraries(path: Cow<'_, str>) -> Result<ThreadSet<String>> {
     let libraries = if let Ok(Some(libraries)) = get_cache(&path, Object::Libraries) {
         libraries
     } else {

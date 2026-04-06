@@ -1,7 +1,4 @@
-use crate::{
-    cli,
-    shared::{Set, format_iter},
-};
+use crate::{cli, shared::StableSet};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
@@ -19,24 +16,24 @@ pub struct Ipc {
     pub user_bus: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub portals: Set<Portal>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub portals: StableSet<Portal>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub see: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub see: StableSet<String>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub talk: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub talk: StableSet<String>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub own: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub own: StableSet<String>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub call: Set<String>,
+    #[serde(skip_serializing_if = "StableSet::is_empty")]
+    pub call: StableSet<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
@@ -90,26 +87,6 @@ impl Ipc {
         }
 
         ipc
-    }
-
-    /// Get info about the IPC set.
-    pub fn info(&self) {
-        println!("\t- IPC mediated via xdg-dbus-proxy");
-        if !self.portals.is_empty() {
-            println!("\t\t- Portals: {}", format_iter(self.portals.iter()));
-        }
-        if !self.talk.is_empty() {
-            println!("\t\t- Talk: {}", format_iter(self.talk.iter()));
-        }
-        if !self.see.is_empty() {
-            println!("\t\t- Visible: {}", format_iter(self.see.iter()));
-        }
-        if !self.own.is_empty() {
-            println!("\t\t- Owns: {}", format_iter(self.own.iter()));
-        }
-        if !self.call.is_empty() {
-            println!("\t\t- Calls via: {}", format_iter(self.call.iter()));
-        }
     }
 }
 

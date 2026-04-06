@@ -8,7 +8,7 @@
 use crate::{
     fab::resolve,
     shared::{
-        Map, Set,
+        Map, Set, StableSet,
         feature::{self, Feature},
         profile::{Profile, files::FILE_MODES},
     },
@@ -75,7 +75,7 @@ fn strike_feature(
         debug!("Striking feature: {feature}");
 
         // Remove the offending feature immediately.
-        features.swap_remove(feature);
+        features.remove(feature);
 
         // Then, grab the features that this feature requires.
         if let Some(depends) = load_feature(feature, db)?.requires.clone() {
@@ -101,7 +101,7 @@ fn resolve_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
     features: &mut Map<String, u32>,
-    blacklist: &mut Set<String>,
+    blacklist: &mut StableSet<String>,
     searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
@@ -141,8 +141,8 @@ fn resolve_feature(
 }
 
 fn resolve_features(
-    features: &Set<String>,
-    conflicts: &Set<String>,
+    features: &StableSet<String>,
+    conflicts: &StableSet<String>,
 ) -> Result<Vec<Feature>, Error> {
     let mut feature_list = Map::default();
     let mut searched = Set::default();
@@ -160,7 +160,7 @@ fn resolve_features(
     }
     Ok(feature_list
         .into_keys()
-        .filter_map(|name| db.swap_remove(&name))
+        .filter_map(|name| db.remove(&name))
         .collect())
 }
 
@@ -322,7 +322,7 @@ fn add_feature(
             None => ipc.disable,
         };
 
-        let format_all = |ipc_list: Set<String>| -> Set<String> {
+        let format_all = |ipc_list: StableSet<String>| -> Set<String> {
             ipc_list
                 .into_iter()
                 .filter_map(|f| format(f, map).ok())

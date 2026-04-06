@@ -3,13 +3,15 @@
 //! so that profiles can share a cache entirely in memory, which is then dumped to the
 //! actual backing store all in one go.
 
-use crate::shared::store::{BackingStore, CACHE_STORE, OBJECTS, Object};
+use crate::shared::{
+    Map, ThreadMap,
+    store::{BackingStore, CACHE_STORE, OBJECTS, Object},
+};
 use common::cache::{self, CacheStatic};
-use dashmap::DashMap;
 use log::debug;
-use std::{any::Any, collections::HashMap, sync::LazyLock};
+use std::{any::Any, sync::LazyLock};
 
-type Table = HashMap<String, Vec<u8>>;
+type Table = Map<String, Vec<u8>>;
 
 pub fn flush() {
     CACHE_STORE.with_borrow(|s| {
@@ -20,9 +22,9 @@ pub fn flush() {
 }
 
 /// The cache store.
-static CACHE: CacheStatic<String, DashMap<Object, Table>> = LazyLock::new(DashMap::default);
+static CACHE: CacheStatic<String, ThreadMap<Object, Table>> = LazyLock::new(ThreadMap::default);
 
-static MEM_STORE: LazyLock<cache::Cache<String, DashMap<Object, Table>>> =
+static MEM_STORE: LazyLock<cache::Cache<String, ThreadMap<Object, Table>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
 /// The File Store
@@ -44,10 +46,10 @@ impl Store {
     /// is false, only memory is checked.
     pub fn new(name: &str, backend: Box<dyn BackingStore>, read: bool) -> Self {
         if MEM_STORE.get(name).is_none() {
-            MEM_STORE.insert(name.to_string(), DashMap::default());
+            MEM_STORE.insert(name.to_string(), ThreadMap::default());
             let db = MEM_STORE.get(name).unwrap();
             for object in super::OBJECTS {
-                db.insert(object, HashMap::default());
+                db.insert(object, Map::default());
             }
         }
 
@@ -125,7 +127,7 @@ impl super::BackingStore for Store {
 
     fn bulk(
         &self,
-        entries: HashMap<String, Vec<u8>>,
+        entries: Map<String, Vec<u8>>,
         object: super::Object,
     ) -> Result<(), super::Error> {
         entries

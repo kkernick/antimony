@@ -11,7 +11,7 @@
 
 use antimony::{
     shared::{
-        self,
+        self, ThreadMap,
         syscalls::{self, Notifier, get_num},
         user_dir, utility,
     },
@@ -21,7 +21,6 @@ use anyhow::Result;
 use caps::Capability;
 use clap::{Parser, Subcommand};
 use common::stream::receive_fd;
-use dashmap::DashMap;
 use inotify::{Inotify, WatchMask};
 use log::info;
 use nix::{
@@ -135,7 +134,7 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
 
 /// Listen on the Kernel FD and find paths.
 pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Result<()> {
-    let found = Arc::new(DashMap::<u32, Vec<String>>::new());
+    let found = Arc::new(ThreadMap::<u32, Vec<String>>::default());
 
     while !term.load(Ordering::Relaxed) {
         let pair = Pair::new()?;

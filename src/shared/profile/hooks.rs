@@ -1,5 +1,4 @@
 use crate::{fab::resolve, shared::profile::append};
-use console::style;
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
@@ -67,26 +66,6 @@ impl Hooks {
             if self.parent.is_none() {
                 self.parent = hooks.parent;
             }
-        }
-    }
-
-    pub fn info(&self) {
-        if let Some(pre) = &self.pre {
-            println!("\tPre-Hooks");
-            for hook in pre {
-                hook.info();
-            }
-        }
-        if let Some(post) = &self.post {
-            println!("\tPost-Hooks");
-            for hook in post {
-                hook.info();
-            }
-        }
-
-        if let Some(parent) = &self.parent {
-            println!("\tParent Hooks");
-            parent.info();
         }
     }
 }
@@ -210,53 +189,6 @@ impl Hook {
                 }
                 Ok(main)
             }
-        }
-    }
-
-    pub fn info(&self) {
-        if let Some(name) = &self.name {
-            println!("Hook: {name}");
-        }
-
-        if self.content.is_some() {
-            print!("\t\t/usr/bin/bash -c ...")
-        } else if let Some(path) = &self.path {
-            print!("\t\t{path} ")
-        }
-
-        if let Some(args) = &self.args {
-            for arg in args {
-                print!("{arg} ")
-            }
-        }
-        println!();
-        if self.can_fail.unwrap_or(false) {
-            println!("\t\t\t-> Non-Failing")
-        }
-
-        if self.env.unwrap_or(false) {
-            println!("\t\t\t-> Environment Aware")
-        }
-
-        if self.attach.unwrap_or(false) {
-            println!("\t\t\t-> Attached")
-        }
-
-        println!(
-            "\t\t\t-> Allow New Privileges: {}",
-            if self.new_privileges.unwrap_or(false) {
-                style("Yes").red()
-            } else {
-                style("No").green()
-            }
-        );
-
-        if self.capture_output.unwrap_or(false) {
-            println!("\t\t\t-> Capturing Sandbox Output")
-        }
-
-        if self.capture_error.unwrap_or(false) {
-            println!("\t\t\t-> Capturing Sandbox Error")
         }
     }
 }

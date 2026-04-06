@@ -45,23 +45,6 @@ impl Home {
         }
     }
 
-    pub fn info(&self, name: &str) {
-        println!(
-            "\t\t- Home Path: ~/.local/share/antimony/{} on {}",
-            match &self.name {
-                Some(name) => name,
-                None => name,
-            },
-            match &self.path {
-                Some(path) => path,
-                None => "~/antimony",
-            }
-        );
-        if let Some(policy) = &self.name {
-            println!("\t\t- Home Policy: {policy}");
-        }
-    }
-
     pub fn path(&self, name: &str) -> PathBuf {
         DATA_HOME.join("antimony").join(match &self.name {
             Some(name) => name,

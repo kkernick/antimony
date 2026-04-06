@@ -6,9 +6,9 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{ThreadCache, get_dir, get_libraries, get_wildcards, in_lib, localize_home},
+    fab::{get_dir, get_libraries, get_wildcards, in_lib, localize_home},
     shared::{
-        Set,
+        Set, StableSet, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
     },
@@ -16,21 +16,20 @@ use crate::{
 };
 use ahash::RandomState;
 use anyhow::Result;
-use dashmap::{DashSet, iter_set::OwningIter};
+use dashmap::iter_set::OwningIter;
 use log::{debug, error, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
-    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 
-pub static FILES: LazyLock<ThreadCache> = LazyLock::new(DashSet::default);
-pub static DIRS: LazyLock<ThreadCache> = LazyLock::new(DashSet::default);
-pub static ROOTS: LazyLock<ThreadCache> = LazyLock::new(|| {
+pub static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
+pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
+pub static ROOTS: LazyLock<ThreadSet<String>> = LazyLock::new(|| {
     CONFIG_FILE
         .library_roots()
         .par_iter()
@@ -110,11 +109,28 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     Ok(())
 }
 
-#[inline]
-fn resolve_wildcards(set: Set<String>, filter: &'static str) -> OwningIter<String, RandomState> {
-    let resolved = ThreadCache::default();
+#[derive(Copy, Clone, PartialEq)]
+pub enum WildcardFilter {
+    Files,
+    Directories,
+}
+impl WildcardFilter {
+    pub fn find_filter(&self) -> &'static str {
+        match self {
+            WildcardFilter::Files => "f,l",
+            WildcardFilter::Directories => "d",
+        }
+    }
+}
 
-    let (wildcards, flat): (HashSet<_>, HashSet<_>) = timer!(
+#[inline]
+fn resolve_wildcards(
+    set: StableSet<String>,
+    filter: WildcardFilter,
+) -> OwningIter<String, RandomState> {
+    let resolved = ThreadSet::default();
+
+    let (wildcards, flat): (Set<_>, Set<_>) = timer!(
         "::wildcard::partition",
         set.into_par_iter().partition(|e| e.contains('*'))
     );
@@ -126,12 +142,15 @@ fn resolve_wildcards(set: Set<String>, filter: &'static str) -> OwningIter<Strin
             } else if e.starts_with("~") {
                 resolved.insert(e.replace("~", HOME.as_str()));
             } else {
-                ROOTS.par_iter().for_each(|root| {
+                for root in ROOTS.iter() {
                     let path = format!("{}/{e}", root.as_str());
                     if Path::new(&path).exists() {
                         resolved.insert(path);
+                        if filter == WildcardFilter::Files {
+                            break;
+                        }
                     }
-                });
+                }
             }
         })
     });
@@ -220,7 +239,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 move || {
                     timer!(
                         "::directories",
-                        resolve_wildcards(libraries.directories, "d")
+                        resolve_wildcards(libraries.directories, WildcardFilter::Directories)
                             .par_bridge()
                             .for_each(|e| {
                                 if let Ok(libraries) = get_dir(&e) {
@@ -235,7 +254,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 move || {
                     timer!(
                         "::files",
-                        resolve_wildcards(libraries.files, "f,l")
+                        resolve_wildcards(libraries.files, WildcardFilter::Files)
                             .par_bridge()
                             .for_each(|file| {
                                 if let Ok(libraries) = get_libraries(Cow::Borrowed(&file)) {

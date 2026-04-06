@@ -2,7 +2,7 @@
 
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
-    Map, Set, edit,
+    StableMap, StableSet, edit,
     profile::{files::Files, hooks::Hooks, lib::Libraries},
     store::{self, Object},
 };
@@ -46,31 +46,31 @@ pub struct Feature {
     pub caveat: Option<String>,
 
     /// A list of other features this feature depends on.
-    pub requires: Option<Set<String>>,
+    pub requires: Option<StableSet<String>>,
 
     /// A list of other features this feature conflicts with.
-    pub conflicts: Option<Set<String>>,
+    pub conflicts: Option<StableSet<String>>,
 
     /// Any IPC busses needed.
     pub ipc: Option<Ipc>,
 
     /// Namespaces required.
-    pub namespaces: Option<Set<Namespace>>,
+    pub namespaces: Option<StableSet<Namespace>>,
 
     /// Required files
     pub files: Option<Files>,
 
     /// Required binaries
-    pub binaries: Option<Set<String>>,
+    pub binaries: Option<StableSet<String>>,
 
     /// Required libraries
     pub libraries: Option<Libraries>,
 
     /// Required devices.
-    pub devices: Option<Set<String>>,
+    pub devices: Option<StableSet<String>>,
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
-    pub environment: Option<Map<String, String>>,
+    pub environment: Option<StableMap<String, String>>,
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.

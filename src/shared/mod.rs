@@ -10,13 +10,19 @@ use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_HOME, CACHE_DIR, RUNTIME_DIR},
 };
+use dashmap::{DashMap, DashSet};
 use indexmap::{IndexMap, IndexSet};
 use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
 use spawn::Spawner;
 use std::{
-    fmt::Display, fs::metadata, hash::BuildHasher, os::unix::fs::MetadataExt, path::PathBuf,
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    fs::metadata,
+    hash::BuildHasher,
+    os::unix::fs::MetadataExt,
+    path::PathBuf,
 };
 use user::{USER, as_real};
 
@@ -29,8 +35,13 @@ impl BuildHasher for StaticHash {
     }
 }
 
-pub type Set<T> = IndexSet<T, StaticHash>;
-pub type Map<K, V> = IndexMap<K, V, StaticHash>;
+pub type Set<T> = HashSet<T, ahash::RandomState>;
+pub type StableSet<T> = IndexSet<T, StaticHash>;
+pub type ThreadSet<T> = DashSet<T, ahash::RandomState>;
+
+pub type Map<K, V> = HashMap<K, V, StaticHash>;
+pub type StableMap<K, V> = IndexMap<K, V, StaticHash>;
+pub type ThreadMap<K, V> = DashMap<K, V, ahash::RandomState>;
 
 /// Check that the Real User is privileged. This is used to allow modifying the
 /// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)

@@ -4,11 +4,12 @@
 
 use crate::{
     fab::{
-        ELF_MAGIC, FabInfo, ThreadCache, elf_filter, get_cache, get_wildcards, in_lib, lib,
+        ELF_MAGIC, FabInfo, elf_filter, get_cache, get_wildcards, in_lib,
+        lib::{self, WildcardFilter},
         localize_path, write_cache,
     },
     shared::{
-        Set, direct_path,
+        Set, ThreadMap, ThreadSet, direct_path,
         profile::{Profile, files::FileMode},
         store::Object,
         utility,
@@ -16,7 +17,6 @@ use crate::{
     timer,
 };
 use anyhow::{Context, Result};
-use dashmap::{DashMap, DashSet};
 use log::{debug, info, warn};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -47,22 +47,22 @@ pub enum Type {
 #[derive(Default, Serialize, Deserialize, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
-    pub elf: ThreadCache,
+    pub elf: ThreadSet<String>,
 
     /// Regular files, which act as heuristics for library folders.
-    pub files: ThreadCache,
+    pub files: ThreadSet<String>,
 
     /// Script files, which need no further parsing, but must be mounted.
-    pub scripts: ThreadCache,
+    pub scripts: ThreadSet<String>,
 
     /// Symlinks
-    pub symlinks: DashMap<String, String>,
+    pub symlinks: ThreadMap<String, String>,
 
     /// Localized values
-    pub localized: DashMap<String, String>,
+    pub localized: ThreadMap<String, String>,
 
     /// Library directories.
-    pub directories: ThreadCache,
+    pub directories: ThreadSet<String>,
 }
 impl ParseReturn {
     fn new() -> Self {
@@ -116,7 +116,7 @@ fn parse(
     path: &str,
     instance: &str,
     global: &ParseReturn,
-    done: Arc<ThreadCache>,
+    done: Arc<ThreadSet<String>>,
     mut include_self: bool,
 ) -> Result<Type> {
     // Avoid duplicate work
@@ -291,7 +291,7 @@ fn handle_localize(
     home: bool,
     include_self: bool,
     parsed: &ParseReturn,
-    done: Arc<ThreadCache>,
+    done: Arc<ThreadSet<String>>,
 ) -> Result<()> {
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
@@ -323,7 +323,7 @@ fn handle_localize(
 /// This includes resolving wildcards, and parsing files tagged as Executable
 /// in the files header.
 pub fn collect(profile: &Profile, name: &str, instance: &str, parsed: &ParseReturn) -> Result<()> {
-    let resolved = Arc::new(DashSet::new());
+    let resolved = Arc::new(ThreadSet::default());
     resolved.insert(profile.app_path(name).to_string());
 
     // Scope so the lock falls out of scope.
@@ -338,20 +338,20 @@ pub fn collect(profile: &Profile, name: &str, instance: &str, parsed: &ParseRetu
                 resolved.insert(f.clone());
             });
 
-            wildcards
-                .into_par_iter()
-                .for_each(|w| match get_wildcards(w, false, "f,l") {
+            wildcards.into_par_iter().for_each(|w| {
+                match get_wildcards(w, false, WildcardFilter::Files) {
                     Ok(cards) => {
                         for card in cards {
                             resolved.insert(card);
                         }
                     }
                     Err(e) => warn!("Failed to get wildcards for {w}: {e}"),
-                })
+                }
+            })
         });
     }
 
-    let done = Arc::new(ThreadCache::default());
+    let done = Arc::new(ThreadSet::default());
 
     // Read direct files so we can determine dependencies.
     timer!("::collect::files", {
@@ -441,7 +441,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         }
     };
 
-    let elf_binaries = Arc::new(DashSet::<String>::new());
+    let elf_binaries = Arc::new(ThreadSet::default());
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.

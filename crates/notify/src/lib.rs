@@ -279,7 +279,7 @@ pub fn action(
     let body = body.into();
 
     // Format.
-    let mut a = Vec::<String>::new();
+    let mut a = Vec::new();
     for (key, value) in actions.clone() {
         a.push(key);
         a.push(value);
@@ -297,7 +297,7 @@ pub fn action(
 
         // The Bus will Broadcast the response through an ActionInvoked Member,
         // with a pair containing the response, and the ID we got from the original call.
-        let found = Arc::<AtomicBool>::new(AtomicBool::new(false));
+        let found = Arc::new(AtomicBool::new(false));
         let action = Arc::<Mutex<String>>::default();
         let found_clone = found.clone();
         let action_clone = action.clone();
