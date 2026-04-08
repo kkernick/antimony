@@ -11,8 +11,7 @@ pub mod ns;
 pub mod seccomp;
 
 use crate::{
-    cli,
-    fab::{self, get_wildcards, lib::WildcardFilter},
+    cli, fab,
     shared::{
         StableMap, StableSet,
         config::CONFIG_FILE,
@@ -24,7 +23,6 @@ use crate::{
     timer,
 };
 use ahash::RandomState;
-use console::style;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io};
@@ -41,10 +39,6 @@ pub enum Error {
     /// When the profile cannot be Deserialized.
     #[error("Failed to deserialize profile: {0}")]
     Deserialize(#[from] toml::de::Error),
-
-    /// When the profile cannot be Deserialized.
-    #[error("Failed to cache profile: {0}")]
-    Cache(#[from] postcard::Error),
 
     /// When the profile cannot be Serialized.
     #[error("Failed to serialize profile: {0}")]
@@ -85,25 +79,6 @@ fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
             dest.append(&mut source)
         } else {
             *s = Some(source);
-        }
-    }
-}
-
-/// Print info about the libraries used in a feature/profile.
-pub fn library_info(libraries: &StableSet<String>, verbose: u8) {
-    println!("\t- Libraries:");
-    for library in libraries {
-        if verbose > 2 && library.contains("*") {
-            match get_wildcards(library, true, WildcardFilter::Files) {
-                Ok(wilds) => {
-                    for wild in wilds {
-                        println!("\t\t- {}", style(wild).italic());
-                    }
-                }
-                Err(_) => println!("\t\t- {}", style(library).italic()),
-            }
-        } else {
-            println!("\t\t- {}", style(library).italic());
         }
     }
 }
@@ -328,7 +303,7 @@ impl Profile {
 
         if let Ok(str) = CACHE_STORE.with_borrow(|s| s.fetch(&hash, Object::Profile)) {
             debug!("Using cached profile");
-            return Ok(timer!("::cache_parse", toml::from_str(&str)?));
+            return Ok(toml::from_str(&str)?);
         }
 
         debug!("No cache available");
@@ -552,7 +527,7 @@ impl Profile {
     /// we can serialize it for the purposes of hashing.
     pub fn num_hash(&self) -> Result<u64, Error> {
         timer!("::hash", {
-            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(&postcard::to_stdvec(&self)?))
+            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(&toml::to_string(&self)?))
         })
     }
 

@@ -13,6 +13,7 @@ use std::{any::Any, sync::LazyLock};
 
 type Table = Map<String, Vec<u8>>;
 
+#[inline]
 pub fn flush() {
     CACHE_STORE.with_borrow(|s| {
         if let Some(cache) = s.as_any().downcast_ref::<Store>() {
@@ -81,14 +82,17 @@ impl Store {
     }
 }
 impl super::BackingStore for Store {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn resident(&self) -> bool {
         true
     }
 
+    #[inline]
     fn fetch(&self, name: &str, object: Object) -> Result<String, super::Error> {
         let bytes = String::from_utf8(self.bytes(name, object)?)?;
         Ok(bytes)
@@ -121,6 +125,7 @@ impl super::BackingStore for Store {
         }
     }
 
+    #[inline]
     fn store(&self, name: &str, object: Object, content: &str) -> Result<(), super::Error> {
         self.dump(name, object, content.as_bytes())
     }
@@ -160,6 +165,7 @@ impl super::BackingStore for Store {
         }
     }
 
+    #[inline]
     fn remove(&self, name: &str, object: Object) -> Result<(), super::Error> {
         if let Some(db) = MEM_STORE.get(&self.name) {
             db.get_mut(&object).unwrap().remove(name);

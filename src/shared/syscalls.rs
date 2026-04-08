@@ -29,7 +29,7 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use user::as_real;
+use user::{as_effective, as_real};
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug, Error)]
@@ -57,17 +57,18 @@ pub enum Error {
 
 /// Get a new connection to the database.
 fn new_connection() -> Result<Connection, Error> {
-    let db = AT_HOME.join("seccomp").join("syscalls.db");
-    if let Some(parent) = db.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent)?;
-    }
+    as_effective!({
+        let db = AT_HOME.join("seccomp").join("syscalls.db");
+        if let Some(parent) = db.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
 
-    let conn = if !db.exists() {
-        let conn = Connection::open(db)?;
-        conn.execute_batch(
-            r#"
+        let conn = if !db.exists() {
+            let conn = Connection::open(db)?;
+            conn.execute_batch(
+                r#"
                 PRAGMA foreign_keys = ON;
                 CREATE TABLE IF NOT EXISTS binaries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -100,18 +101,21 @@ fn new_connection() -> Result<Connection, Error> {
                     FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
                 );
                 "#,
-        )?;
-        conn
-    } else {
-        Connection::open(db)?
-    };
+            )?;
+            conn
+        } else {
+            Connection::open(db)?
+        };
 
-    conn.pragma_update(None, "journal_mode", "WAL")?;
-    conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.pragma_update(None, "temp_store", "MEMORY")?;
-    conn.pragma_update(None, "cache_size", "-20000")?;
-    conn.set_prepared_statement_cache_capacity(100);
-    Ok(conn)
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "temp_store", "MEMORY")?;
+        conn.pragma_update(None, "cache_size", "-20000")?;
+        conn.pragma_update(None, "busy_timeout", "100")?;
+        conn.set_prepared_statement_cache_capacity(100);
+        Ok(conn)
+    })
+    .expect("Fatal user error")
 }
 
 thread_local! {
@@ -218,6 +222,7 @@ impl seccomp::notify::Notifier for Notifier {
 }
 
 /// Get the internal ID of a profile
+#[inline]
 pub fn profile_id(tx: &Transaction, name: &str) -> Result<i64, Error> {
     let id: i64 = tx.query_row("SELECT id FROM profiles WHERE name = ?1", [name], |row| {
         row.get(0)
@@ -226,6 +231,7 @@ pub fn profile_id(tx: &Transaction, name: &str) -> Result<i64, Error> {
 }
 
 /// Add a profile to the database.
+#[inline]
 pub fn insert_profile(tx: &Transaction, name: &str) -> Result<i64, Error> {
     if let Ok(id) = profile_id(tx, name) {
         Ok(id)
@@ -236,6 +242,7 @@ pub fn insert_profile(tx: &Transaction, name: &str) -> Result<i64, Error> {
 }
 
 /// Get the internal ID of a binary.
+#[inline]
 pub fn binary_id(tx: &Transaction, path: &str) -> Result<i64, Error> {
     let id = tx.query_row("SELECT id FROM binaries WHERE path = ?1", [path], |row| {
         row.get(0)
@@ -244,6 +251,7 @@ pub fn binary_id(tx: &Transaction, path: &str) -> Result<i64, Error> {
 }
 
 /// Add a binary to the database.
+#[inline]
 pub fn insert_binary(tx: &Transaction, path: &str) -> Result<i64, Error> {
     if let Ok(id) = binary_id(tx, path) {
         Ok(id)
@@ -254,6 +262,7 @@ pub fn insert_binary(tx: &Transaction, path: &str) -> Result<i64, Error> {
 }
 
 /// Map syscall names.
+#[inline]
 pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
     syscalls
         .into_par_iter()
@@ -262,6 +271,7 @@ pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
 }
 
 /// Get the syscalls from a binary id.
+#[inline]
 pub fn id_syscalls(
     tx: &Transaction,
     binary: &str,
@@ -280,6 +290,7 @@ pub fn id_syscalls(
 }
 
 /// Get the syscalls used by a binary.
+#[inline]
 pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, Error> {
     let mut syscalls = Set::default();
     if let Ok(id) = binary_id(tx, binary) {
@@ -295,6 +306,7 @@ pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, E
 }
 
 /// Add the syscalls from a binary to the working set.
+#[inline]
 fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(), Error> {
     let binary = match binary.split_once('=') {
         Some((_, dest)) => dest,

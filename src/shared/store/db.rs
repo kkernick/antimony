@@ -115,6 +115,7 @@ impl Store {
             conn.pragma_update(None, "synchronous", "NORMAL")?;
             conn.pragma_update(None, "temp_store", "MEMORY")?;
             conn.pragma_update(None, "cache_size", "-20000")?;
+            conn.pragma_update(None, "busy_timeout", "100")?;
             conn.set_prepared_statement_cache_capacity(100);
             Ok(conn)
         })
@@ -136,6 +137,7 @@ impl Store {
     /// impose an unnecessary penalty.
     ///
     #[allow(clippy::mut_from_ref)]
+    #[inline]
     fn get_connection(&self) -> &mut Connection {
         unsafe { &mut *self.connection.get() }
     }
@@ -148,22 +150,27 @@ impl Store {
     }
 }
 impl super::BackingStore for Store {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
 
+    #[inline]
     fn resident(&self) -> bool {
         false
     }
 
+    #[inline]
     fn fetch(&self, name: &str, object: super::Object) -> Result<String, super::Error> {
         self.retrieve(name, object)
     }
 
+    #[inline]
     fn bytes(&self, name: &str, object: super::Object) -> Result<Vec<u8>, super::Error> {
         self.retrieve(name, object)
     }
 
+    #[inline]
     fn get(&self, object: super::Object) -> Result<Vec<String>, super::Error> {
         let mut things = Vec::default();
         let mut stmt = self
@@ -176,6 +183,7 @@ impl super::BackingStore for Store {
         Ok(things)
     }
 
+    #[inline]
     fn exists(&self, name: &str, object: super::Object) -> bool {
         self.get_connection()
             .query_row(
@@ -186,6 +194,7 @@ impl super::BackingStore for Store {
             .unwrap_or(false)
     }
 
+    #[inline]
     fn store(&self, name: &str, object: super::Object, content: &str) -> Result<(), super::Error> {
         self.get_connection().execute(
             &format!("INSERT OR REPLACE INTO {object} (name, value) VALUES (?1, ?2)",),
@@ -194,6 +203,7 @@ impl super::BackingStore for Store {
         Ok(())
     }
 
+    #[inline]
     fn bulk(
         &self,
         entries: Map<String, Vec<u8>>,
@@ -215,6 +225,7 @@ impl super::BackingStore for Store {
         Ok(())
     }
 
+    #[inline]
     fn dump(&self, name: &str, object: super::Object, content: &[u8]) -> Result<(), super::Error> {
         self.get_connection().execute(
             &format!("INSERT OR REPLACE INTO {object} (name, value) VALUES (?1, ?2)",),
@@ -223,6 +234,7 @@ impl super::BackingStore for Store {
         Ok(())
     }
 
+    #[inline]
     fn remove(&self, name: &str, object: super::Object) -> Result<(), super::Error> {
         self.get_connection().execute(
             &format!("DELETE FROM {object} WHERE name = ?1"),

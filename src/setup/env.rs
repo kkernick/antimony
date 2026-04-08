@@ -2,6 +2,7 @@ use crate::shared::env::HOME;
 use log::debug;
 use rayon::prelude::*;
 
+#[inline]
 pub fn setup(args: &super::Args) {
     debug!("Setting up environment");
     args.profile

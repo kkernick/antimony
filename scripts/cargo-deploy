@@ -41,7 +41,7 @@ sudo chmod ug+s $exec
 sudo chmod o+x $exec
 
 echo "Removing old config"
-sudo rm -fr /usr/share/antimony/{features,profiles}
+sudo rm -fr /usr/share/antimony/config/{features,profiles}
 
 echo "Setting up config"
 if [[ ! -d /usr/share/antimony/config ]]; then

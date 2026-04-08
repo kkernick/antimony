@@ -78,7 +78,7 @@ fn elf_filter(path: &str) -> bool {
     false
 }
 
-#[inline]
+#[inline(always)]
 pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
     if elf_filter(path) {
         Ok(Spawner::abs("/usr/bin/ldd")
@@ -202,10 +202,11 @@ pub fn get_wildcards(
         let mut libraries = ThreadSet::default();
         for root in ROOTS.iter() {
             if let Ok(lib) = run(&root, pattern) {
-                libraries.extend(lib);
                 if filter == WildcardFilter::Files {
+                    libraries.extend(lib);
                     break;
                 }
+                libraries.extend(lib);
             }
         }
 
@@ -229,12 +230,12 @@ pub fn get_wildcards(
 ///
 /// get_libraries(Cow::Borrowed("/proc/self/exe")).expect("Failed to LDD self");
 /// ```
-pub fn get_libraries(path: Cow<'_, str>) -> Result<ThreadSet<String>> {
-    let libraries = if let Ok(Some(libraries)) = get_cache(&path, Object::Libraries) {
+pub fn get_libraries(path: &str) -> Result<ThreadSet<String>> {
+    let libraries = if let Ok(Some(libraries)) = get_cache(path, Object::Libraries) {
         libraries
     } else {
-        let libraries = ldd(&path)?;
-        write_cache(&path, &libraries, Object::Libraries)?;
+        let libraries = ldd(path)?;
+        write_cache(path, &libraries, Object::Libraries)?;
         libraries
     };
 

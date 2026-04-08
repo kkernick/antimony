@@ -269,6 +269,7 @@ fn parse(
 }
 
 /// Get the immediate parent within /usr/lib.
+#[inline]
 fn resolve_dir(path: &str) -> Result<Option<String>> {
     let lib_root = Path::new("/usr/lib");
     let mut path = Path::new(&path);

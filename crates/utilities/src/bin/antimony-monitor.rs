@@ -8,15 +8,15 @@ use antimony::shared::{
     profile::seccomp::SeccompPolicy,
     syscalls, utility,
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use common::stream::receive_fd;
 use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
-use log::{debug, warn};
 use nix::{
     errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
+    poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
         signal::{
             Signal::{SIGKILL, SIGTERM},
@@ -36,7 +36,7 @@ use std::{
     fmt::Display,
     fs,
     os::{
-        fd::{AsRawFd, OwnedFd},
+        fd::{AsFd, AsRawFd, OwnedFd},
         unix::net::UnixListener,
     },
     path::Path,
@@ -176,6 +176,26 @@ fn commit_or_defer(
     }
 }
 
+pub fn poll_timeout(poll_fd: &mut [PollFd<'_>; 1], term: &Arc<AtomicBool>) -> Result<Option<()>> {
+    match poll(poll_fd, PollTimeout::from(100u8)) {
+        Ok(_) => {
+            if let Some(revents) = poll_fd[0].revents()
+                && (revents.contains(PollFlags::POLLHUP) || revents.contains(PollFlags::POLLERR))
+            {
+                term.store(true, Ordering::Relaxed);
+                Err(anyhow!("Peer closed"))
+            } else {
+                Ok(Some(()))
+            }
+        }
+        Err(Errno::EINTR | Errno::EAGAIN) => Ok(None),
+        Err(e) => {
+            term.store(true, Ordering::Relaxed);
+            Err(anyhow!("Poll failed: {e}. Aborting!"))
+        }
+    }
+}
+
 /// Read from the Audit log
 ///
 /// This function requires CAP_AUDIT_READ.
@@ -204,8 +224,21 @@ pub fn audit_reader(
     let mut buf = vec![0u8; BUFFER_SIZE];
 
     let allow = Arc::new(ThreadMap::<String, Set<i32>>::default());
+    let mut poll_fd = [PollFd::new(sock_fd.as_fd(), PollFlags::POLLIN)];
 
     while !term.load(Ordering::Relaxed) {
+        match poll_timeout(&mut poll_fd, &term) {
+            Ok(option) => {
+                if option.is_none() {
+                    continue;
+                }
+            }
+            Err(e) => {
+                println!("{e}");
+                break;
+            }
+        }
+
         match recv(sock_fd.as_raw_fd(), &mut buf, MsgFlags::MSG_DONTWAIT) {
             Ok(size) => {
                 if size == 0 {
@@ -311,7 +344,21 @@ pub fn notify_reader(
     // If the user selects "Save All," this mode can change during execution.
     let ask = Arc::new(ask);
 
+    let mut poll_fd = [PollFd::new(fd.as_fd(), PollFlags::POLLIN)];
+
     while !term.load(Ordering::Relaxed) {
+        match poll_timeout(&mut poll_fd, &term) {
+            Ok(option) => {
+                if option.is_none() {
+                    continue;
+                }
+            }
+            Err(e) => {
+                println!("{e}");
+                break;
+            }
+        }
+
         // New pair for each loop, since we don't want to mediate access.
         let pair = Pair::new()?;
         let stats_clone = Arc::clone(&stats);
@@ -526,7 +573,8 @@ fn main() -> Result<()> {
     let stats = ThreadMap::default();
     let mut threads = Vec::new();
 
-    if cli.audit {
+    // We don't care about cleaning up audit thread, but it needs to stick around
+    let _audit = if cli.audit {
         let audit = stats
             .entry("audit".to_string())
             .or_insert_with(|| Arc::new(ThreadMap::default()))
@@ -535,10 +583,12 @@ fn main() -> Result<()> {
         println!("Spawning audit reader");
         let audit_term = term.clone();
         let profile_clone = cli.profile.clone();
-        threads.push(thread::spawn(move || {
+        Some(thread::spawn(move || {
             audit_reader(profile_clone, audit_term, audit)
-        }));
-    }
+        }))
+    } else {
+        None
+    };
 
     // Loop and accept new FDs.
     while !term.load(Ordering::Relaxed) {
@@ -571,9 +621,12 @@ fn main() -> Result<()> {
         }
     }
 
+    // Notify the threads to quit
+    term.store(true, Ordering::Relaxed);
+
     if !stats.is_empty() {
         let write = || -> Result<()> {
-            debug!("Writing stats");
+            println!("Writing stats");
 
             // Grab a connection (Permission is handled via the call)
             syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
@@ -656,11 +709,14 @@ fn main() -> Result<()> {
         };
 
         if write().is_err() {
-            warn!(
+            println!(
                 "Failed to commit syscall data. The monitor may have insufficient privilege to update the database."
             );
         }
     }
-    debug!("Done");
+
+    for thread in threads {
+        let _ = thread.join();
+    }
     Ok(())
 }

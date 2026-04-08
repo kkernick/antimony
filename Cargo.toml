@@ -1,6 +1,6 @@
 [package]
 name = "antimony"
-version = "4.2.1"
+version = "5.0.0"
 edition = "2024"
 
 [workspace]
@@ -33,28 +33,23 @@ ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = { version = "1.0.98", features = ["std"], default-features = false }
 caps = "0.5.6"
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }
-console = { version = "0.16.0", default-features = false }
 dashmap = { version = "6.1.0", features = ["rayon", "serde"], default-features = false }
 dbus = { version = "0.9.10", features = ["stdfd"], default-features = false }
 dialoguer = { version = "0.11.0", default-features = false }
 enum_dispatch = { version = "0.3.13", default-features = false }
 heck = { version = "0.5.0", default-features = false }
-indicatif = { version = "0.18.0", default-features = false }
+indexmap = { version = "2.12.1", default-features = false, features = ["std", "rayon", "serde"] }
 inotify = { version = "0.11.0", default-features = false }
 log = { version = "0.4.27", default-features = false }
 nix = { version = "0.30.1", default-features = false, features = ["socket", "uio"] }
-parking_lot = { version = "0.12.5", default-features = false, features = ["deadlock_detection", "serde"] }
+parking_lot = { version = "0.12.5", default-features = false, features = ["serde"] }
 rayon = { version = "1.10.0", default-features = false }
 rusqlite = { version = "0.37.0", default-features = false }
 serde = { version = "1.0.219", features = ["derive"], default-features = false }
 signal-hook = { version = "0.3.18", default-features = false }
-toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
-postcard = { version = "1.1.3", default-features = false, features = ["use-std"] }
 thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
-indexmap = { version = "2.12.1", default-features = false, features = ["std", "rayon", "serde"] }
-
-[dev-dependencies]
-anyhow = { version = "1.0.98", features = ["backtrace", "std"] }
+toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
+postcard = "1.1.3"
 
 [profile.dev]
 debug = false

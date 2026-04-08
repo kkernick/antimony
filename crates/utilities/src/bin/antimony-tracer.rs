@@ -24,7 +24,7 @@ fn main() -> anyhow::Result<()> {
     let stdin = stdin();
 
     // We need to populate the library roots ;)
-    get_libraries(Cow::Owned(utility("tracer")))?;
+    get_libraries(&utility("tracer"))?;
 
     loop {
         let mut line = String::new();

@@ -228,6 +228,7 @@ pub fn load<
 }
 
 /// Export the entire store into memory.
+#[inline]
 pub fn export(store: &dyn BackingStore) -> Map<Object, Vec<String>> {
     let mut map = Map::default();
     for object in OBJECTS {

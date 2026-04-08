@@ -9,9 +9,8 @@ use crate::{
     },
 };
 use anyhow::Result;
-use indicatif::{ProgressBar, ProgressStyle};
 use log::debug;
-use std::{fs, time::Duration};
+use std::fs;
 use user::as_real;
 
 #[derive(clap::Args, Default)]
@@ -84,14 +83,8 @@ impl cli::Run for Args {
         // If not dry, repopulate the cache.
         } else if !self.dry {
             let profiles = installed_profiles()?;
-            let pb = ProgressBar::new(profiles.len() as u64 + 1);
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
-            );
-            pb.enable_steady_tick(Duration::from_millis(100));
             profiles.into_iter().try_for_each(|name| -> Result<()> {
-                pb.set_message(format!("Refreshing {name}"));
+                println!("Refreshing {name}");
 
                 let profile = store::load::<Profile, profile::Error>(&name, Object::Profile, true)?;
 
@@ -104,7 +97,6 @@ impl cli::Run for Args {
                 args.refresh()?;
 
                 for (conf, _) in profile.configuration {
-                    pb.set_message(format!("Refreshing {name} ({conf})"));
                     let args = run::Args {
                         profile: name.clone(),
                         dry: true,
@@ -114,12 +106,10 @@ impl cli::Run for Args {
                     };
                     args.refresh()?;
                 }
-                pb.inc(1);
                 Ok(())
             })?;
 
-            pb.inc(1);
-            pb.set_message("Flushing to disk");
+            println!("Flushing to disk");
             mem::flush();
         }
         Ok(())

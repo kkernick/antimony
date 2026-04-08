@@ -27,7 +27,7 @@ use std::{
     sync::LazyLock,
 };
 
-pub static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
+static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 pub static ROOTS: LazyLock<ThreadSet<String>> = LazyLock::new(|| {
     CONFIG_FILE
@@ -123,7 +123,7 @@ impl WildcardFilter {
     }
 }
 
-#[inline]
+#[inline(always)]
 fn resolve_wildcards(
     set: StableSet<String>,
     filter: WildcardFilter,
@@ -220,7 +220,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
         timer!("::binaries", {
             info.profile.binaries.par_iter().for_each(|binary| {
-                if let Ok(libraries) = get_libraries(Cow::Borrowed(binary)) {
+                if let Ok(libraries) = get_libraries(binary) {
                     libraries.into_iter().for_each(|lib| {
                         let _ = FILES.insert(lib);
                     });
@@ -257,7 +257,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                         resolve_wildcards(libraries.files, WildcardFilter::Files)
                             .par_bridge()
                             .for_each(|file| {
-                                if let Ok(libraries) = get_libraries(Cow::Borrowed(&file)) {
+                                if let Ok(libraries) = get_libraries(&file) {
                                     libraries.into_par_iter().for_each(|lib| {
                                         let _ = FILES.insert(lib);
                                     });
