@@ -1,7 +1,6 @@
 //! Antimony's CLI.
 
 pub mod backend;
-pub mod config;
 pub mod edit;
 pub mod export;
 pub mod import;
@@ -80,10 +79,7 @@ pub enum Command {
     /// Import user profiles.
     Import(import::Args),
 
-    /// Manage the system configuration file.
-    Config(config::Args),
-    
-    /// Manage the Backend Datastore 
+    /// Manage the Backend Datastore
     Backend(backend::Args),
 }
 impl Default for Command {

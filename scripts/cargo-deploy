@@ -59,7 +59,12 @@ sudo cp $ROOT/config/default.toml /usr/share/antimony/config/profiles
 
 sudo cp $ROOT/config/feature.toml /usr/share/antimony/config
 sudo cp $ROOT/config/profile.toml /usr/share/antimony/config
-sudo cp $ROOT/config/config.toml /usr/share/antimony/config
+
+sudo cp $ROOT/config/config.toml /etc/antimony.toml
+if [[ ! -d /etc/antimony.d ]]; then
+  sudo mkdir /etc/antimony.d
+fi
+sudo cp $ROOT/config/config.d/arch.toml /etc/antimony.d/arch.toml
 
 sudo chown -R antimony:antimony /usr/share/antimony
 

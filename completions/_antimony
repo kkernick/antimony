@@ -162,12 +162,6 @@ _arguments "${_arguments_options[@]}" : \
 ':name -- The path of the object. Can also be a directory, which will import all files within:_default' \
 && ret=0
 ;;
-(config)
-_arguments "${_arguments_options[@]}" : \
-'-h[Print help]' \
-'--help[Print help]' \
-&& ret=0
-;;
 (backend)
 _arguments "${_arguments_options[@]}" : \
 '--digest[Perform the operation in place by destructively removing the existing datastore and digesting it into the new dataset]' \
@@ -223,10 +217,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(config)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (backend)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -255,7 +245,6 @@ _antimony_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'config:Manage the system configuration file' \
 'backend:Manage the Backend Datastore' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -265,11 +254,6 @@ _antimony_commands() {
 _antimony__backend_commands() {
     local commands; commands=()
     _describe -t commands 'antimony backend commands' commands "$@"
-}
-(( $+functions[_antimony__config_commands] )) ||
-_antimony__config_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony config commands' commands "$@"
 }
 (( $+functions[_antimony__edit_commands] )) ||
 _antimony__edit_commands() {
@@ -292,7 +276,6 @@ _antimony__help_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'config:Manage the system configuration file' \
 'backend:Manage the Backend Datastore' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -302,11 +285,6 @@ _antimony__help_commands() {
 _antimony__help__backend_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help backend commands' commands "$@"
-}
-(( $+functions[_antimony__help__config_commands] )) ||
-_antimony__help__config_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help config commands' commands "$@"
 }
 (( $+functions[_antimony__help__edit_commands] )) ||
 _antimony__help__edit_commands() {

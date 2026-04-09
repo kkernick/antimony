@@ -202,10 +202,6 @@ pub fn get_wildcards(
         let mut libraries = ThreadSet::default();
         for root in ROOTS.iter() {
             if let Ok(lib) = run(&root, pattern) {
-                if filter == WildcardFilter::Files {
-                    libraries.extend(lib);
-                    break;
-                }
                 libraries.extend(lib);
             }
         }
