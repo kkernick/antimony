@@ -10,7 +10,7 @@ use crate::{
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use heck::ToTitleCase;
-use log::{debug, info, warn};
+use log::{debug, info};
 use std::{
     borrow::Cow,
     fs::{self, File},
@@ -62,12 +62,20 @@ pub enum ConfigMode {
 
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
-        let profile = Profile::new(&self.profile, None)?;
-        user::drop(user::Mode::Real)?;
+        user::set(user::Mode::Real)?;
         if self.remove {
+            let profile = match Profile::new(&self.profile, None, None, false) {
+                Ok(profile) => profile,
+                Err(_) => Profile {
+                    path: Some(self.profile.clone()),
+                    ..Default::default()
+                },
+            };
+
+            // Load directly, since we can remove profiles that don't exist
             remove(&profile, self)
         } else {
-            integrate(&profile, self)
+            integrate(&Profile::new(&self.profile, None, None, false)?, self)
         }
     }
 }
@@ -75,24 +83,29 @@ impl cli::Run for Args {
 /// Undo integration.
 pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
     let name = &cmd.profile;
-    if fs::remove_file(HOME_PATH.join(".local").join("bin").join(name)).is_err() {
-        warn!("Binary does not exist");
+
+    let binary = HOME_PATH.join(".local").join("bin").join(name);
+    match fs::remove_file(&binary) {
+        Err(e) => eprintln!("{}: {e}.", binary.display()),
+        Ok(()) => println!("Removed binary integration"),
     }
 
     let application = DATA_HOME
         .join("applications")
         .join(format!("{}.desktop", profile.desktop(name)));
-    if fs::remove_file(&application).is_err() {
-        warn!(
-            "Original .desktop file ({}) does not exist. You may need to provide if it differs from the profile name",
-            application.display()
-        );
+
+    match fs::remove_file(&application) {
+        Err(e) => eprintln!("{}: {e}.", application.display()),
+        Ok(()) => println!("Removed profile desktop integration"),
     }
 
     let xdg = CONFIG_HOME
         .join("autostart")
         .join(format!("{}.desktop", profile.desktop(name)));
-    let _ = fs::remove_file(&xdg);
+    match fs::remove_file(&xdg) {
+        Err(e) => eprintln!("{}: {e}.", xdg.display()),
+        Ok(()) => println!("Removed profile service integration"),
+    }
 
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         Cow::Owned(profile.id(name))
@@ -105,15 +118,22 @@ pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
             .join("applications")
             .join(format!("{name}-{config}.desktop"));
         if config_desktop.exists() {
-            fs::remove_file(config_desktop)?;
+            match fs::remove_file(&config_desktop) {
+                Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
+                Ok(()) => println!("Removed configuration integration"),
+            }
         }
     }
 
     let copy = DATA_HOME
         .join("applications")
         .join(format!("{name}.desktop"));
-    if fs::remove_file(&copy).is_err() {
-        warn!("Profile .desktop file ({}) does not exist", copy.display());
+
+    if copy != application {
+        match fs::remove_file(&copy) {
+            Err(e) => eprintln!("{}: {e}.", copy.display()),
+            Ok(()) => println!("Removed shadow file"),
+        }
     }
 
     Ok(())

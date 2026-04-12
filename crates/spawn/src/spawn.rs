@@ -63,6 +63,10 @@ pub enum Error {
     #[error("Fork error: {0}")]
     Fork(nix::errno::Errno),
 
+    /// An error for switching operating user
+    #[error("User error: {0}")]
+    User(#[from] user::Error),
+
     /// An error when the spawner fails to parse the environment.
     #[error("Failed to parse environment")]
     Environment,
@@ -814,9 +818,7 @@ impl<'a> Spawner {
                 };
 
                 #[cfg(feature = "user")]
-                let mode = self.mode.into_inner().unwrap_or(
-                    user::current().map_err(|e| Error::Errno(Some(fork), "getresuid", e))?,
-                );
+                let mode = self.mode.into_inner().unwrap_or(user::current()?);
 
                 let associated: Vec<Handle> = self.associated.into_iter().map(|(_, v)| v).collect();
 

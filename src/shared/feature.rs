@@ -7,6 +7,7 @@ use crate::shared::{
     store::{self, Object},
 };
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 use std::io;
 use thiserror::Error;
 
@@ -27,7 +28,7 @@ pub enum Error {
 }
 
 /// A Feature
-#[derive(Deserialize, Serialize, PartialEq)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.
@@ -99,6 +100,17 @@ impl Feature {
     /// Edit a feature.
     pub fn edit(feat: &str) -> Result<Option<String>, edit::Error> {
         edit::edit::<Self>(feat)
+    }
+}
+impl PartialEq for Feature {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+impl Eq for Feature {}
+impl Hash for Feature {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
     }
 }
 

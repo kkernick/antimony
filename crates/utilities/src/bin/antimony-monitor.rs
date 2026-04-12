@@ -700,7 +700,7 @@ fn main() -> Result<()> {
                             .with_context(|| "Updating profile")?;
                     }
                 }
-
+ 
                 // Commit and flush.
                 tx.commit()?;
                 conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
@@ -713,10 +713,6 @@ fn main() -> Result<()> {
                 "Failed to commit syscall data. The monitor may have insufficient privilege to update the database."
             );
         }
-    }
-
-    for thread in threads {
-        let _ = thread.join();
     }
     Ok(())
 }

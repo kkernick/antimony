@@ -7,6 +7,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("I/O Error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[cfg(feature = "user")]
+    #[error("User Error: {0}")]
+    User(#[from] user::Error),
+}
+
 /// Generate a unique object in the provided directory.
 fn unique(dir: &Path) -> String {
     let mut rng = fastrand::Rng::new();
@@ -26,10 +36,10 @@ fn unique(dir: &Path) -> String {
 /// An object is something that exists in the filesystem.
 pub trait Object {
     /// Create the object
-    fn create(&self) -> Result<(), std::io::Error>;
+    fn create(&self) -> Result<(), Error>;
 
     /// Remove the object
-    fn remove(&self) -> Result<(), std::io::Error>;
+    fn remove(&self) -> Result<(), Error>;
 
     /// Get the parent of the object
     fn path(&self) -> &Path;
@@ -52,13 +62,14 @@ pub struct File {
     name: String,
 }
 impl Object for File {
-    fn create(&self) -> Result<(), std::io::Error> {
+    fn create(&self) -> Result<(), Error> {
         if !self.parent.exists() {
             std::fs::create_dir_all(&self.parent)?;
         }
-        std::fs::File::create_new(self.parent.join(&self.name)).map(|_| ())
+        std::fs::File::create_new(self.parent.join(&self.name)).map(|_| ())?;
+        Ok(())
     }
-    fn remove(&self) -> Result<(), std::io::Error> {
+    fn remove(&self) -> Result<(), Error> {
         std::fs::remove_file(self.full()).map(|_| ())?;
         Ok(())
     }
@@ -87,11 +98,12 @@ pub struct Directory {
     name: String,
 }
 impl Object for Directory {
-    fn create(&self) -> Result<(), std::io::Error> {
-        std::fs::create_dir_all(self.path.join(&self.name)).map(|_| ())
+    fn create(&self) -> Result<(), Error> {
+        std::fs::create_dir_all(self.path.join(&self.name)).map(|_| ())?;
+        Ok(())
     }
 
-    fn remove(&self) -> Result<(), std::io::Error> {
+    fn remove(&self) -> Result<(), Error> {
         std::fs::remove_dir_all(self.full()).map(|_| ())?;
         Ok(())
     }
@@ -160,13 +172,14 @@ impl Temp {
         link: impl Into<PathBuf>,
 
         #[cfg(feature = "user")] mode: user::Mode,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<(), Error> {
         let link = link.into();
         if let Some(parent) = link.parent()
             && let Some(name) = link.file_name()
         {
             #[cfg(feature = "user")]
-            user::run_as!(mode, { symlink(self.object.full(), &link) })??;
+            user::run_as!(mode, { symlink(self.object.full(), &link) })
+                .expect("Failed to switch user!")?;
 
             #[cfg(not(feature = "user"))]
             symlink(self.object.full(), &link)?;
@@ -183,7 +196,7 @@ impl Temp {
             });
             Ok(())
         } else {
-            Err(std::io::ErrorKind::NotFound.into())
+            Err(Error::Io(std::io::ErrorKind::NotFound.into()))
         }
     }
 }
@@ -290,7 +303,7 @@ impl Builder {
     /// ```rust
     /// temp::Builder::new().within("").create::<temp::Directory>().unwrap();
     /// ```
-    pub fn create<T: BuilderCreate + Object + 'static>(self) -> Result<Temp, std::io::Error> {
+    pub fn create<T: BuilderCreate + Object + 'static>(self) -> Result<Temp, Error> {
         let parent = self.path.unwrap_or(temp_dir());
         let mut name = self.name.unwrap_or(unique(&parent));
 
@@ -302,6 +315,7 @@ impl Builder {
         }
 
         let object = T::new(parent, name);
+
         if self.make {
             #[cfg(feature = "user")]
             user::run_as!(mode, object.create())??;

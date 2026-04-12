@@ -808,6 +808,7 @@ version = "0.1.0"
 dependencies = [
  "fastrand",
  "log",
+ "thiserror 2.0.18",
  "user",
 ]
 

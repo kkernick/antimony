@@ -47,7 +47,10 @@ fn main() -> anyhow::Result<()> {
             let r = e.rfind('"').unwrap_or(e.len());
             e[l + 1..r].trim().to_string()
         })
-        .filter(|e| Path::new(e).exists())
+        .filter(|e| {
+            let path = Path::new(e);
+            path.exists() && !e.starts_with("/home/antimony")
+        })
         .collect();
 
     if !not_found.is_empty() {

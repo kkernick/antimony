@@ -69,6 +69,10 @@ pub enum Error {
     /// Generic IO errors.
     #[error("I/O Error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// Generic IO errors.
+    #[error("Temporary File Error: {0}")]
+    Temp(#[from] temp::Error),
 }
 
 /// A `Spawner`-like structure that executes a closure instead of another process. Specifically,

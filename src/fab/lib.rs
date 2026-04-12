@@ -84,7 +84,16 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     ROOTS.par_iter().try_for_each(|root| -> Result<()> {
         let path = PathBuf::from(format!("{sof}{}", root.as_str()));
         if path.exists() {
-            handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()])?;
+            if sof.is_empty() {
+                handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()])?;
+            } else {
+                handle.args_i([
+                    "--overlay-src",
+                    path.to_str().unwrap(),
+                    "--tmp-overlay",
+                    root.as_ref(),
+                ])?;
+            }
         }
         Ok(())
     })?;
@@ -180,60 +189,67 @@ pub fn sof_dir(sys_dir: &Path) -> PathBuf {
 
 /// Generate the libraries for a program.
 pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
-    timer!("::pre_lib", {
-        // Each is sent to the library fabricator, in case they contain anything,
-        // and are then mounted directly.
-        [
-            Path::new("/etc"),
-            Path::new("/usr/share"),
-            Path::new("/opt"),
-        ]
-        .into_iter()
-        .filter_map(|path| {
-            let path = path.join(info.name);
-            if path.exists() {
-                Some(path.to_string_lossy().into_owned())
-            } else {
-                None
-            }
-        })
-        .for_each(|path| {
+    let no_sof = if let Some(libraries) = &info.profile.libraries {
+        libraries.no_sof.unwrap_or(false)
+    } else {
+        false
+    };
+
+    // Each is sent to the library fabricator, in case they contain anything,
+    // and are then mounted directly.
+    [
+        Path::new("/etc"),
+        Path::new("/usr/share"),
+        Path::new("/opt"),
+    ]
+    .into_iter()
+    .filter_map(|path| {
+        let path = path.join(info.name);
+        if path.exists() {
+            Some(path.to_string_lossy().into_owned())
+        } else {
+            None
+        }
+    })
+    .for_each(|path| {
+        if no_sof {
+            let _ = info.handle.args_i(["--ro-bind", &path, &path]);
+        } else {
+            info.profile
+                .libraries
+                .get_or_insert_default()
+                .directories
+                .insert(path);
+        }
+    });
+
+    if no_sof {
+        return mount_roots("", info.handle);
+    }
+
+    ROOTS.iter().for_each(|lib_root| {
+        let name = format!("{}/{}", lib_root.as_str(), info.name);
+        if Path::new(&name).exists() {
             let _ = info
                 .profile
                 .libraries
                 .get_or_insert_default()
                 .directories
-                .insert(path);
-        });
+                .insert(name);
+        }
+    });
 
-        ROOTS.iter().for_each(|lib_root| {
-            let name = format!("{}/{}", lib_root.as_str(), info.name);
-            if Path::new(&name).exists() {
-                let _ = info
-                    .profile
-                    .libraries
-                    .get_or_insert_default()
-                    .directories
-                    .insert(name);
+    timer!("::binaries", {
+        info.profile.binaries.par_iter().for_each(|binary| {
+            if let Ok(libraries) = get_libraries(binary) {
+                libraries.into_iter().for_each(|lib| {
+                    let _ = FILES.insert(lib);
+                });
             }
-        });
-
-        timer!("::binaries", {
-            info.profile.binaries.par_iter().for_each(|binary| {
-                if let Ok(libraries) = get_libraries(binary) {
-                    libraries.into_iter().for_each(|lib| {
-                        let _ = FILES.insert(lib);
-                    });
-                }
-            });
         });
     });
 
     if let Some(libraries) = info.profile.libraries.take() {
-        if libraries.no_sof.unwrap_or(false) {
-            return mount_roots("", info.handle);
-        }
-
         timer!("::resolve", {
             rayon::join(
                 move || {

@@ -19,8 +19,8 @@ pub enum Error {
     #[error("I/O Error: {0}: {1}")]
     Io(&'static str, std::io::Error),
 
-    #[error("System Error: {0}: {1}")]
-    Errno(&'static str, nix::errno::Errno),
+    #[error("User Error: {0}")]
+    User(#[from] user::Error),
 
     #[error("Database Error: {0}")]
     Database(#[from] rusqlite::Error),
@@ -118,8 +118,7 @@ impl Store {
             conn.pragma_update(None, "busy_timeout", "100")?;
             conn.set_prepared_statement_cache_capacity(100);
             Ok(conn)
-        })
-        .map_err(|e| Error::Errno("user", e))??;
+        })??;
 
         Ok(Self {
             connection: UnsafeCell::new(connection),

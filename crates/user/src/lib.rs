@@ -23,37 +23,31 @@ static SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
 #[derive(Debug)]
 pub struct Error {
     /// The UID we were trying to change to
-    uid: ResUid,
+    mode: Mode,
 
     /// The error we got from the syscall.
     errno: Errno,
+
+    /// What syscall we tried to use
+    call: &'static str,
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let current = getresgid();
-        if let Ok(uid) = current {
-            write!(
-                f,
-                "Failed to change UID from: ({}, {}, {}) to ({}, {}, {})",
-                uid.real,
-                uid.effective,
-                uid.saved,
-                self.uid.real,
-                self.uid.effective,
-                self.uid.saved
-            )
-        } else {
-            write!(
-                f,
-                "Failed to change UID to ({}, {}, {})",
-                self.uid.real, self.uid.effective, self.uid.saved
-            )
-        }
+        write!(
+            f,
+            "{}: Failed to change UID to {:?}: {}",
+            self.call, self.mode, self.errno
+        )
     }
 }
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         Some(&self.errno as &dyn error::Error)
+    }
+}
+impl Error {
+    pub fn new(mode: Mode, errno: Errno, call: &'static str) -> Self {
+        Self { mode, errno, call }
     }
 }
 
@@ -101,22 +95,26 @@ pub enum Mode {
 /// using this function. If you need to ensure that everything executed between
 /// a `set()` and `restore()` block is run under the desired user, use `run_as` or
 /// its mode-specific variants.
-pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
+pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Error> {
     if !*SETUID {
         return Ok((*USER, *GROUP));
     }
 
-    let uid = getresuid()?;
-    let gid = getresgid()?;
+    let uid = getresuid().map_err(|e| Error::new(mode, e, "getresuid"))?;
+    let gid = getresgid().map_err(|e| Error::new(mode, e, "getresgid"))?;
 
     match mode {
         Mode::Real => {
-            setresuid(USER.real, USER.real, USER.effective)?;
-            setresgid(GROUP.real, GROUP.real, GROUP.effective)?;
+            setresuid(USER.real, USER.real, USER.effective)
+                .map_err(|e| Error::new(mode, e, "setresuid"))?;
+            setresgid(GROUP.real, GROUP.real, GROUP.effective)
+                .map_err(|e| Error::new(mode, e, "setresgid"))?;
         }
         Mode::Effective => {
-            setresuid(USER.effective, USER.effective, USER.real)?;
-            setresgid(GROUP.effective, GROUP.effective, GROUP.real)?;
+            setresuid(USER.effective, USER.effective, USER.real)
+                .map_err(|e| Error::new(mode, e, "setresuid"))?;
+            setresgid(GROUP.effective, GROUP.effective, GROUP.real)
+                .map_err(|e| Error::new(mode, e, "setresgid"))?;
         }
         Mode::Original => revert()?,
         Mode::Existing => {}
@@ -130,23 +128,31 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Errno> {
 /// from TOC-TOU problems if you assume this value will remain the same
 /// when you actually need to perform a privileged operation in a multi-threaded
 /// environment.
-pub fn current() -> Result<Mode, Errno> {
-    let uid = getresuid()?.real;
+pub fn current() -> Result<Mode, Error> {
+    let uid = getresuid()
+        .map_err(|e| Error::new(Mode::Existing, e, "getresuid"))?
+        .real;
     if uid == USER.real {
         Ok(Mode::Real)
     } else if uid == USER.effective {
         Ok(Mode::Effective)
     } else {
-        Err(Errno::EINVAL)
+        Err(Error::new(
+            Mode::Existing,
+            Errno::EINVAL,
+            "current uid unknown",
+        ))
     }
 }
 
 /// Revert the Mode to the original.
 /// This function returns to the values of `USER` and `GROUP`.
 /// This function can fail if the underlying syscall does.
-pub fn revert() -> Result<(), Errno> {
-    setresuid(USER.real, USER.effective, USER.saved)?;
+pub fn revert() -> Result<(), Error> {
+    setresuid(USER.real, USER.effective, USER.saved)
+        .map_err(|e| Error::new(Mode::Original, e, "setresuid"))?;
     setresgid(GROUP.real, GROUP.effective, GROUP.saved)
+        .map_err(|e| Error::new(Mode::Original, e, "setresgid"))
 }
 
 /// Destructively change mode, preventing the process from returning.
@@ -160,21 +166,30 @@ pub fn revert() -> Result<(), Errno> {
 ///     user::set(user::Mode::Effective).expect_err("Cannot return!");
 /// }
 /// ```
-pub fn drop(mode: Mode) -> Result<(), Errno> {
+pub fn drop(mode: Mode) -> Result<(), Error> {
     match mode {
         Mode::Real => {
-            setresuid(USER.real, USER.real, USER.real)?;
+            setresuid(USER.real, USER.real, USER.real)
+                .map_err(|e| Error::new(mode, e, "setresuid"))?;
             setresgid(GROUP.real, GROUP.real, GROUP.real)
+                .map_err(|e| Error::new(mode, e, "setresgid"))
         }
         Mode::Effective => {
-            setresuid(USER.effective, USER.effective, USER.effective)?;
+            setresuid(USER.effective, USER.effective, USER.effective)
+                .map_err(|e| Error::new(mode, e, "setresuid"))?;
             setresgid(GROUP.effective, GROUP.effective, GROUP.effective)
+                .map_err(|e| Error::new(mode, e, "setresgid"))
         }
         Mode::Original => revert(),
         Mode::Existing => {
-            let (user, group) = (getresuid()?, getresgid()?);
-            setresuid(user.real, user.real, user.real)?;
+            let (user, group) = (
+                getresuid().map_err(|e| Error::new(mode, e, "getresuid"))?,
+                getresgid().map_err(|e| Error::new(mode, e, "getresgid"))?,
+            );
+            setresuid(user.real, user.real, user.real)
+                .map_err(|e| Error::new(mode, e, "setresuid"))?;
             setresgid(group.real, group.real, group.real)
+                .map_err(|e| Error::new(mode, e, "setresgid"))
         }
     }
 }
@@ -187,13 +202,15 @@ pub fn drop(mode: Mode) -> Result<(), Errno> {
 /// // Do work.
 /// user::restore(saved).unwrap()
 /// ```
-pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Errno> {
+pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Error> {
     if !*SETUID {
         return Ok(());
     }
 
-    setresuid(uid.real, uid.effective, uid.saved)?;
+    setresuid(uid.real, uid.effective, uid.saved)
+        .map_err(|e| Error::new(Mode::Original, e, "setresuid"))?;
     setresgid(gid.real, gid.effective, gid.saved)
+        .map_err(|e| Error::new(Mode::Original, e, "setresgid"))
 }
 
 pub fn obtain_lock() -> Option<Singleton> {

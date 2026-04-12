@@ -66,7 +66,7 @@ pub enum Error {
 
     /// User switching errors.
     #[error("Failed to switch user: {0}")]
-    User(Errno),
+    User(user::Error),
 
     /// User switching errors.
     #[error("System Error: {0}")]

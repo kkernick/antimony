@@ -1,0 +1,5 @@
+name = "vte"
+description = "Virtual Terminal Emulator for GTK"
+requires = ["gtk4", "gir"]
+
+libraries.files = ["libvte*"]

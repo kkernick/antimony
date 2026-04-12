@@ -32,23 +32,28 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 /// The Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
-
-    let writeable = if CONFIG_FILE.force_temp() {
-        false
-    } else {
-        if !cache_dir.exists() {
-            fs::create_dir(&cache_dir).is_ok()
+    let writeable = || -> anyhow::Result<()> {
+        if CONFIG_FILE.force_temp() {
+            return Err(anyhow::anyhow!("Temporary cache enforced"));
         } else {
-            temp::Builder::new()
-                .within(&cache_dir)
-                .owner(user::Mode::Effective)
-                .create::<temp::File>()
-                .is_ok()
+            if !cache_dir.exists() {
+                as_effective!(fs::create_dir(&cache_dir))??;
+            } else {
+                temp::Builder::new()
+                    .within(&cache_dir)
+                    .owner(user::Mode::Effective)
+                    .name(".test")
+                    .create::<temp::File>()?;
+            }
         }
-    };
+        Ok(())
+    }();
 
-    if !writeable {
-        debug!("Cache dir not-writable. Pivoting to /tmp");
+    if let Err(e) = writeable {
+        debug!(
+            "Cache dir ({}) not-writable: {e}. Pivoting to /tmp",
+            cache_dir.display()
+        );
         cache_dir = temp_dir().join(format!("antimony-{}", USER.effective.as_raw()));
         let result = || -> Result<()> {
             as_effective!({

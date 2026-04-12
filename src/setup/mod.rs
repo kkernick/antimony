@@ -12,7 +12,6 @@ use crate::{
     fab::lib::ROOTS,
     shared::{
         Set,
-        config::CONFIG_FILE,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::Profile,
         store::mem,
@@ -65,30 +64,13 @@ pub struct Info {
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
 pub fn setup<'a>(
     name: Cow<'a, str>,
-    args: &'a mut super::cli::run::Args,
+    mut args: &'a mut super::cli::run::Args,
     flush_defer: bool,
 ) -> Result<Info> {
     let mut profile = timer!(
         "::profile_load",
-        match Profile::new(&name, args.config.take()) {
-            Ok(profile) => profile,
-            Err(e) => {
-                debug!("No profile: {name}: {e}, assuming binary");
-                Profile {
-                    path: Some(which::which(&name)?.to_string()),
-                    ..Default::default()
-                }
-            }
-        }
-    );
-
-    if !CONFIG_FILE.system_mode() {
-        let cmd_profile = Profile::from_args(args)?;
-        profile = profile.base(cmd_profile)?
-    }
-    if !name.ends_with(".toml") && profile.path.is_none() {
-        profile.path = Some(which::which(&profile.app_path(&name))?.to_string());
-    }
+        Profile::new(&name, args.config.take(), Some(&mut args), false)
+    )?;
 
     // Try and lookup the path. If it doesn't work, then the corresponding application
     // isn't installed. This is fine, as long as the user doesn't try and run the profile.
@@ -99,7 +81,9 @@ pub fn setup<'a>(
 
     if let Some(libraries) = &mut profile.libraries {
         libraries.roots.drain(..).for_each(|root| {
-            let _ = ROOTS.insert(root);
+            if Path::new(&root).exists() {
+                let _ = ROOTS.insert(root);
+            }
         });
     }
 

@@ -1,11 +1,10 @@
 //! The configuration file is a global configuration for Antimony.
 
 use crate::shared::{
-    Set, edit,
+    Map, Set, edit,
     env::{AT_HOME, USER_NAME},
     store,
 };
-use log::{error, warn};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -64,6 +63,9 @@ pub struct ConfigFile {
 
     pub config_store: Mutex<Option<store::Store>>,
     pub cache_store: Mutex<Option<store::Store>>,
+
+    #[serde(skip_serializing_if = "Map::is_empty", default = "Map::default")]
+    pub environment: Map<String, String>,
 }
 impl ConfigFile {
     pub fn auto_refresh(&self) -> bool {
@@ -88,6 +90,10 @@ impl ConfigFile {
 
     pub fn library_roots(&self) -> &Set<String> {
         &self.library_roots
+    }
+
+    pub fn environment(&self) -> &Map<String, String> {
+        &self.environment
     }
 
     pub fn cache_store(&self) -> store::Store {
@@ -120,6 +126,7 @@ impl ConfigFile {
         switch(&mut self.auto_refresh, config.auto_refresh);
 
         self.library_roots.extend(config.library_roots);
+        self.environment.extend(config.environment);
 
         if let Some(users) = config.privileged_users.take() {
             self.privileged_users.get_or_insert_default().extend(users);
@@ -144,10 +151,10 @@ impl ConfigFile {
             match read_to_string(config_path) {
                 Ok(content) => match toml::from_str(&content) {
                     Ok(parsed) => return parsed,
-                    Err(e) => error!("Failed to read config {}: {e}", config_path.display()),
+                    Err(e) => eprintln!("Failed to read config {}: {e}", config_path.display()),
                 },
                 Err(e) => {
-                    warn!("Could not read config {}: {e}", config_path.display())
+                    eprintln!("Could not read config {}: {e}", config_path.display())
                 }
             }
         }
@@ -160,6 +167,7 @@ impl ConfigFile {
             library_roots: Set::default(),
             cache_store: Mutex::default(),
             config_store: Mutex::default(),
+            environment: Map::default(),
         }
     }
 }
@@ -184,6 +192,7 @@ impl Clone for ConfigFile {
             privileged_users: self.privileged_users.clone(),
             config_store: Mutex::new(*self.config_store.lock()),
             cache_store: Mutex::new(*self.cache_store.lock()),
+            environment: self.environment.clone(),
         }
     }
 }

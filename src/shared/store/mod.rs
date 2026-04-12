@@ -14,7 +14,6 @@ use crate::shared::{
 };
 use clap::ValueEnum;
 use log::info;
-use nix::errno;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{any::Any, cell::RefCell, error, fmt, fs, io, path::PathBuf};
@@ -111,7 +110,7 @@ pub enum Error {
     Database(#[from] rusqlite::Error),
 
     #[error("Failed to change user: {0}")]
-    Errno(#[from] errno::Errno),
+    User(#[from] user::Error),
 
     #[error("Pulling raw bytes from this backend cannot be returned as a string: {0}")]
     UTF(#[from] std::string::FromUtf8Error),

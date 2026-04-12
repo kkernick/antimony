@@ -25,9 +25,8 @@ pub enum Error {
     #[error("Failed to deserialize file: {0}")]
     Deserialize(#[from] toml::de::Error),
 
-    /// Misc Errno errors.
-    #[error("System error: {0}")]
-    Errno(#[from] nix::errno::Errno),
+    #[error("User error: {0}")]
+    User(#[from] user::Error),
 
     /// Errors running the profile
     #[error("Failed to spawn editor: {0}")]
@@ -40,14 +39,16 @@ pub enum Error {
     /// Dialog errors
     #[error("Dialog errors: {0}")]
     Dialog(#[from] dialoguer::Error),
+
+    /// Temp errors
+    #[error("Temporary File Error: {0}")]
+    Temp(#[from] temp::Error),
 }
 
 /// Edit a file via a temporary, committing the changes back into the file.
 pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
     original: &str,
 ) -> Result<Option<String>, Error> {
-    let digest = toml::from_str(original)?;
-
     // Pivot to real mode to edit the temporary.
     // Editors, like vim, can run arbitrary commands, and we don't want
     // to extend privilege.
@@ -105,7 +106,12 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
         }
     };
 
-    Ok(if buffer == digest {
+    let update = match toml::from_str(original) {
+        Ok(digest) => buffer != digest,
+        Err(_) => true,
+    };
+
+    Ok(if !update {
         println!("No changes made");
         None
     } else {

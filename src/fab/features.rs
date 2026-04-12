@@ -143,7 +143,7 @@ fn resolve_feature(
 fn resolve_features(
     features: &StableSet<String>,
     conflicts: &StableSet<String>,
-) -> Result<Vec<Feature>, Error> {
+) -> Result<Set<Feature>, Error> {
     let mut feature_list = Map::default();
     let mut searched = Set::default();
     let mut blacklist = conflicts.clone();

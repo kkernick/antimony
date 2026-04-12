@@ -2,7 +2,7 @@
 
 use antimony::{
     cli::{Run, run::as_symlink},
-    shared,
+    shared::{self, config::CONFIG_FILE},
 };
 use anyhow::Result;
 use clap::Parser;
@@ -10,6 +10,10 @@ use rayon::ThreadPoolBuilder;
 use std::thread::available_parallelism;
 
 fn main() -> Result<()> {
+    for (key, value) in CONFIG_FILE.environment() {
+        unsafe { std::env::set_var(key, value) }
+    }
+
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 

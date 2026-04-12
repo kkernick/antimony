@@ -11,6 +11,7 @@ use std::{
     io::Write,
     path::PathBuf,
 };
+use user::as_effective;
 
 /// The File Store
 pub struct Store {
@@ -107,7 +108,7 @@ impl super::BackingStore for Store {
 
     #[inline]
     fn remove(&self, name: &str, object: Object) -> Result<(), super::Error> {
-        fs::remove_file(self.path(name, object))?;
+        as_effective!({ fs::remove_file(self.path(name, object)) })??;
         Ok(())
     }
 }

@@ -84,6 +84,7 @@ pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
         Ok(Spawner::abs("/usr/bin/ldd")
             .arg(path)?
             .output(StreamMode::Pipe)
+            .error(StreamMode::Discard)
             .mode(user::Mode::Real)
             .spawn()?
             .output_all()?
@@ -136,7 +137,7 @@ pub fn get_dir(dir: &str) -> Result<ThreadSet<String>> {
     }
 
     let libraries: ThreadSet<String> = Spawner::abs("/usr/bin/find")
-        .args([dir, "-executable", "-type", "f"])?
+        .args([dir, "-executable", "-type", "f", "-o", "-name", "*.so*"])?
         .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
         .spawn()?
@@ -364,7 +365,10 @@ pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
 /// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_string()));
 /// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_string()));
 /// ```
-pub fn localize_path(file: &str, home: bool) -> Result<(Option<Cow<'_, str>>, String), nix::Error> {
+pub fn localize_path(
+    file: &str,
+    home: bool,
+) -> Result<(Option<Cow<'_, str>>, String), user::Error> {
     let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
         (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
     } else {

@@ -25,7 +25,7 @@ use crate::{
 use ahash::RandomState;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, io};
+use std::{borrow::Cow, io, path::Path};
 use thiserror::Error;
 use which::which;
 
@@ -276,20 +276,55 @@ impl Profile {
             profile.home.get_or_insert_default().policy = Some(policy);
         }
 
-        fab::features::fabricate(&mut profile, "cmdline")?;
         Ok(profile)
     }
 
     /// Load a new profile from all supported locations.
-    pub fn new(name: &str, config: Option<String>) -> Result<Profile, Error> {
+    pub fn new(
+        name: &str,
+        config: Option<String>,
+        args: Option<&mut cli::run::Args>,
+        foreign: bool,
+    ) -> Result<Profile, Error> {
         debug!("Loading {name}");
 
         let mut profile = timer!(
             "::load",
-            store::load::<Self, Error>(name, Object::Profile, true)
-        )?;
+            match store::load::<Self, Error>(name, Object::Profile, true) {
+                Ok(profile) => profile,
+                Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
+                    debug!("No profile: {name}, assuming binary");
+                    Profile {
+                        path: Some(which::which(name)?.to_string()),
+                        ..Default::default()
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        );
         if name == "default" {
             return Ok(profile);
+        }
+
+        if let Some(args) = args {
+            if !CONFIG_FILE.system_mode() {
+                let cmd_profile = Profile::from_args(args)?;
+                profile = profile.base(cmd_profile)?
+            }
+            if !name.ends_with(".toml") && profile.path.is_none() {
+                profile.path = Some(which::which(&profile.app_path(name))?.to_string());
+            }
+        }
+
+        if !foreign
+            && let path = profile.app_path(name).as_ref()
+            && !Path::new(path).exists()
+            && which::which(path).is_err()
+        {
+            return Err(Error::NotFound(
+                name.to_string(),
+                Cow::Borrowed("Profile binary {} does not exist on system"),
+            ));
         }
 
         let hash = timer!("::hash", {
@@ -321,7 +356,7 @@ impl Profile {
         };
 
         for inherit in to_inherit {
-            profile.merge(Profile::new(&inherit, None)?)?;
+            profile.merge(Profile::new(&inherit, None, None, true)?)?;
         }
 
         if let Some(config) = config {

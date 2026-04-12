@@ -37,8 +37,8 @@ sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/ant
 echo "Setting SetUID"
 exec="/usr/bin/antimony"
 sudo chown antimony:antimony $exec
-sudo chmod ug+s $exec
 sudo chmod o+x $exec
+sudo chmod ug+s $exec
 
 echo "Removing old config"
 sudo rm -fr /usr/share/antimony/config/{features,profiles}
@@ -60,11 +60,14 @@ sudo cp $ROOT/config/default.toml /usr/share/antimony/config/profiles
 sudo cp $ROOT/config/feature.toml /usr/share/antimony/config
 sudo cp $ROOT/config/profile.toml /usr/share/antimony/config
 
-sudo cp $ROOT/config/config.toml /etc/antimony.toml
+if [[ ! -f /etc/antimony.toml ]]; then
+  sudo cp $ROOT/config/config.toml /etc/antimony.toml
+fi
+
 if [[ ! -d /etc/antimony.d ]]; then
   sudo mkdir /etc/antimony.d
 fi
-sudo cp $ROOT/config/config.d/arch.toml /etc/antimony.d/arch.toml
+sudo cp $ROOT/config/config.d/base.toml /etc/antimony.d/base.toml
 
 sudo chown -R antimony:antimony /usr/share/antimony
 

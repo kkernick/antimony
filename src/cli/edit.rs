@@ -2,6 +2,8 @@
 
 use std::fs;
 
+use dialoguer::console::style;
+
 use crate::{
     cli,
     shared::{
@@ -56,6 +58,13 @@ impl cli::Run for Args {
 
         if let Some(out) = commit {
             USER_STORE.with_borrow(|s| s.store(&self.name, table, &out))?;
+            if self.name == "default" || self.feature {
+                println!(
+                    "{}",
+                    style("Note: Profiles will not use your changes until you refresh them.")
+                        .yellow()
+                );
+            }
         } else if new {
             USER_STORE.with_borrow(|s| s.remove(&self.name, table))?;
         }
