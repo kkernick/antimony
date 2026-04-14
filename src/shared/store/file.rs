@@ -3,7 +3,7 @@
 //! in $AT_HOME/config, and Caches are stored in $AT_HOME/cache.
 //! This Backend is best for fast disks.
 
-use crate::shared::{Map, store::Object};
+use crate::shared::{Map, Set, store::Object};
 use rayon::prelude::*;
 use std::{
     any::Any,
@@ -11,7 +11,6 @@ use std::{
     io::Write,
     path::PathBuf,
 };
-use user::as_effective;
 
 /// The File Store
 pub struct Store {
@@ -62,7 +61,7 @@ impl super::BackingStore for Store {
     }
 
     #[inline]
-    fn get(&self, object: Object) -> Result<Vec<String>, super::Error> {
+    fn get(&self, object: Object) -> Result<Set<String>, super::Error> {
         Ok(fs::read_dir(self.root_path(object))?
             .filter_map(|file| file.ok())
             .filter_map(|file| {
@@ -108,7 +107,7 @@ impl super::BackingStore for Store {
 
     #[inline]
     fn remove(&self, name: &str, object: Object) -> Result<(), super::Error> {
-        as_effective!({ fs::remove_file(self.path(name, object)) })??;
+        fs::remove_file(self.path(name, object))?;
         Ok(())
     }
 }

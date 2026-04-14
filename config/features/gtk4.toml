@@ -1,6 +1,6 @@
 name = "gtk4"
 description = "For GTK4 applications"
-requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf"]
+requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf", "vulkan"]
 
 [libraries]
 directories = ["gtk-4.0", "tinysparql-3.0"]

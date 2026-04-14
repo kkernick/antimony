@@ -10,4 +10,5 @@ rw = ["/tmp"]
 
 [[hooks.pre]]
 name = "sleep"
-content = "sleep 0.5"
+content = "sleep"
+arguments = ["0.5"]

@@ -5,6 +5,7 @@ caveat = "You must have a home folder defined in your profile! If you've already
 conditional = "command -v /usr/bin/dirname && command -v /usr/bin/kdialog && command -v /usr/bin/gocryptfs"
 
 [[hooks.pre]]
+type = "Shell"
 name = "gocryptfs init"
 content = """
 set -e
@@ -20,6 +21,7 @@ env = true
 new_privileges = true
 
 [[hooks.pre]]
+type = "Shell"
 name = "gocryptfs mount"
 content = """
 set -e
@@ -31,6 +33,7 @@ env = true
 new_privileges = true
 
 [[hooks.post]]
+type = "Shell"
 name = "gocryptfs unmount"
 content = 'if [[ -z $ANTIMONY_HOME ]]; then exit 0; else umount "${ANTIMONY_HOME}"; fi'
 new_privileges = true

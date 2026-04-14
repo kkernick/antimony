@@ -4,6 +4,7 @@ pub mod backend;
 pub mod edit;
 pub mod export;
 pub mod import;
+pub mod info;
 pub mod integrate;
 pub mod refresh;
 pub mod remove;
@@ -81,6 +82,9 @@ pub enum Command {
 
     /// Manage the Backend Datastore
     Backend(backend::Args),
+
+    /// Get information about profiles/features
+    Info(info::Args),
 }
 impl Default for Command {
     fn default() -> Self {

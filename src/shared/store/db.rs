@@ -6,7 +6,7 @@
 //! 3. The Cache Database (cache.db) is a dumping ground for caching used through the project.
 
 use crate::shared::{
-    Map,
+    Map, Set,
     env::{AT_HOME, USER_NAME},
 };
 use rusqlite::{Connection, params, types::FromSql};
@@ -170,14 +170,14 @@ impl super::BackingStore for Store {
     }
 
     #[inline]
-    fn get(&self, object: super::Object) -> Result<Vec<String>, super::Error> {
-        let mut things = Vec::default();
+    fn get(&self, object: super::Object) -> Result<Set<String>, super::Error> {
+        let mut things = Set::default();
         let mut stmt = self
             .get_connection()
             .prepare(&format!("SELECT name FROM {object}"))?;
         let rows = stmt.query_map([], |row| row.get(0))?;
         for name in rows {
-            things.push(name?);
+            things.insert(name?);
         }
         Ok(things)
     }

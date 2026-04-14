@@ -50,6 +50,7 @@ signal-hook = { version = "0.3.18", default-features = false }
 thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
 toml = { version = "0.8.22", default-features = false, features = ["display", "parse"] }
 postcard = "1.1.3"
+similar = { version = "3.1.0", default-features = false, features = ["text", "unicode"] }
 
 [profile.dev]
 debug = false

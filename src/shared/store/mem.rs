@@ -4,7 +4,7 @@
 //! actual backing store all in one go.
 
 use crate::shared::{
-    Map, ThreadMap,
+    Map, Set, ThreadMap,
     store::{BackingStore, CACHE_STORE, OBJECTS, Object},
 };
 use common::cache::{self, CacheStatic};
@@ -113,7 +113,7 @@ impl super::BackingStore for Store {
         }
     }
 
-    fn get(&self, object: Object) -> Result<Vec<String>, super::Error> {
+    fn get(&self, object: Object) -> Result<Set<String>, super::Error> {
         if let Some(db) = MEM_STORE.get(&self.name) {
             Ok(db.get(&object).unwrap().keys().cloned().collect())
         } else if self.read

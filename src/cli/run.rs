@@ -22,6 +22,7 @@ use log::{debug, error};
 use nix::errno::Errno;
 use spawn::{Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, thread, time::Duration};
+use user::as_real;
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -346,7 +347,9 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         log::trace!("Spawning");
         let handle = info.handle.spawn()?;
         mem::flush();
-        let code = handle.wait()?;
+
+        // Drop to real while waiting so user processes/parent can signal us.
+        let code = as_real!(handle.wait())??;
 
         if code != 0 {
             if CONFIG_FILE.auto_refresh() && !args.refresh {

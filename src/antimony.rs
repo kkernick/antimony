@@ -11,7 +11,9 @@ use std::thread::available_parallelism;
 
 fn main() -> Result<()> {
     for (key, value) in CONFIG_FILE.environment() {
-        unsafe { std::env::set_var(key, value) }
+        if std::env::var(key).is_err() {
+            unsafe { std::env::set_var(key, value) }
+        }
     }
 
     notify::init()?;

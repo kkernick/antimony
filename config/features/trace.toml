@@ -6,6 +6,6 @@ binaries = ["strace"]
 
 [hooks.parent]
 name = "tracer"
-path = "$AT_HOME/utilities/antimony-tracer"
+content = "$AT_HOME/utilities/antimony-tracer"
 capture_error = true
 env = true

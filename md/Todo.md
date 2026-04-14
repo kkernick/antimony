@@ -8,11 +8,12 @@
 * [ ] Features
 	* [x] SECCOMP Fixes
 	* [x] Move Config to /etc
-	* [ ] Support logging in config
-	* [ ] Return info by dumping TOML + Diff of User + System
-	* [ ] Refactor hooks so explicitly define type (Script, Program Antimony)
-	* [ ] L2 Profile Cache where Default/Cmdline get fabricated?
-	* [ ] Investigate hooks not being killed with parent.
+	* [x] Support logging in config
+	* [x] Return info by dumping TOML + Diff of User + System
+	* [x] Refactor hooks so explicitly define type (Script, Program Antimony)
+	* [x] L2 Profile Cache where Default/Cmdline get fabricated?
+		* The Command Line must be cached with the profile. 
+	* [x] Investigate hooks not being killed with parent.
 	* [x] Allow editing invalid profiles.
 	* [ ] `antimony setup` for complicated profiles.
 	```toml 
@@ -22,10 +23,13 @@
 	fatal = true
 	```
 	* [ ] Command completion for loading profiles (IE antimony run ch + tab → chromium)
-	* [ ] Integrate should require a path to add, but not to remove
+	* [x] Integrate should require a path to add, but not to remove
+	* [ ] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
+	* [ ] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
 * [ ] Ensure Steam Works
 * [ ] Ensure Ubuntu Works
 	* [ ] Antimony AppArmor Profile
 	* [ ] Dynamic Sandbox Profiles too? TOML → AppArmor? aa-exec? How to handle privilege of loading?
 * [ ] Update docs
+* [ ] Actually add a comprehensive testing suite
 * [ ] Update Version and add tag.

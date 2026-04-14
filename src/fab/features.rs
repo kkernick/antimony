@@ -116,7 +116,10 @@ fn resolve_feature(
         let (requires, conflicts) = {
             match load_feature(feature, db) {
                 Ok(feature) => (feature.requires.clone(), feature.conflicts.clone()),
-                Err(_) => (None, None),
+                Err(e) => {
+                    warn!("Could not load feature {feature}: {e}");
+                    (None, None)
+                }
             }
         };
 
@@ -158,6 +161,7 @@ fn resolve_features(
             &mut searched,
         )?;
     }
+
     Ok(feature_list
         .into_keys()
         .filter_map(|name| db.remove(&name))

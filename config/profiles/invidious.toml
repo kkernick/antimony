@@ -24,15 +24,19 @@ policy = "Enabled"
 ro = ["$XDG_DATA_HOME/antimony/invidious/invidious.yml=/etc/invidious.yml"]
 
 [[hooks.pre]]
-content = """
-antimony run postgresql --home-name invidious/db &
-antimony run $XDG_DATA_HOME/antimony/invidious/invidious_companion --env SERVER_SECRET_KEY=1234567890abcdef --features network
-"""
+type = "Profile"
+content = "postgresql"
+arguments= ["--home-name", "invidious/db"]
 attach = true
-env = true
-new_privileges = true
 
 [[hooks.pre]]
+type = "Profile"
+content = "$XDG_DATA_HOME/antimony/invidious/invidious_companion"
+arguments = ["--env", "SERVER_SECRET_KEY=1234567890abcdef", "--features", "network"]
+attach = true
+
+[[hooks.pre]]
+type = "Script"
 content = """
 echo "Waiting for DB"
 while ! nc -z localhost 5432; do

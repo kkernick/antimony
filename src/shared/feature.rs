@@ -28,7 +28,7 @@ pub enum Error {
 }
 
 /// A Feature
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.

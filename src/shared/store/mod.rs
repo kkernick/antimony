@@ -8,7 +8,7 @@ pub mod file;
 pub mod mem;
 
 use crate::shared::{
-    Map,
+    Map, Set,
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
@@ -170,7 +170,7 @@ pub trait BackingStore {
     fn bytes(&self, name: &str, object: Object) -> Result<Vec<u8>, Error>;
 
     /// Get all objects of a certain type
-    fn get(&self, object: Object) -> Result<Vec<String>, Error>;
+    fn get(&self, object: Object) -> Result<Set<String>, Error>;
 
     /// Check if an object exists.
     fn exists(&self, name: &str, object: Object) -> bool;
@@ -228,7 +228,7 @@ pub fn load<
 
 /// Export the entire store into memory.
 #[inline]
-pub fn export(store: &dyn BackingStore) -> Map<Object, Vec<String>> {
+pub fn export(store: &dyn BackingStore) -> Map<Object, Set<String>> {
     let mut map = Map::default();
     for object in OBJECTS {
         if let Ok(objects) = store.get(object) {

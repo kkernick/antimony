@@ -70,6 +70,15 @@ impl Hooks {
     }
 }
 
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+pub enum Type {
+    Shell,
+
+    #[default]
+    Program,
+    Profile,
+}
+
 /// A Hook is a program run in coordination with the profile.
 /// Hooks are run as the user.
 /// Hooks are invoked with the following environment variables:
@@ -82,14 +91,17 @@ pub struct Hook {
     /// An optional name to identify the process.
     pub name: Option<String>,
 
-    /// The path to a binary
-    pub path: Option<String>,
+    #[serde(rename = "type")]
+    pub t: Type,
 
-    /// The raw content of a shell script. If both path and content are defined, path is used.
-    pub content: Option<String>,
+    /// The contents of the hook.
+    /// For scripts, the full content.
+    /// For programs, the name/path of the binary.
+    /// For antimony, the profile
+    pub content: String,
 
     /// A list of arguments to be passed to the hook
-    pub args: Option<Vec<String>>,
+    pub arguments: Option<Vec<String>>,
 
     /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside
     /// the sandbox. If false, the program waits for the hook to terminate before launching
@@ -127,31 +139,39 @@ impl Hook {
         home: &Option<String>,
         parent: bool,
     ) -> Result<Option<Spawner>, HookError> {
-        let handle = if let Some(path) = self.path {
-            Spawner::new(resolve(Cow::Owned(path)))?
-        } else if let Some(content) = self.content {
-            Spawner::abs("/usr/bin/bash").args(["-c", content.as_str()])?
-        } else {
-            return Err(HookError::Missing);
+        let handle = match self.t {
+            Type::Shell | Type::Program => {
+                let handle = match self.t {
+                    Type::Shell => {
+                        Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])?
+                    }
+                    _ => Spawner::new(resolve(Cow::Owned(self.content)))?,
+                }
+                .mode(user::Mode::Real)
+                .preserve_env(self.env.unwrap_or(false))
+                .env("ANTIMONY_NAME", name)?
+                .env("ANTIMONY_CACHE", cache)?
+                .env("ANTIMONY_INSTANCE", instance)?;
+
+                if self.new_privileges.unwrap_or(false) {
+                    handle.new_privileges_i(true);
+                }
+                if let Some(home) = home {
+                    handle.env_i("ANTIMONY_HOME", home)?;
+                }
+
+                handle
+            }
+
+            Type::Profile => Spawner::abs("/usr/bin/antimony")
+                .args(["run", self.content.as_str()])?
+                .new_privileges(true)
+                .preserve_env(true)
+                .mode(user::Mode::Original),
         }
         .name(&self.name.unwrap_or("hook".to_string()));
-
-        handle.preserve_env_i(self.env.unwrap_or(false));
-        handle.env_i("ANTIMONY_NAME", name)?;
-        handle.env_i("ANTIMONY_CACHE", cache)?;
-        handle.env_i("ANTIMONY_INSTANCE", instance)?;
-        handle.mode_i(user::Mode::Real);
-
-        if self.new_privileges.unwrap_or(false) {
-            handle.new_privileges_i(true);
-        }
-
-        if let Some(args) = self.args {
+        if let Some(args) = self.arguments {
             handle.args_i(args)?;
-        }
-
-        if let Some(home) = home {
-            handle.env_i("ANTIMONY_HOME", home)?;
         }
 
         if parent {

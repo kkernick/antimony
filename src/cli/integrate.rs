@@ -62,7 +62,6 @@ pub enum ConfigMode {
 
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
-        user::set(user::Mode::Real)?;
         if self.remove {
             let profile = match Profile::new(&self.profile, None, None, false) {
                 Ok(profile) => profile,
@@ -82,6 +81,7 @@ impl cli::Run for Args {
 
 /// Undo integration.
 pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
+    user::set(user::Mode::Real)?;
     let name = &cmd.profile;
 
     let binary = HOME_PATH.join(".local").join("bin").join(name);
@@ -320,6 +320,8 @@ fn format_desktop(
 
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
 pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
+    user::set(user::Mode::Real)?;
+
     // Collect environment.
     let antimony = which::which("antimony")?;
     let name = &cmd.profile;
