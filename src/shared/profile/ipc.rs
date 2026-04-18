@@ -21,19 +21,19 @@ pub struct Ipc {
 
     /// Busses that the sandbox can see, but not interact with.
     #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub see: StableSet<String>,
+    pub sees: StableSet<String>,
 
     /// Busses the sandbox can talk over.
     #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub talk: StableSet<String>,
+    pub talks: StableSet<String>,
 
     /// Busses the sandbox owns.
     #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub own: StableSet<String>,
+    pub owns: StableSet<String>,
 
     /// Call semantics.
     #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub call: StableSet<String>,
+    pub calls: StableSet<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
@@ -50,10 +50,10 @@ impl Ipc {
         }
 
         self.portals.extend(ipc.portals);
-        self.see.extend(ipc.see);
-        self.talk.extend(ipc.talk);
-        self.own.extend(ipc.own);
-        self.call.extend(ipc.call);
+        self.sees.extend(ipc.sees);
+        self.talks.extend(ipc.talks);
+        self.owns.extend(ipc.owns);
+        self.calls.extend(ipc.calls);
     }
 
     /// Construct an IPC set from the command line.
@@ -64,16 +64,16 @@ impl Ipc {
             ipc.get_or_insert_default().portals = portals.into_iter().collect();
         };
         if let Some(see) = args.see.take() {
-            ipc.get_or_insert_default().see = see.into_iter().collect();
+            ipc.get_or_insert_default().sees = see.into_iter().collect();
         };
         if let Some(talk) = args.talk.take() {
-            ipc.get_or_insert_default().talk = talk.into_iter().collect();
+            ipc.get_or_insert_default().talks = talk.into_iter().collect();
         };
         if let Some(own) = args.own.take() {
-            ipc.get_or_insert_default().own = own.into_iter().collect();
+            ipc.get_or_insert_default().owns = own.into_iter().collect();
         };
         if let Some(call) = args.call.take() {
-            ipc.get_or_insert_default().call = call.into_iter().collect();
+            ipc.get_or_insert_default().calls = call.into_iter().collect();
         };
 
         if args.user_bus {

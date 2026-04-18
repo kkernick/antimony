@@ -4,4 +4,4 @@ home.policy = "Enabled"
 features = ["libadwaita", "libclapper", "network", "libpeas", "gio"]
 
 [ipc]
-own = ["org.mpris.MediaPlayer2.tubefeeder"]
+owns = ["org.mpris.MediaPlayer2.tubefeeder"]

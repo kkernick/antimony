@@ -1,0 +1,26 @@
+abi <abi/4.0>,
+
+include <tunables/global>
+
+# This profile is a bridge between two security systems, AppArmor and Bubblewrap.
+# It does not present a particularly effective security barrier, as the whole point
+# of Antimony is that it can confine anything, and can be easily extended.
+#
+# This AppArmor profile exists solely because some Linux Distributions (i.e Ubuntu)
+# Do not allow user namespaces for unconfined programs, which would not only prevent
+# Bubblewrap from functioning, but also applications that run in Antimony that
+# themselves need user namespaces, such as Chromium.
+profile antimony /usr/bin/antimony flags=(attach_disconnected, mediate_deleted) {
+  capability,
+  network,
+  mount,
+  signal,
+  ptrace,
+  pivot_root,
+  userns create,
+
+  umount /{,oldroot/},
+
+  /** ix,
+  /{,**} mrwlk,
+}

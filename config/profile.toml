@@ -32,7 +32,7 @@
 # The threat model for this setting is to combat a potential sandbox escape. Under normal operations,
 # such an exploit would allow unfettered access to the user's home, which constitutes a privacy risk.
 # Under lockdown, the attack would be thwarted, as the user only has access to /usr/share/antimony/lockdown.
-# lockdown = false
+# lockdowns = false
 
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
@@ -179,16 +179,16 @@
 # portals = []
 #
 # See are busses that the application can see, but cannot interact with.
-# see = []
+# sees = []
 #
 # Talk are busses the application can talk over.
-# talk = []
+# talks = []
 #
 # Own are busses the application owns, particularly for GTK applications
-# own = []
+# owns = []
 #
 # Call are formatted as BUS=METHOD@PATH. If you don't know what that means, you don't need it.
-# call = []
+# calls = []
 
 # Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
 # do not fall into this group. Each group specifies three kinds of files:

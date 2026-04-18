@@ -39,7 +39,7 @@ pub enum HookError {
 
 /// The Hooks structure contains both pre and post hooks.
 #[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
-#[serde(deny_unknown_fields, default)]
+#[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
     pub pre: Option<Vec<Hook>>,
@@ -70,11 +70,9 @@ impl Hooks {
     }
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub enum Type {
     Shell,
-
-    #[default]
     Program,
     Profile,
 }
@@ -85,8 +83,8 @@ pub enum Type {
 ///     ANTIMONY_NAME: The name of the current profile.
 ///     ANTIMONY_HOME: The path to the home folder, if it exists.
 ///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
-#[serde(deny_unknown_fields, default)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Hook {
     /// An optional name to identify the process.
     pub name: Option<String>,
@@ -145,7 +143,8 @@ impl Hook {
                     Type::Shell => {
                         Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])?
                     }
-                    _ => Spawner::new(resolve(Cow::Owned(self.content)))?,
+                    Type::Program => Spawner::new(resolve(Cow::Owned(self.content)))?,
+                    _ => unreachable!(),
                 }
                 .mode(user::Mode::Real)
                 .preserve_env(self.env.unwrap_or(false))

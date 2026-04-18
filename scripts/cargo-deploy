@@ -83,3 +83,6 @@ sudo chmod ug+s /usr/share/antimony/utilities/antimony-lockdown
 sudo cp $ROOT/completions/antimony.bash /usr/share/bash-completion/completions
 sudo cp $ROOT/completions/antimony.fish /usr/share/fish/vendor_completions.d
 sudo cp $ROOT/completions/_antimony /usr/share/zsh/site-functions
+
+sudo cp $ROOT/install/antimony /etc/apparmor.d/antimony
+sudo systemctl reload apparmor

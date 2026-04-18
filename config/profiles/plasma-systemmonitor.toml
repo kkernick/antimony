@@ -7,8 +7,8 @@ namespaces = ["Pid"]
 policy = "Enabled"
 
 [ipc]
-talk = ["org.kde.ksystemstats", "org.kde.ksystemstats1.*"]
-own = ["org.kde.plasma-systemmonitor"]
+talks = ["org.kde.ksystemstats", "org.kde.ksystemstats1.*"]
+owns = ["org.kde.plasma-systemmonitor"]
 
 [files.platform]
 ro = ["/sys"]

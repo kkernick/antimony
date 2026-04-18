@@ -316,17 +316,6 @@ impl Profile {
             }
         }
 
-        if !foreign
-            && let path = profile.app_path(name).as_ref()
-            && !Path::new(path).exists()
-            && which::which(path).is_err()
-        {
-            return Err(Error::NotFound(
-                name.to_string(),
-                Cow::Borrowed("Profile binary {} does not exist on system"),
-            ));
-        }
-
         let hash = timer!("::hash", {
             let mut hash = profile.hash_str()?;
             if let Some(config) = &config {
@@ -339,6 +328,22 @@ impl Profile {
         if let Ok(str) = CACHE_STORE.with_borrow(|s| s.fetch(&hash, Object::Profile)) {
             debug!("Using cached profile");
             return Ok(toml::from_str(&str)?);
+        }
+
+        let app_path = profile.app_path(name);
+        let path = Path::new(app_path.as_ref());
+        if !path.exists() {
+            match which::which(app_path.as_ref()) {
+                Ok(path) => profile.path = Some(path.to_string()),
+                Err(_) => {
+                    if !foreign {
+                        return Err(Error::NotFound(
+                            name.to_string(),
+                            Cow::Borrowed("Profile binary does not exist on system"),
+                        ));
+                    }
+                }
+            }
         }
 
         debug!("No cache available");

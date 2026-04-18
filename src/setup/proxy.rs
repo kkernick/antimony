@@ -148,16 +148,16 @@ pub fn run(
                         ])?;
                     }
                 }
-                for portal in &ipc.see {
+                for portal in &ipc.sees {
                     proxy.args_i([format!("--see={portal}"), permit_call(portal)])?;
                 }
-                for portal in &ipc.talk {
+                for portal in &ipc.talks {
                     proxy.args_i([format!("--talk={portal}"), permit_call(portal)])?;
                 }
-                for portal in &ipc.own {
+                for portal in &ipc.owns {
                     proxy.args_i([format!("--own={portal}"), permit_call(portal)])?;
                 }
-                for portal in &ipc.call {
+                for portal in &ipc.calls {
                     proxy.arg_i(format!("--call={portal}"))?;
                 }
             }

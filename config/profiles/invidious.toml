@@ -36,7 +36,7 @@ arguments = ["--env", "SERVER_SECRET_KEY=1234567890abcdef", "--features", "netwo
 attach = true
 
 [[hooks.pre]]
-type = "Script"
+type = "Shell"
 content = """
 echo "Waiting for DB"
 while ! nc -z localhost 5432; do

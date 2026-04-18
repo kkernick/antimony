@@ -15,21 +15,20 @@
 		* The Command Line must be cached with the profile. 
 	* [x] Investigate hooks not being killed with parent.
 	* [x] Allow editing invalid profiles.
-	* [ ] `antimony setup` for complicated profiles.
-	```toml 
-	[[setup.dependencies]]
-	name = "Checking Depends..."
-	commands = ["command -v x", "command -v y", ...]
-	fatal = true
-	```
+	* [x] `antimony setup` for complicated profiles.
+		* I tried, but it’s not very useful :(
+		* You end up having to do a lot of manual work, so a dedicated setup doesn’t have much utility
 	* [ ] Command completion for loading profiles (IE antimony run ch + tab → chromium)
 	* [x] Integrate should require a path to add, but not to remove
 	* [ ] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
 	* [ ] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
+	* [ ] `info` should be able to dump SECCOMP info, too.
 * [ ] Ensure Steam Works
 * [ ] Ensure Ubuntu Works
-	* [ ] Antimony AppArmor Profile
-	* [ ] Dynamic Sandbox Profiles too? TOML → AppArmor? aa-exec? How to handle privilege of loading?
+	* [x] Antimony AppArmor Profile
+	* [x] Dynamic Sandbox Profiles too? TOML → AppArmor? aa-exec? How to handle privilege of loading?
+		* `aa-exec` only allows using a policy already loaded.
+		* Our `antimony` profile does not allow `pix`.
 * [ ] Update docs
 * [ ] Actually add a comprehensive testing suite
 * [ ] Update Version and add tag.

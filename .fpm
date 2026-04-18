@@ -28,8 +28,10 @@
 
 ./config/feature.toml=/usr/share/antimony/config/feature.toml
 ./config/profile.toml=/usr/share/antimony/config/profile.toml
-./config/config.toml=/usr/share/antimony/config/config.toml
+./config/config.d/base.toml=/etc/antimony.d/base.toml
 
 ./completions/antimony.bash=/usr/share/bash-completion/completions/antimony
 ./completions/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish
 ./completions/_antimony=/usr/share/zsh/site-functions/_antimony
+
+./install/antimony=/etc/apparmor.d/antimony

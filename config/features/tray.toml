@@ -2,4 +2,4 @@ name = "tray"
 description = "Tray icons"
 
 [ipc]
-talk = ["org.kde.StatusNotifierWatcher"]
+talks = ["org.kde.StatusNotifierWatcher"]

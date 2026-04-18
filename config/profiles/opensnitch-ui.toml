@@ -9,6 +9,7 @@ policy = "Enabled"
 rw = ["/tmp"]
 
 [[hooks.pre]]
+type = "Program"
 name = "sleep"
 content = "sleep"
 arguments = ["0.5"]

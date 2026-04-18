@@ -4,4 +4,4 @@ home.policy = "Enabled"
 features = ["kf6"]
 
 [ipc]
-talk = ["org.kde.kclockd"]
+talks = ["org.kde.kclockd"]

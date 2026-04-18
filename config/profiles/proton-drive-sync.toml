@@ -8,9 +8,10 @@ policy = "Enabled"
 arguments = ["start", "--no-daemon"]
 
 [[hooks.pre]]
+type = "Program"
 content = "sleep"
 arguments = ["5"]
 
 [[hooks.pre]]
-content = "sqlite3"
-arguments = ["$ANTIMONY_HOME/.local/state/proton-drive-sync/state.db", "DELETE FROM flags WHERE name GLOB 'running_pid*';"]
+type = "Shell"
+content = "sqlite3 $ANTIMONY_HOME/.local/state/proton-drive-sync/state.db \"DELETE FROM flags WHERE name GLOB 'running_pid*';\""

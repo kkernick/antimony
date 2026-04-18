@@ -5,6 +5,7 @@ sandbox_args = ["strace", "-ffyY", "-v", "-s", "256"]
 binaries = ["strace"]
 
 [hooks.parent]
+type = "Program"
 name = "tracer"
 content = "$AT_HOME/utilities/antimony-tracer"
 capture_error = true

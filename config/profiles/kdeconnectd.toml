@@ -6,4 +6,4 @@ policy = "Enabled"
 
 [ipc]
 portals = ["Notifications"]
-own = ["org.kde.kdeconnect", "org.kde.kdeconnect.*"]
+owns = ["org.kde.kdeconnect", "org.kde.kdeconnect.*"]

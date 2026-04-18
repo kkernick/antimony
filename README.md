@@ -75,17 +75,3 @@ sudo chmod ug+s /usr/bin/antimony
 >If Antimony cannot create hard links, it will default to copies. This has a drastic toll on performance.
 
 3. You should create a folder for Antimony to store configurations and caches. It defaults to `/usr/share/antimony`.
-
-### Troubleshooting
-
-#### Bubblewrap Permission Errors
-
-If Antimony is failing with messages from `bwrap`, the issue is almost invariably your Mandatory Access Control framework (IE SELinux or AppArmor). Bubblewrap requires certain privileges in order to run correctly, chiefly of which the ability to create User Namespaces. If it cannot do that, then Antimony cannot create the sandboxed environment.
-
-You have two options:
-
-1. Create a profile for `bwrap` that delegates the necessary privileges.
-2. Exempt `bwrap` from confinement.
-
-> [!note] 
-> Newer versions of Ubuntu configure AppArmor such that *any* application without a profile defined is run confined. This not only breaks `bwrap`, but `antimony` and any profile you run within it. While the above choices are still valid, you can also opt-out of this behavior by setting the sysctl `kernel.apparmor_restrict_unprivileged_userns` to `0`

@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use log::{debug, warn};
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::borrow::Cow;
 use thiserror::Error;
 
@@ -182,8 +182,8 @@ fn add_feature(
                 .args(["-c", &condition])?
                 .preserve_env(true)
                 .mode(user::Mode::Real)
-                .output(spawn::StreamMode::Pipe)
-                .error(spawn::StreamMode::Pipe)
+                .output(StreamMode::Discard)
+                .error(StreamMode::Discard)
                 .spawn()?
                 .wait()?;
             Ok(code)
@@ -336,26 +336,26 @@ fn add_feature(
         if !ipc.portals.is_empty() {
             p_ipc.portals.extend(ipc.portals);
         }
-        if !ipc.see.is_empty() {
-            let formatted = format_all(ipc.see);
+        if !ipc.sees.is_empty() {
+            let formatted = format_all(ipc.sees);
             if !formatted.is_empty() {
-                p_ipc.see.extend(formatted);
+                p_ipc.sees.extend(formatted);
             }
         }
-        if !ipc.talk.is_empty() {
-            let formatted = format_all(ipc.talk);
+        if !ipc.talks.is_empty() {
+            let formatted = format_all(ipc.talks);
             if !formatted.is_empty() {
-                p_ipc.talk.extend(formatted);
+                p_ipc.talks.extend(formatted);
             }
         }
-        if !ipc.own.is_empty() {
-            let formatted = format_all(ipc.own);
+        if !ipc.owns.is_empty() {
+            let formatted = format_all(ipc.owns);
             if !formatted.is_empty() {
-                p_ipc.own.extend(formatted);
+                p_ipc.owns.extend(formatted);
             }
         }
-        if !ipc.call.is_empty() {
-            p_ipc.call.extend(ipc.call);
+        if !ipc.calls.is_empty() {
+            p_ipc.calls.extend(ipc.calls);
         }
     }
 

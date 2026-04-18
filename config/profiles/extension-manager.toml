@@ -4,5 +4,5 @@ features = ["libadwaita", "network", "gio"]
 
 [ipc]
 portals = ["Documents"]
-talk = ["org.gnome.Shell.Extensions"]
-call = ["org.gnome.Shell.Extensions=org.gnome.Shell.Extensions.*@/org/gnome/Shell/Extensions"]
+talks = ["org.gnome.Shell.Extensions"]
+calls = ["org.gnome.Shell.Extensions=org.gnome.Shell.Extensions.*@/org/gnome/Shell/Extensions"]

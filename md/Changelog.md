@@ -8,6 +8,11 @@
 * Profile Hooks have been changed. Existing hooks will need to be migrated.
 	* A mandatory `type` field now specifies between `Program`, `Shell`, and `Antimony` the first two are analogous to the old `content`/`path` scheme, with `Antimony` allowing privileged execution of another profile (Other hooks only run as the user). The `content` field now either accepts the script content, path, or profile name.
 	* `args` has been renamed to `arguments` to align with the Profile field.
+* Profile IPC has been renamed to use plural keys. User profiles may need to be updated:
+	* `own` is now `owns`
+	* `talk` in now `talks`
+	* `call` is now `calls`
+	* `see` is now `sees`
 * The Configuration file has been moved to `/etc/antimony.toml`. Drop-in support is available by placing TOML files in `/etc/antimony.d` The old location is no longer supported; you will need to migrate your existing configuration. 
 * The `config` command has been removed, as the configuration file is now a root-owned config in `/etc`.
 * `antimony-bench` has been updated, and can only be used to benchmark version 2.4.0 and greater. 
@@ -18,6 +23,7 @@
 * The `info` command has been brought back, dumping the TOML contents of profiles/feature, and diffing user and system definitions.
 * The `integrate` command now allows you to create arbitrary profiles in `~/.local/bin` which lets you run programs within Antimony even if a profile is not defined (In the same way it works through the command line)
 * The `edit` command now allows you to edit malformed profiles, though they must be valid in order for them to be saved.
+* Antimony now ships with an AppArmor profile. You should no longer need to modify `sysctl` to get it, or any application run within it, to work.
 
 ### Fixes
 

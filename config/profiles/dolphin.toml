@@ -3,7 +3,7 @@ features = ["kf6", "xdg-open"]
 libraries.files = ["libdolphin*"]
 
 [ipc]
-own = ["org.kde.dolphin.*"]
+owns = ["org.kde.dolphin.*"]
 
 [files.user]
 rw = ["/"]

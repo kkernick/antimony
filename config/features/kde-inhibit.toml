@@ -6,4 +6,4 @@ binaries = ["kde-inhibit"]
 sandbox_args = ["kde-inhibit", "--power"]
 
 [ipc]
-talk = ["org.freedesktop.PowerManagement.*"]
+talks = ["org.freedesktop.PowerManagement.*"]

@@ -106,12 +106,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
         }
     };
 
-    let update = match toml::from_str(original) {
-        Ok(digest) => buffer != digest,
-        Err(_) => true,
-    };
-
-    Ok(if !update {
+    Ok(if toml::to_string(&buffer)? == original {
         println!("No changes made");
         None
     } else {

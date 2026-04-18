@@ -15,4 +15,4 @@ platform.ro = [
 
 [ipc]
 system_bus = true
-own = ["org.virt-manager.virt-manager"]
+owns = ["org.virt-manager.virt-manager"]

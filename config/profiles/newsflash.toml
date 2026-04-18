@@ -5,4 +5,4 @@ features = ["libadwaita", "mpris", "libclapper", "network", "webkit", "xdg-open"
 
 [ipc]
 portals = ["Background", "FileChooser"]
-own = ["org.mpris.MediaPlayer2.Newsflash"]
+owns = ["org.mpris.MediaPlayer2.Newsflash"]

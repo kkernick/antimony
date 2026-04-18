@@ -95,16 +95,16 @@ description = ""
 # portals = []
 #
 # See are busses that the application can see, but cannot interact with.
-# see = []
+# sees = []
 #
 # Talk are busses the application can talk over.
-# talk = []
+# talks = []
 #
 # Own are busses the application owns, particularly for GTK applications
-# own = []
+# owns = []
 #
 # Call are formatted as BUS=METHOD@PATH. If you don't know what that means, you don't need it.
-# call = []
+# calls = []
 
 # Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
 # do not fall into this group. Each group specifies three kinds of files:
