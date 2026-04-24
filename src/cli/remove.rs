@@ -32,12 +32,12 @@ impl cli::Run for Args {
         };
 
         if let Some(name) = self.name {
-            let user = USER_STORE.with_borrow(|s| s.exists(&name, table));
-            let system = SYSTEM_STORE.with_borrow(|s| s.exists(&name, table));
+            let user = USER_STORE.borrow().exists(&name, table);
+            let system = SYSTEM_STORE.borrow().exists(&name, table);
 
             if user && system {
                 println!("Resetting to system {kind}");
-                USER_STORE.with_borrow(|s| s.remove(&name, table))?;
+                USER_STORE.borrow().remove(&name, table)?;
             } else if user {
                 if Confirm::new()
                     .with_prompt(format!(
@@ -46,7 +46,7 @@ impl cli::Run for Args {
                     .interact()?
                 {
                     println!("Goodbye, {name}!");
-                    USER_STORE.with_borrow(|s| s.remove(&name, table))?;
+                    USER_STORE.borrow().remove(&name, table)?;
                 }
             } else if system && name != "default" {
                 if privileged()?
@@ -57,26 +57,20 @@ impl cli::Run for Args {
                         .interact()?
                 {
                     println!("Deleting system {kind}");
-                    SYSTEM_STORE.with_borrow(|s| s.remove(&name, table))?;
+                    SYSTEM_STORE.borrow().remove(&name, table)?;
                 }
             } else {
                 println!("No such {kind}")
             }
             Ok(())
         } else {
-            let user: Set<_> = USER_STORE
-                .with_borrow(|s| s.get(table))?
-                .into_iter()
-                .collect();
-            let system: Set<_> = SYSTEM_STORE
-                .with_borrow(|s| s.get(table))?
-                .into_iter()
-                .collect();
+            let user: Set<_> = USER_STORE.borrow().get(table)?.into_iter().collect();
+            let system: Set<_> = SYSTEM_STORE.borrow().get(table)?.into_iter().collect();
 
             for thing in user.intersection(&system) {
                 debug!("Custom User {kind} for: {thing}");
-                let user = USER_STORE.with_borrow(|s| s.fetch(thing, table))?;
-                let system = SYSTEM_STORE.with_borrow(|s| s.fetch(thing, table))?;
+                let user = USER_STORE.borrow().fetch(thing, table)?;
+                let system = SYSTEM_STORE.borrow().fetch(thing, table)?;
 
                 let identical = if self.feature {
                     toml::from_str::<Feature>(&user)? == toml::from_str::<Feature>(&system)?
@@ -86,7 +80,7 @@ impl cli::Run for Args {
 
                 if identical {
                     println!("Removing redundant {kind}: {thing}");
-                    USER_STORE.with_borrow(|s| s.remove(thing, table))?;
+                    USER_STORE.borrow().remove(thing, table)?;
                 }
             }
             Ok(())

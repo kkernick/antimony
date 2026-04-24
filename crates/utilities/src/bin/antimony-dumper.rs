@@ -9,13 +9,10 @@
 //!
 //! Or whatever instance value you have.
 
-use antimony::{
-    shared::{
-        self, ThreadMap,
-        syscalls::{self, Notifier, get_num},
-        user_dir, utility,
-    },
-    timer,
+use antimony::shared::{
+    self, ThreadMap,
+    syscalls::{self, Notifier, get_num},
+    utility,
 };
 use anyhow::Result;
 use caps::Capability;
@@ -73,7 +70,7 @@ pub struct RunArgs {
     #[arg(long)]
     path: String,
 
-    /// The instance ID, for localizing the socket. This can be any value.
+    /// The instance path for localizing the socket. This can be any value.
     #[arg(long)]
     instance: String,
 
@@ -234,7 +231,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
         None => &args.path,
     };
 
-    let path = user_dir(&args.instance);
+    let path = PathBuf::from(args.instance);
     if !path.exists() {
         fs::create_dir_all(&path)?;
     }
@@ -261,32 +258,30 @@ pub fn runner(args: RunArgs) -> Result<()> {
 
     // Create an attached version to listen.
     let mut _handle = Spawner::abs(utility("dumper"))
-        .args(["attach", &sock_str])?
+        .args(["attach", &sock_str])
         .preserve_env(true)
         .new_privileges(true)
         .cap(Capability::CAP_SYS_PTRACE);
 
     if let Some(filter) = args.filter {
         for call in filter {
-            _handle.args_i(["--filter", &format!("{}", get_num(&call))])?;
+            _handle.args_i(["--filter", &format!("{}", get_num(&call))]);
         }
     }
     let _handle = _handle.spawn()?;
 
     // Wait for it to be ready.
-    timer!("::inotify", {
-        let mut buffer = [0; 1024];
-        'outer: loop {
-            let events = inotify.read_events_blocking(&mut buffer)?;
-            for event in events {
-                if let Some(name) = event.name
-                    && name == temp.name()
-                {
-                    break 'outer;
-                }
+    let mut buffer = [0; 1024];
+    'outer: loop {
+        let events = inotify.read_events_blocking(&mut buffer)?;
+        for event in events {
+            if let Some(name) = event.name
+                && name == temp.name()
+            {
+                break 'outer;
             }
         }
-    });
+    }
 
     // Spawn the program under our Notify policy.
     let handle = Spawner::new(args.path)?

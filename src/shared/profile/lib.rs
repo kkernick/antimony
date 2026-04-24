@@ -1,22 +1,23 @@
-use crate::{cli, shared::StableSet};
+use crate::{cli, shared::Set};
+use bilrost::Message;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields, default)]
 pub struct Libraries {
     pub no_sof: Option<bool>,
 
     /// The library roots to search. Borrows the definitions from /etc/antimony.conf
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub roots: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub roots: Set<String>,
 
     /// Files and Wildcards matching files.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub files: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub files: Set<String>,
 
     /// Directories and Wildcards matching directories.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub directories: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub directories: Set<String>,
 }
 impl Libraries {
     /// Merge two file set together.

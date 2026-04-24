@@ -81,7 +81,6 @@ impl super::Run for Args {
                     }
                     Ok(())
                 }
-
                 Operation::Merge => {
                     let db = match self.path {
                         Some(path) => PathBuf::from(path),
@@ -132,7 +131,6 @@ impl super::Run for Args {
                         Ok(())
                     })
                 }
-
                 Operation::Clean => {
                     syscalls::CONNECTION.with_borrow_mut(|conn| {
                     let tx = conn.transaction()?;
@@ -149,8 +147,7 @@ impl super::Run for Args {
                                 continue;
                             }
 
-                            if !SYSTEM_STORE.with_borrow(|s| s.exists(&name, Object::Profile)) && !USER_STORE.with_borrow(|s| s.exists(&name, Object::Profile))
-
+                            if !SYSTEM_STORE.borrow().exists(&name, Object::Profile) && !USER_STORE.borrow().exists(&name, Object::Profile)
                             {
                                 println!("Removing missing profile: {name}");
                                 tx.execute("DELETE FROM profiles WHERE id = ?", params![id])?;
@@ -177,8 +174,8 @@ impl super::Run for Args {
                                 // If any profile's home has the binary in it, we preserve.
                                 let wild = path.replace("/home/antimony", "*");
                                 Spawner::abs("/usr/bin/find")
-                                    .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                                    .args(["-wholename", &wild])?
+                                    .arg(DATA_HOME.join("antimony").to_string_lossy())
+                                    .args(["-wholename", &wild])
                                     .mode(user::Mode::Real)
                                     .output(StreamMode::Pipe)
                                     .spawn()?

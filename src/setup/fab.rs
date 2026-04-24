@@ -20,12 +20,6 @@ pub fn cmd_cache(sys_dir: &Path) -> PathBuf {
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached, but on disk.
     let cmd_cache = cmd_cache(&args.sys_dir);
-    if let Some(parent) = cmd_cache.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent)?;
-    }
-
     if cmd_cache.exists() {
         debug!("Using cached fabricators");
         if args.handle.cache_read(&cmd_cache).is_ok() {
@@ -34,8 +28,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         debug!("Corrupted cache. Rebuilding.");
     }
 
-    debug!("Fabricating sandbox");
+    if let Some(parent) = cmd_cache.parent()
+        && !parent.exists()
+    {
+        fs::create_dir_all(parent)?;
+    }
 
+    debug!("Fabricating sandbox");
     let mut info = FabInfo {
         profile: &mut args.profile,
         handle: &args.handle,

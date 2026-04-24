@@ -1,11 +1,12 @@
 use crate::{cli, shared::env::DATA_HOME};
+use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
 /// for persistent configurations and caches.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
@@ -54,24 +55,26 @@ impl Home {
 }
 
 /// The Home Policy being set creates a persistent home folder for the profile.
-#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug)]
+#[derive(
+    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug, Enumeration,
+)]
 #[serde(deny_unknown_fields)]
 pub enum HomePolicy {
     /// Do not use a home profile.
     #[default]
-    None,
+    None = 0,
 
     /// The Home Folder is passed read/write. Applications that only permit a single
     /// instance, such as Chromium, will get upset if you launch multiple instances of
     /// the sandbox.
-    Enabled,
+    Enabled = 1,
 
     /// Mount the Home Folder as a Read-Only overlay.
-    ReadOnly,
+    ReadOnly = 2,
 
     /// Once an application has been configured, Overlay effectively freezes it in place by
     /// mounting it as a temporary overlay. Changes made in the sandbox are discarded, and
     /// it can be shared by multiple instances, even if that application doesn't typically
     /// support multiple instances (Zed, Chromium, etc).
-    Overlay,
+    Overlay = 3,
 }

@@ -1,7 +1,7 @@
 //! The bulk of the SECCOMP Logic.
 
 use crate::{
-    shared::{Set, StableSet, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy, user_dir},
+    shared::{Set, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy},
     timer,
 };
 use inotify::{Inotify, WatchMask};
@@ -28,6 +28,7 @@ use std::{
     thread::sleep,
     time::Duration,
 };
+use temp::Temp;
 use thiserror::Error;
 use user::{as_effective, as_real};
 
@@ -328,7 +329,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
-pub fn get_calls(name: &str, p_binaries: &StableSet<String>) -> PolicyPair {
+pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
     let mut syscalls = Set::default();
     let mut bwrap = Set::default();
 
@@ -382,16 +383,16 @@ pub fn get_calls(name: &str, p_binaries: &StableSet<String>) -> PolicyPair {
 /// Return a new Policy
 pub fn new(
     name: &str,
-    instance: &str,
+    instance: &Temp,
     policy: SeccompPolicy,
-    binaries: &StableSet<String>,
+    binaries: &Set<String>,
     lockdown: bool,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
     let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
         let mut filter = Filter::new(Action::Notify)?;
         filter.set_notifier(Notifier::new(
-            user_dir(instance).join("monitor"),
+            instance.full().join("monitor"),
             name.to_string(),
         ));
 

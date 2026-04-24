@@ -6,7 +6,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     info.profile
         .devices
         .par_iter()
-        .try_for_each(|device| info.handle.args_i(["--dev-bind", device, device]))?;
+        .for_each(|device| info.handle.args_i(["--dev-bind", device, device]));
 
     Ok(())
 }

@@ -31,8 +31,8 @@ impl cli::Run for Args {
         };
 
         let info_dump = |name: &str| -> String {
-            let user = USER_STORE.with_borrow(|s| s.fetch(name, table));
-            let system = SYSTEM_STORE.with_borrow(|s| s.fetch(name, table));
+            let user = USER_STORE.borrow().fetch(name, table);
+            let system = SYSTEM_STORE.borrow().fetch(name, table);
 
             if let Ok(user) = user {
                 if self.diff
@@ -80,8 +80,9 @@ impl cli::Run for Args {
             print(&name, info_dump(&name))
         } else {
             SYSTEM_STORE
-                .with_borrow(|s| s.get(table))?
-                .union(&USER_STORE.with_borrow(|s| s.get(table))?)
+                .borrow()
+                .get(table)?
+                .union(&USER_STORE.borrow().get(table)?)
                 .for_each(|name| print(name, info_dump(name)));
         }
 

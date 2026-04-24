@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
     let mut cli = antimony::cli::Cli::command();
 
     let root = Spawner::new("git")?
-        .args(["rev-parse", "--show-toplevel"])?
+        .args(["rev-parse", "--show-toplevel"])
         .output(spawn::StreamMode::Pipe)
         .spawn()?
         .output_all()?;

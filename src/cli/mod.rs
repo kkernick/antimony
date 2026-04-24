@@ -1,6 +1,5 @@
 //! Antimony's CLI.
 
-pub mod backend;
 pub mod edit;
 pub mod export;
 pub mod import;
@@ -79,9 +78,6 @@ pub enum Command {
 
     /// Import user profiles.
     Import(import::Args),
-
-    /// Manage the Backend Datastore
-    Backend(backend::Args),
 
     /// Get information about profiles/features
     Info(info::Args),

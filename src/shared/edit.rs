@@ -69,7 +69,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
         // Launch the editor.
         Spawner::new(EDITOR.as_str())?
             .preserve_env(true)
-            .arg(temp.full().to_string_lossy())?
+            .arg(temp.full().to_string_lossy())
             .mode(user::Mode::Real)
             .spawn()?
             .wait()?;
@@ -81,7 +81,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
                 // so that they don't create a redundant user profile.
                 Ok(profile) => {
                     if string == original {
-                        println!("No modification made.");
+                        eprintln!("No modification made.");
                         return Ok(None);
                     } else {
                         break profile;
@@ -107,10 +107,10 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
     };
 
     Ok(if toml::to_string(&buffer)? == original {
-        println!("No changes made");
+        eprintln!("No changes made");
         None
     } else {
-        println!("Updating file");
+        eprintln!("Updating file");
         Some(toml::to_string(&buffer)?)
     })
 }

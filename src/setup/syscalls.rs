@@ -1,17 +1,18 @@
 //! Note the bulk of SECCOMP logic is in shared. This just attaches the Filter to a process.
 
-use crate::shared::{StableSet, profile::seccomp::SeccompPolicy, syscalls, utility};
+use crate::shared::{Set, env::DATA_HOME, profile::seccomp::SeccompPolicy, syscalls, utility};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
 use spawn::Spawner;
+use temp::Temp;
 
 /// Install a filter onto a handle.
 pub fn install_filter(
     name: &str,
-    instance: &str,
+    instance: &Temp,
     policy: SeccompPolicy,
-    binaries: &StableSet<String>,
+    binaries: &Set<String>,
     main: &Spawner,
     monitor_parent: &Spawner,
     lockdown: bool,
@@ -24,7 +25,7 @@ pub fn install_filter(
         // Bwrap is confined under a broad policy that includes both it and the sandbox, to
         // which it then further confines the sandbox under a policy that only includes the sandbox.
         if let Some(fd) = fd {
-            main.fd_arg_i("--seccomp", fd)?;
+            main.fd_arg_i("--seccomp", fd);
         }
 
         // If nobody has started a monitor yet, and we need one, attach it to the monitor_parent.
@@ -41,14 +42,13 @@ pub fn install_filter(
                 .name("monitor")
                 .args([
                     "--instance",
-                    instance,
+                    &instance.full().to_string_lossy(),
                     "--profile",
                     name,
                     "--mode",
                     &format!("{policy}").to_lowercase(),
-                ])?
-                .pass_env("XDG_DATA_HOME")?
-                .pass_env("XDG_RUNTIME_DIR")?
+                ])
+                .env_or("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
                 .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                 .output(spawn::StreamMode::Log(log::Level::Info))
                 .new_privileges(true)
@@ -56,7 +56,7 @@ pub fn install_filter(
                 .mode(user::Mode::Original);
 
             if audit {
-                handle.arg_i("--audit")?;
+                handle.arg_i("--audit");
             }
             if log::log_enabled!(log::Level::Info) {
                 handle.pass_env_i("RUST_LOG")?
@@ -81,7 +81,7 @@ pub fn setup(args: &super::Args) -> Result<()> {
                 let binaries = &args.profile.binaries;
                 install_filter(
                     &args.name,
-                    args.instance.name(),
+                    args.instance,
                     policy,
                     binaries,
                     &args.handle,

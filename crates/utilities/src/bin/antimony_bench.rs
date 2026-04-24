@@ -6,10 +6,7 @@
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
 
-use antimony::{
-    cli::refresh::installed_profiles,
-    shared::{self, store},
-};
+use antimony::{cli::refresh::installed_profiles, shared};
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueEnum};
 use dialoguer::Input;
@@ -55,14 +52,6 @@ pub struct Cli {
     /// wherever `antimony` resolves to, and doesn't build.
     #[arg(long)]
     pub recipe: Option<String>,
-
-    /// Specify a cache backend to test.
-    #[arg(long)]
-    pub cache_backend: Option<store::Store>,
-
-    /// Specify a config backend to test.
-    #[arg(long)]
-    pub config_backend: Option<store::Store>,
 
     /// The maximum amount of times hyperfine should run the profile.
     #[arg(long)]
@@ -165,7 +154,7 @@ fn main() -> Result<()> {
     };
 
     let root = Spawner::new("git")?
-        .args(["rev-parse", "--show-toplevel"])?
+        .args(["rev-parse", "--show-toplevel"])
         .output(spawn::StreamMode::Pipe)
         .spawn()?
         .output_all()?;
@@ -207,17 +196,17 @@ fn main() -> Result<()> {
         }
 
         // Stash our working edits
-        Spawner::new("git")?.arg("stash")?.spawn()?.wait()?;
+        Spawner::new("git")?.arg("stash").spawn()?.wait()?;
 
         // Checkout the desired state, but only for code and Cargo.
         Spawner::new("git")?
-            .args(["checkout", checkout])?
+            .args(["checkout", checkout])
             .spawn()?
             .wait()?;
 
         // Reset to the original state
         Spawner::new("git")?
-            .args(["reset", "--hard"])?
+            .args(["reset", "--hard"])
             .spawn()?
             .wait()?;
     }
@@ -262,23 +251,23 @@ fn main() -> Result<()> {
         let antimony = if let Some(recipe) = &cli.recipe {
             println!("Building recipe");
             let antimony = Spawner::abs(format!("{target_dir}/debug/antimony_build"))
-                .args(["--recipe", recipe])?
-                .args(cli.builder_args.unwrap_or_default())?
+                .args(["--recipe", recipe])
+                .args(cli.builder_args.unwrap_or_default())
                 .preserve_env(true)
                 .output(spawn::StreamMode::Pipe)
                 .new_privileges(true)
                 .spawn()?
                 .output_all()?;
-            let antimony = antimony[..antimony.len() - 1].to_string() + "/antimony";
+            let antimony: String = antimony[..antimony.len() - 1].to_string() + "/antimony";
             if cli.system {
                 Spawner::abs("/usr/bin/sudo")
-                    .args(["chown", "antimony:antimony", &antimony])?
+                    .args(["chown", "antimony:antimony", &antimony])
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
 
                 Spawner::abs("/usr/bin/sudo")
-                    .args(["chmod", "ug+s", &antimony])?
+                    .args(["chmod", "ug+s", &antimony])
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
@@ -289,7 +278,7 @@ fn main() -> Result<()> {
                         "--bind",
                         &format!("{root}/config"),
                         "/usr/share/antimony/config",
-                    ])?
+                    ])
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
@@ -301,7 +290,7 @@ fn main() -> Result<()> {
                             "-s",
                             "/usr/share/antimony/config/profiles",
                             "/usr/share/antimony/profiles",
-                        ])?
+                        ])
                         .new_privileges(true)
                         .spawn()?
                         .wait()?;
@@ -314,7 +303,7 @@ fn main() -> Result<()> {
                             "-s",
                             "/usr/share/antimony/config/features",
                             "/usr/share/antimony/features",
-                        ])?
+                        ])
                         .new_privileges(true)
                         .spawn()?
                         .wait()?;
@@ -326,14 +315,6 @@ fn main() -> Result<()> {
         };
 
         println!("Using: {antimony}");
-
-        if let Some(store::Store::Database) = &cli.cache_backend {
-            unsafe { env::set_var("AT_CACHE_DB", "1") }
-        }
-
-        if let Some(store::Store::Database) = &cli.config_backend {
-            unsafe { env::set_var("AT_CONFIG_DB", "1") }
-        }
 
         for profile in &profiles {
             cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
@@ -355,9 +336,9 @@ fn main() -> Result<()> {
                         &format!("Cold {profile}"),
                         "--warmup",
                         "1",
-                    ])?
-                    .args(args.clone())?
-                    .arg(command.join(" "))?
+                    ])
+                    .args(args.clone())
+                    .arg(command.join(" "))
                     .preserve_env(true)
                     .new_privileges(true)
                     .spawn()?
@@ -377,9 +358,9 @@ fn main() -> Result<()> {
                     command.extend(add.clone());
                 }
                 Spawner::new("hyperfine")?
-                    .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])?
-                    .args(args.clone())?
-                    .arg(command.join(" "))?
+                    .args(["--command-name", &format!("Hot {profile}"), "--warmup", "1"])
+                    .args(args.clone())
+                    .arg(command.join(" "))
                     .preserve_env(true)
                     .new_privileges(true)
                     .spawn()?
@@ -391,9 +372,9 @@ fn main() -> Result<()> {
 
         if benchmarks.contains(&Benchmark::Refresh) {
             Spawner::new("hyperfine")?
-                .args(["--command-name", "System Refresh", "--warmup", "1"])?
-                .args(args)?
-                .arg(format!("{antimony} refresh"))?
+                .args(["--command-name", "System Refresh", "--warmup", "1"])
+                .args(args)
+                .arg(format!("{antimony} refresh"))
                 .preserve_env(true)
                 .new_privileges(true)
                 .spawn()?
@@ -405,33 +386,33 @@ fn main() -> Result<()> {
     if cli.checkout.is_some() {
         // Undo the checkout
         Spawner::new("git")?
-            .args(["checkout", "main"])?
+            .args(["checkout", "main"])
             .spawn()?
             .wait()?;
 
         // Reset to the original state
         Spawner::new("git")?
-            .args(["reset", "--hard"])?
+            .args(["reset", "--hard"])
             .spawn()?
             .wait()?;
 
         // Return uncommitted edits.
         Spawner::new("git")?
-            .args(["stash", "pop"])?
+            .args(["stash", "pop"])
             .spawn()?
             .wait()?;
     }
 
     if cli.system {
         Spawner::abs("/usr/bin/sudo")
-            .args(["umount", "/usr/share/antimony/config"])?
+            .args(["umount", "/usr/share/antimony/config"])
             .new_privileges(true)
             .spawn()?
             .wait()?;
 
         if Path::new("/usr/share/antimony/profiles").is_symlink() {
             Spawner::abs("/usr/bin/sudo")
-                .args(["rm", "/usr/share/antimony/profiles"])?
+                .args(["rm", "/usr/share/antimony/profiles"])
                 .new_privileges(true)
                 .spawn()?
                 .wait()?;
@@ -439,7 +420,7 @@ fn main() -> Result<()> {
 
         if Path::new("/usr/share/antimony/features").is_symlink() {
             Spawner::abs("/usr/bin/sudo")
-                .args(["rm", "/usr/share/antimony/features"])?
+                .args(["rm", "/usr/share/antimony/features"])
                 .new_privileges(true)
                 .spawn()?
                 .wait()?;
@@ -449,7 +430,7 @@ fn main() -> Result<()> {
     let antimony = antimony?;
     if cli.system {
         Spawner::abs("/usr/bin/sudo")
-            .args(["rm", &antimony])?
+            .args(["rm", &antimony])
             .new_privileges(true)
             .spawn()?
             .wait()?;

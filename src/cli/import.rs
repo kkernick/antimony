@@ -35,9 +35,11 @@ impl super::Run for Args {
             };
 
             if let Ok(content) = content {
-                store::USER_STORE.with_borrow(|s| {
-                    s.store(src.file_name().unwrap().to_str().unwrap(), table, &content)
-                })?;
+                store::USER_STORE.borrow().store(
+                    src.file_name().unwrap().to_str().unwrap(),
+                    table,
+                    &content,
+                )?;
             } else {
                 warn!("Invalid {kind}: {}", src.display());
             }

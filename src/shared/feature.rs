@@ -2,7 +2,7 @@
 
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
-    StableMap, StableSet, edit,
+    Map, Set, edit,
     profile::{files::Files, hooks::Hooks, lib::Libraries},
     store::{self, Object},
 };
@@ -28,7 +28,7 @@ pub enum Error {
 }
 
 /// A Feature
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.
@@ -47,31 +47,31 @@ pub struct Feature {
     pub caveat: Option<String>,
 
     /// A list of other features this feature depends on.
-    pub requires: Option<StableSet<String>>,
+    pub requires: Option<Set<String>>,
 
     /// A list of other features this feature conflicts with.
-    pub conflicts: Option<StableSet<String>>,
+    pub conflicts: Option<Set<String>>,
 
     /// Any IPC busses needed.
     pub ipc: Option<Ipc>,
 
     /// Namespaces required.
-    pub namespaces: Option<StableSet<Namespace>>,
+    pub namespaces: Option<Set<Namespace>>,
 
     /// Required files
     pub files: Option<Files>,
 
     /// Required binaries
-    pub binaries: Option<StableSet<String>>,
+    pub binaries: Option<Set<String>>,
 
     /// Required libraries
     pub libraries: Option<Libraries>,
 
     /// Required devices.
-    pub devices: Option<StableSet<String>>,
+    pub devices: Option<Set<String>>,
 
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
-    pub environment: Option<StableMap<String, String>>,
+    pub environment: Option<Map<String, String>>,
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
@@ -122,16 +122,17 @@ mod tests {
     #[test]
     fn validate_features() {
         for feature in SYSTEM_STORE
-            .with_borrow(|s| s.get(Object::Feature))
+            .borrow()
+            .get(Object::Feature)
             .expect("Failed to get features")
         {
-            SYSTEM_STORE
-                .with_borrow(|s| {
-                    toml::from_str::<Feature>(
-                        &s.fetch(&feature, Object::Feature).expect("Failed to fetch"),
-                    )
-                })
-                .expect("Failed to read {feature}");
+            let store = SYSTEM_STORE.borrow();
+            toml::from_str::<Feature>(
+                &store
+                    .fetch(&feature, Object::Feature)
+                    .expect("Failed to fetch"),
+            )
+            .expect("Failed to read {feature}");
         }
     }
 }

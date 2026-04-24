@@ -36,8 +36,8 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
                 let file = arg.strip_prefix("file://").unwrap_or(&abs_arg);
                 let dest = file.replace(HOME.as_str(), "/home/antimony");
                 match operation {
-                    FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest])?,
-                    FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest])?,
+                    FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest]),
+                    FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest]),
                     FileMode::Executable => {
                         let contents = as_real!(fs::read_to_string(file))??;
                         super::files::add_file(&args.handle, file, contents, FileMode::Executable)?

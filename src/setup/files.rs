@@ -25,9 +25,9 @@ use user::{USER, as_real};
 fn get_x<'a>(src: Option<Cow<'a, str>>, dst: &str, handle: &Spawner) -> Result<()> {
     let src = src.unwrap_or(Cow::Borrowed(dst));
     let fd = OwnedFd::from(File::open(src.as_ref())?);
-    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst])?;
+    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst]);
     handle.fd_i(fd);
-    handle.args_i(["--chmod", "555", dst])?;
+    handle.args_i(["--chmod", "555", dst]);
     Ok(())
 }
 
@@ -58,9 +58,9 @@ fn lockdown_file<'a>(
         }
     };
 
-    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst])?;
+    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst]);
     handle.fd_i(fd);
-    handle.args_i(["--chmod", if ro { "444" } else { "666" }, dst])?;
+    handle.args_i(["--chmod", if ro { "444" } else { "666" }, dst]);
     Ok(())
 }
 
@@ -76,9 +76,9 @@ pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) ->
     }
 
     let fd = OwnedFd::from(File::open(path)?);
-    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file])?;
+    handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file]);
     handle.fd_i(fd);
-    handle.args_i(["--chmod", op.chmod(), file])?;
+    handle.args_i(["--chmod", op.chmod(), file]);
     Ok(())
 }
 
@@ -96,13 +96,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     {
         let suffix = format!("{}/{}", USER.real.as_raw(), args.name);
         let path = format!("/usr/share/antimony/lockdown/{suffix}",);
-        args.handle.env_i("LOCKDOWN_HOME", suffix)?;
-        args.handle.args_i(["--bind", &path, "/home/antimony"])?;
+        args.handle.env_i("LOCKDOWN_HOME", suffix);
+        args.handle.args_i(["--bind", &path, "/home/antimony"]);
     }
 
     if let Some(files) = &mut args.profile.files {
         let user = &mut files.user;
-        if let Some(exe) = user.swap_remove(&FileMode::Executable) {
+        if let Some(exe) = user.remove(&FileMode::Executable) {
             exe.into_par_iter().try_for_each(|file| {
                 let (src, dest) = localize_path(&file, true)?;
                 get_x(src, &dest, &args.handle)
@@ -111,13 +111,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
         // Lockdown takes all user files and passes them as FDs. Folders are not supported.
         if lockdown {
-            if let Some(ro) = user.swap_remove(&FileMode::ReadOnly) {
+            if let Some(ro) = user.remove(&FileMode::ReadOnly) {
                 ro.into_par_iter().try_for_each(|file| {
                     let (src, dest) = localize_path(&file, true)?;
                     lockdown_file(src, &dest, &args.handle, true)
                 })?;
             }
-            if let Some(rw) = user.swap_remove(&FileMode::ReadWrite) {
+            if let Some(rw) = user.remove(&FileMode::ReadWrite) {
                 rw.into_par_iter().try_for_each(|file| {
                     let (src, dest) = localize_path(&file, true)?;
                     lockdown_file(src, &dest, &args.handle, false)
@@ -126,13 +126,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         }
 
         let system = &mut files.platform;
-        if let Some(exe) = system.swap_remove(&FileMode::Executable) {
+        if let Some(exe) = system.remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(None, &file, &args.handle))?;
         }
 
         let system = &mut files.resources;
-        if let Some(exe) = system.swap_remove(&FileMode::Executable) {
+        if let Some(exe) = system.remove(&FileMode::Executable) {
             exe.into_par_iter()
                 .try_for_each(|file| get_x(None, &file, &args.handle))?;
         }

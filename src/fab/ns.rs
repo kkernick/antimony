@@ -20,23 +20,23 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<(), SpawnError> {
             "--unshare-user",
             "--disable-userns",
             "--assert-userns-disabled",
-        ])?;
+        ]);
     }
     if !namespaces.contains(&Namespace::Ipc) {
-        info.handle.arg_i("--unshare-ipc")?;
+        info.handle.arg_i("--unshare-ipc");
     }
     if !namespaces.contains(&Namespace::Pid) {
-        info.handle.arg_i("--unshare-pid")?;
+        info.handle.arg_i("--unshare-pid");
     }
 
     if !namespaces.contains(&Namespace::Net) {
-        info.handle.arg_i("--unshare-net")?;
+        info.handle.arg_i("--unshare-net");
     }
     if !namespaces.contains(&Namespace::Uts) {
-        info.handle.arg_i("--unshare-uts")?;
+        info.handle.arg_i("--unshare-uts");
     }
     if !namespaces.contains(&Namespace::CGroup) {
-        info.handle.arg_i("--unshare-cgroup")?;
+        info.handle.arg_i("--unshare-cgroup");
     }
 
     Ok(())

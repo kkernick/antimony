@@ -13,7 +13,7 @@ pub mod seccomp;
 use crate::{
     cli, fab,
     shared::{
-        StableMap, StableSet,
+        Map, Set,
         config::CONFIG_FILE,
         edit,
         env::HOME,
@@ -23,6 +23,7 @@ use crate::{
     timer,
 };
 use ahash::RandomState;
+use bilrost::{Message, OwnedMessage};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io, path::Path};
@@ -43,6 +44,10 @@ pub enum Error {
     /// When the profile cannot be Serialized.
     #[error("Failed to serialize profile: {0}")]
     Serialize(#[from] toml::ser::Error),
+
+    /// When the profile cannot be Deserialized from cache.
+    #[error("Failed to deserialize cached profile: {0}")]
+    Cache(#[from] bilrost::DecodeError),
 
     /// Misc IO errors.
     #[error("I/O Error: {0}")]
@@ -72,19 +77,17 @@ pub enum Error {
     Store(#[from] store::Error),
 }
 
-/// Append two things together. Used for Profile Merging.
-fn append<T>(s: &mut Option<Vec<T>>, p: Option<Vec<T>>) {
-    if let Some(mut source) = p {
-        if let Some(dest) = s {
-            dest.append(&mut source)
-        } else {
-            *s = Some(source);
-        }
+#[inline]
+fn default_inherits() -> Set<String> {
+    if !CONFIG_FILE.system_mode() && USER_STORE.borrow().exists("default", Object::Profile) {
+        Set::from_iter(["default".to_string()])
+    } else {
+        Set::default()
     }
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -112,12 +115,12 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub features: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub features: Set<String>,
 
     /// Features that should be excluded from running under the profile.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub conflicts: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub conflicts: Set<String>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -138,7 +141,8 @@ pub struct Profile {
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    pub inherits: Option<StableSet<String>>,
+    #[serde(default = "default_inherits")]
+    pub inherits: Set<String>,
 
     /// Configuration for the profile's home.
     pub home: Option<home::Home>,
@@ -154,8 +158,8 @@ pub struct Profile {
     pub files: Option<files::Files>,
 
     /// Binaries needed in the sandbox.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub binaries: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub binaries: Set<String>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
@@ -164,24 +168,25 @@ pub struct Profile {
     pub libraries: Option<Libraries>,
 
     /// Devices needed in the sandbox, at /dev.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub devices: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub devices: Set<String>,
 
     /// Namespaces, such as User and Net.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub namespaces: StableSet<ns::Namespace>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub namespaces: Set<ns::Namespace>,
 
     /// Environment Variable Keypairs
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
-    pub environment: StableMap<String, String>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub environment: Map<String, String>,
 
     /// Arguments to pass to the sandboxed application directly.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
-    pub configuration: StableMap<String, Profile>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    #[bilrost(recurses)]
+    pub configuration: Map<String, Profile>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
@@ -231,7 +236,7 @@ impl Profile {
         }
 
         if let Some(inherits) = args.inherits.take() {
-            profile.inherits = Some(inherits.into_iter().collect())
+            profile.inherits.extend(inherits)
         }
 
         if let Some(conflicts) = args.conflicts.take() {
@@ -285,7 +290,7 @@ impl Profile {
         config: Option<String>,
         args: Option<&mut cli::run::Args>,
         foreign: bool,
-    ) -> Result<Profile, Error> {
+    ) -> Result<(Profile, String), Error> {
         debug!("Loading {name}");
 
         let mut profile = timer!(
@@ -303,7 +308,7 @@ impl Profile {
             }
         );
         if name == "default" {
-            return Ok(profile);
+            return Ok((profile, "default".to_string()));
         }
 
         if let Some(args) = args {
@@ -316,18 +321,13 @@ impl Profile {
             }
         }
 
-        let hash = timer!("::hash", {
-            let mut hash = profile.hash_str()?;
-            if let Some(config) = &config {
-                hash += config;
-            }
-            hash += &CONFIG_FILE.system_mode().to_string();
-            hash
-        });
-
-        if let Ok(str) = CACHE_STORE.with_borrow(|s| s.fetch(&hash, Object::Profile)) {
+        let hash = profile.hash_str(&config);
+        if let Ok(bytes) = timer!(
+            "fetch_cache",
+            CACHE_STORE.borrow().bytes(&hash, Object::Profile)
+        ) {
             debug!("Using cached profile");
-            return Ok(toml::from_str(&str)?);
+            return Ok((Self::decode(bytes.as_slice())?, hash));
         }
 
         let app_path = profile.app_path(name);
@@ -347,27 +347,14 @@ impl Profile {
         }
 
         debug!("No cache available");
-        let to_inherit: StableSet<String> = match &profile.inherits {
-            Some(i) => i.clone(),
-            None => {
-                if !CONFIG_FILE.system_mode()
-                    && USER_STORE.with_borrow(|s| s.exists("default", Object::Profile))
-                {
-                    StableSet::from_iter(["default".to_string()])
-                } else {
-                    StableSet::default()
-                }
-            }
-        };
-
-        for inherit in to_inherit {
-            profile.merge(Profile::new(&inherit, None, None, true)?)?;
+        for inherit in profile.inherits.clone() {
+            profile.merge(Profile::new(&inherit, None, None, true)?.0)?;
         }
 
         if let Some(config) = config {
             debug!("Loading configuration");
             if !profile.configuration.is_empty() {
-                match profile.configuration.swap_remove(&config) {
+                match profile.configuration.remove(&config) {
                     Some(conf) => {
                         let hooks = conf.hooks.clone();
                         profile = profile.base(conf)?;
@@ -404,10 +391,11 @@ impl Profile {
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
-        if let Ok(str) = toml::to_string(&profile) {
-            CACHE_STORE.with_borrow(|s| s.store(&hash, Object::Profile, &str))?;
-        }
-        Ok(profile)
+        CACHE_STORE
+            .borrow()
+            .dump(&hash, Object::Profile, &Self::encode_to_bytes(&profile))?;
+
+        Ok((profile, hash))
     }
 
     /// Use another profile as the base for the caller.
@@ -419,7 +407,7 @@ impl Profile {
     /// the caller.
     pub fn base(mut self, mut source: Self) -> Result<Self, Error> {
         source.id = self.id.take();
-        source.inherits = self.inherits.take();
+        source.inherits = self.inherits.clone();
 
         source.merge(self)?;
         Ok(source)
@@ -563,17 +551,18 @@ impl Profile {
     }
 
     /// Get the numerical hash of the profile.
-    /// Note that while *deserializing* from postcard throws an error,
-    /// we can serialize it for the purposes of hashing.
-    pub fn num_hash(&self) -> Result<u64, Error> {
-        timer!("::hash", {
-            Ok(RandomState::with_seeds(0, 0, 0, 0).hash_one(&toml::to_string(&self)?))
-        })
+    pub fn num_hash(&self, config: &Option<String>) -> u64 {
+        let mut bytes = Self::encode_to_bytes(self).to_vec();
+        bytes.push(CONFIG_FILE.system_mode() as u8);
+        if let Some(config) = config {
+            bytes.extend_from_slice(config.as_bytes());
+        }
+        RandomState::with_seeds(0, 0, 0, 0).hash_one(bytes)
     }
 
     /// Get the Profile's hash.
-    pub fn hash_str(&self) -> Result<String, Error> {
-        Ok(format!("{}", self.num_hash()?))
+    pub fn hash_str(&self, config: &Option<String>) -> String {
+        format!("{}", self.num_hash(config))
     }
 
     /// Edit a profile.
@@ -589,16 +578,17 @@ mod tests {
     #[test]
     fn validate_profiles() {
         for profile in store::SYSTEM_STORE
-            .with_borrow(|s| s.get(Object::Profile))
+            .borrow()
+            .get(Object::Profile)
             .expect("Failed to get profiles")
         {
-            store::SYSTEM_STORE
-                .with_borrow(|s| {
-                    toml::from_str::<Profile>(
-                        &s.fetch(&profile, Object::Profile).expect("Failed to fetch"),
-                    )
-                })
-                .expect("Failed to fetch {profile}");
+            let store = store::SYSTEM_STORE.borrow();
+            toml::from_str::<Profile>(
+                &store
+                    .fetch(&profile, Object::Profile)
+                    .expect("Failed to fetch"),
+            )
+            .expect("Failed to fetch {profile}");
         }
     }
 }

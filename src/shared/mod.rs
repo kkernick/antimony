@@ -8,10 +8,9 @@ pub mod syscalls;
 
 use crate::shared::{
     config::CONFIG_FILE,
-    env::{AT_HOME, CACHE_DIR, RUNTIME_DIR},
+    env::{AT_HOME, CACHE_DIR},
 };
 use dashmap::{DashMap, DashSet};
-use indexmap::{IndexMap, IndexSet};
 use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
@@ -35,13 +34,11 @@ impl BuildHasher for StaticHash {
     }
 }
 
-pub type Set<T> = HashSet<T, ahash::RandomState>;
-pub type StableSet<T> = IndexSet<T, StaticHash>;
-pub type ThreadSet<T> = DashSet<T, ahash::RandomState>;
+pub type Set<T> = HashSet<T, StaticHash>;
+pub type ThreadSet<T> = DashSet<T, StaticHash>;
 
 pub type Map<K, V> = HashMap<K, V, StaticHash>;
-pub type StableMap<K, V> = IndexMap<K, V, StaticHash>;
-pub type ThreadMap<K, V> = DashMap<K, V, ahash::RandomState>;
+pub type ThreadMap<K, V> = DashMap<K, V, StaticHash>;
 
 /// Check that the Real User is privileged. This is used to allow modifying the
 /// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)
@@ -63,7 +60,7 @@ pub fn privileged() -> anyhow::Result<bool> {
                     "--allow-user-interaction",
                     "--process",
                     &format!("{}", getpid().as_raw()),
-                ])?
+                ])
                 .mode(user::Mode::Real)
                 .preserve_env(true)
                 .error(spawn::StreamMode::Discard)
@@ -98,7 +95,7 @@ pub fn logger(record: &Record, level: Level) -> bool {
                 &format!("{}", record.args()),
                 "--urgency",
                 &format!("{}", level_urgency(level)),
-            ])?
+            ])
             .spawn()?
             .wait_blocking()?;
         if code != 0 {
@@ -121,14 +118,6 @@ where
     ret
 }
 
-/// The user dir is where the instance information is stored.
-#[inline]
-pub fn user_dir(instance: &str) -> PathBuf {
-    PathBuf::from(RUNTIME_DIR.as_path())
-        .join("antimony")
-        .join(instance)
-}
-
 /// Get where direct files should be placed.
 #[inline]
 pub fn direct_path(file: &str) -> PathBuf {
@@ -145,7 +134,7 @@ macro_rules! timer {
             log::debug!("Starting {}", $name);
             let start = std::time::Instant::now();
             let result = $body;
-            log::info!("{}: {}us", $name, start.elapsed().as_micros());
+            log::info!("{}: {}us", $name, start.elapsed().as_micros(),);
             result
         }
 
@@ -159,7 +148,7 @@ macro_rules! timer {
             log::debug!("Starting {}", $name);
             let start = std::time::Instant::now();
             let result = $expr;
-            log::info!("{}: {}us", $name, start.elapsed().as_micros());
+            log::info!("{}: {}us", $name, start.elapsed().as_micros(),);
             result
         }
 

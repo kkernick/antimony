@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     let passthrough = cli.passthrough.unwrap_or_default();
 
     let root = Spawner::new("git")?
-        .args(["rev-parse", "--show-toplevel"])?
+        .args(["rev-parse", "--show-toplevel"])
         .output(StreamMode::Pipe)
         .error(StreamMode::Discard)
         .spawn()?
@@ -66,16 +66,16 @@ fn main() -> Result<()> {
     if cli.recipe == "pgo" {
         eprintln!("Compiling instrumented binary");
         Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
+            .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
-            .env("RUST_LOG", "")?
+            .env("RUST_LOG", "")
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
-            .args(cargo_flags.clone())?
-            .args(["pgo", "build", "--", "--target", target])?
-            .args(post_flags.clone())?
-            .args(&passthrough)?
+            .args(cargo_flags.clone())
+            .args(["pgo", "build", "--", "--target", target])
+            .args(post_flags.clone())
+            .args(&passthrough)
             .spawn()?
             .wait()?;
 
@@ -84,13 +84,13 @@ fn main() -> Result<()> {
 
         eprintln!("Performing Refresh Profiling");
         Spawner::abs(&instrumented)
-            .args(["refresh", "--hard"])?
+            .args(["refresh", "--hard"])
             .new_privileges(true)
             .preserve_env(true)
             .env(
                 "LLVM_PROFILE_FILE",
                 format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
-            )?
+            )
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
             .spawn()?
@@ -109,14 +109,14 @@ fn main() -> Result<()> {
 
         eprintln!("Peforming Benchmark Profiling");
         Spawner::abs(format!("{root}/scripts/cargo-bencher"))
-            .args(profiles)?
-            .args(["--recipe", &instrumented, "--bench", "real"])?
+            .args(profiles)
+            .args(["--recipe", &instrumented, "--bench", "real"])
             .new_privileges(true)
             .preserve_env(true)
             .env(
                 "LLVM_PROFILE_FILE",
                 format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
-            )?
+            )
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
             .spawn()?
@@ -124,13 +124,13 @@ fn main() -> Result<()> {
 
         eprintln!("Compiling Final Binary");
         Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
+            .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
-            .env("RUST_LOG", "")?
+            .env("RUST_LOG", "")
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
-            .args(cargo_flags)?
+            .args(cargo_flags)
             .args([
                 "pgo",
                 "optimize",
@@ -139,22 +139,22 @@ fn main() -> Result<()> {
                 "--target",
                 target,
                 "--workspace",
-            ])?
-            .args(post_flags)?
-            .args(&passthrough)?
+            ])
+            .args(post_flags)
+            .args(&passthrough)
             .spawn()?
             .wait()?;
     } else {
         eprintln!("Compiling Binary");
         Spawner::new("cargo")?
-            .env("RUSTFLAGS", rust_flags.join(" "))?
+            .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
-            .args(cargo_flags)?
-            .arg("build")?
-            .args(["--target", target, "--workspace", "--profile", &cli.recipe])?
-            .args(post_flags)?
-            .args(&passthrough)?
+            .args(cargo_flags)
+            .arg("build")
+            .args(["--target", target, "--workspace", "--profile", &cli.recipe])
+            .args(post_flags)
+            .args(&passthrough)
             .error(StreamMode::Log(log::Level::Warn))
             .output(StreamMode::Log(log::Level::Info))
             .spawn()?

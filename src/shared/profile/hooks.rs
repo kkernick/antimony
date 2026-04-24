@@ -1,4 +1,5 @@
-use crate::{fab::resolve, shared::profile::append};
+use crate::fab::resolve;
+use bilrost::{Enumeration, Message};
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
@@ -38,14 +39,16 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
-    pub pre: Option<Vec<Hook>>,
+    #[serde(default = "Vec::default")]
+    pub pre: Vec<Hook>,
 
     /// Post-Hooks are run on cleanup.
-    pub post: Option<Vec<Hook>>,
+    #[serde(default = "Vec::default")]
+    pub post: Vec<Hook>,
 
     /// The parent Hook is an Attached Pre-Hook who controls the lifespan of the
     /// sandbox. When the parent dies, the sandbox does.
@@ -58,10 +61,10 @@ pub struct Hooks {
 }
 impl Hooks {
     /// Merge two Hooks together.
-    pub fn merge(&mut self, hooks: Self) {
+    pub fn merge(&mut self, mut hooks: Self) {
         if self.inherit.unwrap_or(true) {
-            append(&mut self.pre, hooks.pre);
-            append(&mut self.post, hooks.post);
+            self.pre.append(&mut hooks.pre);
+            self.post.append(&mut hooks.post);
 
             if self.parent.is_none() {
                 self.parent = hooks.parent;
@@ -70,11 +73,11 @@ impl Hooks {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Enumeration)]
 pub enum Type {
-    Shell,
-    Program,
-    Profile,
+    Shell = 0,
+    Program = 1,
+    Profile = 2,
 }
 
 /// A Hook is a program run in coordination with the profile.
@@ -83,7 +86,7 @@ pub enum Type {
 ///     ANTIMONY_NAME: The name of the current profile.
 ///     ANTIMONY_HOME: The path to the home folder, if it exists.
 ///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
     /// An optional name to identify the process.
@@ -99,7 +102,8 @@ pub struct Hook {
     pub content: String,
 
     /// A list of arguments to be passed to the hook
-    pub arguments: Option<Vec<String>>,
+    #[serde(default = "Vec::default")]
+    pub arguments: Vec<String>,
 
     /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside
     /// the sandbox. If false, the program waits for the hook to terminate before launching
@@ -129,7 +133,7 @@ pub struct Hook {
 impl Hook {
     /// Process the hook.
     pub fn process(
-        self,
+        &mut self,
         main: Option<Spawner>,
         name: &str,
         cache: &str,
@@ -141,37 +145,35 @@ impl Hook {
             Type::Shell | Type::Program => {
                 let handle = match self.t {
                     Type::Shell => {
-                        Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])?
+                        Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])
                     }
-                    Type::Program => Spawner::new(resolve(Cow::Owned(self.content)))?,
+                    Type::Program => Spawner::new(resolve(Cow::Borrowed(&self.content)))?,
                     _ => unreachable!(),
                 }
                 .mode(user::Mode::Real)
                 .preserve_env(self.env.unwrap_or(false))
-                .env("ANTIMONY_NAME", name)?
-                .env("ANTIMONY_CACHE", cache)?
-                .env("ANTIMONY_INSTANCE", instance)?;
+                .env("ANTIMONY_NAME", name)
+                .env("ANTIMONY_CACHE", cache)
+                .env("ANTIMONY_INSTANCE", instance);
 
                 if self.new_privileges.unwrap_or(false) {
                     handle.new_privileges_i(true);
                 }
                 if let Some(home) = home {
-                    handle.env_i("ANTIMONY_HOME", home)?;
+                    handle.env_i("ANTIMONY_HOME", home);
                 }
 
                 handle
             }
 
             Type::Profile => Spawner::abs("/usr/bin/antimony")
-                .args(["run", self.content.as_str()])?
+                .args(["run", self.content.as_str()])
                 .new_privileges(true)
                 .preserve_env(true)
                 .mode(user::Mode::Original),
         }
-        .name(&self.name.unwrap_or("hook".to_string()));
-        if let Some(args) = self.arguments {
-            handle.args_i(args)?;
-        }
+        .name(self.name.get_or_insert_with(|| "hook".to_string()));
+        handle.args_i(self.arguments.drain(..));
 
         if parent {
             if let Some(main) = main {

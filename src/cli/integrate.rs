@@ -64,7 +64,7 @@ impl cli::Run for Args {
     fn run(self) -> Result<()> {
         if self.remove {
             let profile = match Profile::new(&self.profile, None, None, false) {
-                Ok(profile) => profile,
+                Ok(profile) => profile.0,
                 Err(_) => Profile {
                     path: Some(self.profile.clone()),
                     ..Default::default()
@@ -74,7 +74,7 @@ impl cli::Run for Args {
             // Load directly, since we can remove profiles that don't exist
             remove(&profile, self)
         } else {
-            integrate(&Profile::new(&self.profile, None, None, false)?, self)
+            integrate(&Profile::new(&self.profile, None, None, false)?.0, self)
         }
     }
 }

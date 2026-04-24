@@ -96,7 +96,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
 
         match policy {
             HomePolicy::Enabled => {
-                args.handle.args_i(["--bind", &home_str, dest])?;
+                args.handle.args_i(["--bind", &home_str, dest]);
             }
             _ => {
                 if policy == HomePolicy::Overlay {
@@ -104,7 +104,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 args.handle.args_i([
                                     "--overlay-src", &home_str,
                                     "--tmp-overlay", dest,
-                                ])?;
+                                ]);
                 } else {
                     let work = args.sys_dir.join("work");
                     let work_str = work.to_string_lossy();
@@ -115,7 +115,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                     "--overlay-src", &work_str,
                                     "--overlay-src", &home_str,
                                     "--ro-overlay", dest,
-                                ])?;
+                                ]);
                 }
             }
         }

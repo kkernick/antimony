@@ -10,20 +10,21 @@ pub mod ns;
 use crate::{
     fab::lib::{ROOTS, WildcardFilter},
     shared::{
-        ThreadSet,
+        Set,
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
 };
 use anyhow::Result;
+use bilrost::{Message, OwnedMessage};
 use log::debug;
 use rayon::prelude::*;
-use serde::{Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
+    fmt::Debug,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
@@ -43,11 +44,17 @@ pub struct FabInfo<'a> {
     pub sys_dir: &'a Path,
 }
 
+#[derive(Message, Debug)]
+struct Cache {
+    cache: Set<String>,
+}
+
 /// Get cached definitions.
 #[inline]
-fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Option<T>> {
-    if let Ok(bytes) = CACHE_STORE.with_borrow(|s| s.bytes(&name.replace("/", "-"), object)) {
-        Ok(Some(postcard::from_bytes(&bytes)?))
+fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
+    if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace("/", "-"), object) {
+        let content = T::decode(bytes.as_slice())?;
+        Ok(Some(content))
     } else {
         Ok(None)
     }
@@ -55,10 +62,12 @@ fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Option<T
 
 /// Write the cache file.
 #[inline]
-fn write_cache<T: Serialize>(name: &str, content: &T, object: Object) -> Result<()> {
-    let bytes = postcard::to_stdvec(content)?;
-    CACHE_STORE.with_borrow(|s| s.dump(&name.replace("/", "-"), object, &bytes))?;
-    Ok(())
+fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
+    let bytes = content.encode_to_bytes();
+    CACHE_STORE
+        .borrow()
+        .dump(&name.replace("/", "-"), object, &bytes)?;
+    Ok(content)
 }
 
 #[inline]
@@ -79,10 +88,10 @@ fn elf_filter(path: &str) -> bool {
 }
 
 #[inline(always)]
-pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
+pub fn ldd(path: &str) -> Result<Set<String>> {
     if elf_filter(path) {
         Ok(Spawner::abs("/usr/bin/ldd")
-            .arg(path)?
+            .arg(path)
             .output(StreamMode::Pipe)
             .error(StreamMode::Discard)
             .mode(user::Mode::Real)
@@ -120,7 +129,7 @@ pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
             })
             .collect())
     } else {
-        Ok(ThreadSet::default())
+        Ok(Set::default())
     }
 }
 
@@ -131,13 +140,13 @@ pub fn ldd(path: &str) -> Result<ThreadSet<String>> {
 /// ```rust
 /// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
 /// ```
-pub fn get_dir(dir: &str) -> Result<ThreadSet<String>> {
-    if let Ok(Some(libraries)) = get_cache(dir, Object::Directories) {
-        return Ok(libraries);
+pub fn get_dir(dir: &str) -> Result<Set<String>> {
+    if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
+        return Ok(libraries.cache);
     }
 
-    let libraries: ThreadSet<String> = Spawner::abs("/usr/bin/find")
-        .args([dir, "-executable", "-type", "f", "-o", "-name", "*.so*"])?
+    let libraries: Set<String> = Spawner::abs("/usr/bin/find")
+        .args([dir, "-executable", "-type", "f", "-o", "-name", "*.so*"])
         .output(StreamMode::Pipe)
         .mode(user::Mode::Real)
         .spawn()?
@@ -148,8 +157,7 @@ pub fn get_dir(dir: &str) -> Result<ThreadSet<String>> {
         .flatten()
         .collect();
 
-    write_cache(dir, &libraries, Object::Directories)?;
-    Ok(libraries)
+    Ok(write_cache(dir, Cache { cache: libraries }, Object::Directories)?.cache)
 }
 
 /// Find all matches in a directory. We only match the top level for performance considerations.
@@ -159,27 +167,23 @@ pub fn get_dir(dir: &str) -> Result<ThreadSet<String>> {
 /// ```rust
 /// antimony::fab::get_wildcards("glib*", true).expect("Failed to find Glib");
 /// ```
-pub fn get_wildcards(
-    pattern: &str,
-    lib: bool,
-    filter: WildcardFilter,
-) -> Result<ThreadSet<String>> {
-    let run = |dir: &str, base: &str| -> Result<ThreadSet<String>> {
-        let handle = Spawner::abs("/usr/bin/find").arg(dir)?;
+pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
+    let run = |dir: &str, base: &str| -> Result<Set<String>> {
+        let handle = Spawner::abs("/usr/bin/find").arg(dir);
 
         if base.contains("/") {
             let whole = PathBuf::from(format!("{dir}/{base}"));
             if !whole.parent().unwrap().exists() {
-                return Ok(ThreadSet::default());
+                return Ok(Set::default());
             }
             let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
-            handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()])?;
+            handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()]);
         } else {
-            handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base])?;
+            handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base]);
         }
 
         Ok(handle
-            .args(["-type", filter.find_filter()])?
+            .args(["-type", filter.find_filter()])
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?
@@ -189,8 +193,8 @@ pub fn get_wildcards(
             .collect())
     };
 
-    if let Some(libraries) = get_cache(pattern, Object::Wildcards)? {
-        return Ok(libraries);
+    if let Some(libraries) = get_cache::<Cache>(pattern, Object::Wildcards)? {
+        return Ok(libraries.cache);
     }
 
     // If we have a direct path, call `find /path/to/parent -name file*`
@@ -200,7 +204,7 @@ pub fn get_wildcards(
 
     // If we're looking for libraries, check each library root.
     } else if lib {
-        let mut libraries = ThreadSet::default();
+        let mut libraries = Set::default();
         for root in ROOTS.iter() {
             if let Ok(lib) = run(&root, pattern) {
                 libraries.extend(lib);
@@ -213,8 +217,7 @@ pub fn get_wildcards(
         run("/usr/bin", pattern)?
     };
 
-    write_cache(pattern, &libraries, Object::Wildcards)?;
-    Ok(libraries)
+    Ok(write_cache(pattern, Cache { cache: libraries }, Object::Wildcards)?.cache)
 }
 
 /// LDD a path.
@@ -227,13 +230,12 @@ pub fn get_wildcards(
 ///
 /// get_libraries(Cow::Borrowed("/proc/self/exe")).expect("Failed to LDD self");
 /// ```
-pub fn get_libraries(path: &str) -> Result<ThreadSet<String>> {
-    let libraries = if let Ok(Some(libraries)) = get_cache(path, Object::Libraries) {
-        libraries
+pub fn get_libraries(path: &str) -> Result<Set<String>> {
+    let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
+        libraries.cache
     } else {
         let libraries = ldd(path)?;
-        write_cache(path, &libraries, Object::Libraries)?;
-        libraries
+        write_cache(path, Cache { cache: libraries }, Object::Libraries)?.cache
     };
 
     Ok(libraries)

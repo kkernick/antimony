@@ -8,13 +8,12 @@
 use crate::{
     fab::{get_dir, get_libraries, get_wildcards, in_lib, localize_home},
     shared::{
-        Set, StableSet, ThreadSet,
+        Set, StaticHash, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
     },
     timer,
 };
-use ahash::RandomState;
 use anyhow::Result;
 use dashmap::iter_set::OwningIter;
 use log::{debug, error, warn};
@@ -85,14 +84,14 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
         let path = PathBuf::from(format!("{sof}{}", root.as_str()));
         if path.exists() {
             if sof.is_empty() {
-                handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()])?;
+                handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()]);
             } else {
                 handle.args_i([
                     "--overlay-src",
                     path.to_str().unwrap(),
                     "--tmp-overlay",
                     root.as_ref(),
-                ])?;
+                ]);
             }
         }
         Ok(())
@@ -110,7 +109,7 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
             if let Some(str) = link.to_str()
                 && ROOTS.contains(str)
             {
-                handle.args_i(["--symlink", str, root])?;
+                handle.args_i(["--symlink", str, root]);
             }
         }
     }
@@ -133,10 +132,7 @@ impl WildcardFilter {
 }
 
 #[inline(always)]
-fn resolve_wildcards(
-    set: StableSet<String>,
-    filter: WildcardFilter,
-) -> OwningIter<String, RandomState> {
+fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<String, StaticHash> {
     let resolved = ThreadSet::default();
 
     let (wildcards, flat): (Set<_>, Set<_>) = timer!(
@@ -213,7 +209,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     })
     .for_each(|path| {
         if no_sof {
-            let _ = info.handle.args_i(["--ro-bind", &path, &path]);
+            info.handle.args_i(["--ro-bind", &path, &path]);
         } else {
             info.profile
                 .libraries
@@ -316,7 +312,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                     if in_lib(library) {
                         true
                     } else {
-                        let _ = info.handle.args_i([
+                        info.handle.args_i([
                             if library.starts_with("/home/") {
                                 "--bind"
                             } else {
@@ -357,7 +353,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                     },
                     dir.as_ref(),
                     localize_home(dir.as_ref()).as_ref(),
-                ])?;
+                ]);
                 Ok(())
             })?;
         });

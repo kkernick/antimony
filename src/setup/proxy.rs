@@ -8,10 +8,9 @@ use crate::{
     },
     setup::syscalls,
     shared::{
-        StableSet,
+        Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         profile::{Profile, ipc::Portal, ns::Namespace},
-        user_dir,
     },
     timer,
 };
@@ -28,13 +27,14 @@ use std::{
     os::fd::AsRawFd,
     path::Path,
 };
+use temp::Temp;
 use user::as_real;
 
 /// Get the Spawner used to run Proxy.
 pub fn run(
     sys_dir: &Path,
     profile: &Profile,
-    instance: &str,
+    instance: &Temp,
     info: &Path,
     id: &str,
 ) -> Result<Spawner> {
@@ -42,7 +42,7 @@ pub fn run(
     let cache = CACHE_DIR.join(".proxy");
     let sof = cache.join("sof");
     let app_dir = RUNTIME_DIR.join("app").join(id);
-    let proxy = user_dir(instance).join("proxy");
+    let proxy = instance.full().join("proxy");
 
     timer!("::directory_setup", {
         as_real!(Result<()>, {
@@ -92,7 +92,7 @@ pub fn run(
             "--ro-bind", &info.to_string_lossy(), "/.flatpak-info",
             "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
             "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
-        ])?;
+        ]);
 
         let sof_str = sof.to_string_lossy();
         mount_roots(&sof_str, &proxy)?;
@@ -106,10 +106,10 @@ pub fn run(
             &env::var("DBUS_SESSION_BUS_ADDRESS")?,
             &app_dir.join("bus").to_string_lossy(),
             "--filter",
-        ])?;
+        ]);
 
         if log::log_enabled!(log::Level::Debug) {
-            proxy.arg_i("--log")?;
+            proxy.arg_i("--log");
             proxy.output_i(StreamMode::Log(log::Level::Debug));
         }
     });
@@ -136,29 +136,29 @@ pub fn run(
                         format!(
                             "--call={desktop}=org.freedesktop.DBus.Introspectable.Introspect@{path}"
                         ),
-                    ])?;
+                    ]);
 
                     for portal in &ipc.portals {
                         if portal == &Portal::Settings {
-                            proxy.arg_i(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"))?;
+                            proxy.arg_i(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"));
                         }
                         proxy.args_i([
                             format!("--call={desktop}=org.freedesktop.portal.{portal}.*@{path}"),
                             format!("--talk=org.freedesktop.portal.{portal}"),
-                        ])?;
+                        ]);
                     }
                 }
                 for portal in &ipc.sees {
-                    proxy.args_i([format!("--see={portal}"), permit_call(portal)])?;
+                    proxy.args_i([format!("--see={portal}"), permit_call(portal)]);
                 }
                 for portal in &ipc.talks {
-                    proxy.args_i([format!("--talk={portal}"), permit_call(portal)])?;
+                    proxy.args_i([format!("--talk={portal}"), permit_call(portal)]);
                 }
                 for portal in &ipc.owns {
-                    proxy.args_i([format!("--own={portal}"), permit_call(portal)])?;
+                    proxy.args_i([format!("--own={portal}"), permit_call(portal)]);
                 }
                 for portal in &ipc.calls {
-                    proxy.arg_i(format!("--call={portal}"))?;
+                    proxy.arg_i(format!("--call={portal}"));
                 }
             }
             proxy.cache_write(&cache)?;
@@ -190,14 +190,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             "--ro-bind",
             "/var/run/dbus/system_bus_socket",
             "/var/run/dbus/system_bus_socket",
-        ])?;
+        ]);
     }
 
-    let instance = args.instance.name();
     let id = &args.id;
     let instance_dir = args.instance.full();
     let instance_dir_str = instance_dir.to_string_lossy();
-    let info = user_dir(instance).join(".flatpak-info");
+    let info = instance_dir.join(".flatpak-info");
 
     debug!("Setting up user bus");
     // Either mount the bus directly
@@ -206,19 +205,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             "--ro-bind",
             &format!("{}/bus", RUNTIME_STR.as_str()),
             &format!("{}/bus", RUNTIME_STR.as_str()),
-        ])?;
+        ]);
 
     // Or mediate via the proxy.
     } else {
         let proxy = timer!(
             "::run",
-            run(
-                &args.sys_dir,
-                &args.profile,
-                args.instance.name(),
-                &info,
-                id,
-            )
+            run(&args.sys_dir, &args.profile, args.instance, &info, id)
         )?;
 
         if !args.args.dry {
@@ -228,9 +221,9 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 timer!("::seccomp", {
                     syscalls::install_filter(
                         "xdg-dbus-proxy",
-                        instance,
+                        args.instance,
                         policy,
-                        &StableSet::default(),
+                        &Set::default(),
                         &proxy,
                         &args.handle,
                         false,
@@ -248,7 +241,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     "[Application]",
                     &format!("name={id}"),
                     "[Instance]",
-                    &format!("instance-id={instance}"),
+                    &format!("instance-id={}", args.instance.name()),
                     "app-path=/usr",
                     "[Context]",
                     "sockets=session-bus;system-bus;",
@@ -277,12 +270,12 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
                     "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
                     "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-                ])?;
+                ]);
             });
 
             timer!("::flapak_dir", {
                 debug!("Creating flatpak directory");
-                let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(instance);
+                let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(args.instance.name());
 
                 let file = as_real!(Result<File>, {
                     if !flatpak_dir.exists() {
@@ -293,17 +286,18 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 })??;
 
                 args.handle
-                    .args_i(["--json-status-fd", &format!("{}", file.as_raw_fd())])?;
+                    .args_i(["--json-status-fd", &format!("{}", file.as_raw_fd())]);
                 args.handle.fd_i(file);
             });
 
             // Watch for the proxy to expose its bus to give to the sandbox.
             debug!("Creating proxy watch");
             as_real!(Result<()>, {
-                args.watches.insert(args.inotify.watches().add(
-                    user_dir(args.instance.name()).join("proxy"),
-                    WatchMask::CREATE,
-                )?);
+                args.watches.insert(
+                    args.inotify
+                        .watches()
+                        .add(instance_dir.join("proxy"), WatchMask::CREATE)?,
+                );
                 Ok(())
             })??;
 
@@ -314,7 +308,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             "--ro-bind",
             &format!("{instance_dir_str}/proxy/bus"),
             &format!("{runtime}/bus"),
-        ])?;
+        ]);
     }
 
     Ok(())

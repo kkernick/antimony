@@ -169,16 +169,15 @@ impl Temp {
     /// with the caller, such that the Link will be deleted with the Object.
     pub fn link(
         &mut self,
-        link: impl Into<PathBuf>,
+        link: &Path,
 
         #[cfg(feature = "user")] mode: user::Mode,
     ) -> Result<(), Error> {
-        let link = link.into();
         if let Some(parent) = link.parent()
             && let Some(name) = link.file_name()
         {
             #[cfg(feature = "user")]
-            user::run_as!(mode, { symlink(self.object.full(), &link) })
+            user::run_as!(mode, { symlink(self.object.full(), link) })
                 .expect("Failed to switch user!")?;
 
             #[cfg(not(feature = "user"))]

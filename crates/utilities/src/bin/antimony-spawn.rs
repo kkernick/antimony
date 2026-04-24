@@ -134,17 +134,17 @@ fn main() -> Result<()> {
         info.handle.args_i([
             "--ro-bind", "/etc", "/etc",
             "--ro-bind", "/usr/share", "/usr/share",
-        ])?;
+        ]);
 
         // Post and spawn.
-        info.handle.arg_i(info.profile.app_path(&info.name))?;
-        info.handle.args_i(info.post)?;
+        info.handle.arg_i(info.profile.app_path(&info.name));
+        info.handle.args_i(info.post);
         info.handle.spawn()?
     } else {
         // If --host, or no --sandbox, just spawn the command.
         let handle = Spawner::new(cli.command)?;
         if let Some(passthrough) = cli.passthrough {
-            handle.args_i(passthrough)?;
+            handle.args_i(passthrough);
         }
         if let Some(fds) = cli.forward_fd {
             for fd in fds {

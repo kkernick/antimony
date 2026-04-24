@@ -3,7 +3,10 @@
 use crate::shared::config::CONFIG_FILE;
 use anyhow::Result;
 use log::{debug, warn};
-use nix::libc::getpwuid;
+use nix::{
+    libc::getpwuid,
+    unistd::{AccessFlags, access},
+};
 use std::{
     env::{self, temp_dir},
     ffi::CString,
@@ -32,26 +35,11 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 /// The Cache Dir is where cache and SOF is stored. It usually defaults to within AT_HOME.
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
-    let writeable = || -> anyhow::Result<()> {
-        if CONFIG_FILE.force_temp() {
-            return Err(anyhow::anyhow!("Temporary cache enforced"));
-        } else {
-            if !cache_dir.exists() {
-                as_effective!(fs::create_dir(&cache_dir))??;
-            } else {
-                temp::Builder::new()
-                    .within(&cache_dir)
-                    .owner(user::Mode::Effective)
-                    .name(".test")
-                    .create::<temp::File>()?;
-            }
-        }
-        Ok(())
-    }();
-
-    if let Err(e) = writeable {
+    if CONFIG_FILE.force_temp()
+        || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err()).unwrap()
+    {
         debug!(
-            "Cache dir ({}) not-writable: {e}. Pivoting to /tmp",
+            "Cache dir ({}) not-writable. Pivoting to /tmp",
             cache_dir.display()
         );
         cache_dir = temp_dir().join(format!("antimony-{}", USER.effective.as_raw()));

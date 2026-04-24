@@ -2,11 +2,8 @@
 //! Database to be used for profile generation.
 
 use antimony::shared::{
-    self, Set, ThreadMap,
-    env::{DATA_HOME, RUNTIME_DIR},
-    format_iter,
-    profile::seccomp::SeccompPolicy,
-    syscalls, utility,
+    self, Set, ThreadMap, env::DATA_HOME, format_iter, profile::seccomp::SeccompPolicy, syscalls,
+    utility,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -39,7 +36,7 @@ use std::{
         fd::{AsFd, AsRawFd, OwnedFd},
         unix::net::UnixListener,
     },
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -317,7 +314,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
         "--action", "Allow",
         "--action", "Deny",
         "--action", "Kill"
-    ])?
+    ])
     .mode(user::Mode::Real)
     .output(StreamMode::Pipe)
     .pass_env("DBUS_SESSION_BUS_ADDRESS")?
@@ -542,10 +539,7 @@ fn main() -> Result<()> {
     user::set(user::Mode::Real)?;
 
     // All binaries use the same monitor for a profile (IE proxy and sandbox)
-    let monitor_path = RUNTIME_DIR
-        .join("antimony")
-        .join(&cli.instance)
-        .join("monitor");
+    let monitor_path = PathBuf::from(cli.instance).join("monitor");
 
     if let Some(parent) = monitor_path.parent()
         && !parent.exists()
@@ -558,8 +552,8 @@ fn main() -> Result<()> {
     rayon::ThreadPoolBuilder::new().build_global()?;
 
     println!(
-        "SECCOMP Monitor Started! ({} at {} using {})",
-        cli.profile, cli.instance, cli.mode
+        "SECCOMP Monitor Started! ({} using {})",
+        cli.profile, cli.mode
     );
 
     // Setup the socket. We run this as the user.
@@ -639,8 +633,8 @@ fn main() -> Result<()> {
                     Ok(if path.starts_with("/home/antimony") {
                         let path = path.replace("/home/antimony", "*");
                         !Spawner::abs("/usr/bin/find")
-                            .arg(DATA_HOME.join("antimony").to_string_lossy())?
-                            .args(["-wholename", &path])?
+                            .arg(DATA_HOME.join("antimony").to_string_lossy())
+                            .args(["-wholename", &path])
                             .mode(user::Mode::Real)
                             .output(StreamMode::Pipe)
                             .spawn()?
@@ -700,7 +694,7 @@ fn main() -> Result<()> {
                             .with_context(|| "Updating profile")?;
                     }
                 }
- 
+
                 // Commit and flush.
                 tx.commit()?;
                 conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;

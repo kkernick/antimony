@@ -1,27 +1,28 @@
-use crate::{
-    cli,
-    shared::{StableMap, StableSet},
-};
+use crate::cli;
+use crate::shared::{Map, Set};
+use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// How a file should be exposed in the sandbox.
-#[derive(Debug, Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum)]
+#[derive(
+    Debug, Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum, Enumeration,
+)]
 #[serde(deny_unknown_fields)]
 pub enum FileMode {
     /// Only allow reads
     #[default]
     #[serde(rename = "ro")]
-    ReadOnly,
+    ReadOnly = 0,
 
     /// Allow writes.
     #[serde(rename = "rw")]
-    ReadWrite,
+    ReadWrite = 1,
 
     /// Executable files need to be created as copies, so that chmod will work
     /// correctly.
     #[serde(rename = "rx")]
-    Executable,
+    Executable = 2,
 }
 impl FileMode {
     /// Get the bwrap argument for binding this file.
@@ -71,10 +72,10 @@ pub static FILE_MODES: [FileMode; 3] = [
 ];
 
 /// For each file mode, we have a list of files.
-pub type FileList = StableMap<FileMode, StableSet<String>>;
+pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough
@@ -87,20 +88,20 @@ pub struct Files {
     pub temp: Vec<String>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub user: FileList,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub platform: FileList,
 
     /// Resource files are system files required by libraries/binaries.
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub resources: FileList,
 
     /// Direct files take a path, and file contents.
-    #[serde(skip_serializing_if = "StableMap::is_empty")]
-    pub direct: StableMap<FileMode, StableMap<String, String>>,
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub direct: Map<FileMode, Map<String, String>>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -112,7 +113,7 @@ impl Files {
         let mut user = files.user;
         let s_user = &mut self.user;
         for mode in FILE_MODES {
-            if let Some(map) = user.swap_remove(&mode) {
+            if let Some(map) = user.remove(&mode) {
                 s_user.entry(mode).or_default().extend(map);
             }
         }
@@ -121,7 +122,7 @@ impl Files {
         let s_user = &mut self.platform;
 
         for mode in FILE_MODES {
-            if let Some(map) = sys.swap_remove(&mode) {
+            if let Some(map) = sys.remove(&mode) {
                 s_user.entry(mode).or_default().extend(map);
             }
         }
@@ -129,7 +130,7 @@ impl Files {
         let mut sys = files.resources;
         let s_user = &mut self.resources;
         for mode in FILE_MODES {
-            if let Some(map) = sys.swap_remove(&mode) {
+            if let Some(map) = sys.remove(&mode) {
                 s_user.entry(mode).or_default().extend(map);
             }
         }
@@ -137,7 +138,7 @@ impl Files {
         let mut direct = files.direct;
         let s_user = &mut self.direct;
         for mode in FILE_MODES {
-            if let Some(map) = direct.swap_remove(&mode) {
+            if let Some(map) = direct.remove(&mode) {
                 s_user.entry(mode).or_default().extend(map);
             }
         }

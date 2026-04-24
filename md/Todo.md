@@ -20,9 +20,11 @@
 		* You end up having to do a lot of manual work, so a dedicated setup doesn’t have much utility
 	* [ ] Command completion for loading profiles (IE antimony run ch + tab → chromium)
 	* [x] Integrate should require a path to add, but not to remove
-	* [ ] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
-	* [ ] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
+	* [x] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
+	* [x] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
 	* [ ] `info` should be able to dump SECCOMP info, too.
+	* [x] Migrate instance information entirely in `RUNTIME`. `HASH/INSTANCE`. No symlink.
+	* [x] Profile `HASH` should incorporate config/other info before hashing, so they’re consistently named.
 * [ ] Ensure Steam Works
 * [ ] Ensure Ubuntu Works
 	* [x] Antimony AppArmor Profile

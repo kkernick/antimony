@@ -15,7 +15,7 @@ use std::borrow::Cow;
 fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: bool) -> Result<()> {
     match localize_path(file, home)? {
         (Some(source), dest) => {
-            Ok(handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])?)
+            handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])
         }
         (None, dest) => {
             let resolved = if home && !file.starts_with("/home") {
@@ -23,10 +23,10 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
             } else {
                 Cow::Borrowed(file)
             };
-
-            Ok(handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)])?)
+            handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)])
         }
     }
+    Ok(())
 }
 
 pub fn fabricate(info: &super::FabInfo) -> Result<()> {
@@ -34,25 +34,22 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
 
     if let Some(files) = &info.profile.files {
         for temp in &files.temp {
-            info.handle.args_i(["--tmpfs", temp])?;
+            info.handle.args_i(["--tmpfs", temp]);
         }
 
         if !lockdown {
             let user_files = &files.user;
             for mode in FILE_MODES {
                 if let Some(files) = user_files.get(&mode) {
-                    files
-                        .into_par_iter()
-                        .try_for_each(|file| {
-                            localize(
-                                mode,
-                                &file.replace("~", HOME.as_str()),
-                                true,
-                                info.handle,
-                                true,
-                            )
-                        })
-                        .ok();
+                    files.into_par_iter().try_for_each(|file| {
+                        localize(
+                            mode,
+                            &file.replace("~", HOME.as_str()),
+                            true,
+                            info.handle,
+                            true,
+                        )
+                    })?;
                 }
             }
         }
@@ -62,8 +59,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             if let Some(files) = system.get(&mode) {
                 files
                     .into_par_iter()
-                    .try_for_each(|file| localize(mode, file, false, info.handle, true))
-                    .ok();
+                    .try_for_each(|file| localize(mode, file, false, info.handle, true))?;
             }
         }
 
@@ -72,8 +68,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
             if let Some(files) = system.get(&mode) {
                 files
                     .into_par_iter()
-                    .try_for_each(|file| localize(mode, file, false, info.handle, false))
-                    .ok();
+                    .try_for_each(|file| localize(mode, file, false, info.handle, false))?;
             }
         }
     }

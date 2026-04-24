@@ -16,15 +16,6 @@ pub use spawn::Error as SpawnError;
 pub use spawn::Spawner;
 pub use spawn::StreamMode;
 
-#[cfg(feature = "fork")]
-pub use fork::Error as ForkError;
-
-#[cfg(feature = "fork")]
-pub use fork::Fork;
-
-#[cfg(feature = "fork")]
-mod fork;
-
 /// An OwnedFd pointing to /dev/null, duplicated for
 /// StreamMode::Discard.
 static NULL: LazyLock<OwnedFd> = LazyLock::new(|| {

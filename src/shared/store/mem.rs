@@ -4,10 +4,11 @@
 //! actual backing store all in one go.
 
 use crate::shared::{
-    Map, Set, ThreadMap,
+    Map, Set,
     store::{BackingStore, CACHE_STORE, OBJECTS, Object},
 };
 use common::cache::{self, CacheStatic};
+use dashmap::DashMap;
 use log::debug;
 use std::{any::Any, sync::LazyLock};
 
@@ -15,17 +16,16 @@ type Table = Map<String, Vec<u8>>;
 
 #[inline]
 pub fn flush() {
-    CACHE_STORE.with_borrow(|s| {
-        if let Some(cache) = s.as_any().downcast_ref::<Store>() {
-            let _ = cache.flush();
-        }
-    })
+    let store = CACHE_STORE.borrow();
+    if let Some(cache) = store.as_any().downcast_ref::<Store>() {
+        let _ = cache.flush();
+    }
 }
 
 /// The cache store.
-static CACHE: CacheStatic<String, ThreadMap<Object, Table>> = LazyLock::new(ThreadMap::default);
+static CACHE: CacheStatic<String, DashMap<Object, Table>> = LazyLock::new(DashMap::default);
 
-static MEM_STORE: LazyLock<cache::Cache<String, ThreadMap<Object, Table>>> =
+static MEM_STORE: LazyLock<cache::Cache<String, DashMap<Object, Table>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
 /// The File Store
@@ -47,7 +47,7 @@ impl Store {
     /// is false, only memory is checked.
     pub fn new(name: &str, backend: Box<dyn BackingStore>, read: bool) -> Self {
         if MEM_STORE.get(name).is_none() {
-            MEM_STORE.insert(name.to_string(), ThreadMap::default());
+            MEM_STORE.insert(name.to_string(), DashMap::default());
             let db = MEM_STORE.get(name).unwrap();
             for object in super::OBJECTS {
                 db.insert(object, Map::default());

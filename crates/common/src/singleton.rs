@@ -22,7 +22,7 @@
 //! fn critical_write() {
 //!     // Acquire a lock
 //!     let _lock = common::singleton::Singleton::new();
-//!     println!("Rust already ensures only a single thread can write here, but we're being safe ;)");
+//!     !("Rust already ensures only a single thread can write here, but we're being safe ;)");
 //!
 //!     // Because we already have the Singleton in this thread, this instance will be none. The MutexGuard
 //!     // is held by the parent.

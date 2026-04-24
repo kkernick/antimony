@@ -1,0 +1,12 @@
+export EDITOR=tee
+PROFILE='path = "/usr/bin/bash"'
+
+echo "$PROFILE" | $ANTIMONY edit new_profile
+assert '[[ $? -eq 0 ]]'
+
+SAVED=$(env EDITOR=cat $ANTIMONY edit new_profile)
+assert '[[ $? -eq 0 ]]'
+assert '[[ "$SAVED" == "$PROFILE" ]]'
+
+yes | $ANTIMONY remove new_profile
+assert '[[ $? -eq 0 ]]'

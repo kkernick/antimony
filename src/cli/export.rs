@@ -34,9 +34,9 @@ impl super::Run for Args {
         };
 
         let export = |name: &str| -> Result<()> {
-            let content = if let Ok(user) = USER_STORE.with_borrow(|s| s.fetch(name, table)) {
+            let content = if let Ok(user) = USER_STORE.borrow().fetch(name, table) {
                 user
-            } else if let Ok(system) = SYSTEM_STORE.with_borrow(|s| s.fetch(name, table)) {
+            } else if let Ok(system) = SYSTEM_STORE.borrow().fetch(name, table) {
                 system
             } else {
                 return Err(anyhow::anyhow!("No such {kind}: {name}"));
@@ -53,7 +53,7 @@ impl super::Run for Args {
         } else if let Some(object) = self.name {
             export(&object)
         } else {
-            for object in USER_STORE.with_borrow(|s| s.get(table))? {
+            for object in USER_STORE.borrow().get(table)? {
                 export(&object)?;
             }
             Ok(())

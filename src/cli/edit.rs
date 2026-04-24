@@ -31,19 +31,19 @@ impl cli::Run for Args {
             (Object::Profile, "profile")
         };
 
-        let user = USER_STORE.with_borrow(|s| s.fetch(&self.name, table));
-        let system = SYSTEM_STORE.with_borrow(|s| s.fetch(&self.name, table));
+        let user = USER_STORE.borrow().fetch(&self.name, table);
+        let system = SYSTEM_STORE.borrow().fetch(&self.name, table);
 
         let (buffer, new) = if let Ok(str) = user {
             (str, false)
         } else if let Ok(str) = system {
-            USER_STORE.with_borrow(|s| s.store(&self.name, table, &str))?;
+            USER_STORE.borrow().store(&self.name, table, &str)?;
             (str, true)
         } else {
             (
                 {
                     let str = fs::read_to_string(AT_CONFIG.join(kind).with_extension("toml"))?;
-                    USER_STORE.with_borrow(|s| s.store(&self.name, table, &str))?;
+                    USER_STORE.borrow().store(&self.name, table, &str)?;
                     str
                 },
                 true,
@@ -57,16 +57,16 @@ impl cli::Run for Args {
         };
 
         if let Some(out) = commit {
-            USER_STORE.with_borrow(|s| s.store(&self.name, table, &out))?;
+            USER_STORE.borrow().store(&self.name, table, &out)?;
             if self.name == "default" || self.feature {
-                println!(
+                eprintln!(
                     "{}",
                     style("Note: Profiles will not use your changes until you refresh them.")
                         .yellow()
                 );
             }
         } else if new {
-            USER_STORE.with_borrow(|s| s.remove(&self.name, table))?;
+            USER_STORE.borrow().remove(&self.name, table)?;
         }
 
         Ok(())

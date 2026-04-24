@@ -9,7 +9,7 @@ use crate::{
         localize_path, write_cache,
     },
     shared::{
-        Set, ThreadMap, ThreadSet, direct_path,
+        Map, Set, ThreadSet, direct_path,
         profile::{Profile, files::FileMode},
         store::Object,
         utility,
@@ -17,9 +17,10 @@ use crate::{
     timer,
 };
 use anyhow::{Context, Result};
-use log::{debug, info, warn};
+use bilrost::{Enumeration, Message};
+use log::{debug, warn};
+use parking_lot::Mutex;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -28,48 +29,55 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use temp::Temp;
 use user::as_real;
 use which::which;
 
+#[derive(Message, Debug)]
+struct Cache {
+    t: Type,
+    parse: ParseReturn,
+}
+
 /// The kind of thing we just analyzed.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Enumeration, Eq, PartialEq)]
 pub enum Type {
-    Elf,
-    File,
-    Script,
-    Link,
-    Directory,
-    Done,
-    None,
+    Elf = 0,
+    File = 1,
+    Script = 2,
+    Link = 3,
+    Directory = 4,
+    Done = 5,
+    None = 6,
 }
 
 /// Information returned from parse.
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, Message, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
-    pub elf: ThreadSet<String>,
+    pub elf: Set<String>,
 
     /// Regular files, which act as heuristics for library folders.
-    pub files: ThreadSet<String>,
+    pub files: Set<String>,
 
     /// Script files, which need no further parsing, but must be mounted.
-    pub scripts: ThreadSet<String>,
+    pub scripts: Set<String>,
 
     /// Symlinks
-    pub symlinks: ThreadMap<String, String>,
+    pub symlinks: Set<(String, String)>,
 
     /// Localized values
-    pub localized: ThreadMap<String, String>,
+    pub localized: Map<String, String>,
 
     /// Library directories.
-    pub directories: ThreadSet<String>,
+    pub directories: Set<String>,
 }
 impl ParseReturn {
     fn new() -> Self {
         Self::default()
     }
 
-    fn merge(global: &Self, cache: Self) {
+    fn merge(global: &mut Self, cache: Self) {
         for elf in cache.elf {
             global.elf.insert(elf);
         }
@@ -83,7 +91,7 @@ impl ParseReturn {
             global.directories.insert(dir);
         }
         for (k, v) in cache.symlinks {
-            global.symlinks.insert(k, v);
+            global.symlinks.insert((k, v));
         }
     }
 }
@@ -114,8 +122,8 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 /// Parses binaries, specifically for shell scripts.
 fn parse(
     path: &str,
-    instance: &str,
-    global: &ParseReturn,
+    instance: &Temp,
+    global: &Mutex<ParseReturn>,
     done: Arc<ThreadSet<String>>,
     mut include_self: bool,
 ) -> Result<Type> {
@@ -124,10 +132,11 @@ fn parse(
         return Ok(Type::Done);
     }
 
-    if let Ok(Some((t, cache))) = get_cache::<(Type, ParseReturn)>(path, Object::Binaries) {
+    if let Ok(Some(cache)) = get_cache::<Cache>(path, Object::Binaries) {
         debug!("Using cache");
-        ParseReturn::merge(global, cache);
-        return Ok(t);
+        let mut lock = global.lock();
+        ParseReturn::merge(&mut lock, cache.parse);
+        return Ok(cache.t);
     }
 
     let resolved = match resolve_bin(path) {
@@ -135,7 +144,7 @@ fn parse(
         Err(_) => return Ok(Type::None),
     };
 
-    let ret = ParseReturn::new();
+    let mut ret = ParseReturn::new();
 
     let dest = as_real!(Result<String>, {
         let mut dest = fs::read_link(resolved.as_ref())?;
@@ -160,7 +169,7 @@ fn parse(
                     ret.directories.insert(dest[..i].to_string());
                 }
 
-                ret.symlinks.insert(resolved.into_owned(), dest);
+                ret.symlinks.insert((resolved.into_owned(), dest));
             }
             Type::Link
         } else {
@@ -234,11 +243,12 @@ fn parse(
                             "--path",
                             &resolved,
                             "--instance",
-                            instance,
+                            &instance.full().to_string_lossy(),
                             "--filter",
                             "execve",
-                        ])?
+                        ])
                         .output(StreamMode::Pipe)
+                        .error(StreamMode::Discard)
                         .preserve_env(true)
                         .new_privileges(true)
                         .mode(user::Mode::Real)
@@ -263,9 +273,12 @@ fn parse(
         }
     };
 
-    write_cache(path, &(&t, &ret), Object::Binaries)?;
-    ParseReturn::merge(global, ret);
-    Ok(t)
+    let cache = write_cache(path, Cache { t, parse: ret }, Object::Binaries)?;
+    {
+        let mut lock = global.lock();
+        ParseReturn::merge(&mut lock, cache.parse);
+    }
+    Ok(cache.t)
 }
 
 /// Get the immediate parent within /usr/lib.
@@ -288,10 +301,10 @@ fn resolve_dir(path: &str) -> Result<Option<String>> {
 /// (IE the destination to a symlink).
 fn handle_localize(
     file: &str,
-    instance: &str,
+    instance: &Temp,
     home: bool,
     include_self: bool,
-    parsed: &ParseReturn,
+    parsed: &Mutex<ParseReturn>,
     done: Arc<ThreadSet<String>>,
 ) -> Result<()> {
     let file = which::which(file).unwrap_or(file);
@@ -301,14 +314,14 @@ fn handle_localize(
         } else {
             match parse(&src, instance, parsed, done.clone(), false)? {
                 Type::Script | Type::File | Type::Elf => {
-                    parsed.localized.insert(src.into_owned(), dst);
+                    parsed.lock().localized.insert(src.into_owned(), dst);
                 }
 
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
                     handle_localize(&ldst, instance, home, false, parsed, done.clone())?;
-                    parsed.symlinks.insert(dst, ldst);
+                    parsed.lock().symlinks.insert((dst, ldst));
                 }
                 _ => {}
             }
@@ -323,7 +336,12 @@ fn handle_localize(
 /// Collection takes all the binaries defined in the profiles, and parses them.
 /// This includes resolving wildcards, and parsing files tagged as Executable
 /// in the files header.
-pub fn collect(profile: &Profile, name: &str, instance: &str, parsed: &ParseReturn) -> Result<()> {
+pub fn collect(
+    profile: &Profile,
+    name: &str,
+    instance: &Temp,
+    parsed: &Mutex<ParseReturn>,
+) -> Result<()> {
     let resolved = Arc::new(ThreadSet::default());
     resolved.insert(profile.app_path(name).to_string());
 
@@ -419,26 +437,24 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
                 "--symlink", "/usr/bin", "/bin",
                 "--symlink", "/usr/sbin", "/sbin",
-            ])?;
+            ]);
             return Ok(());
         }
     }
 
-    info.handle.args_i(["--dir", "/usr/bin"])?;
+    info.handle.args_i(["--dir", "/usr/bin"]);
     let bin_cache = format!("{}-bin", info.instance.name());
     let parsed = match get_cache(&bin_cache, Object::Binaries) {
         Ok(Some(parsed)) => parsed,
         _ => {
-            let parsed = ParseReturn::new();
+            let parsed = Mutex::new(ParseReturn::new());
             timer!(
                 "::collect",
-                collect(info.profile, info.name, info.instance.name(), &parsed,)
+                collect(info.profile, info.name, info.instance, &parsed,)
             )?;
 
-            info!("Finished");
-            write_cache(&bin_cache, &parsed, Object::Binaries)?;
-            info!("Writting");
-            parsed
+            let parsed = parsed.into_inner();
+            write_cache(&bin_cache, parsed, Object::Binaries)?
         }
     };
 
@@ -448,7 +464,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     // to use LDD on depends.
     timer!("::elf", {
         parsed.elf.into_par_iter().try_for_each(|elf| {
-            info.handle.args_i(["--ro-bind", &elf, &elf])?;
+            info.handle.args_i(["--ro-bind", &elf, &elf]);
             elf_binaries.insert(elf.to_string());
             anyhow::Ok(())
         })?;
@@ -459,27 +475,26 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         parsed
             .scripts
             .into_par_iter()
-            .try_for_each(|script| info.handle.args_i(["--ro-bind", &script, &script]))?;
+            .for_each(|script| info.handle.args_i(["--ro-bind", &script, &script]));
     });
 
     timer!("::files", {
         parsed
             .files
             .into_par_iter()
-            .try_for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]))
-    })?;
+            .for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]))
+    });
 
     timer!("::localized", {
-        parsed
-            .localized
-            .into_par_iter()
-            .try_for_each(|(src, dst)| -> anyhow::Result<()> {
-                info.handle.args_i(["--ro-bind", &src, &dst])?;
+        parsed.localized.into_par_iter().try_for_each(
+            |(src, dst): (String, String)| -> anyhow::Result<()> {
+                info.handle.args_i(["--ro-bind", &src, &dst]);
                 if elf_filter(&src) {
                     elf_binaries.insert(src);
                 }
                 Ok(())
-            })
+            },
+        )
     })?;
 
     if !parsed.directories.is_empty() {
@@ -497,11 +512,11 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             .into_par_iter()
             .try_for_each(|(link, dest)| -> anyhow::Result<()> {
                 if !elf_binaries.contains(&dest) {
-                    info.handle.args_i(["--ro-bind", &dest, &dest])?;
+                    info.handle.args_i(["--ro-bind", &dest, &dest]);
                     elf_binaries.insert(dest.clone());
                 }
                 if !in_lib(&link) {
-                    info.handle.args_i(["--symlink", &dest, &link])?;
+                    info.handle.args_i(["--symlink", &dest, &link]);
                 }
                 Ok(())
             })
@@ -517,7 +532,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         })
     }
 
-    info.handle.args_i(["--symlink", "/usr/bin", "/bin"])?;
+    info.handle.args_i(["--symlink", "/usr/bin", "/bin"]);
 
     if fs::read_link("/usr/sbin").is_ok() {
         info.handle.args_i([
@@ -527,7 +542,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             "--symlink",
             "/usr/bin",
             "/sbin",
-        ])?;
+        ]);
     }
 
     info.profile.binaries = Arc::into_inner(elf_binaries).unwrap().into_iter().collect();

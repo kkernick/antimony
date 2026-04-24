@@ -3,9 +3,7 @@
 use crate::shared::{
     Map, Set, edit,
     env::{AT_HOME, USER_NAME},
-    store,
 };
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, read_to_string},
@@ -36,21 +34,11 @@ pub fn digest_config() -> ConfigFile {
     if let Ok(env) = std::env::var("AT_LIB_ROOTS") {
         config.library_roots = env.split(" ").map(String::from).collect()
     }
-    if let Ok(env) = std::env::var("AT_CACHE_DB")
-        && env != "0"
-    {
-        config.cache_store = Mutex::new(Some(store::Store::Database));
-    }
-    if let Ok(env) = std::env::var("AT_CONFIG_DB")
-        && env != "0"
-    {
-        config.config_store = Mutex::new(Some(store::Store::Database));
-    }
 
     config
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigFile {
     pub force_temp: Option<bool>,
@@ -60,9 +48,6 @@ pub struct ConfigFile {
 
     #[serde(skip_serializing_if = "Set::is_empty", default = "Set::default")]
     pub library_roots: Set<String>,
-
-    pub config_store: Mutex<Option<store::Store>>,
-    pub cache_store: Mutex<Option<store::Store>>,
 
     #[serde(skip_serializing_if = "Map::is_empty", default = "Map::default")]
     pub environment: Map<String, String>,
@@ -96,21 +81,8 @@ impl ConfigFile {
         &self.environment
     }
 
-    pub fn cache_store(&self) -> store::Store {
-        self.cache_store.lock().unwrap_or(store::Store::File)
-    }
-
-    pub fn config_store(&self) -> store::Store {
-        self.config_store.lock().unwrap_or(store::Store::File)
-    }
-
     pub fn edit(config: &str) -> Result<Option<String>, edit::Error> {
         edit::edit::<Self>(config)
-    }
-
-    pub fn update(&self) -> anyhow::Result<()> {
-        fs::write(AT_HOME.join("config.toml"), toml::to_string(self)?)?;
-        Ok(())
     }
 
     pub fn merge(&mut self, mut config: ConfigFile) {
@@ -130,19 +102,6 @@ impl ConfigFile {
 
         if let Some(users) = config.privileged_users.take() {
             self.privileged_users.get_or_insert_default().extend(users);
-        }
-
-        if let Some(cache) = config.cache_store.lock().take() {
-            let mut s = self.cache_store.lock();
-            if s.is_none() {
-                s.replace(cache);
-            }
-        }
-        if let Some(config) = config.config_store.lock().take() {
-            let mut s = self.config_store.lock();
-            if s.is_none() {
-                s.replace(config);
-            }
         }
     }
 
@@ -165,34 +124,7 @@ impl ConfigFile {
             auto_refresh: None,
             privileged_users: None,
             library_roots: Set::default(),
-            cache_store: Mutex::default(),
-            config_store: Mutex::default(),
             environment: Map::default(),
-        }
-    }
-}
-impl PartialEq for ConfigFile {
-    fn eq(&self, other: &Self) -> bool {
-        self.force_temp == other.force_temp
-            && self.system_mode == other.system_mode
-            && self.auto_refresh == other.auto_refresh
-            && self.privileged_users == other.privileged_users
-            && self.library_roots == other.library_roots
-            && self.config_store.lock().as_ref() == other.config_store.lock().as_ref()
-            && self.cache_store.lock().as_ref() == other.cache_store.lock().as_ref()
-    }
-}
-impl Clone for ConfigFile {
-    fn clone(&self) -> Self {
-        Self {
-            force_temp: self.force_temp,
-            system_mode: self.system_mode,
-            auto_refresh: self.auto_refresh,
-            library_roots: self.library_roots.clone(),
-            privileged_users: self.privileged_users.clone(),
-            config_store: Mutex::new(*self.config_store.lock()),
-            cache_store: Mutex::new(*self.cache_store.lock()),
-            environment: self.environment.clone(),
         }
     }
 }

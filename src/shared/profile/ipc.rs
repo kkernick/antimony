@@ -1,9 +1,10 @@
-use crate::{cli, shared::StableSet};
+use crate::{cli, shared::Set};
+use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug, Message)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.
@@ -16,24 +17,24 @@ pub struct Ipc {
     pub user_bus: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub portals: StableSet<Portal>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub portals: Set<Portal>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub sees: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub sees: Set<String>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub talks: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub talks: Set<String>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub owns: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub owns: Set<String>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "StableSet::is_empty")]
-    pub calls: StableSet<String>,
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub calls: Set<String>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
@@ -94,26 +95,26 @@ impl Ipc {
 /// implemented for certain Desktop Environments.
 /// Not all applications use portals, even if they
 /// are provided to the sandbox.
-#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone)]
+#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Enumeration)]
 #[serde(deny_unknown_fields)]
 pub enum Portal {
-    Background,
-    Camera,
-    Clipboard,
-    Documents,
-    FileChooser,
-    GlobalShortcuts,
-    Inhibit,
-    Location,
-    Notifications,
-    OpenURI,
-    ProxyResolver,
-    Realtime,
-    ScreenCast,
-    Screenshot,
-    Settings,
-    Secret,
-    NetworkMonitor,
+    Background = 0,
+    Camera = 1,
+    Clipboard = 2,
+    Documents = 3,
+    FileChooser = 4,
+    GlobalShortcuts = 5,
+    Inhibit = 6,
+    Location = 7,
+    Notifications = 8,
+    OpenURI = 9,
+    ProxyResolver = 10,
+    Realtime = 11,
+    ScreenCast = 12,
+    Screenshot = 13,
+    Settings = 14,
+    Secret = 15,
+    NetworkMonitor = 16,
 }
 impl std::fmt::Display for Portal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

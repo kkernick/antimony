@@ -1,0 +1,33 @@
+#!/bin/bash
+DIR=$(cargo builder --recipe dev)
+ROOT=$(git rev-parse --show-toplevel)
+
+export ANTIMONY="${DIR}/antimony"
+export NOTIFY="none"
+export RUST_LOG="error"
+export AT_HOME="$ROOT"
+
+SOURCE=""
+for UTIL in $(find "$ROOT/tests" -name "*.util"); do
+  SOURCE="$SOURCE source $UTIL;"
+done
+export SOURCE
+
+echo "Running test suite..."
+for TEST in $(find "$ROOT/tests" -name "*.test"); do
+  echo "$TEST"
+  OUT=$(bash -c "$SOURCE set -x; $(cat $TEST)")
+  if [[ $? -ne 0 ]]; then
+    echo "$TEST: FAILED"
+    echo "$OUT"
+  fi
+done
+for TEST in $(find "$ROOT/tests" -name "*.fail"); do
+  echo "$TEST"
+  OUT=$(bash -c "set -x; $(cat $TEST)" 2>&1)
+  if [[ $? -eq 0 ]]; then
+    echo "$TEST: FAILED"
+    echo "$OUT"
+  fi
+done
+echo "Done"

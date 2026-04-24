@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     let arguments: Vec<_> = env::args().collect();
     let handle = Spawner::abs("/usr/bin/bwrap")
         .mode(user::Mode::Effective)
-        .args(&arguments[1..])?;
+        .args(&arguments[1..]);
 
     // Pass all FDs Antimony tells us to.
     let fds: Vec<OwnedFd> = env::var("FDS")

@@ -162,17 +162,6 @@ _arguments "${_arguments_options[@]}" : \
 ':name -- The path of the object. Can also be a directory, which will import all files within:_default' \
 && ret=0
 ;;
-(backend)
-_arguments "${_arguments_options[@]}" : \
-'--digest[Perform the operation in place by destructively removing the existing datastore and digesting it into the new dataset]' \
-'--cache[Configure the cache datastore rather than than the configuration datastore]' \
-'--overwrite[Overwrite existing values without confirmation]' \
-'--dry[Replicate the existing backend to new, but don'\''t update the config]' \
-'-h[Print help]' \
-'--help[Print help]' \
-'::new -- The new backend to use for the datastore:(file database)' \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 '--feature[Target the feature set rather than the profile set]' \
@@ -226,10 +215,6 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-(backend)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
 (info)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -258,16 +243,10 @@ _antimony_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'backend:Manage the Backend Datastore' \
 'info:Get information about profiles/features' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony commands' commands "$@"
-}
-(( $+functions[_antimony__backend_commands] )) ||
-_antimony__backend_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony backend commands' commands "$@"
 }
 (( $+functions[_antimony__edit_commands] )) ||
 _antimony__edit_commands() {
@@ -290,16 +269,10 @@ _antimony__help_commands() {
 'seccomp:Perform operations on the SECCOMP Database' \
 'export:Export user profiles' \
 'import:Import user profiles' \
-'backend:Manage the Backend Datastore' \
 'info:Get information about profiles/features' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'antimony help commands' commands "$@"
-}
-(( $+functions[_antimony__help__backend_commands] )) ||
-_antimony__help__backend_commands() {
-    local commands; commands=()
-    _describe -t commands 'antimony help backend commands' commands "$@"
 }
 (( $+functions[_antimony__help__edit_commands] )) ||
 _antimony__help__edit_commands() {

@@ -10,7 +10,7 @@ use crate::{
         profile::{
             files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace, seccomp::SeccompPolicy,
         },
-        store::{self, mem},
+        store::{self, CACHE_STORE, mem},
         utility,
     },
     timer,
@@ -196,6 +196,9 @@ impl cli::Run for Args {
                 cache.replace(true);
             }
         }
+        rayon::spawn(|| {
+            CACHE_STORE.borrow();
+        });
 
         let result = || -> Result<()> {
             let info = timer!(
@@ -274,7 +277,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 add = false;
                 break;
             } else {
-                info.handle.arg_i(arg)?
+                info.handle.arg_i(arg)
             }
         }
         add
@@ -284,8 +287,8 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 
     if add_regular {
         info.handle
-            .arg_i(localize_home(&info.profile.app_path(&info.name)))?;
-        info.handle.args_i(info.post)?;
+            .arg_i(localize_home(&info.profile.app_path(&info.name)));
+        info.handle.args_i(info.post);
     }
 
     // Run it
@@ -305,7 +308,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 .into_iter()
                 .map(|raw| format!("{raw:?}"))
                 .collect();
-            info.handle.env_i("FDS", fds.join(","))?;
+            info.handle.env_i("FDS", fds.join(","));
 
             // We run as Antimony, since Lockdown takes over.
             info.handle.mode_i(user::Mode::Effective);
@@ -313,24 +316,22 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
         }
 
         if let Some(hooks) = &mut info.profile.hooks {
-            if let Some(pre) = hooks.pre.take() {
-                debug!("Processing pre-hooks");
-                for hook in pre {
-                    info.handle = hook
-                        .process(
-                            Some(info.handle),
-                            &info.name,
-                            &info.sys_dir.to_string_lossy(),
-                            info.instance.name(),
-                            &info.home,
-                            false,
-                        )?
-                        .unwrap()
-                }
+            debug!("Processing pre-hooks");
+            for hook in &mut hooks.pre {
+                info.handle = hook
+                    .process(
+                        Some(info.handle),
+                        &info.name,
+                        &info.sys_dir.to_string_lossy(),
+                        info.instance.name(),
+                        &info.home,
+                        false,
+                    )?
+                    .unwrap()
             }
 
             // Attaching to the parent means info.handle becomes the parent
-            if let Some(parent) = hooks.parent.take() {
+            if let Some(mut parent) = hooks.parent.take() {
                 info.handle = parent
                     .process(
                         Some(info.handle),
@@ -365,7 +366,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         to refresh cached definitions.",
                         "--timeout",
                         "5000",
-                    ])?
+                    ])
                     .spawn()?
                     .wait()?;
 
@@ -395,14 +396,12 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 ),
                 "--timeout", "5000",
                 "--urgency", "critical",
-            ])?.spawn()?.output_all()?;
+            ]).spawn()?.output_all()?;
         }
 
-        if let Some(mut hooks) = info.profile.hooks.take()
-            && let Some(post) = hooks.post.take()
-        {
+        if let Some(mut hooks) = info.profile.hooks.take() {
             debug!("Executing post-hooks");
-            for hook in post {
+            for hook in &mut hooks.post {
                 hook.process(
                     None,
                     &info.name,

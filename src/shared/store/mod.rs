@@ -3,7 +3,6 @@
 //! By defining a common interface, they can be swapped out relatively easily,
 //! and migrating from one to the other.
 
-pub mod db;
 pub mod file;
 pub mod mem;
 
@@ -12,86 +11,66 @@ use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
-use clap::ValueEnum;
 use log::info;
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use std::{any::Any, cell::RefCell, error, fmt, fs, io, path::PathBuf};
+use serde::de::DeserializeOwned;
+use std::{any::Any, error, fmt, fs, io, path::PathBuf, sync::LazyLock};
 use thiserror::Error;
 
 pub static CACHE: Mutex<Option<bool>> = Mutex::new(None);
 
-/// Initialize the system store based on the defined configuration.
-pub fn init(t: StoreType, store: Store) -> Box<dyn BackingStore> {
-    info!("Using {store:?} for {t:?}");
-
-    match t {
-        StoreType::System => match store {
-            Store::Database => Box::new(
-                db::Store::new(db::Database::System).expect("Failed to initialize Database Store"),
-            ),
-            Store::File => Box::new(file::Store::new(
+pub struct Store {
+    backing: Box<dyn BackingStore>,
+}
+impl Store {
+    pub fn init(t: StoreType) -> Self {
+        let backing = match t {
+            StoreType::System => Box::new(file::Store::new(
                 &format!("{}", AT_CONFIG.display()),
                 "toml",
             )),
-        },
-        StoreType::User => match store {
-            Store::Database => Box::new(
-                db::Store::new(db::Database::User).expect("Failed to initialize Database Store"),
-            ),
-            Store::File => Box::new(file::Store::new(
+
+            StoreType::User => Box::new(file::Store::new(
                 &format!("{}/{}", AT_CONFIG.display(), USER_NAME.as_str()),
                 "toml",
             )),
-        },
-        StoreType::Cache => {
-            let cache: Box<dyn BackingStore> = match store {
-                Store::Database => Box::new(
-                    db::Store::new(db::Database::Cache)
-                        .expect("Failed to initialize Database Store"),
-                ),
-                Store::File => Box::new(file::Store::new(
+            StoreType::Cache => {
+                let cache: Box<dyn BackingStore> = Box::new(file::Store::new(
                     &format!("{}", CACHE_DIR.display()),
                     "cache",
-                )),
-            };
-            if let Some(read) = *CACHE.lock() {
-                info!("{t:?} in Memory");
-                let name = format!("{t:?}_cache");
-                Box::new(mem::Store::new(&name, cache, read))
-            } else {
-                cache
+                ));
+
+                if let Some(read) = *CACHE.lock() {
+                    info!("{t:?} in Memory");
+                    let name = format!("{t:?}_cache");
+                    Box::new(mem::Store::new(&name, cache, read))
+                } else {
+                    cache
+                }
             }
-        }
+        };
+        Self { backing }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn borrow(&self) -> &dyn BackingStore {
+        self.backing.as_ref()
     }
 }
+unsafe impl Sync for Store {}
+unsafe impl Send for Store {}
 
-// Each thread gets its own. Useful for databases, but does nothing
-// for files.
-thread_local! {
-    pub static SYSTEM_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init(StoreType::System, CONFIG_FILE.config_store()));
+pub static SYSTEM_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::System));
 
-    pub static USER_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init(StoreType::User, CONFIG_FILE.config_store()));
+pub static USER_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::User));
 
-    pub static CACHE_STORE: RefCell<Box<dyn BackingStore>> =
-        RefCell::new(init(StoreType::Cache, CONFIG_FILE.cache_store()));
-}
+pub static CACHE_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::Cache));
 
 #[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
 pub enum StoreType {
     System,
     User,
     Cache,
-}
-
-/// Which store is in use for a given backend.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Copy, Clone, ValueEnum, Default)]
-pub enum Store {
-    #[default]
-    File,
-    Database,
 }
 
 /// Store errors
@@ -189,23 +168,16 @@ pub trait BackingStore {
 
 /// Load an object from the database.
 pub fn load<
-    T: DeserializeOwned,
+    T: DeserializeOwned + Default,
     E: error::Error + From<toml::de::Error> + From<Error> + From<io::Error>,
 >(
     name: &str,
     object: Object,
     def: bool,
 ) -> Result<T, E> {
-    if def && name == "default" {
-        if !CONFIG_FILE.system_mode()
-            && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
-        {
-            return Ok(toml::from_str::<T>(&str)?);
-        } else {
-            let str = SYSTEM_STORE.with_borrow(|s| s.fetch(name, object))?;
-            USER_STORE.with_borrow(|s| s.store(name, object, &str))?;
-            return Ok(toml::from_str::<T>(&str)?);
-        }
+    if def && name == "default" && CONFIG_FILE.system_mode() {
+        log::trace!("Default not allowed");
+        return Ok(T::default());
     }
 
     // Try and load a file absolutely if the file is given.
@@ -217,12 +189,12 @@ pub fn load<
     }
 
     if !CONFIG_FILE.system_mode()
-        && let Ok(str) = USER_STORE.with_borrow(|s| s.fetch(name, object))
+        && let Ok(str) = USER_STORE.borrow().fetch(name, object)
     {
         return Ok(toml::from_str(&str)?);
     }
 
-    let str = SYSTEM_STORE.with_borrow(|s| s.fetch(name, object))?;
+    let str = SYSTEM_STORE.borrow().fetch(name, object)?;
     Ok(toml::from_str(&str)?)
 }
 
@@ -242,7 +214,7 @@ pub fn export(store: &dyn BackingStore) -> Map<Object, Set<String>> {
 mod tests {
     use crate::shared::{
         env::{AT_CONFIG, AT_HOME, PWD},
-        store::{BackingStore, Object, db, file},
+        store::{BackingStore, Object, file},
     };
 
     fn backend_test(store: Box<dyn BackingStore>) {
@@ -266,15 +238,6 @@ mod tests {
             .remove("test", object)
             .expect("Failed to delete profile");
         assert!(!store.exists("test", object));
-    }
-
-    #[test]
-    fn db_backend() {
-        if AT_HOME.as_path() == PWD.as_path() && PWD.join("db").exists() {
-            let store =
-                db::Store::new(db::Database::System).expect("Failed to initialize Database Store");
-            backend_test(Box::new(store));
-        }
     }
 
     #[test]

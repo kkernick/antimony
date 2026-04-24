@@ -3,15 +3,16 @@
 use crate::{
     cli::{self, run, run_vec},
     shared::{
-        env::{CACHE_DIR, HOME_PATH},
+        Set,
+        env::{CACHE_DIR, HOME_PATH, RUNTIME_DIR},
         profile::{self, Profile},
         store::{self, Object, mem},
     },
 };
 use anyhow::Result;
-use log::debug;
+use log::{debug, info};
 use std::fs;
-use user::as_real;
+use user::{as_effective, as_real};
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -43,22 +44,24 @@ impl cli::Run for Args {
                 }
             }
         } else if self.profile.is_none() {
-            for cache in fs::read_dir(CACHE_DIR.as_path())? {
-                let cache = cache?;
-                let instances = cache.path().join("instances");
-                if instances.exists() {
-                    for instance in fs::read_dir(&instances)? {
-                        let instance = instance?.path();
-                        match fs::read_link(&instance) {
-                            Ok(e) if !e.exists() => fs::remove_file(&instance)?,
-                            Err(_) => fs::remove_file(&instance)?,
-                            _ => {}
-                        }
+            for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(|f| f.ok()) {
+                let saved: Set<String> = fs::read_dir(hash.path())?
+                    .filter_map(|f| f.ok())
+                    .filter_map(|f| f.file_name().into_string().ok())
+                    .collect();
+
+                let session: Set<String> = fs::read_dir(RUNTIME_DIR.join("antimony"))?
+                    .filter_map(|f| f.ok())
+                    .filter_map(|f| f.file_name().into_string().ok())
+                    .collect();
+
+                as_effective!(Result<()>, {
+                    for stale in saved.difference(&session) {
+                        info!("Removing stale SOF cache {stale}");
+                        fs::remove_dir_all(CACHE_DIR.join("run").join(stale))?;
                     }
-                    if fs::read_dir(instances)?.count() == 0 {
-                        fs::remove_dir_all(cache.path())?;
-                    }
-                }
+                    Ok(())
+                })??;
             }
         }
 

@@ -13,7 +13,6 @@ use parking_lot::Mutex;
 #[cfg(feature = "fd")]
 use std::os::fd::RawFd;
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     ffi::{CString, NulError, OsString},
     os::fd::OwnedFd,
@@ -135,7 +134,7 @@ pub struct Spawner {
     unique_name: Mutex<Option<String>>,
 
     /// Arguments
-    args: Mutex<Vec<CString>>,
+    args: Mutex<Vec<String>>,
 
     /// Whether to pipe **STDIN**. This lets you call `Handle::write()` to
     /// the process handle to send any Display value to the child.
@@ -157,7 +156,7 @@ pub struct Spawner {
     whitelist: DashSet<Capability>,
 
     /// Environment variables
-    env: DashMap<CString, CString>,
+    env: DashMap<String, String>,
 
     /// A list of other Pids that the eventual Handle should be responsible for,
     /// attached to the main child.
@@ -184,7 +183,7 @@ pub struct Spawner {
     #[cfg(feature = "seccomp")]
     seccomp: Mutex<Option<Filter>>,
 }
-impl<'a> Spawner {
+impl Spawner {
     /// Construct a `Spawner` to spawn *cmd*.
     /// *cmd* will be resolved from **PATH**.
     pub fn new(cmd: impl Into<String>) -> Result<Self, Error> {
@@ -334,19 +333,26 @@ impl<'a> Spawner {
     /// Sets an environment variable to pass to the process.
     /// Note that if preserve_env is set to true, this value will
     /// overwrite the existing value, if it exists.
-    pub fn env(
-        self,
-        key: impl Into<Cow<'a, str>>,
-        var: impl Into<Cow<'a, str>>,
-    ) -> Result<Self, Error> {
-        self.env_i(key, var)?;
+    pub fn env(self, key: impl Into<String>, var: impl Into<String>) -> Self {
+        self.env_i(key, var);
+        self
+    }
+
+    /// Passes the value of the provided environment variable to the child.
+    /// If preserve_env is true, this is functionally a no-op.
+    pub fn pass_env(self, key: impl Into<String>) -> Result<Self, Error> {
+        self.pass_env_i(key)?;
         Ok(self)
     }
 
     /// Passes the value of the provided environment variable to the child.
     /// If preserve_env is true, this is functionally a no-op.
-    pub fn pass_env(self, key: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
-        self.pass_env_i(key)?;
+    pub fn env_or(
+        self,
+        key: impl Into<String>,
+        fallback: impl Into<String>,
+    ) -> Result<Self, Error> {
+        self.env_or_i(key, fallback)?;
         Ok(self)
     }
 
@@ -369,9 +375,9 @@ impl<'a> Spawner {
     /// Move a new argument to the argument vector.
     /// This function is guaranteed to append to the end of the current argument
     /// vector.
-    pub fn arg(self, arg: impl Into<Cow<'a, str>>) -> Result<Self, Error> {
-        self.arg_i(arg)?;
-        Ok(self)
+    pub fn arg(self, arg: impl Into<String>) -> Self {
+        self.arg_i(arg);
+        self
     }
 
     /// Move a new FD to the `Spawner`.
@@ -400,25 +406,21 @@ impl<'a> Spawner {
     /// std::fs::remove_file("file.txt").unwrap();
     /// ```
     #[cfg(feature = "fd")]
-    pub fn fd_arg(
-        self,
-        arg: impl Into<Cow<'a, str>>,
-        fd: impl Into<OwnedFd>,
-    ) -> Result<Self, Error> {
-        self.fd_arg_i(arg, fd)?;
-        Ok(self)
+    pub fn fd_arg(self, arg: impl Into<String>, fd: impl Into<OwnedFd>) -> Self {
+        self.fd_arg_i(arg, fd);
+        self
     }
 
     /// Move an iterator of arguments into the `Spawner`.
     /// It is guaranteed that the arguments
     /// in the iterator will appear sequentially, and in the same order.
-    pub fn args<I, S>(self, args: I) -> Result<Self, Error>
+    pub fn args<I, S>(self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: Into<Cow<'a, str>>,
+        S: Into<String>,
     {
-        self.args_i(args)?;
-        Ok(self)
+        self.args_i(args);
+        self
     }
 
     /// Move an iterator of FD's to the `Spawner`.
@@ -476,29 +478,36 @@ impl<'a> Spawner {
     }
 
     /// Sets an environment variable to the child process without consuming the `Spawner`.
-    pub fn env_i(
-        &self,
-        key: impl Into<Cow<'a, str>>,
-        value: impl Into<Cow<'a, str>>,
-    ) -> Result<(), Error> {
-        self.env.insert(
-            CString::from_str(&key.into())?,
-            CString::from_str(&value.into())?,
-        );
-        Ok(())
+    pub fn env_i(&self, key: impl Into<String>, value: impl Into<String>) {
+        self.env.insert(key.into(), value.into());
     }
 
     /// Pass an environment variable to the child process without consuming the `Spawner`.
-    pub fn pass_env_i(&self, key: impl Into<Cow<'a, str>>) -> Result<(), Error> {
+    pub fn pass_env_i(&self, key: impl Into<String>) -> Result<(), Error> {
         let key = key.into();
         let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
         if let Ok(env) = std::env::var(&os_key) {
-            self.env
-                .insert(CString::from_str(&key)?, CString::from_str(&env)?);
+            self.env.insert(key, env);
             Ok(())
         } else {
             Err(Error::Environment)
         }
+    }
+
+    /// Pass an environment variable to the child process without consuming the `Spawner`.
+    pub fn env_or_i(
+        &self,
+        key: impl Into<String>,
+        fallback: impl Into<String>,
+    ) -> Result<(), Error> {
+        let key = key.into();
+        let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
+        if let Ok(env) = std::env::var(&os_key) {
+            self.env.insert(key, env);
+        } else {
+            self.env.insert(key, fallback.into());
+        }
+        Ok(())
     }
 
     /// Set the user mode without consuming the `Spawner`.
@@ -514,9 +523,8 @@ impl<'a> Spawner {
     }
 
     /// Move an argument to the `Spawner` in-place.
-    pub fn arg_i(&self, arg: impl Into<Cow<'a, str>>) -> Result<(), Error> {
-        self.args.lock().push(CString::new(arg.into().as_ref())?);
-        Ok(())
+    pub fn arg_i(&self, arg: impl Into<String>) {
+        self.args.lock().push(arg.into());
     }
 
     /// Move a FD to the `Spawner` in-place.
@@ -527,15 +535,10 @@ impl<'a> Spawner {
 
     /// Move FDs to the `Spawner` in-place, passing it as an argument.
     #[cfg(feature = "fd")]
-    pub fn fd_arg_i(
-        &self,
-        arg: impl Into<Cow<'a, str>>,
-        fd: impl Into<OwnedFd>,
-    ) -> Result<(), Error> {
+    pub fn fd_arg_i(&self, arg: impl Into<String>, fd: impl Into<OwnedFd>) {
         let fd = fd.into();
-        self.args_i([arg.into(), Cow::Owned(format!("{}", fd.as_raw_fd()))])?;
+        self.args_i([arg.into(), format!("{}", fd.as_raw_fd())]);
         self.fd_i(fd);
-        Ok(())
     }
 
     /// Move an iterator of FDs to the `Spawner` in-place.
@@ -556,18 +559,16 @@ impl<'a> Spawner {
 
     /// Move an iterator of arguments to the `Spawner` in-place.
     /// Both sequence and order are guaranteed.
-    pub fn args_i<I, S>(&self, args: I) -> Result<(), Error>
+    pub fn args_i<I, S>(&self, args: I)
     where
         I: IntoIterator<Item = S>,
-        S: Into<Cow<'a, str>>,
+        S: Into<String>,
     {
         let mut a = self.args.lock();
 
         for s in args {
-            let cow: Cow<'a, str> = s.into();
-            a.push(CString::new(cow.as_ref())?);
+            a.push(s.into());
         }
-        Ok(())
     }
 
     /// Set the cache index.
@@ -626,9 +627,8 @@ impl<'a> Spawner {
                 fs::create_dir(parent)?;
             }
             let mut file = fs::File::create(path)?;
-            let bytes = postcard::to_stdvec(&args[i..])
-                .map_err(|_| Error::Cache("Failed to serialize cache"))?;
-            file.write_all(&bytes)?;
+            let bytes = args[i..].join(" ");
+            file.write_all(bytes.as_bytes())?;
             *index = None;
             Ok(())
         } else {
@@ -643,9 +643,10 @@ impl<'a> Spawner {
     #[cfg(feature = "cache")]
     pub fn cache_read(&self, path: &Path) -> Result<(), Error> {
         let mut args = self.args.lock();
-
-        let mut cached: Vec<CString> = postcard::from_bytes(&fs::read(path)?)
-            .map_err(|_| Error::Cache("Failed to decode cache"))?;
+        let mut cached: Vec<String> = fs::read_to_string(path)?
+            .split(" ")
+            .map(String::from)
+            .collect();
         args.append(&mut cached);
         Ok(())
     }
@@ -708,7 +709,13 @@ impl<'a> Spawner {
         };
 
         args_c.push(resolved);
-        args_c.append(&mut self.args.into_inner());
+        self.args
+            .into_inner()
+            .into_iter()
+            .try_for_each(|arg| -> Result<(), Error> {
+                args_c.push(CString::from_str(&arg)?);
+                Ok(())
+            })?;
 
         // Clear F_SETFD to allow passed FD's to persist after execve
         #[cfg(feature = "fd")]
@@ -720,10 +727,8 @@ impl<'a> Spawner {
         if self.preserve_env.load(Ordering::Relaxed) {
             let environment: HashMap<_, _> = std::env::vars_os()
                 .filter_map(|(key, value)| {
-                    if let Some(key) = key.to_str()
-                        && let Some(value) = value.to_str()
-                        && let Ok(key) = CString::from_str(key)
-                        && let Ok(value) = CString::from_str(value)
+                    if let Ok(key) = key.into_string()
+                        && let Ok(value) = value.into_string()
                     {
                         if !self.env.contains_key(&key) {
                             Some((key, value))
@@ -742,10 +747,7 @@ impl<'a> Spawner {
         let envs: Vec<_> = self
             .env
             .into_iter()
-            .filter_map(|(k, v)| {
-                // We already know both are valid strings, because we converted them from Str to begin with.
-                CString::from_str(&format!("{}={}", k.to_str().unwrap(), v.to_str().unwrap())).ok()
-            })
+            .filter_map(|(k, v)| CString::from_str(&format!("{k}={v}")).ok())
             .collect();
 
         // Log if desired.
@@ -917,7 +919,7 @@ mod tests {
     fn bash() -> Result<()> {
         let string = "Hello, World!";
         let mut handle = Spawner::new("bash")?
-            .args(["-c", &format!("echo '{string}'")])?
+            .args(["-c", &format!("echo '{string}'")])
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
@@ -947,7 +949,7 @@ mod tests {
     fn read() -> Result<()> {
         let string = "Hello!";
         let mut handle = Spawner::new("echo")?
-            .arg(string)?
+            .arg(string)
             .output(StreamMode::Pipe)
             .spawn()?;
 
@@ -960,7 +962,7 @@ mod tests {
     #[test]
     fn clear_env() -> Result<()> {
         let mut handle = Spawner::new("bash")?
-            .args(["-c", "echo $USER"])?
+            .args(["-c", "echo $USER"])
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
@@ -974,8 +976,8 @@ mod tests {
     fn preserve_env() -> Result<()> {
         let user = "Test";
         let mut handle = Spawner::new("bash")?
-            .args(["-c", "echo $USER"])?
-            .env("USER", user)?
+            .args(["-c", "echo $USER"])
+            .env("USER", user)
             .output(StreamMode::Pipe)
             .error(StreamMode::Pipe)
             .spawn()?;
