@@ -214,7 +214,7 @@ fn main() -> Result<()> {
     let antimony = || -> Result<String> {
         let benchmarks = cli.bench.unwrap_or(vec![Benchmark::Cold, Benchmark::Hot]);
 
-        let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
+        let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=microsecond"]
             .into_iter()
             .map(Cow::Borrowed)
             .collect();

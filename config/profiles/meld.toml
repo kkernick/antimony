@@ -1,0 +1,5 @@
+id = "org.gnome.Meld"
+features = ["python", "gtk3", "gtksourceview"]
+
+[ipc]
+portals = ["FileChooser"]

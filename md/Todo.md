@@ -22,11 +22,12 @@
 	* [x] Integrate should require a path to add, but not to remove
 	* [x] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
 	* [x] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
-	* [ ] `info` should be able to dump SECCOMP info, too.
+	* [x] `info` should be able to dump SECCOMP info, too.
+		* There’s really no good place to put it. `info` is tailored for Profiles/Features, `seccomp` is tailored for paths.
 	* [x] Migrate instance information entirely in `RUNTIME`. `HASH/INSTANCE`. No symlink.
 	* [x] Profile `HASH` should incorporate config/other info before hashing, so they’re consistently named.
-* [ ] Ensure Steam Works
-* [ ] Ensure Ubuntu Works
+* [x] Ensure Steam Works
+* [x] Ensure Ubuntu Works
 	* [x] Antimony AppArmor Profile
 	* [x] Dynamic Sandbox Profiles too? TOML → AppArmor? aa-exec? How to handle privilege of loading?
 		* `aa-exec` only allows using a policy already loaded.

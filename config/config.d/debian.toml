@@ -3,5 +3,4 @@ library_roots = [
   "/usr/lib64",
   "/usr/libexec",
   "/usr/lib/x86_64-linux-gnu",
-  "/usr/lib/x86_64-linux-gnu/libexec"
 ]

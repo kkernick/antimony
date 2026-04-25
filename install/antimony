@@ -1,3 +1,4 @@
+# Last Modified: Fri Apr 24 12:03:43 2026
 abi <abi/4.0>,
 
 include <tunables/global>
@@ -10,16 +11,19 @@ include <tunables/global>
 # Do not allow user namespaces for unconfined programs, which would not only prevent
 # Bubblewrap from functioning, but also applications that run in Antimony that
 # themselves need user namespaces, such as Chromium.
+
+
 profile antimony /usr/bin/antimony flags=(attach_disconnected, mediate_deleted) {
   capability,
   network,
   mount,
+  umount /home/*/.local/share/antimony/**,
+  umount /{,oldroot/},
   signal,
   ptrace,
   pivot_root,
+  dbus,
   userns create,
-
-  umount /{,oldroot/},
 
   /** ix,
   /{,**} mrwlk,

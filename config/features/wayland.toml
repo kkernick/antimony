@@ -1,13 +1,10 @@
 name = "wayland"
 description = "Provide the wayland socket."
+libraries.files = ["libwayland*"]
 
-files.resources.ro = [
-  "/usr/share/X11/xkb",
-]
-
-files.user.ro = [
-  "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY",
-]
+[files]
+resources.ro = ["/usr/share/X11/xkb"]
+user.ro = ["$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"]
 
 [environment]
 "WAYLAND_DISPLAY" = "$WAYLAND_DISPLAY"

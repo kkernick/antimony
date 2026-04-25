@@ -28,6 +28,7 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io, path::Path};
 use thiserror::Error;
+use user::as_real;
 use which::which;
 
 /// An error for issues around Profiles.
@@ -53,13 +54,9 @@ pub enum Error {
     #[error("I/O Error: {0}")]
     Io(#[from] io::Error),
 
-    /// Misc Errno errors.
-    #[error("System error: {0}: {1}")]
-    Errno(&'static str, nix::errno::Errno),
-
-    /// Misc Errno errors.
-    #[error("Failed to switch user: {0}")]
-    User(#[from] nix::errno::Errno),
+    /// User errors.
+    #[error("SetUID error: {0}")]
+    User(#[from] user::Error),
 
     /// Errors resolving/creating paths.
     #[error("Path error: {0}")]
@@ -142,6 +139,7 @@ pub struct Profile {
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
     #[serde(default = "default_inherits")]
+    #[serde(skip_serializing_if = "Set::is_empty")]
     pub inherits: Set<String>,
 
     /// Configuration for the profile's home.
@@ -330,9 +328,19 @@ impl Profile {
             return Ok((Self::decode(bytes.as_slice())?, hash));
         }
 
+        if let Some(path) = &profile.path {
+            if path.starts_with("~") {
+                profile.path = Some(path.replace("~", HOME.as_str()))
+            } else if path.starts_with("$AT_HOME")
+                && let Some(home) = &profile.home
+            {
+                profile.path = Some(path.replace("$AT_HOME", &home.path(name).to_string_lossy()));
+            }
+        }
+
         let app_path = profile.app_path(name);
         let path = Path::new(app_path.as_ref());
-        if !path.exists() {
+        if !as_real!(path.exists())? {
             match which::which(app_path.as_ref()) {
                 Ok(path) => profile.path = Some(path.to_string()),
                 Err(_) => {
@@ -378,16 +386,6 @@ impl Profile {
                 ));
             }
         };
-
-        if let Some(path) = &profile.path {
-            if path.starts_with("~") {
-                profile.path = Some(path.replace("~", HOME.as_str()))
-            } else if path.starts_with("$AT_HOME")
-                && let Some(home) = &profile.home
-            {
-                profile.path = Some(path.replace("$AT_HOME", &home.path(name).to_string_lossy()));
-            }
-        }
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;

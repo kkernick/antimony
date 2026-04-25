@@ -78,7 +78,7 @@ pub fn in_lib(path: &str) -> bool {
 /// Filter non-elf files.
 #[inline]
 fn elf_filter(path: &str) -> bool {
-    if let Ok(mut file) = File::open(path) {
+    if let Ok(Ok(mut file)) = as_real!(File::open(path)) {
         let mut magic = [0u8; 4];
         if file.read_exact(&mut magic).is_ok() && magic == ELF_MAGIC {
             return true;
