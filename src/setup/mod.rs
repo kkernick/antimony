@@ -219,7 +219,6 @@ pub fn setup<'a>(
             "--chmod", "0700", runtime,
             "--setenv", "HOME", "/home/antimony",
             "--dir", "/home/antimony",
-            "--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
             "--setenv", "PATH", "/usr/bin",
             "--setenv", "USER", "antimony",
             "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
