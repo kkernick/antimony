@@ -12,7 +12,7 @@ use crate::{
 use anyhow::Result;
 use log::{debug, info};
 use std::fs;
-use user::{as_effective, as_real};
+use user::as_real;
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -50,18 +50,19 @@ impl cli::Run for Args {
                     .filter_map(|f| f.file_name().into_string().ok())
                     .collect();
 
-                let session: Set<String> = fs::read_dir(RUNTIME_DIR.join("antimony"))?
-                    .filter_map(|f| f.ok())
-                    .filter_map(|f| f.file_name().into_string().ok())
-                    .collect();
+                let session: Set<String> =
+                    as_real!({ fs::read_dir(RUNTIME_DIR.join("antimony")) })??
+                        .filter_map(|f| f.ok())
+                        .filter_map(|f| f.file_name().into_string().ok())
+                        .collect();
 
-                as_effective!(Result<()>, {
-                    for stale in saved.difference(&session) {
+                for stale in saved.difference(&session) {
+                    let cache = CACHE_DIR.join("run").join(stale);
+                    if cache.exists() {
                         info!("Removing stale SOF cache {stale}");
-                        fs::remove_dir_all(CACHE_DIR.join("run").join(stale))?;
+                        fs::remove_dir_all(cache)?;
                     }
-                    Ok(())
-                })??;
+                }
             }
         }
 

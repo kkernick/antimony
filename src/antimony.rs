@@ -43,10 +43,35 @@ fn main() -> Result<()> {
     // This is not a security consideration, just a practical one.
     timer!("::set", user::set(user::Mode::Effective))?;
 
-    if as_symlink().is_err() {
+    let ret = if as_symlink().is_err() {
         let cli = timer!("::cli", antimony::cli::Cli::parse());
         timer!("::command", cli.command.run())
     } else {
         Ok(())
+    };
+
+    #[cfg(debug_assertions)]
+    {
+        let mut total = 0.0f64;
+        let mut sorted = shared::TIME_MAP
+            .iter()
+            .map(|r| {
+                total += *r.value() as f64;
+                (r.key().to_string(), *r.value())
+            })
+            .collect::<Vec<_>>();
+        sorted.sort_by(|a, b| a.1.cmp(&b.1));
+        sorted.reverse();
+        for (k, v) in sorted {
+            let weight: f64 = (v as f64 / total) * 100f64;
+            if weight < 1.0 {
+                continue;
+            }
+            println!("{k} => {v} ({weight}%)");
+        }
+
+        println!("TOTAL => {total}");
     }
+
+    ret
 }

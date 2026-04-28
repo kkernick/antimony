@@ -1,0 +1,7 @@
+assert $ANTIMONY info --help
+assert $ANTIMONY info
+assert $ANTIMONY info --feature
+assert $ANTIMONY info --diff
+assert $ANTIMONY info --diff --feature
+assert ! $ANTIMONY no_profile
+assert ! $ANTIMONY --feature no_feature

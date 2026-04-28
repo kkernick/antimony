@@ -15,10 +15,13 @@ use crate::{
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
+    timer,
 };
 use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
-use log::debug;
+use common::cache::{self, CacheStatic};
+use dashmap::DashMap;
+use log::{debug, trace};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -28,6 +31,7 @@ use std::{
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 use temp::Temp;
 use user::as_real;
@@ -52,84 +56,104 @@ struct Cache {
 /// Get cached definitions.
 #[inline]
 fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
-    if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace("/", "-"), object) {
-        let content = T::decode(bytes.as_slice())?;
-        Ok(Some(content))
-    } else {
-        Ok(None)
-    }
+    timer!("::get_cache", {
+        if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace("/", "-"), object) {
+            let content = T::decode(bytes.as_slice())?;
+            Ok(Some(content))
+        } else {
+            Ok(None)
+        }
+    })
 }
 
 /// Write the cache file.
 #[inline]
 fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
-    let bytes = content.encode_to_bytes();
-    CACHE_STORE
-        .borrow()
-        .dump(&name.replace("/", "-"), object, &bytes)?;
-    Ok(content)
+    timer!("::write_cache", {
+        let bytes = content.encode_to_bytes();
+        CACHE_STORE
+            .borrow()
+            .dump(&name.replace("/", "-"), object, &bytes)?;
+        Ok(content)
+    })
 }
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    ROOTS.par_iter().any(|r| path.starts_with(r.as_str()))
+    timer!("::in_lib", {
+        ROOTS.par_iter().any(|r| path.starts_with(r.as_str()))
+    })
 }
 
 /// Filter non-elf files.
 #[inline]
 fn elf_filter(path: &str) -> bool {
-    if let Ok(Ok(mut file)) = as_real!(File::open(path)) {
-        let mut magic = [0u8; 4];
-        if file.read_exact(&mut magic).is_ok() && magic == ELF_MAGIC {
-            return true;
+    timer!("::elf_filter", {
+        if let Ok(mut file) = File::open(path) {
+            let mut magic = [0u8; 4];
+            if file.read_exact(&mut magic).is_ok() && magic == ELF_MAGIC {
+                return true;
+            }
         }
-    }
-    false
+        false
+    })
 }
 
+/// Cache LDD calls ephemerally.
+static CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default);
+
+/// The underlying cache, storing path -> resolved path lookups.
+static LDD: LazyLock<cache::Cache<String, Set<String>>> =
+    LazyLock::new(|| cache::Cache::new(&CACHE));
+
 #[inline(always)]
-pub fn ldd(path: &str) -> Result<Set<String>> {
-    if elf_filter(path) {
-        Ok(Spawner::abs("/usr/bin/ldd")
-            .arg(path)
-            .output(StreamMode::Pipe)
-            .error(StreamMode::Discard)
-            .mode(user::Mode::Real)
-            .spawn()?
-            .output_all()?
-            .lines()
-            .par_bridge()
-            .filter_map(|e| {
-                if let Some(start) = e.find("/")
-                    && let Some(end) = e[start..].find(' ')
-                {
-                    Some(String::from(&e[start..start + end]))
-                } else {
-                    None
-                }
-            })
-            .map(|e| {
-                let path = Path::new(&e);
-                if let Some(parent) = path.parent()
-                    && let Ok(canon) = fs::canonicalize(parent)
-                {
-                    let canon = canon.join(path.file_name().unwrap());
-                    canon.to_string_lossy().into_owned()
-                } else {
-                    e
-                }
-            })
-            .map(|e| {
-                let formatted = format!("/usr{e}");
-                if Path::new(&formatted).exists() {
-                    formatted
-                } else {
-                    e
-                }
-            })
-            .collect())
-    } else {
-        Ok(Set::default())
+pub fn ldd(path: &str) -> Result<&'static Set<String>> {
+    match LDD.get(path) {
+        Some(depends) => Ok(depends),
+        None => {
+            let depends = if elf_filter(path) {
+                Spawner::abs("/usr/bin/ldd")
+                    .arg(path)
+                    .output(StreamMode::Pipe)
+                    .error(StreamMode::Discard)
+                    .mode(user::Mode::Real)
+                    .spawn()?
+                    .output_all()?
+                    .lines()
+                    .filter_map(|e| {
+                        if let Some(start) = e.find("/")
+                            && let Some(end) = e[start..].find(' ')
+                        {
+                            Some(String::from(&e[start..start + end]))
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|e| {
+                        let path = Path::new(&e);
+                        if let Some(parent) = path.parent()
+                            && let Ok(canon) = fs::canonicalize(parent)
+                        {
+                            let canon = canon.join(path.file_name().unwrap());
+                            canon.to_string_lossy().into_owned()
+                        } else {
+                            e
+                        }
+                    })
+                    .map(|e| {
+                        let formatted = format!("/usr{e}");
+                        if Path::new(&formatted).exists() {
+                            formatted
+                        } else {
+                            e
+                        }
+                    })
+                    .collect()
+            } else {
+                Set::default()
+            };
+            Ok(LDD.insert(path.to_string(), depends))
+        }
     }
 }
 
@@ -141,23 +165,26 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
 /// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
 /// ```
 pub fn get_dir(dir: &str) -> Result<Set<String>> {
-    if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
-        return Ok(libraries.cache);
-    }
+    timer!("::get_dir", {
+        if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
+            return Ok(libraries.cache);
+        }
 
-    let libraries: Set<String> = Spawner::abs("/usr/bin/find")
-        .args([dir, "-executable", "-type", "f", "-o", "-name", "*.so*"])
-        .output(StreamMode::Pipe)
-        .mode(user::Mode::Real)
-        .spawn()?
-        .output_all()?
-        .lines()
-        .par_bridge()
-        .filter_map(|lib| ldd(lib).ok())
-        .flatten()
-        .collect();
+        let libraries: Set<String> = Spawner::abs("/usr/bin/find")
+            .args([dir, "-executable", "-type", "fs"])
+            .output(StreamMode::Pipe)
+            .mode(user::Mode::Real)
+            .spawn()?
+            .output_all()?
+            .lines()
+            .par_bridge()
+            .filter_map(|lib| ldd(lib).ok())
+            .flatten()
+            .cloned()
+            .collect();
 
-    Ok(write_cache(dir, Cache { cache: libraries }, Object::Directories)?.cache)
+        Ok(write_cache(dir, Cache { cache: libraries }, Object::Directories)?.cache)
+    })
 }
 
 /// Find all matches in a directory. We only match the top level for performance considerations.
@@ -165,59 +192,62 @@ pub fn get_dir(dir: &str) -> Result<Set<String>> {
 /// ## Examples
 ///
 /// ```rust
-/// antimony::fab::get_wildcards("glib*", true).expect("Failed to find Glib");
+/// use antimony::fab::{get_wildcards,lib::WildcardFilter};
+/// get_wildcards("glib*", true, WildcardFilter::Files).expect("Failed to find Glib");
 /// ```
 pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
-    let run = |dir: &str, base: &str| -> Result<Set<String>> {
-        let handle = Spawner::abs("/usr/bin/find").arg(dir);
+    timer!("::get_wildcards", {
+        let run = |dir: &str, base: &str| -> Result<Set<String>> {
+            let handle = Spawner::abs("/usr/bin/find").arg(dir);
 
-        if base.contains("/") {
-            let whole = PathBuf::from(format!("{dir}/{base}"));
-            if !whole.parent().unwrap().exists() {
-                return Ok(Set::default());
+            if base.contains("/") {
+                let whole = PathBuf::from(format!("{dir}/{base}"));
+                if !whole.parent().unwrap().exists() {
+                    return Ok(Set::default());
+                }
+                let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
+                handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()]);
+            } else {
+                handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base]);
             }
-            let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
-            handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()]);
+
+            Ok(handle
+                .args(["-type", filter.find_filter()])
+                .output(StreamMode::Pipe)
+                .mode(user::Mode::Real)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .map(|e| e.to_string())
+                .collect())
+        };
+
+        if let Some(libraries) = get_cache::<Cache>(pattern, Object::Wildcards)? {
+            return Ok(libraries.cache);
+        }
+
+        // If we have a direct path, call `find /path/to/parent -name file*`
+        let libraries = if pattern.starts_with("/") {
+            let i = pattern.rfind('/').unwrap();
+            run(&pattern[..i], &pattern[i + 1..])?
+
+        // If we're looking for libraries, check each library root.
+        } else if lib {
+            let mut libraries = Set::default();
+            for root in ROOTS.iter() {
+                if let Ok(lib) = run(&root, pattern) {
+                    libraries.extend(lib);
+                }
+            }
+
+            libraries
+        // Otherwise, we assume we're looking for binaries.
         } else {
-            handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base]);
-        }
+            run("/usr/bin", pattern)?
+        };
 
-        Ok(handle
-            .args(["-type", filter.find_filter()])
-            .output(StreamMode::Pipe)
-            .mode(user::Mode::Real)
-            .spawn()?
-            .output_all()?
-            .lines()
-            .map(|e| e.to_string())
-            .collect())
-    };
-
-    if let Some(libraries) = get_cache::<Cache>(pattern, Object::Wildcards)? {
-        return Ok(libraries.cache);
-    }
-
-    // If we have a direct path, call `find /path/to/parent -name file*`
-    let libraries = if pattern.starts_with("/") {
-        let i = pattern.rfind('/').unwrap();
-        run(&pattern[..i], &pattern[i + 1..])?
-
-    // If we're looking for libraries, check each library root.
-    } else if lib {
-        let mut libraries = Set::default();
-        for root in ROOTS.iter() {
-            if let Ok(lib) = run(&root, pattern) {
-                libraries.extend(lib);
-            }
-        }
-
-        libraries
-    // Otherwise, we assume we're looking for binaries.
-    } else {
-        run("/usr/bin", pattern)?
-    };
-
-    Ok(write_cache(pattern, Cache { cache: libraries }, Object::Wildcards)?.cache)
+        Ok(write_cache(pattern, Cache { cache: libraries }, Object::Wildcards)?.cache)
+    })
 }
 
 /// LDD a path.
@@ -228,17 +258,18 @@ pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result
 /// use std::borrow::Cow;
 /// use antimony::fab::get_libraries;
 ///
-/// get_libraries(Cow::Borrowed("/proc/self/exe")).expect("Failed to LDD self");
+/// get_libraries("/proc/self/exe").expect("Failed to LDD self");
 /// ```
 pub fn get_libraries(path: &str) -> Result<Set<String>> {
-    let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
-        libraries.cache
-    } else {
-        let libraries = ldd(path)?;
-        write_cache(path, Cache { cache: libraries }, Object::Libraries)?.cache
-    };
-
-    Ok(libraries)
+    timer!("::get_libraries", {
+        let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
+            libraries.cache
+        } else {
+            let libraries = ldd(path)?.clone();
+            write_cache(path, Cache { cache: libraries }, Object::Libraries)?.cache
+        };
+        Ok(libraries)
+    })
 }
 
 /// Resolve environment variables within paths.
@@ -264,47 +295,49 @@ pub fn get_libraries(path: &str) -> Result<Set<String>> {
 /// assert!(resolve(Cow::Borrowed("$$$")) == "$$$");
 /// ```
 pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
-    if string.starts_with('~') {
-        string = Cow::Owned(string.replace("~", "/home/antimony"));
-    }
-
-    if string.contains('$') {
-        let mut resolved = String::new();
-        let mut chars = string.chars().peekable();
-
-        while let Some(ch) = chars.next() {
-            if ch == '$' {
-                let mut var_name = String::new();
-                while let Some(&next) = chars.peek() {
-                    if next.is_ascii_uppercase() || next.is_ascii_digit() || next == '_' {
-                        var_name.push(next);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                if !var_name.is_empty() {
-                    // These values may not be defined in the environment, but have explicit
-                    // values Antimony can fill.
-                    let val = match var_name.as_str() {
-                        "UID" => format!("{}", user::USER.real),
-                        "AT_HOME" => AT_HOME.display().to_string(),
-                        "XDG_CONFIG_HOME" => CONFIG_HOME.display().to_string(),
-                        "XDG_DATA_HOME" => DATA_HOME.display().to_string(),
-                        name => env::var(name).unwrap_or_else(|_| format!("${name}")),
-                    };
-                    resolved.push_str(&val);
-                } else {
-                    resolved.push('$');
-                }
-            } else {
-                resolved.push(ch)
-            }
+    timer!("::resolve", {
+        if string.starts_with('~') {
+            string = Cow::Owned(string.replace("~", "/home/antimony"));
         }
-        Cow::Owned(resolved)
-    } else {
-        string
-    }
+
+        if string.contains('$') {
+            let mut resolved = String::new();
+            let mut chars = string.chars().peekable();
+
+            while let Some(ch) = chars.next() {
+                if ch == '$' {
+                    let mut var_name = String::new();
+                    while let Some(&next) = chars.peek() {
+                        if next.is_ascii_uppercase() || next.is_ascii_digit() || next == '_' {
+                            var_name.push(next);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if !var_name.is_empty() {
+                        // These values may not be defined in the environment, but have explicit
+                        // values Antimony can fill.
+                        let val = match var_name.as_str() {
+                            "UID" => format!("{}", user::USER.real),
+                            "AT_HOME" => AT_HOME.display().to_string(),
+                            "XDG_CONFIG_HOME" => CONFIG_HOME.display().to_string(),
+                            "XDG_DATA_HOME" => DATA_HOME.display().to_string(),
+                            name => env::var(name).unwrap_or_else(|_| format!("${name}")),
+                        };
+                        resolved.push_str(&val);
+                    } else {
+                        resolved.push('$');
+                    }
+                } else {
+                    resolved.push(ch)
+                }
+            }
+            Cow::Owned(resolved)
+        } else {
+            string
+        }
+    })
 }
 
 /// Localize a home path to /home/antimony
@@ -317,11 +350,13 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
 /// ```
 #[inline]
 pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
-    if path.starts_with("/home") {
-        Cow::Owned(path.replace(HOME.as_str(), "/home/antimony"))
-    } else {
-        Cow::Borrowed(path)
-    }
+    timer!("::localize_home", {
+        if path.starts_with("/home") {
+            Cow::Owned(path.replace(HOME.as_str(), "/home/antimony"))
+        } else {
+            Cow::Borrowed(path)
+        }
+    })
 }
 
 /// Localize a path, returning the resolved source, and where it should be mounted in the sandbox.
@@ -371,25 +406,28 @@ pub fn localize_path(
     file: &str,
     home: bool,
 ) -> Result<(Option<Cow<'_, str>>, String), user::Error> {
-    let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
-        (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
-    } else {
-        let mut resolved = resolve(Cow::Borrowed(file));
-        if home
-            && !resolved.starts_with("/home")
-            && (!resolved.starts_with('/') || !as_real!({ Path::new(resolved.as_ref()).exists() })?)
-        {
-            resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
-        }
-        (resolved.clone(), resolved)
-    };
-    let dest = localize_home(&dest);
+    timer!("::localize_path", {
+        let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
+            (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
+        } else {
+            let mut resolved = resolve(Cow::Borrowed(file));
+            if home
+                && !resolved.starts_with("/home")
+                && (!resolved.starts_with('/')
+                    || !as_real!({ Path::new(resolved.as_ref()).exists() })?)
+            {
+                resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
+            }
+            (resolved.clone(), resolved)
+        };
+        let dest = localize_home(&dest);
 
-    Ok(if as_real!({ Path::new(source.as_ref()).exists() })? {
-        debug!("{source} => {dest}");
-        (Some(source), dest.into_owned())
-    } else {
-        debug!("{source} (does not exist) => {dest}");
-        (None, dest.into_owned())
+        Ok(if as_real!({ Path::new(source.as_ref()).exists() })? {
+            debug!("{source} => {dest}");
+            (Some(source), dest.into_owned())
+        } else {
+            debug!("{source} (does not exist) => {dest}");
+            (None, dest.into_owned())
+        })
     })
 }

@@ -107,6 +107,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'P
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Add libraries'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand edit" -l stdin -d 'Read from stdin, rather than using an interactive editor'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'
@@ -117,9 +118,12 @@ complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s r -l rem
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s s -l shadow -d 'Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don\'t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -l create-desktop -d 'Create a desktop file if one does not exist'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand remove" -l feature -d 'Target a feature, rather than a profile. Requires privilege'
+complete -c antimony -n "__fish_antimony_using_subcommand remove" -l feature -d 'Target a feature, rather than a profile'
+complete -c antimony -n "__fish_antimony_using_subcommand remove" -l yes -d 'Do not ask for confirmation'
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c antimony -n "__fish_antimony_using_subcommand export" -l name -d 'The name of the profile/feature to export. If absent, export all user-profiles/features' -r
+complete -c antimony -n "__fish_antimony_using_subcommand export" -l dest -d 'Where to export to. Defaults to current directory' -r
 complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand import" -l feature -d 'Target the feature set rather than the profile set'

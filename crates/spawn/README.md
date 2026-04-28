@@ -57,15 +57,15 @@ let proxy = spawn::Spawner::abs("/usr/bin/bwrap")
 .mode(user::Mode::Real).args([
 		"--new-session",
 		"--ro-bind", "/usr/bin/xdg-dbus-proxy", "/usr/bin/xdg-dbus-proxy",
-]).unwrap();
+]);
 
 let sof_str = "sof";
-proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"]).unwrap();
+proxy.args_i(["--ro-bind-try", &format!("{sof_str}/lib"), "/usr/lib"]);
 let path = &format!("{sof_str}/lib64");
 if std::path::Path::new(path).exists() {
-		proxy.args_i(["--ro-bind-try", path, "/usr/lib64"]).unwrap();
+		proxy.args_i(["--ro-bind-try", path, "/usr/lib64"]);
 } else {
-		proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"]).unwrap();
+		proxy.args_i(["--symlink", "/usr/lib", "/usr/lib64"]);
 }
 ```
 
@@ -108,7 +108,7 @@ let string = "Hello, World!";
 write!(handle, "{string}").unwrap();
 handle.close().unwrap();
 
-let output = handle.output().unwrap().read_all().unwrap();
+let output = handle.output().unwrap().read_blocking().unwrap();
 assert!(output.trim() == string);
 ```
 
@@ -162,4 +162,4 @@ If you are not using SetUID, this feature is useless.
 
 ### `fork`
 
-The Fork feature gates the highly dangerous and unsafe `Fork` structure for running Rust closures within the child, rather than calling `execve`. 
+The Fork feature gates the highly dangerous and unsafe `Fork` structure for running Rust closures within the child, rather than calling `execve`.

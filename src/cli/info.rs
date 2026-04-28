@@ -78,11 +78,17 @@ impl cli::Run for Args {
 
         if let Some(name) = self.name {
             print(&name, info_dump(&name))
+        } else if let Ok(user) = USER_STORE.borrow().get(table) {
+            SYSTEM_STORE
+                .borrow()
+                .get(table)?
+                .union(&user)
+                .for_each(|name| print(name, info_dump(name)));
         } else {
             SYSTEM_STORE
                 .borrow()
                 .get(table)?
-                .union(&USER_STORE.borrow().get(table)?)
+                .iter()
                 .for_each(|name| print(name, info_dump(name)));
         }
 

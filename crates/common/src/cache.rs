@@ -128,3 +128,19 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
         self.get(&key).unwrap()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::borrow::Cow;
+
+    static BACK: CacheStatic<String, Cow<'static, str>> = LazyLock::new(DashMap::default);
+    static CACHE: LazyLock<Cache<String, Cow<'static, str>>> = LazyLock::new(|| Cache::new(&BACK));
+
+    #[test]
+    fn test_cache() {
+        assert!(CACHE.get("test").is_none());
+        CACHE.insert("test".to_string(), Cow::Borrowed("Hello!"));
+        assert!(CACHE.get("test").unwrap().as_ref() == "Hello!")
+    }
+}

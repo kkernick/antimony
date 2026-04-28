@@ -124,6 +124,10 @@ pub fn direct_path(file: &str) -> PathBuf {
     CACHE_DIR.join(".direct").join(&file[1..])
 }
 
+#[cfg(debug_assertions)]
+pub static TIME_MAP: std::sync::LazyLock<ThreadMap<&'static str, u128>> =
+    std::sync::LazyLock::new(ThreadMap::default);
+
 /// Debug macro to record how long something took, but only in developer builds.
 /// On release builds, this does nothing.
 #[macro_export]
@@ -131,10 +135,15 @@ macro_rules! timer {
     ($name:literal, $body:block) => {{
         #[cfg(debug_assertions)]
         {
-            log::debug!("Starting {}", $name);
+            use std::ops::AddAssign;
             let start = std::time::Instant::now();
             let result = $body;
-            log::info!("{}: {}us", $name, start.elapsed().as_micros(),);
+            let elapsed = start.elapsed().as_micros();
+            $crate::shared::TIME_MAP
+                .entry($name)
+                .or_insert(0)
+                .value_mut()
+                .add_assign(elapsed);
             result
         }
 
@@ -145,10 +154,15 @@ macro_rules! timer {
     ($name:literal, $expr:expr) => {{
         #[cfg(debug_assertions)]
         {
-            log::debug!("Starting {}", $name);
+            use std::ops::AddAssign;
             let start = std::time::Instant::now();
             let result = $expr;
-            log::info!("{}: {}us", $name, start.elapsed().as_micros(),);
+            let elapsed = start.elapsed().as_micros();
+            $crate::shared::TIME_MAP
+                .entry($name)
+                .or_insert(0)
+                .value_mut()
+                .add_assign(elapsed);
             result
         }
 

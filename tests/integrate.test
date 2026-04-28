@@ -1,0 +1,17 @@
+export XDG_DATA_HOME="/tmp/.local/share"
+export HOME="/tmp"
+
+assert $ANTIMONY integrate bash
+assert [[ -h /tmp/.local/bin/bash ]]
+
+assert $ANTIMONY integrate -r bash
+assert ! [[ -h /tmp/.local/bin/bash ]]
+
+assert $ANTIMONY integrate --create-desktop bash
+assert [[ -f /tmp/.local/share/applications/bash.desktop ]]
+
+assert $ANTIMONY integrate -r bash
+assert ! [[ -h /tmp/.local/bin/bash ]]
+assert ! [[ -h /tmp/.local/share/applications/bash.desktop ]]
+
+rm -r /tmp/.local

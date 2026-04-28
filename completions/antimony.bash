@@ -97,7 +97,7 @@ _antimony() {
             return 0
             ;;
         antimony__edit)
-            opts="-h --feature --help <NAME>"
+            opts="-h --feature --stdin --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -111,12 +111,20 @@ _antimony() {
             return 0
             ;;
         antimony__export)
-            opts="-h --feature --help [NAME] [DEST]"
+            opts="-h --name --dest --feature --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --dest)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
@@ -343,7 +351,7 @@ _antimony() {
             return 0
             ;;
         antimony__remove)
-            opts="-h --feature --help [NAME]"
+            opts="-h --feature --yes --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

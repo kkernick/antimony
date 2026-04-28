@@ -1,0 +1,36 @@
+assert $ANTIMONY run bash --dry
+assert $ANTIMONY refresh bash --dry
+assert $ANTIMONY refresh --hard bash --dry
+assert $ANTIMONY run bash --refresh --dry
+
+MESSAGE="Hello, world!"
+assert_str "$($ANTIMONY run bash --binaries echo --sandbox-args="# echo ${MESSAGE} !")" "$MESSAGE"
+
+FILE="/tmp/test.txt"
+echo "$MESSAGE" > $FILE
+assert_str "$($ANTIMONY run bash --ro "$FILE" --binaries cat --sandbox-args="# cat $FILE !")" "$MESSAGE"
+rm $FILE
+
+if [[ -f /usr/bin/sleep ]]; then
+  assert $ANTIMONY run bash --path /usr/bin/sleep -- 0.1
+fi
+
+assert_str "$($ANTIMONY run bash --dir /tmp --path /usr/bin/pwd)" "/tmp"
+assert $ANTIMONY run bash --lockdown true --dry
+assert $ANTIMONY run bash --user-bus --system-bus --dry
+assert $ANTIMONY run bash --owns org.bash --dry
+assert $ANTIMONY run bash --temp /run --dry
+assert $ANTIMONY run bash --libraries "libz*" --dry
+assert $ANTIMONY run bash --directories "b*" --dry
+assert $ANTIMONY run bash --no-sof --dry
+assert $ANTIMONY run bash --namespaces all --dry
+
+for PROFILE in $(ls files/valid/profiles/*); do
+  assert $ANTIMONY run $PROFILE --dry
+done
+
+assert ! $ANTIMONY run no_such_program
+assert ! $ANTIMONY refresh no_such_program
+for PROFILE in $(ls files/invalid/profiles/*); do
+  assert ! $ANTIMONY run $PROFILE
+done

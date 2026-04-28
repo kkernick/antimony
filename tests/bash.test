@@ -1,3 +1,0 @@
-$ANTIMONY run bash --dry
-$ANTIMONY refresh bash --dry
-$ANTIMONY refresh --hard bash --dry

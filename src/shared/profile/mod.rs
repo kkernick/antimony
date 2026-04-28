@@ -321,7 +321,7 @@ impl Profile {
 
         let hash = profile.hash_str(&config);
         if let Ok(bytes) = timer!(
-            "fetch_cache",
+            "::fetch_cache",
             CACHE_STORE.borrow().bytes(&hash, Object::Profile)
         ) {
             debug!("Using cached profile");

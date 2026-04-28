@@ -4,16 +4,18 @@ use crate::shared::{
     env::PWD,
     store::{Object, SYSTEM_STORE, USER_STORE},
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use std::{fs, path::PathBuf};
 use user::as_real;
 
 #[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile/feature to export. If absent, export all user-profiles/features.
+    #[arg(long)]
     name: Option<String>,
 
     /// Where to export to. Defaults to current directory
+    #[arg(long)]
     dest: Option<String>,
 
     /// Target the feature set rather than the profile set.
@@ -49,8 +51,10 @@ impl super::Run for Args {
         };
 
         if !dest.exists() {
-            Err(anyhow!("Destination does not exist"))
-        } else if let Some(object) = self.name {
+            as_real!(fs::create_dir_all(&dest))??;
+        }
+
+        if let Some(object) = self.name {
             export(&object)
         } else {
             for object in USER_STORE.borrow().get(table)? {

@@ -1,33 +1,43 @@
 #!/bin/bash
-DIR=$(cargo builder --recipe dev)
+set -x
+
+DIR=$(cargo builder --recipe gdb)
 ROOT=$(git rev-parse --show-toplevel)
+OLD=$(pwd)
+
+cargo test --workspace --exclude notify
+
+cd $ROOT/tests
 
 export ANTIMONY="${DIR}/antimony"
 export NOTIFY="none"
 export RUST_LOG="error"
+export RUST_BACKTRACE=1
 export AT_HOME="$ROOT"
+export AT_FORCE_TEMP=1
 
 SOURCE=""
-for UTIL in $(find "$ROOT/tests" -name "*.util"); do
+for UTIL in $(find "." -name "*.util"); do
   SOURCE="$SOURCE source $UTIL;"
 done
 export SOURCE
 
 echo "Running test suite..."
-for TEST in $(find "$ROOT/tests" -name "*.test"); do
-  echo "$TEST"
-  OUT=$(bash -c "$SOURCE set -x; $(cat $TEST)")
+for TEST in $(find "." -name "*.test"); do
+  echo "Running $TEST..."
+  OUT=$(bash -c "$SOURCE set -x; $(cat $TEST)" 2>&1)
   if [[ $? -ne 0 ]]; then
     echo "$TEST: FAILED"
     echo "$OUT"
-  fi
-done
-for TEST in $(find "$ROOT/tests" -name "*.fail"); do
-  echo "$TEST"
-  OUT=$(bash -c "set -x; $(cat $TEST)" 2>&1)
-  if [[ $? -eq 0 ]]; then
-    echo "$TEST: FAILED"
-    echo "$OUT"
+  else
+    echo "$TEST: PASS"
+    if [[ -n $(echo "$@" | grep "out") ]]; then
+      echo "$OUT"
+    fi
   fi
 done
 echo "Done"
+
+cd $OLD
+
+rm -r $AT_HOME/config/$USER

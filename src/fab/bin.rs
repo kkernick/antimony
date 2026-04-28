@@ -19,7 +19,6 @@ use crate::{
 use anyhow::{Context, Result};
 use bilrost::{Enumeration, Message};
 use log::{debug, warn};
-use parking_lot::Mutex;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -33,14 +32,14 @@ use temp::Temp;
 use user::as_real;
 use which::which;
 
-#[derive(Message, Debug)]
+#[derive(Message, Debug, Default)]
 struct Cache {
     t: Type,
-    parse: ParseReturn,
+    parse: Option<ParseReturn>,
 }
 
 /// The kind of thing we just analyzed.
-#[derive(Debug, Enumeration, Eq, PartialEq)]
+#[derive(Debug, Enumeration, Eq, PartialEq, Default)]
 pub enum Type {
     Elf = 0,
     File = 1,
@@ -48,6 +47,8 @@ pub enum Type {
     Link = 3,
     Directory = 4,
     Done = 5,
+
+    #[default]
     None = 6,
 }
 
@@ -77,21 +78,24 @@ impl ParseReturn {
         Self::default()
     }
 
-    fn merge(global: &mut Self, cache: Self) {
-        for elf in cache.elf {
-            global.elf.insert(elf);
+    fn merge(&mut self, cache: &Self) {
+        for elf in cache.elf.iter().cloned() {
+            self.elf.insert(elf);
         }
-        for script in cache.scripts {
-            global.scripts.insert(script);
+        for script in cache.scripts.iter().cloned() {
+            self.scripts.insert(script);
         }
-        for file in cache.files {
-            global.files.insert(file);
+        for file in cache.files.iter().cloned() {
+            self.files.insert(file);
         }
-        for dir in cache.directories {
-            global.directories.insert(dir);
+        for dir in cache.directories.iter().cloned() {
+            self.directories.insert(dir);
         }
-        for (k, v) in cache.symlinks {
-            global.symlinks.insert((k, v));
+        for (k, v) in cache.symlinks.iter().cloned() {
+            self.symlinks.insert((k, v));
+        }
+        for (k, v) in cache.localized.iter() {
+            self.localized.insert(k.clone(), v.clone());
         }
     }
 }
@@ -123,25 +127,27 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 fn parse(
     path: &str,
     instance: &Temp,
-    global: &Mutex<ParseReturn>,
     done: Arc<ThreadSet<String>>,
     mut include_self: bool,
-) -> Result<Type> {
+) -> Result<Cache> {
     // Avoid duplicate work
     if !done.insert(path.to_string()) {
-        return Ok(Type::Done);
+        return Ok(Cache {
+            t: Type::Done,
+            parse: None,
+        });
     }
 
     if let Ok(Some(cache)) = get_cache::<Cache>(path, Object::Binaries) {
         debug!("Using cache");
-        let mut lock = global.lock();
-        ParseReturn::merge(&mut lock, cache.parse);
-        return Ok(cache.t);
+        return Ok(cache);
     }
 
     let resolved = match resolve_bin(path) {
         Ok(path) => path,
-        Err(_) => return Ok(Type::None),
+        Err(_) => {
+            return Ok(Cache::default());
+        }
     };
 
     let mut ret = ParseReturn::new();
@@ -161,7 +167,9 @@ fn parse(
     // Ensure it's a valid binary.
     let t = {
         if let Ok(dest) = dest {
-            parse(&dest, instance, global, done.clone(), true)?;
+            if let Some(parsed) = parse(&dest, instance, done.clone(), true)?.parse {
+                ret.merge(&parsed)
+            }
             if include_self {
                 if !dest.contains("bin")
                     && let Some(i) = dest.rfind("/")
@@ -185,13 +193,18 @@ fn parse(
             // Open it.
             let mut file = match as_real!({ File::open(resolved.as_ref()) })? {
                 Ok(file) => file,
-                Err(_) => return Ok(Type::None),
+                Err(_) => {
+                    return Ok(Cache::default());
+                }
             };
 
             // Get the magic.
             let mut magic = [0u8; 4];
             if file.read_exact(&mut magic).is_err() {
-                return Ok(Type::None);
+                return Ok(Cache {
+                    t: Type::None,
+                    parse: None,
+                });
             }
 
             // ELF binaries are returned, as they are LDD'd by the library fabricator.
@@ -222,9 +235,9 @@ fn parse(
                 let header = match iter.next() {
                     Some(line) => match line {
                         Ok(line) => line,
-                        Err(_) => return Ok(Type::None),
+                        Err(_) => return Ok(Cache::default()),
                     },
-                    None => return Ok(Type::None),
+                    None => return Ok(Cache::default()),
                 };
 
                 binaries.extend(
@@ -233,34 +246,31 @@ fn parse(
                         .map(|token| token.strip_prefix("#!").unwrap_or(token).to_string()),
                 );
 
-                if ["dash", "bash", "sh", "zsh"]
-                    .into_iter()
-                    .any(|shell| header.contains(shell))
-                {
-                    let out = Spawner::abs(utility("dumper"))
-                        .args([
-                            "run",
-                            "--path",
-                            &resolved,
-                            "--instance",
-                            &instance.full().to_string_lossy(),
-                            "--filter",
-                            "execve",
-                        ])
-                        .output(StreamMode::Pipe)
-                        .error(StreamMode::Discard)
-                        .preserve_env(true)
-                        .new_privileges(true)
-                        .mode(user::Mode::Real)
-                        .spawn()?
-                        .output_all()?;
+                let out = Spawner::abs(utility("dumper"))
+                    .args([
+                        "run",
+                        "--path",
+                        &resolved,
+                        "--instance",
+                        &instance.full().to_string_lossy(),
+                        "--filter",
+                        "execve",
+                    ])
+                    .output(StreamMode::Pipe)
+                    .error(StreamMode::Discard)
+                    .preserve_env(true)
+                    .new_privileges(true)
+                    .mode(user::Mode::Real)
+                    .spawn()?
+                    .output_all()?;
 
-                    let out = out.lines().map(String::from);
-                    binaries.extend(out);
-                }
-
+                let out = out.lines().map(String::from);
+                binaries.extend(out);
                 for bin in binaries {
-                    parse(&bin, instance, global, done.clone(), true)?;
+                    let cache = parse(&bin, instance, done.clone(), true)?;
+                    if let Some(parse) = cache.parse {
+                        ret.merge(&parse);
+                    }
                 }
 
                 Type::Script
@@ -273,12 +283,14 @@ fn parse(
         }
     };
 
-    let cache = write_cache(path, Cache { t, parse: ret }, Object::Binaries)?;
-    {
-        let mut lock = global.lock();
-        ParseReturn::merge(&mut lock, cache.parse);
-    }
-    Ok(cache.t)
+    write_cache(
+        path,
+        Cache {
+            t,
+            parse: Some(ret),
+        },
+        Object::Binaries,
+    )
 }
 
 /// Get the immediate parent within /usr/lib.
@@ -304,44 +316,54 @@ fn handle_localize(
     instance: &Temp,
     home: bool,
     include_self: bool,
-    parsed: &Mutex<ParseReturn>,
     done: Arc<ThreadSet<String>>,
-) -> Result<()> {
+) -> Result<ParseReturn> {
+    let mut ret = ParseReturn::default();
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            parse(file, instance, parsed, done.clone(), include_self)?;
+            if let Some(parsed) = parse(file, instance, done.clone(), include_self)?.parse {
+                ret.merge(&parsed)
+            }
         } else {
-            match parse(&src, instance, parsed, done.clone(), false)? {
+            let parsed = parse(&src, instance, done.clone(), false)?;
+            if let Some(parsed) = parsed.parse {
+                ret.merge(&parsed);
+            }
+
+            match parsed.t {
                 Type::Script | Type::File | Type::Elf => {
-                    parsed.lock().localized.insert(src.into_owned(), dst);
+                    ret.localized.insert(src.into_owned(), dst);
                 }
 
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    handle_localize(&ldst, instance, home, false, parsed, done.clone())?;
-                    parsed.lock().symlinks.insert((dst, ldst));
+                    ret.merge(&handle_localize(
+                        &ldst,
+                        instance,
+                        home,
+                        false,
+                        done.clone(),
+                    )?);
+                    ret.symlinks.insert((dst, ldst));
                 }
                 _ => {}
             }
         }
-        Ok(())
     } else {
-        parse(file, instance, parsed, done.clone(), true)?;
-        Ok(())
+        if let Some(parsed) = parse(file, instance, done.clone(), true)?.parse {
+            ret.merge(&parsed)
+        }
     }
+    Ok(ret)
 }
 
 /// Collection takes all the binaries defined in the profiles, and parses them.
 /// This includes resolving wildcards, and parsing files tagged as Executable
 /// in the files header.
-pub fn collect(
-    profile: &Profile,
-    name: &str,
-    instance: &Temp,
-    parsed: &Mutex<ParseReturn>,
-) -> Result<()> {
+pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseReturn> {
+    let mut ret = ParseReturn::default();
     let resolved = Arc::new(ThreadSet::default());
     resolved.insert(profile.app_path(name).to_string());
 
@@ -376,32 +398,48 @@ pub fn collect(
     timer!("::collect::files", {
         if let Some(files) = &profile.files {
             if let Some(x) = files.user.get(&FileMode::Executable) {
-                x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, true, true, parsed, done.clone())
-                })?;
+                x.par_iter()
+                    .filter_map(|file| {
+                        handle_localize(file, instance, true, true, done.clone()).ok()
+                    })
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .for_each(|parsed| ret.merge(parsed));
             }
             if let Some(x) = files.resources.get(&FileMode::Executable) {
-                x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, false, true, parsed, done.clone())
-                })?;
+                x.par_iter()
+                    .filter_map(|file| {
+                        handle_localize(file, instance, false, true, done.clone()).ok()
+                    })
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .for_each(|parsed| ret.merge(parsed));
             }
             if let Some(x) = files.platform.get(&FileMode::Executable) {
-                x.iter().try_for_each(|file| {
-                    handle_localize(file, instance, false, true, parsed, done.clone())
-                })?;
+                x.par_iter()
+                    .filter_map(|file| {
+                        handle_localize(file, instance, false, true, done.clone()).ok()
+                    })
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .for_each(|parsed| ret.merge(parsed));
             }
             if let Some(x) = files.direct.get(&FileMode::Executable) {
-                x.iter().try_for_each(|(file, _)| {
-                    let path = direct_path(file);
-                    handle_localize(
-                        &path.to_string_lossy(),
-                        instance,
-                        false,
-                        false,
-                        parsed,
-                        done.clone(),
-                    )
-                })?;
+                x.par_iter()
+                    .filter_map(|(file, _)| {
+                        let path = direct_path(file);
+                        handle_localize(
+                            &path.to_string_lossy(),
+                            instance,
+                            false,
+                            false,
+                            done.clone(),
+                        )
+                        .ok()
+                    })
+                    .collect::<Vec<_>>()
+                    .iter()
+                    .for_each(|parsed| ret.merge(parsed));
             }
         }
     });
@@ -411,15 +449,16 @@ pub fn collect(
         Arc::into_inner(resolved)
             .unwrap()
             .into_par_iter()
-            .for_each(|binary| {
-                if let Err(e) =
-                    handle_localize(binary.as_str(), instance, false, true, parsed, done.clone())
-                {
-                    warn!("Failed to localize {binary}: {e}");
-                }
+            .filter_map(|binary| {
+                handle_localize(binary.as_str(), instance, false, true, done.clone()).ok()
+            })
+            .collect::<Vec<_>>()
+            .iter()
+            .for_each(|parsed| {
+                ret.merge(parsed);
             });
     });
-    Ok(())
+    Ok(ret)
 }
 
 /// Fabricate the binaries.
@@ -447,13 +486,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     let parsed = match get_cache(&bin_cache, Object::Binaries) {
         Ok(Some(parsed)) => parsed,
         _ => {
-            let parsed = Mutex::new(ParseReturn::new());
-            timer!(
-                "::collect",
-                collect(info.profile, info.name, info.instance, &parsed,)
-            )?;
-
-            let parsed = parsed.into_inner();
+            let parsed = timer!("::collect", collect(info.profile, info.name, info.instance))?;
             write_cache(&bin_cache, parsed, Object::Binaries)?
         }
     };
@@ -478,7 +511,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             .for_each(|script| info.handle.args_i(["--ro-bind", &script, &script]));
     });
 
-    timer!("::files", {
+    timer!("::bin::files", {
         parsed
             .files
             .into_par_iter()
@@ -489,7 +522,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         parsed.localized.into_par_iter().try_for_each(
             |(src, dst): (String, String)| -> anyhow::Result<()> {
                 info.handle.args_i(["--ro-bind", &src, &dst]);
-                if elf_filter(&src) {
+                if as_real!(elf_filter(&src))? {
                     elf_binaries.insert(src);
                 }
                 Ok(())

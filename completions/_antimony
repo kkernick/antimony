@@ -93,6 +93,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 (edit)
 _arguments "${_arguments_options[@]}" : \
 '--feature[Target the feature set rather than the profile set]' \
+'--stdin[Read from stdin, rather than using an interactive editor]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name -- The object to edit:_default' \
@@ -127,7 +128,8 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 ;;
 (remove)
 _arguments "${_arguments_options[@]}" : \
-'--feature[Target a feature, rather than a profile. Requires privilege]' \
+'--feature[Target a feature, rather than a profile]' \
+'--yes[Do not ask for confirmation]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
@@ -147,11 +149,11 @@ clean\:"Remove binaries that no longer exist from the database"))' \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
+'--name=[The name of the profile/feature to export. If absent, export all user-profiles/features]:NAME:_default' \
+'--dest=[Where to export to. Defaults to current directory]:DEST:_default' \
 '--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name -- The name of the profile/feature to export. If absent, export all user-profiles/features:_default' \
-'::dest -- Where to export to. Defaults to current directory:_default' \
 && ret=0
 ;;
 (import)

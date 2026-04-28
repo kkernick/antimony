@@ -123,7 +123,7 @@ pub enum StreamMode {
 /// let string = "Hello, World!";
 /// write!(handle, "{}", &string);
 /// handle.close();
-/// let output = handle.output().unwrap().read_all().unwrap();
+/// let output = handle.output().unwrap().read_blocking().unwrap();
 /// assert!(output == string);
 /// ```
 pub struct Spawner {
@@ -400,8 +400,8 @@ impl Spawner {
     /// ```rust
     /// let file = std::fs::File::create("file.txt").unwrap();
     /// spawn::Spawner::new("bwrap").unwrap()
-    ///     .fd_arg("--file", file).unwrap()
-    ///     .arg("/file.txt").unwrap()
+    ///     .fd_arg("--file", file)
+    ///     .arg("/file.txt")
     ///     .spawn().unwrap();
     /// std::fs::remove_file("file.txt").unwrap();
     /// ```
@@ -924,7 +924,7 @@ mod tests {
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all()?;
+        let output = handle.output()?.read_blocking()?;
         assert!(output.trim() == string);
         Ok(())
     }
@@ -940,7 +940,7 @@ mod tests {
         write!(handle, "{string}")?;
         handle.close()?;
 
-        let output = handle.output()?.read_all()?;
+        let output = handle.output()?.read_blocking()?;
         assert!(output.trim() == string);
         Ok(())
     }
@@ -967,7 +967,7 @@ mod tests {
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all()?;
+        let output = handle.output()?.read_blocking()?;
         assert!(output.trim().is_empty());
         Ok(())
     }
@@ -982,7 +982,7 @@ mod tests {
             .error(StreamMode::Pipe)
             .spawn()?;
 
-        let output = handle.output()?.read_all()?;
+        let output = handle.output()?.read_blocking()?;
         assert!(output.trim() == user);
         Ok(())
     }

@@ -14,3 +14,7 @@ chmod ug+s /usr/bin/antimony
 chmod ug+s /usr/share/antimony/utilities/antimony-lockdown
 setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
 setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
+
+if command -v aa-status && command -v systemctl; then
+    systemctl reload apparmor
+fi

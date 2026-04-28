@@ -1,0 +1,23 @@
+assert $ANTIMONY import --help
+assert $ANTIMONY export --help
+assert $ANTIMONY import files/valid/profiles
+assert $ANTIMONY import files/valid/profiles/1.toml
+assert $ANTIMONY export --dest /tmp/valid
+
+# Make sure the profiles show up in the output
+for FILE in $(ls files/valid/profiles); do
+  assert echo $(ls /tmp/valid) | grep "$(basename $FILE)"
+done
+rm -r /tmp/valid
+
+assert $ANTIMONY export --name 1.toml
+assert [[ -f 1.toml ]]
+assert ! [[ -f 2.toml ]]
+rm 1.toml
+
+assert $ANTIMONY export --name 1.toml --dest /tmp
+assert [[ -f /tmp/1.toml ]]
+assert ! [[ -f /tmp/2.toml ]]
+rm /tmp/1.toml
+
+assert ! $ANTIMONY import files/invalid/profiles

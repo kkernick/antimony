@@ -220,6 +220,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     });
 
     if no_sof {
+        log::info!("Mounting system libraries.");
         return mount_roots("", info.handle);
     }
 
@@ -246,11 +247,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     });
 
     if let Some(libraries) = info.profile.libraries.take() {
-        timer!("::resolve", {
+        timer!("::lib::resolve", {
             rayon::join(
                 move || {
                     timer!(
-                        "::directories",
+                        "::lib::directories",
                         resolve_wildcards(libraries.directories, WildcardFilter::Directories)
                             .par_bridge()
                             .for_each(|e| {
@@ -265,7 +266,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 },
                 move || {
                     timer!(
-                        "::files",
+                        "::lib::files",
                         resolve_wildcards(libraries.files, WildcardFilter::Files)
                             .par_bridge()
                             .for_each(|file| {

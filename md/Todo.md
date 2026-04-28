@@ -21,7 +21,7 @@
 	* [ ] Command completion for loading profiles (IE antimony run ch + tab → chromium)
 	* [x] Integrate should require a path to add, but not to remove
 	* [x] Ensure all environment variables have a fallback (IE `XDG_*`), and have support on the Spawner for an `env_or` to pass a default.
-	* [x] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
+	* [ ] Investigate sandbox fails after calling `run` after making a change to the profile. Stale cache?
 	* [x] `info` should be able to dump SECCOMP info, too.
 		* There’s really no good place to put it. `info` is tailored for Profiles/Features, `seccomp` is tailored for paths.
 	* [x] Migrate instance information entirely in `RUNTIME`. `HASH/INSTANCE`. No symlink.

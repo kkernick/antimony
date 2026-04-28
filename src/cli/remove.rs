@@ -19,9 +19,13 @@ pub struct Args {
     /// The name of the profile. If absent, resets profiles that are identical to the system.
     pub name: Option<String>,
 
-    /// Target a feature, rather than a profile. Requires privilege.
+    /// Target a feature, rather than a profile.
     #[arg(long, default_value_t = false)]
     pub feature: bool,
+
+    /// Do not ask for confirmation.
+    #[arg(long, default_value_t = false)]
+    pub yes: bool,
 }
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
@@ -39,7 +43,7 @@ impl cli::Run for Args {
                 println!("Resetting to system {kind}");
                 USER_STORE.borrow().remove(&name, table)?;
             } else if user {
-                if Confirm::new()
+                if self.yes || Confirm::new()
                     .with_prompt(format!(
                         "{name} is a user-created {kind}. There is no system default to reset to. Are you sure you want to remove it?",
                     ))
@@ -50,17 +54,18 @@ impl cli::Run for Args {
                 }
             } else if system && name != "default" {
                 if privileged()?
-                    && Confirm::new()
-                        .with_prompt(format!(
-                            "{name} is a system {kind}. Are you sure you want to remove it?",
-                        ))
-                        .interact()?
+                    && (self.yes
+                        || Confirm::new()
+                            .with_prompt(format!(
+                                "{name} is a system {kind}. Are you sure you want to remove it?",
+                            ))
+                            .interact()?)
                 {
                     println!("Deleting system {kind}");
                     SYSTEM_STORE.borrow().remove(&name, table)?;
                 }
             } else {
-                println!("No such {kind}")
+                return Err(anyhow::anyhow!("No such {kind}"));
             }
             Ok(())
         } else {

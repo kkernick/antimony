@@ -48,12 +48,12 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
     // These can't be readily done in parallel, since
     // the heaviest ones (bin and lib) rely on each other.
-    timer!("::files", fab::files::fabricate(&info))?;
-    timer!("::bin", fab::bin::fabricate(&mut info))?;
-    timer!("::lib", fab::lib::fabricate(&mut info))?;
-    timer!("::ns", fab::ns::fabricate(&mut info))?;
-    timer!("::dev", fab::dev::fabricate(&info))?;
+    timer!("::fab::files", fab::files::fabricate(&info))?;
+    timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
+    timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
+    timer!("::fab::ns", fab::ns::fabricate(&mut info))?;
+    timer!("::fab::dev", fab::dev::fabricate(&info))?;
 
-    timer!("::cache_write", args.handle.cache_write(&cmd_cache))?;
+    timer!("::fab::cache_write", args.handle.cache_write(&cmd_cache))?;
     Ok(())
 }

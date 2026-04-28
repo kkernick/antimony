@@ -3,8 +3,13 @@
 //! general use is:
 //!
 //! ```rust
+//! use std::sync::LazyLock;
+//! use common::singleton::Semaphore;
+//!
+//! static SEM: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
+//!
 //! // Take control of the Singleton. This is a blocking operation.
-//! let lock = common::singleton::Singleton::new();
+//! let lock = common::singleton::Singleton::new(&SEM);
 //! // ...
 //! if let Some(lock) = lock {
 //!     drop(lock)
@@ -19,10 +24,14 @@
 //! remain owned by the thread for the scope highest in the call-chain:
 //!
 //! ```rust
+//! use std::sync::LazyLock;
+//! use common::singleton::Semaphore;
+//!
+//! static SEM: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
 //! fn critical_write() {
 //!     // Acquire a lock
-//!     let _lock = common::singleton::Singleton::new();
-//!     !("Rust already ensures only a single thread can write here, but we're being safe ;)");
+//!     let _lock = common::singleton::Singleton::new(&SEM);
+//!     println!("Rust already ensures only a single thread can write here, but we're being safe ;)");
 //!
 //!     // Because we already have the Singleton in this thread, this instance will be none. The MutexGuard
 //!     // is held by the parent.
@@ -30,7 +39,7 @@
 //! }
 //!
 //! // Acquire a lock for our critical section.
-//! let _lock = common::singleton::Singleton::new();
+//! let _lock = common::singleton::Singleton::new(&SEM);
 //! let x = 1;
 //!
 //! // Write. Though we already hold an instance of the Singleton, we can safely call this from this thread.
@@ -101,5 +110,42 @@ impl Drop for Singleton {
         *self.guard = false;
         let (_, _, cvar) = &*self.sem;
         cvar.notify_one();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{sync::LazyLock, thread};
+
+    #[cfg(test)]
+    static SEM: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
+
+    #[cfg(test)]
+    static mut COUNTER: u64 = 0;
+
+    #[test]
+    fn test_singleton() {
+        const NUM_THREADS: usize = 50;
+        let mut handles = Vec::with_capacity(NUM_THREADS);
+
+        for _ in 0..NUM_THREADS {
+            let handle = thread::spawn(|| {
+                let _lock = Singleton::new(&SEM).expect("Could not acquire singleton");
+                unsafe {
+                    COUNTER += 1;
+                }
+            });
+            handles.push(handle);
+        }
+
+        for h in handles {
+            h.join().expect("Thread panicked");
+        }
+        let final_value = unsafe { COUNTER };
+        assert_eq!(
+            final_value, NUM_THREADS as u64,
+            "Counter should equal the number of threads"
+        );
     }
 }

@@ -1,6 +1,9 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
-use std::fs;
+use std::{
+    fs,
+    io::{Read, stdin},
+};
 
 use dialoguer::console::style;
 
@@ -22,6 +25,10 @@ pub struct Args {
     /// Target the feature set rather than the profile set.
     #[arg(long)]
     pub feature: bool,
+
+    /// Read from stdin, rather than using an interactive editor.
+    #[arg(long)]
+    pub stdin: bool,
 }
 impl cli::Run for Args {
     fn run(self) -> anyhow::Result<()> {
@@ -50,7 +57,20 @@ impl cli::Run for Args {
             )
         };
 
-        let commit = if self.feature {
+        let commit = if self.stdin {
+            let mut buffer = String::new();
+            stdin().read_to_string(&mut buffer)?;
+            if (self.feature && toml::from_str::<Feature>(&buffer).is_ok())
+                || (!self.feature && toml::from_str::<Profile>(&buffer).is_ok())
+            {
+                Some(buffer)
+            } else {
+                if new {
+                    USER_STORE.borrow().remove(&self.name, table)?;
+                }
+                return Err(anyhow::anyhow!("Invalid {kind} on stdin."));
+            }
+        } else if self.feature {
             Feature::edit(&buffer)?
         } else {
             Profile::edit(&buffer)?
