@@ -31,9 +31,6 @@ pub enum Error {
     /// If the pair cannot be allocated.
     Allocation(Errno),
 
-    /// If a request has become invalid
-    InvalidId,
-
     /// If there was an error receiving a request from the kernel.
     Receive(Errno),
 
@@ -43,9 +40,8 @@ pub enum Error {
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            Self::Allocation(errno) => Some(errno),
-            Self::Receive(errno) => Some(errno),
-            _ => None,
+            Self::Allocation(errno) | Self::Receive(errno) => Some(errno),
+            Self::Respond(_) => None,
         }
     }
 }
@@ -53,7 +49,6 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Allocation(errno) => write!(f, "Failed to allocate notification pair: {errno}"),
-            Self::InvalidId => write!(f, "Received ID is no longer valid"),
             Self::Receive(errno) => write!(f, "Failed to receive event: {errno}"),
             Self::Respond(errno) => write!(f, "Failed to respond to event: {errno}"),
         }
@@ -88,12 +83,15 @@ pub trait Notifier: Send + 'static {
     /// before `seccomp_load`, and as such is the last time you will
     /// not be confined by the Filter. This can be used, for example,
     /// to wait for a socket, then connect to it.
+    ///
+    /// ## Errors
+    /// This function should fail if preparation could not be made.
     fn prepare(&mut self) -> Result<(), String> {
         Ok(())
     }
 
     /// Handle the SECCOMP FD. This function runs under the confined
-    /// SECCOMP Filter, and should transmit the OwnedFD to the
+    /// SECCOMP Filter, and should transmit the `OwnedFD` to the
     /// Notify Monitor. The more you do here, the more syscalls
     /// you will need; consider moving as much as possible to
     /// `prepare()`
@@ -135,11 +133,14 @@ pub struct Pair {
 }
 impl Pair {
     /// Construct a new Pair.
+    ///
+    /// ## Errors
+    /// `Error::Allocation`: if the notify pair could not be allocated.
     pub fn new() -> Result<Self, Error> {
         let (req, resp) = unsafe {
             let mut req: *mut raw::seccomp_notif = null_mut();
             let mut resp: *mut raw::seccomp_notif_resp = null_mut();
-            match raw::seccomp_notify_alloc(&mut req, &mut resp) {
+            match raw::seccomp_notify_alloc(&raw mut req, &raw mut resp) {
                 0 => (req, resp),
                 e => return Err(Error::Allocation(Errno::from_raw(e))),
             }
@@ -149,6 +150,9 @@ impl Pair {
 
     /// Receive a new event.
     /// This function fails if the kernel returns an error.
+    ///
+    /// ## Errors
+    /// `Error::Receive`: If `seccomp_notify_receive` returned an error.
     pub fn recv(&self, fd: RawFd) -> Result<Option<()>, Error> {
         // We need to wipe the structure each time.
         unsafe {
@@ -176,6 +180,8 @@ impl Pair {
     ///
     /// The request will always be valid, and the ID will already be set.
     ///
+    /// ## Errors
+    /// `Error::Respond` if the `seccomp_notify_respond` fails
     pub fn reply<F>(&self, fd: RawFd, handle: F) -> Result<(), Error>
     where
         F: Fn(&raw::seccomp_notif, &mut raw::seccomp_notif_resp),
@@ -197,6 +203,10 @@ impl Pair {
         // Send response
         let respond_ret = unsafe { raw::seccomp_notify_respond(fd.as_raw_fd(), self.resp) };
         if respond_ret < 0 {
+            #[allow(
+                clippy::arithmetic_side_effects,
+                reason = "The kernel returns `Errno` as negative values"
+            )]
             let errno = Errno::from_raw(-respond_ret);
             match errno {
                 Errno::ECANCELED => Ok(()),

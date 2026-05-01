@@ -77,7 +77,7 @@ pub fn setup<'a>(
     if let Some(libraries) = &mut profile.libraries {
         libraries.roots.drain().for_each(|root| {
             if Path::new(&root).exists() {
-                let _ = ROOTS.insert(root);
+                let _ = ROOTS.insert(Cow::Owned(root));
             }
         });
     }
@@ -269,9 +269,6 @@ pub fn setup<'a>(
     }
 
     let post = timer!("::post", post::setup(&mut a))?;
-
-    // Unfortunately, the proxy is slower than Antimony, so we need to wait for it
-    // to be ready. I should probably just write my own.
     timer!(
         "::wait",
         wait::setup(a.watches, a.inotify, &mut a.handle, a.args.dry)

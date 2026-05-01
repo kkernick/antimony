@@ -364,8 +364,8 @@ fn handle_localize(
 /// in the files header.
 pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseReturn> {
     let mut ret = ParseReturn::default();
-    let resolved = Arc::new(ThreadSet::default());
-    resolved.insert(profile.app_path(name).to_string());
+    let resolved = Arc::new(ThreadSet::<Cow<'static, str>>::default());
+    resolved.insert(Cow::Owned(profile.app_path(name).to_string()));
 
     // Scope so the lock falls out of scope.
     {
@@ -376,7 +376,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                 binaries.into_par_iter().partition(|e| e.contains('*'));
 
             flat.into_par_iter().for_each(|f| {
-                resolved.insert(f.clone());
+                resolved.insert(Cow::Owned(f.clone()));
             });
 
             wildcards.into_par_iter().for_each(|w| {
@@ -449,9 +449,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
         Arc::into_inner(resolved)
             .unwrap()
             .into_par_iter()
-            .filter_map(|binary| {
-                handle_localize(binary.as_str(), instance, false, true, done.clone()).ok()
-            })
+            .filter_map(|binary| handle_localize(&binary, instance, false, true, done.clone()).ok())
             .collect::<Vec<_>>()
             .iter()
             .for_each(|parsed| {
@@ -560,7 +558,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
                 let home_str = home_dir.to_string_lossy();
-                lib::DIRS.insert(home_str.into_owned());
+                lib::DIRS.insert(Cow::Owned(home_str.into_owned()));
             }
         })
     }

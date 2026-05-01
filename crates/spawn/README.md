@@ -5,7 +5,7 @@ This crate is used to spawn and manage processes. It is conceptually similar to 
 1. It is Linux specific.
 2. It asynchronously manages the process via a `Handle`.
 3. It treats the processes’ standard output and error as a `Stream` which can be asynchronously retrieved.
-4. It supports SetUID and SECCOMP.
+4. It supports setuid and SECCOMP.
 5. It supports passing File Descriptors.
 6. It supports in-place calls, such as `mode` to consume and return the object, and also `mode_i` to modify it in-place without consuming it.
 7. It supports caching.
@@ -24,6 +24,7 @@ These three options take a `StreamMode` value, which can be:
 * `Share`: Use the parent’s stream (IE child output will be displayed on the parent’s Standard Out)
 * `Log(level)`: Send the stream to the program `log::Log` implementation. If the log level is lower than the level specified, the stream is discarded.
 * `Discard`: Send the contents to `/dev/null`.
+* `Fd(OwnedFd)` pipes the provided FD to the opposite side of the process' pipe. `stdin` will read from the FD, `stdout`/`stderr` will write to the FD.
 
 Other options include (With a `_i` variant for a non-consuming version):
 
@@ -32,6 +33,7 @@ Other options include (With a `_i` variant for a non-consuming version):
 * `preserve_env`: Preserve the parent’s environment with the child.
 * `env`: Pass a key-pair to the child for its environment. 
 * `pass_env`: Pass the environment variable as defined in the environment.
+* `env_or`: Pass the environment as defined in the environment, or use a default.
 * `seccomp` (Requires `seccomp` feature): Run the child under a specific SECCOMP Policy.
 * `fd` (Requires `fd` feature): Give ownership of a FD, or FD-like object, to the Spawner, and provide it to the Child.
 * `associate`: Associate another process `Handle` to the `Spawner`, such that they are dropped together.
@@ -156,9 +158,9 @@ The Cache feature gates control to the `Spawner::cache_read`, `Spawner::cache_wr
 
 ### `user`
 
-The User feature gates control of the `Spawner::mode` function, which allows the child to be run under a specific operating mode for SetUID applications, while also ensuring that cleanup and signal works within this privileged context. 
+The User feature gates control of the `Spawner::mode` function, which allows the child to be run under a specific operating mode for setuid applications, while also ensuring that cleanup and signal works within this privileged context. 
 
-If you are not using SetUID, this feature is useless. 
+If you are not using setuid, this feature is useless. 
 
 ### `fork`
 

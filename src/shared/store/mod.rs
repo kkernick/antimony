@@ -1,5 +1,4 @@
 //! Antimony can use different backends for its file and cache store.
-//! Currently, the available options are loose files, and a SQLite database.
 //! By defining a common interface, they can be swapped out relatively easily,
 //! and migrating from one to the other.
 
@@ -61,9 +60,7 @@ unsafe impl Sync for Store {}
 unsafe impl Send for Store {}
 
 pub static SYSTEM_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::System));
-
 pub static USER_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::User));
-
 pub static CACHE_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::Cache));
 
 #[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
@@ -231,7 +228,6 @@ mod tests {
             .expect("Failed to store profile");
 
         assert!(store.exists("test", object));
-
         assert!(store.fetch("test", object).expect("Failed to get profile") == content);
 
         store

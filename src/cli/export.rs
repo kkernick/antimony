@@ -24,11 +24,7 @@ pub struct Args {
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
-        let dest = match self.dest {
-            Some(path) => PathBuf::from(path),
-            None => PWD.clone(),
-        };
-
+        let dest = self.dest.map_or_else(|| PWD.clone(), PathBuf::from);
         let (table, kind) = if self.feature {
             (Object::Feature, "feature")
         } else {

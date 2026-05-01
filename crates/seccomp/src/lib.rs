@@ -9,6 +9,7 @@ pub mod raw;
 pub mod syscall;
 
 /// Get the current architecture.
+#[must_use]
 pub fn get_architecture() -> u32 {
     unsafe { raw::seccomp_arch_native() }
 }
@@ -40,11 +41,11 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            Error::Filter(e) => Some(e),
-            Error::Syscall(e) => Some(e),
+            Self::Filter(e) => Some(e),
+            Self::Syscall(e) => Some(e),
 
             #[cfg(feature = "notify")]
-            Error::Notify(e) => Some(e),
+            Self::Notify(e) => Some(e),
         }
     }
 }
@@ -77,11 +78,11 @@ mod tests {
 
     #[test]
     fn init_and_release() {
-        Filter::new(Action::Allow).expect("Allow Default Failed");
-        Filter::new(Action::KillProcess).expect("KillProcess Default Failed");
-        Filter::new(Action::KillThread).expect("KillThread Default Failed");
-        Filter::new(Action::Log).expect("Log Default Failed");
-        Filter::new(Action::Trap).expect("Trap Default Failed");
+        let _ = Filter::new(Action::Allow).expect("Allow Default Failed");
+        let _ = Filter::new(Action::KillProcess).expect("KillProcess Default Failed");
+        let _ = Filter::new(Action::KillThread).expect("KillThread Default Failed");
+        let _ = Filter::new(Action::Log).expect("Log Default Failed");
+        let _ = Filter::new(Action::Trap).expect("Trap Default Failed");
     }
 
     #[test]
@@ -128,7 +129,7 @@ mod tests {
     #[test]
     fn add_rule() {
         let mut filter = Filter::new(Action::Allow).expect("Failed to create filter");
-        filter
+        let _ = filter
             .add_rule(
                 Action::Allow,
                 Syscall::from_name("read").expect("Failed to get read syscall"),

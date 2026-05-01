@@ -50,6 +50,7 @@ To compile Antimony, you will need:
 * `libdbus` (`libdbus-1-dev` for Debian)
 
 To build, simply execute `cargo build --release` to generate the required binaries in `target/release`. If you want shell completions, execute `cargo build --release --workspace`, then run the `target/release/antimony_completions`. The completions files will be available in the `completions` folder.
+
 ### Packaging
 
 If you want to install Antimony without the help of a package manager, just run the `deploy` script. Otherwise, you can use `fpm` to build a package for your distribution. Simply execute `fpm -t package_type` to output the package.
@@ -57,7 +58,6 @@ If you want to install Antimony without the help of a package manager, just run 
 You’ll need the following dependencies to run the package script:
 * `fpm` (Recommended through `gem install fpm`)
 * `libarchive` (`libarchive-tools` for Debian)
-* `rpm-tools` (`rpm` for Debian)
 
 If you want to install Antimony manually, there are some considerations you take into account:
 1. Antimony expects to be run as SetUID underneath its own dedicated system account. You can create one using `useradd -r antimony`. This account should only have access to `/usr/share/antimony`, alongside ownership of the `antimony` binary. You can set the correct permissions on the binary via:

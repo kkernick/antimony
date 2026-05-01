@@ -62,10 +62,6 @@ pub enum Error {
     #[error("Path error: {0}")]
     Path(#[from] which::Error),
 
-    /// Errors for profile arguments specified on the command line.
-    #[error("Command line error: {0}")]
-    CommandLine(&'static str, String, Vec<String>),
-
     /// Errors incorporating features.
     #[error("Feature error: {0}")]
     Feature(#[from] crate::fab::features::Error),
@@ -503,6 +499,7 @@ impl Profile {
         Ok(())
     }
 
+    /// Get the path of the profile binary.
     pub fn app_path<'a>(&'a self, name: &'a str) -> Cow<'a, str> {
         match &self.path {
             Some(path) => Cow::Borrowed(path),

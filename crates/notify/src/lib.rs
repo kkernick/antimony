@@ -15,7 +15,10 @@ use parking_lot::{Mutex, ReentrantMutex};
 use std::{
     borrow::Cow,
     collections::HashMap,
+    env,
+    fmt::{self, Write},
     io::{IsTerminal, stdout},
+    process,
     sync::{
         Arc, LazyLock, OnceLock,
         atomic::{AtomicBool, Ordering},
@@ -24,34 +27,31 @@ use std::{
 };
 use thiserror::Error;
 
-/// The current log level, set by the RUST_LOG environment variable
-pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| match std::env::var("RUST_LOG") {
-    Ok(e) => match e.to_lowercase().as_str() {
+/// The current log level, set by the `RUST_LOG` environment variable
+pub static LEVEL: LazyLock<log::Level> = LazyLock::new(|| {
+    env::var("RUST_LOG").map_or(Level::Error, |e| match e.to_lowercase().as_str() {
         "trace" => log::Level::Trace,
         "warn" => log::Level::Warn,
         "info" => log::Level::Info,
         "debug" => log::Level::Debug,
         _ => log::Level::Error,
-    },
-    Err(_) => log::Level::Error,
+    })
 });
 
-/// The current level to which messages should be notified. By
-/// default, only errors cause prompts. This is controlled via the
-/// NOTIFY environment variable, and can be set to none to only log
-/// to the terminal.
-pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> =
-    LazyLock::new(|| match std::env::var("NOTIFY") {
-        Ok(e) => match e.to_lowercase().as_str() {
-            "none" => None,
-            "trace" => Some(log::Level::Trace),
-            "warn" => Some(log::Level::Warn),
-            "info" => Some(log::Level::Info),
-            "debug" => Some(log::Level::Debug),
-            _ => Some(log::Level::Error),
-        },
-        Err(_) => Some(log::Level::Error),
-    });
+/// The current level to which messages should be notified.
+///
+/// By default, only errors cause prompts. This is controlled via the
+/// NOTIFY environment variable.
+pub static PROMPT_LEVEL: LazyLock<Option<log::Level>> = LazyLock::new(|| {
+    env::var("NOTIFY").map_or(Some(Level::Error), |e| match e.to_lowercase().as_str() {
+        "none" => None,
+        "trace" => Some(log::Level::Trace),
+        "warn" => Some(log::Level::Warn),
+        "info" => Some(log::Level::Info),
+        "debug" => Some(log::Level::Debug),
+        _ => Some(log::Level::Error),
+    })
+});
 
 /// The global Logger
 static LOGGER: OnceLock<NotifyLogger> = OnceLock::new();
@@ -62,14 +62,15 @@ static LOCK: LazyLock<ReentrantMutex<()>> = LazyLock::new(ReentrantMutex::defaul
 /// A custom Notifier that the LOGGER will use, if set.
 static NOTIFIER: OnceLock<Box<Notifier>> = OnceLock::new();
 
-/// A DBus Map
+/// A D-Bus Map
+#[allow(clippy::absolute_paths)]
 type VariantMap<'a> = HashMap<&'a str, Variant<Box<dyn dbus::arg::RefArg>>>;
 
 /// A Notifier function, which accepts the Record and Level of each Log, and
 /// returns whether the logging was successful.
 type Notifier = dyn Fn(&Record, Level) -> bool + Send + Sync + 'static;
 
-/// Errors for the NotifyLogger.
+/// Errors for the `NotifyLogger`.
 #[derive(Debug, Error)]
 pub enum Error {
     /// Errors for when the console-fallback fails to receive
@@ -112,20 +113,20 @@ pub enum Urgency {
 }
 impl Urgency {
     /// Get the Byte for this Urgency Level, to send across the Bus.
-    fn byte(&self) -> u8 {
+    const fn byte(self) -> u8 {
         match self {
-            Urgency::Low => 0,
-            Urgency::Normal => 1,
-            Urgency::Critical => 2,
+            Self::Low => 0,
+            Self::Normal => 1,
+            Self::Critical => 2,
         }
     }
 }
-impl std::fmt::Display for Urgency {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Urgency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Urgency::Low => write!(f, "low"),
-            Urgency::Normal => write!(f, "normal"),
-            Urgency::Critical => write!(f, "critical"),
+            Self::Low => write!(f, "low"),
+            Self::Normal => write!(f, "normal"),
+            Self::Critical => write!(f, "critical"),
         }
     }
 }
@@ -145,6 +146,7 @@ fn console_msg(title: &str, body: &str, urgency: Option<Urgency>) -> String {
 }
 
 /// Convert the HTML tags defined by the Notification Spec to console formatting.
+#[allow(clippy::arithmetic_side_effects)]
 fn style_tag<F>(mut msg: String, open: &str, close: &str, style: F) -> String
 where
     F: Fn(&str) -> StyledObject<&str>,
@@ -162,7 +164,7 @@ where
 
 /// Format style tags.
 fn console_format(content: &str) -> String {
-    let mut content = content.to_string();
+    let mut content = content.to_owned();
     content = style_tag(content, "<b>", "</b>", |tag: &str| style(tag).bold());
     content = style_tag(content, "<i>", "</i>", |tag: &str| style(tag).italic());
     content
@@ -173,38 +175,40 @@ fn console_actions(
     title: &str,
     body: &str,
     urgency: Option<Urgency>,
-    actions: Vec<String>,
+    actions: &Vec<String>,
 ) -> Result<String, Error> {
     let msg = console_msg(title, body, urgency);
     let _lock = LOCK.lock();
     let result = dialoguer::Select::new()
         .with_prompt(msg)
         .default(0)
-        .items(&actions)
+        .items(actions)
         .interact()?;
     Ok(actions[result].clone())
 }
 
 /// Construct a Message to send across the User Bus.
+#[allow(
+    clippy::ref_option,
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation
+)]
+#[allow(clippy::unwrap_used, reason = "All arguments are hard-coded.")]
 fn get_msg(
     title: &str,
     body: &str,
     timeout: &Option<Duration>,
-    urgency: &Option<Urgency>,
+    urgency: Option<Urgency>,
     actions: Option<&Vec<String>>,
 ) -> Message {
     let mut hints = VariantMap::new();
     if let Some(urgency) = urgency {
-        hints.insert("urgency", Variant(Box::new(urgency.byte())));
+        let _ = hints.insert("urgency", Variant(Box::new(urgency.byte())));
     }
-    hints.insert("sender-pid", Variant(Box::new(std::process::id() as i32)));
+    let _ = hints.insert("sender-pid", Variant(Box::new(process::id() as i32)));
 
     let a_placeholder = Vec::new();
-    let a = if let Some(a) = actions {
-        a
-    } else {
-        &a_placeholder
-    };
+    let a = actions.unwrap_or(&a_placeholder);
 
     Message::new_method_call(
         "org.freedesktop.Notifications",
@@ -215,12 +219,12 @@ fn get_msg(
     .unwrap()
     // App Name
     .append1(
-        if let Ok(path) = std::env::current_exe()
+        if let Ok(path) = env::current_exe()
             && let Some(name) = path.file_name()
         {
             name.to_string_lossy().to_title_case()
         } else {
-            "Notify".to_string()
+            "Notify".to_owned()
         },
     )
     // Replace ID and Icon are empty
@@ -230,16 +234,16 @@ fn get_msg(
     // Actions and Hints
     .append2(a, hints)
     // Timeout
-    .append1(if let Some(timeout) = timeout {
-        timeout.as_millis() as i32
-    } else {
-        -1
-    })
+    .append1(timeout.map_or(-1, |timeout| timeout.as_millis() as i32))
 }
 
 /// Send a stateless Notification across the User Bus.
 /// If there is a failure sending the message, it will be sent
 /// to the terminal.
+///
+/// ## Errors
+/// This function will fail if a connection to the user bus could not be made, or if
+/// the message could not be sent.
 pub fn notify(
     title: impl Into<Cow<'static, str>>,
     body: impl Into<Cow<'static, str>>,
@@ -249,16 +253,16 @@ pub fn notify(
     let title = title.into();
     let body = body.into();
 
-    let msg = get_msg(&title, &body, &timeout, &urgency, None);
+    let msg = get_msg(&title, &body, &timeout, urgency, None);
     let result = || -> Result<(), Error> {
         let connection = LocalConnection::new_session()?;
-        connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+        let _ = connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
         Ok(())
     };
 
     if result().is_err() {
         let _lock = LOCK.lock();
-        println!("{}", console_msg(&title, &body, urgency))
+        println!("{}", console_msg(&title, &body, urgency));
     }
     Ok(())
 }
@@ -268,6 +272,15 @@ pub fn notify(
 ///
 /// Should an error preventing sending a Notification, the dialoguer
 /// crate will be used to prompt from the terminal.
+///
+/// ## Errors
+/// This function will fail if a connection to the user bus could not be made, or if
+/// the message could not be sent.
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "We will never panic unwrapping the Arc"
+)]
 pub fn action(
     title: impl Into<Cow<'static, str>>,
     body: impl Into<Cow<'static, str>>,
@@ -288,19 +301,18 @@ pub fn action(
     let result = || -> Result<String, Error> {
         // Get a connection, and send the notification.
         let connection = LocalConnection::new_session()?;
-        let msg = get_msg(&title, &body, &timeout, &urgency, Some(&a));
+        let msg = get_msg(&title, &body, &timeout, urgency, Some(&a));
         let response = connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-        let id = match response.get1::<u32>() {
-            Some(id) => id,
-            None => return Err(Error::Connection),
+        let Some(id) = response.get1::<u32>() else {
+            return Err(Error::Connection);
         };
 
         // The Bus will Broadcast the response through an ActionInvoked Member,
         // with a pair containing the response, and the ID we got from the original call.
         let found = Arc::new(AtomicBool::new(false));
         let action = Arc::<Mutex<String>>::default();
-        let found_clone = found.clone();
-        let action_clone = action.clone();
+        let found_clone = Arc::clone(&found);
+        let action_clone = Arc::clone(&action);
         let rule = MatchRule::new()
             .with_path("/org/freedesktop/Notifications")
             .with_interface("org.freedesktop.Notifications")
@@ -321,10 +333,12 @@ pub fn action(
         )?;
 
         // Watch the Bus for our desired notification.
-        monitor.start_receive(
+        let _ = monitor.start_receive(
             MatchRule::new(),
             Box::new(move |msg: Message, _conn: &LocalConnection| -> bool {
-                if !found_clone.load(Ordering::Relaxed) {
+                if found_clone.load(Ordering::Relaxed) {
+                    true
+                } else {
                     let (notif_id, action_key): (u32, String) = match msg.read2() {
                         Ok(v) => v,
                         Err(_) => {
@@ -339,8 +353,6 @@ pub fn action(
                     } else {
                         true
                     }
-                } else {
-                    true
                 }
             }),
         );
@@ -349,35 +361,35 @@ pub fn action(
         let timeout = timeout.unwrap_or(Duration::from_secs(10));
         let start = Instant::now();
         while !found.load(Ordering::Relaxed) && start.elapsed() < timeout {
-            monitor.process(Duration::from_secs(1))?;
+            let _ = monitor.process(Duration::from_secs(1))?;
         }
         Ok(Arc::into_inner(action).unwrap().into_inner())
     };
 
     // If we couldn't get a response, ask on the terminal, instead.
-    match result() {
-        Ok(result) => Ok(result),
-        Err(_) => {
-            let _lock = LOCK.lock();
-            let response = console_actions(
-                &title,
-                &body,
-                urgency,
-                actions.iter().map(|(_, v)| v.to_string()).collect(),
-            )?;
+    if let Ok(result) = result() {
+        Ok(result)
+    } else {
+        let _lock = LOCK.lock();
+        let response = console_actions(
+            &title,
+            &body,
+            urgency,
+            &actions.iter().map(|(_, v)| v.to_owned()).collect(),
+        )?;
 
-            Ok(actions
-                .into_iter()
-                .find_map(|(k, v)| if v == response { Some(k) } else { None })
-                .iter()
-                .next()
-                .unwrap()
-                .to_string())
-        }
+        Ok(actions
+            .into_iter()
+            .find_map(|(k, v)| if v == response { Some(k) } else { None })
+            .iter()
+            .next()
+            .unwrap()
+            .to_owned())
     }
 }
 
 /// Get the color that should be used for particular log level.
+#[must_use]
 pub fn level_color(level: log::Level) -> StyledObject<&'static str> {
     match level {
         log::Level::Error => style("ERROR").red().bold().blink(),
@@ -389,7 +401,8 @@ pub fn level_color(level: log::Level) -> StyledObject<&'static str> {
 }
 
 /// Get the pretty name of a log level.
-pub fn level_name(level: log::Level) -> &'static str {
+#[must_use]
+pub const fn level_name(level: log::Level) -> &'static str {
     match level {
         log::Level::Error => "Error",
         log::Level::Warn => "Warning",
@@ -400,22 +413,23 @@ pub fn level_name(level: log::Level) -> &'static str {
 }
 
 /// Get the recommended notification urgency for each level.
-pub fn level_urgency(level: log::Level) -> Urgency {
+#[must_use]
+pub const fn level_urgency(level: log::Level) -> Urgency {
     match level {
         log::Level::Error => Urgency::Critical,
         log::Level::Warn => Urgency::Normal,
-        log::Level::Info => Urgency::Low,
-        log::Level::Debug => Urgency::Low,
-        log::Level::Trace => Urgency::Low,
+        _ => Urgency::Low,
     }
 }
 
-/// A log::Log implementation that is controlled by RUST_LOG for console logs,
+/// A `log::Log` implementation that is controlled by `RUST_LOG` for console logs,
 /// and NOTIFY for which of those should be promoted to Notifications.
 struct NotifyLogger {
+    /// Whether to print to stderr or stdin
     error: bool,
 }
 impl NotifyLogger {
+    /// Create a new logger.
     const fn new(error: bool) -> Self {
         Self { error }
     }
@@ -433,16 +447,16 @@ impl log::Log for NotifyLogger {
         }
 
         let mut msg = String::new();
-        msg.push_str(&format!(
-            "[{} {} {:?}] {}",
+        let _ = write!(
+            msg,
+            "[{} {}] {}",
             level_color(record.level()),
             style(record.target()).bold().italic(),
-            std::thread::current().id(),
             record.args()
-        ));
+        );
 
         if !msg.ends_with('\n') {
-            msg.push('\n')
+            msg.push('\n');
         }
 
         {
@@ -475,7 +489,15 @@ impl log::Log for NotifyLogger {
     fn flush(&self) {}
 }
 
-/// Initialize the NotifyLogger as the program's Logger.
+/// Initialize the `NotifyLogger` as the program's Logger.
+///
+/// ## Errors
+/// `Error::Init`: If the logger could not be set, or already was.
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "This function will not panic, as we check the value."
+)]
 pub fn init() -> Result<(), Error> {
     if LOGGER.set(NotifyLogger::new(false)).is_ok() {
         log::set_logger(LOGGER.get().unwrap()).map_err(|_| Error::Init)?;
@@ -486,9 +508,17 @@ pub fn init() -> Result<(), Error> {
     }
 }
 
-/// Initialize the NotifyLogger as the program's Logger, but print to
+/// Initialize the `NotifyLogger` as the program's Logger, but print to
 /// stderr instead of stdout. Note that this only applies to direct logging,
 /// notification call fallback still prints to stdout.
+///
+/// ## Errors
+/// `Error::Init`: If the logger could not be set, or already was.
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "This function will not panic, as we check the value."
+)]
 pub fn init_error() -> Result<(), Error> {
     if LOGGER.set(NotifyLogger::new(true)).is_ok() {
         log::set_logger(LOGGER.get().unwrap()).map_err(|_| Error::Init)?;
@@ -500,16 +530,17 @@ pub fn init_error() -> Result<(), Error> {
 }
 
 /// Set an optional Notifier function that is called instead of the
-/// notify() function defined here, such as to run the binary compiled
-/// by this crate in cases of SetUID, where we cannot communicate
-/// to the User Bus in this process.
+/// `notify()` function defined here.
+///
+/// ## Errors
+/// `Error::Set`: If the logger could not be set, or already was.
 pub fn set_notifier(function: Box<Notifier>) -> Result<(), Error> {
     NOTIFIER.set(function).map_err(|_| Error::Set)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{Error, action, notify};
+    use crate::{Error, action, init, notify};
 
     #[test]
     pub fn simple_notify() -> Result<(), Error> {
@@ -524,9 +555,15 @@ mod tests {
                 "This is an action test!",
                 None,
                 None,
-                vec![("Test".to_string(), "Test".to_string())]
+                vec![("Test".to_owned(), "Test".to_owned())]
             )? == "Test"
         );
         Ok(())
+    }
+
+    #[test]
+    pub fn test_logger() {
+        init().expect("Failed to init");
+        log::info!("Test!");
     }
 }

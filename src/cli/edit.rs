@@ -1,12 +1,5 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
-use std::{
-    fs,
-    io::{Read, stdin},
-};
-
-use dialoguer::console::style;
-
 use crate::{
     cli,
     shared::{
@@ -15,6 +8,11 @@ use crate::{
         profile::Profile,
         store::{Object, SYSTEM_STORE, USER_STORE},
     },
+};
+use dialoguer::console::style;
+use std::{
+    fs,
+    io::{Read, stdin},
 };
 
 #[derive(clap::Args, Default)]
@@ -59,7 +57,10 @@ impl cli::Run for Args {
 
         let commit = if self.stdin {
             let mut buffer = String::new();
-            stdin().read_to_string(&mut buffer)?;
+            if stdin().read_to_string(&mut buffer)? == 0 {
+                return Err(anyhow::anyhow!("Nothing to read on stdin."));
+            }
+
             if (self.feature && toml::from_str::<Feature>(&buffer).is_ok())
                 || (!self.feature && toml::from_str::<Profile>(&buffer).is_ok())
             {

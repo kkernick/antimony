@@ -21,7 +21,7 @@ use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
-use log::{debug, trace};
+use log::debug;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -50,7 +50,7 @@ pub struct FabInfo<'a> {
 
 #[derive(Message, Debug)]
 struct Cache {
-    cache: Set<String>,
+    cache: Set<Cow<'static, str>>,
 }
 
 /// Get cached definitions.
@@ -81,7 +81,7 @@ fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Re
 #[inline]
 pub fn in_lib(path: &str) -> bool {
     timer!("::in_lib", {
-        ROOTS.par_iter().any(|r| path.starts_with(r.as_str()))
+        ROOTS.par_iter().any(|r| path.starts_with(r.as_ref()))
     })
 }
 
@@ -107,6 +107,12 @@ static LDD: LazyLock<cache::Cache<String, Set<String>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
 #[inline(always)]
+/// LDD an executable to get its library dependencies.
+///
+/// ```rust
+/// antimony::fab::ldd("/usr/bin/bash").expect("Failed to LDD bash");
+/// ```
+///
 pub fn ldd(path: &str) -> Result<&'static Set<String>> {
     match LDD.get(path) {
         Some(depends) => Ok(depends),
@@ -164,14 +170,14 @@ pub fn ldd(path: &str) -> Result<&'static Set<String>> {
 /// ```rust
 /// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
 /// ```
-pub fn get_dir(dir: &str) -> Result<Set<String>> {
+pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
     timer!("::get_dir", {
         if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
-            return Ok(libraries.cache);
+            return Ok(libraries.cache.into_iter().collect());
         }
 
-        let libraries: Set<String> = Spawner::abs("/usr/bin/find")
-            .args([dir, "-executable", "-type", "fs"])
+        let libraries: Set<Cow<'static, str>> = Spawner::abs("/usr/bin/find")
+            .args([dir, "-executable", "-type", "f"])
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?
@@ -180,7 +186,7 @@ pub fn get_dir(dir: &str) -> Result<Set<String>> {
             .par_bridge()
             .filter_map(|lib| ldd(lib).ok())
             .flatten()
-            .cloned()
+            .map(|s| Cow::Borrowed(s.as_str()))
             .collect();
 
         Ok(write_cache(dir, Cache { cache: libraries }, Object::Directories)?.cache)
@@ -195,9 +201,13 @@ pub fn get_dir(dir: &str) -> Result<Set<String>> {
 /// use antimony::fab::{get_wildcards,lib::WildcardFilter};
 /// get_wildcards("glib*", true, WildcardFilter::Files).expect("Failed to find Glib");
 /// ```
-pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
+pub fn get_wildcards(
+    pattern: &str,
+    lib: bool,
+    filter: WildcardFilter,
+) -> Result<Set<Cow<'static, str>>> {
     timer!("::get_wildcards", {
-        let run = |dir: &str, base: &str| -> Result<Set<String>> {
+        let run = |dir: &str, base: &str| -> Result<Set<Cow<'static, str>>> {
             let handle = Spawner::abs("/usr/bin/find").arg(dir);
 
             if base.contains("/") {
@@ -218,7 +228,7 @@ pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result
                 .spawn()?
                 .output_all()?
                 .lines()
-                .map(|e| e.to_string())
+                .map(|e| Cow::Owned(e.to_string()))
                 .collect())
         };
 
@@ -260,12 +270,15 @@ pub fn get_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result
 ///
 /// get_libraries("/proc/self/exe").expect("Failed to LDD self");
 /// ```
-pub fn get_libraries(path: &str) -> Result<Set<String>> {
+pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
     timer!("::get_libraries", {
         let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
             libraries.cache
         } else {
-            let libraries = ldd(path)?.clone();
+            let libraries: Set<Cow<'static, str>> = ldd(path)?
+                .iter()
+                .map(|s| Cow::Borrowed(s.as_str()))
+                .collect();
             write_cache(path, Cache { cache: libraries }, Object::Libraries)?.cache
         };
         Ok(libraries)

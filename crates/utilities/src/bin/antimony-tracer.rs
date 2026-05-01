@@ -95,7 +95,7 @@ fn main() -> anyhow::Result<()> {
                         false
                     } else if d_name.contains("*") {
                         match get_wildcards(&d_name, true, WildcardFilter::Files) {
-                            Ok(cards) => cards.contains(file),
+                            Ok(cards) => cards.contains(file.as_str()),
                             Err(_) => false,
                         }
                     } else {

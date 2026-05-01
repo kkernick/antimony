@@ -27,4 +27,4 @@ assert!(std::path::Path::new("/tmp/new_file").exists());
 
 ### `user`
 
-The User Feature gates the `Builder::owner` function to allow creating/deleting the Temporary Object with a specified user mode. This is useless unless your application is SetUID.
+The User Feature gates the `Builder::owner` function to allow creating/deleting the Temporary Object with a specified user mode. This is useless unless your application is `setuid`.

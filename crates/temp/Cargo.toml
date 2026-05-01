@@ -9,3 +9,6 @@ user = { path = "../user", optional = true}
 fastrand = { version = "2.3.0", default-features = false, features = ["std"] }
 log = "0.4.29"
 thiserror = "2.0.18"
+
+[lints]
+workspace = true

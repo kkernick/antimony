@@ -2,6 +2,8 @@
 
 use std::{
     env::temp_dir,
+    fmt::Write,
+    fs, io,
     iter::repeat_with,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -10,7 +12,7 @@ use std::{
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("I/O Error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     #[cfg(feature = "user")]
     #[error("User Error: {0}")]
@@ -36,9 +38,15 @@ fn unique(dir: &Path) -> String {
 /// An object is something that exists in the filesystem.
 pub trait Object {
     /// Create the object
+    ///
+    /// ### Errors
+    /// If the file cannot be created.
     fn create(&self) -> Result<(), Error>;
 
     /// Remove the object
+    ///
+    /// ### Errors
+    /// If the file cannot be removed.
     fn remove(&self) -> Result<(), Error>;
 
     /// Get the parent of the object
@@ -58,19 +66,22 @@ pub trait BuilderCreate {
 
 /// A temporary file.
 pub struct File {
+    /// The path the file is located in.
     parent: PathBuf,
+
+    /// The name of the file
     name: String,
 }
 impl Object for File {
     fn create(&self) -> Result<(), Error> {
         if !self.parent.exists() {
-            std::fs::create_dir_all(&self.parent)?;
+            fs::create_dir_all(&self.parent)?;
         }
-        std::fs::File::create_new(self.parent.join(&self.name)).map(|_| ())?;
+        fs::File::create_new(self.parent.join(&self.name)).map(|_| ())?;
         Ok(())
     }
     fn remove(&self) -> Result<(), Error> {
-        std::fs::remove_file(self.full()).map(|_| ())?;
+        fs::remove_file(self.full())?;
         Ok(())
     }
 
@@ -94,17 +105,20 @@ impl BuilderCreate for File {
 
 /// A temporary directory
 pub struct Directory {
+    /// The path the directory in is.
     path: PathBuf,
+
+    /// The name of the directory
     name: String,
 }
 impl Object for Directory {
     fn create(&self) -> Result<(), Error> {
-        std::fs::create_dir_all(self.path.join(&self.name)).map(|_| ())?;
+        fs::create_dir_all(self.path.join(&self.name))?;
         Ok(())
     }
 
     fn remove(&self) -> Result<(), Error> {
-        std::fs::remove_dir_all(self.full()).map(|_| ())?;
+        fs::remove_dir_all(self.full())?;
         Ok(())
     }
 
@@ -137,36 +151,47 @@ impl BuilderCreate for Directory {
 /// in a Temp. The distinction is only made within the Builder, and
 /// it is up to the program to know what kind of object is stored.
 pub struct Temp {
-    object: Box<dyn Object>,
-    associated: Vec<Temp>,
+    /// The temporary object itself.
+    object: Box<dyn Object + Send + Sync>,
+
+    /// Any associated objects, so their lifetimes are bound together.
+    associated: Vec<Self>,
 
     #[cfg(feature = "user")]
+    /// The mode the file was created with, so it can be properly destroyed
     mode: user::Mode,
 }
 impl Temp {
     /// Associate another Temporary Object to the caller. It will
     /// be tied to the caller's lifetime, and dropped with it.
-    pub fn associate(&mut self, temp: Temp) {
-        self.associated.push(temp)
+    pub fn associate(&mut self, temp: Self) {
+        self.associated.push(temp);
     }
 
     /// Get the name of the temporary object.
+    #[must_use]
     pub fn name(&self) -> &str {
         self.object.name()
     }
 
     /// Get the path the Temporary Object is located within.
+    #[must_use]
     pub fn path(&self) -> &Path {
         self.object.path()
     }
 
     /// The full path to the object, including its name.
+    #[must_use]
     pub fn full(&self) -> PathBuf {
         self.object.full()
     }
 
     /// Make a Symlink from the Temporary Object. This link will be associated
     /// with the caller, such that the Link will be deleted with the Object.
+    ///
+    /// ## Errors
+    /// `Error::Io`: If the object could not be created.
+    /// `Error::User`: If we could not change user.
     pub fn link(
         &mut self,
         link: &Path,
@@ -177,13 +202,12 @@ impl Temp {
             && let Some(name) = link.file_name()
         {
             #[cfg(feature = "user")]
-            user::run_as!(mode, { symlink(self.object.full(), link) })
-                .expect("Failed to switch user!")?;
+            user::run_as!(mode, { symlink(self.object.full(), link) })??;
 
             #[cfg(not(feature = "user"))]
             symlink(self.object.full(), &link)?;
 
-            self.associated.push(Temp {
+            self.associated.push(Self {
                 object: Box::new(File {
                     parent: parent.to_path_buf(),
                     name: name.to_string_lossy().into_owned(),
@@ -195,7 +219,7 @@ impl Temp {
             });
             Ok(())
         } else {
-            Err(Error::Io(std::io::ErrorKind::NotFound.into()))
+            Err(Error::Io(io::ErrorKind::NotFound.into()))
         }
     }
 }
@@ -216,8 +240,6 @@ impl Drop for Temp {
         }
     }
 }
-unsafe impl Send for Temp {}
-unsafe impl Sync for Temp {}
 
 /// Build a new Temporary Object.
 ///
@@ -234,16 +256,25 @@ unsafe impl Sync for Temp {}
 /// ```
 #[derive(Default)]
 pub struct Builder {
+    /// The name of the object.
     name: Option<String>,
+
+    /// The path to the object
     path: Option<PathBuf>,
+
+    /// The file extension
     extension: Option<String>,
 
     #[cfg(feature = "user")]
+    /// The mode to create the file with.
     mode: Option<user::Mode>,
+
+    /// Whether to create the file on `create()`
     make: bool,
 }
 impl Builder {
     /// Create a new Builder.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             make: true,
@@ -252,14 +283,16 @@ impl Builder {
     }
 
     #[cfg(feature = "user")]
+    #[must_use]
     /// Set the owner of the Temporary Object.
-    pub fn owner(mut self, mode: user::Mode) -> Self {
+    pub const fn owner(mut self, mode: user::Mode) -> Self {
         self.mode = Some(mode);
         self
     }
 
     /// The directory the Temporary Object should reside in.
     /// If not set, defaults to /tmp.
+    #[must_use]
     pub fn within(mut self, path: impl Into<PathBuf>) -> Self {
         self.path = Some(path.into());
         self
@@ -267,20 +300,23 @@ impl Builder {
 
     /// The name of the Temporary Object. If not set, uses a
     /// randomized, unique string.
+    #[must_use]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Set an optional extension to the Object.
+    #[must_use]
     pub fn extension(mut self, extension: impl Into<String>) -> Self {
         self.extension = Some(extension.into());
         self
     }
 
-    /// Whether to create the Object on create(). By default,
+    /// Whether to create the Object on `create()`. By default,
     /// the object is created.
-    pub fn make(mut self, make_object: bool) -> Self {
+    #[must_use]
+    pub const fn make(mut self, make_object: bool) -> Self {
         self.make = make_object;
         self
     }
@@ -290,7 +326,7 @@ impl Builder {
     ///
     /// ## Examples
     ///
-    /// Create a new temporary file as /tmp/new_file
+    /// Create a new temporary file as `/tmp/new_file`
     ///
     /// ```rust
     /// let file = temp::Builder::new().name("new_file").create::<temp::File>().unwrap();
@@ -302,15 +338,19 @@ impl Builder {
     /// ```rust
     /// temp::Builder::new().within("").create::<temp::Directory>().unwrap();
     /// ```
-    pub fn create<T: BuilderCreate + Object + 'static>(self) -> Result<Temp, Error> {
-        let parent = self.path.unwrap_or(temp_dir());
-        let mut name = self.name.unwrap_or(unique(&parent));
+    ///
+    /// ## Errors
+    /// `Error::Io`: If the object could not be created.
+    /// `Error::User`: If we could not change user.
+    pub fn create<T: BuilderCreate + Object + Send + Sync + 'static>(self) -> Result<Temp, Error> {
+        let parent = self.path.unwrap_or_else(temp_dir);
+        let mut name = self.name.unwrap_or_else(|| unique(&parent));
 
         #[cfg(feature = "user")]
         let mode = self.mode.unwrap_or(user::current()?);
 
         if let Some(extension) = &self.extension {
-            name.push_str(&format!(".{extension}"));
+            let _ = write!(name, ".{extension}");
         }
 
         let object = T::new(parent, name);

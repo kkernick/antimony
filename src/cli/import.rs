@@ -5,7 +5,7 @@ use crate::shared::{
     profile::{self, Profile},
     store::{self, Object},
 };
-use anyhow::{Result, anyhow};
+use anyhow::anyhow;
 use log::warn;
 use std::path::Path;
 
@@ -19,14 +19,14 @@ pub struct Args {
     feature: bool,
 }
 impl super::Run for Args {
-    fn run(self) -> Result<()> {
+    fn run(self) -> anyhow::Result<()> {
         let (table, kind) = if self.feature {
             (Object::Feature, "feature")
         } else {
             (Object::Profile, "profile")
         };
 
-        let import = |src: &Path| -> Result<()> {
+        let import = |src: &Path| -> anyhow::Result<()> {
             let name = src.to_string_lossy();
             let content = if self.feature {
                 toml::to_string(&store::load::<Feature, feature::Error>(&name, table, true)?)
@@ -48,7 +48,7 @@ impl super::Run for Args {
 
         let profile = Path::new(&self.name);
         if profile.is_dir() {
-            for profile in profile.read_dir()?.filter_map(|e| e.ok()) {
+            for profile in profile.read_dir()?.filter_map(Result::ok) {
                 import(&profile.path())?;
             }
             Ok(())

@@ -11,6 +11,8 @@ This crate contains various auxiliary utilities for Antimony. There are two cate
 2. `antimony-` prefixed binaries should be installed along with antimony in `/usr/share/antimony/utilities`. This includes:
 
 	1. `antimony-dumper`
-	2. `antimony-monitor`.
-	3. `antimony-open`
-	4. `antimony-spawn`
+	2. `antimony-lockdown`
+	3. `antimony-monitor`.
+	4. `antimony-open`
+	5. `antimony-spawn`
+	6. `antimony-tracer`

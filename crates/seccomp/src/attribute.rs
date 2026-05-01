@@ -1,5 +1,10 @@
-//! A wrapper on SCMP_FLTATR.
-use super::raw::scmp_filter_attr::{self, *};
+//! A wrapper on `SCMP_FLTATR`.
+
+use super::raw::scmp_filter_attr::{
+    self, SCMP_FLTATR_ACT_BADARCH, SCMP_FLTATR_API_SYSRAWRC, SCMP_FLTATR_API_TSKIP,
+    SCMP_FLTATR_CTL_LOG, SCMP_FLTATR_CTL_NNP, SCMP_FLTATR_CTL_OPTIMIZE, SCMP_FLTATR_CTL_SSB,
+    SCMP_FLTATR_CTL_TSYNC,
+};
 use crate::action::Action;
 use std::fmt;
 
@@ -40,47 +45,50 @@ pub enum Attribute {
 }
 impl Attribute {
     /// Get the raw name of the attribute.
-    pub fn name(&self) -> scmp_filter_attr {
+    #[must_use]
+    pub const fn name(&self) -> scmp_filter_attr {
         match self {
-            Attribute::BadArchAction(_) => SCMP_FLTATR_ACT_BADARCH,
-            Attribute::NoNewPrivileges(_) => SCMP_FLTATR_CTL_NNP,
-            Attribute::ThreadSync(_) => SCMP_FLTATR_CTL_TSYNC,
-            Attribute::NegativeSyscalls(_) => SCMP_FLTATR_API_TSKIP,
-            Attribute::Log(_) => SCMP_FLTATR_CTL_LOG,
-            Attribute::DisableSSB(_) => SCMP_FLTATR_CTL_SSB,
-            Attribute::Optimize(_) => SCMP_FLTATR_CTL_OPTIMIZE,
-            Attribute::ReturnSystemReturnCodes(_) => SCMP_FLTATR_API_SYSRAWRC,
+            Self::BadArchAction(_) => SCMP_FLTATR_ACT_BADARCH,
+            Self::NoNewPrivileges(_) => SCMP_FLTATR_CTL_NNP,
+            Self::ThreadSync(_) => SCMP_FLTATR_CTL_TSYNC,
+            Self::NegativeSyscalls(_) => SCMP_FLTATR_API_TSKIP,
+            Self::Log(_) => SCMP_FLTATR_CTL_LOG,
+            Self::DisableSSB(_) => SCMP_FLTATR_CTL_SSB,
+            Self::Optimize(_) => SCMP_FLTATR_CTL_OPTIMIZE,
+            Self::ReturnSystemReturnCodes(_) => SCMP_FLTATR_API_SYSRAWRC,
         }
     }
 
     /// Get the current value of the attribute.
+    #[must_use]
     pub fn value(&self) -> u32 {
         match self {
-            Attribute::BadArchAction(action) => (*action).into(),
-            Attribute::NoNewPrivileges(set) => *set as u32,
-            Attribute::ThreadSync(set) => *set as u32,
-            Attribute::NegativeSyscalls(set) => *set as u32,
-            Attribute::Log(set) => *set as u32,
-            Attribute::DisableSSB(set) => *set as u32,
-            Attribute::Optimize(strategy) => match strategy {
+            Self::BadArchAction(action) => (*action).into(),
+            Self::NoNewPrivileges(set)
+            | Self::ThreadSync(set)
+            | Self::NegativeSyscalls(set)
+            | Self::Log(set)
+            | Self::DisableSSB(set)
+            | Self::ReturnSystemReturnCodes(set) => u32::from(*set),
+            Self::Optimize(strategy) => match strategy {
                 OptimizeStrategy::PriorityAndComplexity => 1,
                 OptimizeStrategy::BinaryTree => 2,
             },
-            Attribute::ReturnSystemReturnCodes(set) => *set as u32,
         }
     }
 
     /// Get a string value for the attribute
-    pub fn str(&self) -> &'static str {
+    #[must_use]
+    pub const fn str(&self) -> &'static str {
         match self {
-            Attribute::BadArchAction(_) => "Bad Arch Action",
-            Attribute::NoNewPrivileges(_) => "No New Privileges",
-            Attribute::ThreadSync(_) => "Thread Sync",
-            Attribute::NegativeSyscalls(_) => "Negative Syscalls",
-            Attribute::Log(_) => "Log",
-            Attribute::DisableSSB(_) => "Disable SSB",
-            Attribute::Optimize(_) => "Optimize",
-            Attribute::ReturnSystemReturnCodes(_) => "Return System Return Codes",
+            Self::BadArchAction(_) => "Bad Arch Action",
+            Self::NoNewPrivileges(_) => "No New Privileges",
+            Self::ThreadSync(_) => "Thread Sync",
+            Self::NegativeSyscalls(_) => "Negative Syscalls",
+            Self::Log(_) => "Log",
+            Self::DisableSSB(_) => "Disable SSB",
+            Self::Optimize(_) => "Optimize",
+            Self::ReturnSystemReturnCodes(_) => "Return System Return Codes",
         }
     }
 }

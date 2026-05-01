@@ -28,6 +28,7 @@ use nix::{
 use seccomp::{
     action::Action, attribute::Attribute, filter::Filter, notify::Pair, syscall::Syscall,
 };
+use signal_hook::{consts, flag};
 use spawn::Spawner;
 use std::{
     fs::{self, File},
@@ -100,6 +101,9 @@ static SELF: LazyLock<PathBuf> =
 /// Collect all paths from a syscall.
 /// This is a naive approach that simply checks each argument for a valid
 /// path.
+///
+/// ## Errors
+/// If fetching the memory map of the process fails, or it can not be read.
 pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
     let path = PathBuf::from(format!("/proc/{pid}/mem"));
     let mut mem_file = File::open(path)?;
@@ -112,7 +116,7 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
         let end_pos = buffer.iter().position(|&b| b == 0).unwrap_or(bytes_read);
         let string = str::from_utf8(&buffer[..end_pos])?;
         if Path::new(string).exists() {
-            Ok(string.to_string())
+            Ok(string.to_owned())
         } else {
             Err(anyhow::anyhow!("Not a path!"))
         }
@@ -208,13 +212,13 @@ pub fn collection(args: AttachArgs) -> Result<()> {
 
     // Ensure that we can record syscall info after the attached process dies.
     let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+    flag::register(consts::SIGTERM, Arc::clone(&term))?;
+    flag::register(consts::SIGINT, Arc::clone(&term))?;
     while !term.load(Ordering::Relaxed) {
         match receive_fd(&listener) {
             Ok(Some((fd, _))) => {
-                let term_clone = term.clone();
-                let filter_clone = filter.clone();
+                let term_clone = Arc::clone(&term);
+                let filter_clone = Arc::clone(&filter);
                 thread::spawn(move || reader(term_clone, fd, filter_clone));
             }
             Ok(None) => continue,
@@ -225,9 +229,13 @@ pub fn collection(args: AttachArgs) -> Result<()> {
 }
 
 /// Run the application under a monitor.
+#[allow(clippy::arithmetic_side_effects)]
 pub fn runner(args: RunArgs) -> Result<()> {
     let name = match args.path.rfind('/') {
-        Some(i) => &args.path[i + 1..],
+        Some(i) => args
+            .path
+            .get(i + 1..)
+            .ok_or(anyhow::anyhow!("Index error!"))?,
         None => &args.path,
     };
 
@@ -251,7 +259,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
 
     // Setup the filter.
     let mut filter = Filter::new(Action::Notify)?;
-    filter.set_notifier(Notifier::new(socket, name.to_string()));
+    filter.set_notifier(Notifier::new(socket, name.to_owned()));
     filter.set_attribute(Attribute::NoNewPrivileges(true))?;
     filter.set_attribute(Attribute::ThreadSync(true))?;
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;

@@ -1,12 +1,11 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
 
-use dialoguer::console::style;
-use similar::{Algorithm, TextDiff};
-
 use crate::{
     cli,
     shared::store::{Object, SYSTEM_STORE, USER_STORE},
 };
+use dialoguer::console::style;
+use similar::{Algorithm, TextDiff};
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -64,20 +63,21 @@ impl cli::Run for Args {
                 );
             } else {
                 println!("\n{}", style(format!("=== {name} ===")).bold());
-            };
+            }
+
             out.lines().for_each(|line| {
-                if line.starts_with("+") {
-                    println!("{}", style(line).green())
-                } else if line.starts_with("-") {
-                    println!("{}", style(line).red())
-                } else if !line.starts_with("@") && line != "USER" {
-                    println!("{line}")
+                if line.starts_with('+') {
+                    println!("{}", style(line).green());
+                } else if line.starts_with('-') {
+                    println!("{}", style(line).red());
+                } else if !line.starts_with('@') && line != "USER" {
+                    println!("{line}");
                 }
-            })
+            });
         };
 
         if let Some(name) = self.name {
-            print(&name, info_dump(&name))
+            print(&name, info_dump(&name));
         } else if let Ok(user) = USER_STORE.borrow().get(table) {
             SYSTEM_STORE
                 .borrow()

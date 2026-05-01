@@ -17,7 +17,6 @@ use notify::{level_name, level_urgency};
 use spawn::Spawner;
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Display,
     fs::metadata,
     hash::BuildHasher,
     os::unix::fs::MetadataExt,
@@ -36,7 +35,6 @@ impl BuildHasher for StaticHash {
 
 pub type Set<T> = HashSet<T, StaticHash>;
 pub type ThreadSet<T> = DashSet<T, StaticHash>;
-
 pub type Map<K, V> = HashMap<K, V, StaticHash>;
 pub type ThreadMap<K, V> = DashMap<K, V, StaticHash>;
 
@@ -105,17 +103,6 @@ pub fn logger(record: &Record, level: Level) -> bool {
         }
     }();
     result.is_ok()
-}
-
-/// Format an iterator into a string.
-pub fn format_iter<T, V>(iter: T) -> String
-where
-    T: Iterator<Item = V>,
-    V: Display,
-{
-    let mut ret = String::new();
-    iter.for_each(|f| ret.push_str(&format!("{f} ")));
-    ret
 }
 
 /// Get where direct files should be placed.

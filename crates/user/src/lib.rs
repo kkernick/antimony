@@ -13,10 +13,12 @@ pub static USER: LazyLock<ResUid> = LazyLock::new(|| getresuid().expect("Failed 
 /// The Real, Effective, and Saved GID of the application.
 pub static GROUP: LazyLock<ResGid> = LazyLock::new(|| getresgid().expect("Failed to get GID!"));
 
-/// Whether the system is actually running under SetUid. If false, all functions here
+/// Whether the system is actually running under setuid. If false, all functions here
 /// are no-ops.
 pub static SETUID: LazyLock<bool> = LazyLock::new(|| USER.effective != USER.real);
 
+/// User lock. Only one thread can have control of it so threads cannot switch the
+/// mode underneath a `run_as!` block.
 static SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(Semaphore::default);
 
 /// An error when trying to change UID/GID.
@@ -35,7 +37,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}: Failed to change UID to {:?}: {}",
+            "{}: Failed to change UID to {}: {}",
             self.call, self.mode, self.errno
         )
     }
@@ -46,12 +48,13 @@ impl error::Error for Error {
     }
 }
 impl Error {
-    pub fn new(mode: Mode, errno: Errno, call: &'static str) -> Self {
+    #[must_use]
+    pub const fn new(mode: Mode, errno: Errno, call: &'static str) -> Self {
         Self { mode, errno, call }
     }
 }
 
-/// A SetUID mode.
+/// A setuid mode.
 #[derive(Debug, Copy, Clone)]
 pub enum Mode {
     /// Transition to the Real user, setting both Real and Effective
@@ -67,12 +70,23 @@ pub enum Mode {
     Existing,
 
     /// Revert to the program's original operating mode. For set, this
-    /// mode is functionally identical to using revert(). For drop, it
-    /// acts as user::revert().
+    /// mode is functionally identical to using `revert()`. For drop, it
+    /// acts as `user::revert()`.
     Original,
+}
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Real => write!(f, "{}", USER.real),
+            Self::Effective => write!(f, "{}", USER.effective),
+            Self::Existing => write!(f, "Existing"),
+            Self::Original => write!(f, "{}/{}/{}", USER.real, USER.effective, USER.saved),
+        }
+    }
 }
 
 /// Set the Mode.
+///
 /// This function can never be misused to lock out the process
 /// from returning to the original, or any other mode.
 /// This function returns an error if the mode could not be
@@ -86,8 +100,8 @@ pub enum Mode {
 ///
 /// ## Notes
 ///
-/// * user::set(Mode::Original) is functionally identical to user::revert()
-/// * user::set(Mode::Existing) is a no-op.
+/// * `user::set(Mode::Original)` is functionally identical to `user::revert()`
+/// * `user::set(Mode::Existing)` is a no-op.
 ///
 /// ## Thread Safety
 ///
@@ -95,6 +109,9 @@ pub enum Mode {
 /// using this function. If you need to ensure that everything executed between
 /// a `set()` and `restore()` block is run under the desired user, use `run_as` or
 /// its mode-specific variants.
+///
+/// ## Errors
+/// If the underlying syscall fails
 pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Error> {
     if !*SETUID {
         return Ok((*USER, *GROUP));
@@ -124,10 +141,14 @@ pub fn set(mode: Mode) -> Result<(ResUid, ResGid), Error> {
 }
 
 /// Get the current user mode
+///
 /// Note that this is not thread-safe, and your program can suffer
 /// from TOC-TOU problems if you assume this value will remain the same
 /// when you actually need to perform a privileged operation in a multi-threaded
 /// environment.
+///
+/// ## Errors
+/// If the underlying syscall fails
 pub fn current() -> Result<Mode, Error> {
     let uid = getresuid()
         .map_err(|e| Error::new(Mode::Existing, e, "getresuid"))?
@@ -148,6 +169,9 @@ pub fn current() -> Result<Mode, Error> {
 /// Revert the Mode to the original.
 /// This function returns to the values of `USER` and `GROUP`.
 /// This function can fail if the underlying syscall does.
+///
+/// ## Errors
+/// If the underlying syscalls fail.
 pub fn revert() -> Result<(), Error> {
     setresuid(USER.real, USER.effective, USER.saved)
         .map_err(|e| Error::new(Mode::Original, e, "setresuid"))?;
@@ -158,6 +182,7 @@ pub fn revert() -> Result<(), Error> {
 /// Destructively change mode, preventing the process from returning.
 /// This function will set Real, Effective, and Saved values to the
 /// desired Mode. This prevents the process from changing their mode
+///
 /// ## Examples
 /// ```rust
 /// user::drop(user::Mode::Real).unwrap();
@@ -166,6 +191,9 @@ pub fn revert() -> Result<(), Error> {
 ///     user::set(user::Mode::Effective).expect_err("Cannot return!");
 /// }
 /// ```
+///
+/// ## Errors
+/// If the underlying syscall fails
 pub fn drop(mode: Mode) -> Result<(), Error> {
     match mode {
         Mode::Real => {
@@ -196,12 +224,16 @@ pub fn drop(mode: Mode) -> Result<(), Error> {
 
 /// Restore a saved Uid/Gid combination
 /// This function fails if the syscall does.
+///
 /// ## Examples
 /// ```rust
 /// let saved = user::set(user::Mode::Real).unwrap();
 /// // Do work.
 /// user::restore(saved).unwrap()
 /// ```
+///
+/// ## Errors
+/// If the underlying syscall fails
 pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Error> {
     if !*SETUID {
         return Ok(());
@@ -213,6 +245,7 @@ pub fn restore((uid, gid): (ResUid, ResGid)) -> Result<(), Error> {
         .map_err(|e| Error::new(Mode::Original, e, "setresgid"))
 }
 
+#[must_use]
 pub fn obtain_lock() -> Option<Singleton> {
     if *crate::SETUID {
         Singleton::new(&SEMAPHORE)
@@ -222,7 +255,9 @@ pub fn obtain_lock() -> Option<Singleton> {
 }
 
 /// This is a thread-safe wrapper that sets the mode, runs the closure/expression,
-/// then returns to the mode before the call. You can use this in multi-threaded
+/// then returns to the mode before the call.
+///
+/// You can use this in multi-threaded
 /// environments, and it is guaranteed the content of the closure/expression will
 /// be run under the requested Mode.
 #[macro_export]

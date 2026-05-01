@@ -25,7 +25,7 @@ use std::{
 };
 use thiserror::Error;
 
-/// Errors related to a ProcessHandle
+/// Errors related to a `ProcessHandle`
 #[derive(Debug, Error)]
 pub enum Error {
     /// Errors related to communicating with the process, such as
@@ -73,7 +73,7 @@ pub enum Error {
     Errno(#[from] Errno),
 }
 
-/// The shared state between StreamHandle and Worker Thread.
+/// The shared state between `StreamHandle` and Worker Thread.
 struct InnerBuffer {
     /// The current contents from the pipe
     buffer: VecDeque<u8>,
@@ -84,11 +84,15 @@ struct InnerBuffer {
 
 /// The shared state between thread and handle.
 struct SharedBuffer {
+    /// The rolling buffer that the worker constantly fills, and the handle constantly drains.
     state: Mutex<InnerBuffer>,
+
+    /// A conditional variable to communicate with the worker.
     condvar: Condvar,
 }
 
 /// A handle on a process' Output or Error streams.
+///
 /// The Handle can either be used asynchronously to read content as it is filled by the child,
 /// or synchronously by calling `read_all`, which will wait until the child terminates, then
 /// collect all output. For async, you can use `read_line`, or `read` for an exact byte count.
@@ -102,7 +106,7 @@ struct SharedBuffer {
 /// ```rust
 /// use std::os::fd::{OwnedFd, FromRawFd};
 /// let mut handle = spawn::Stream::new(unsafe {OwnedFd::from_raw_fd(1)});
-/// handle.read_all().unwrap();
+/// handle.read_all();
 /// ```
 ///
 /// Asynchronous.
@@ -122,7 +126,8 @@ pub struct Stream {
 }
 
 impl Stream {
-    /// Construct a new StreamHandle from an OwnedFd connected to the child.
+    /// Construct a new `StreamHandle` from an `OwnedFd` connected to the child.
+    #[must_use]
     pub fn new(owned_fd: OwnedFd) -> Self {
         let mut file = File::from(owned_fd);
         let shared = Arc::new(SharedBuffer {
@@ -136,6 +141,10 @@ impl Stream {
         let thread_shared = Arc::clone(&shared);
 
         // Spawn the worker thread.
+        #[allow(
+            clippy::significant_drop_tightening,
+            reason = "We want to hold onto the lock until we notify."
+        )]
         let handle = thread::spawn(move || {
             let _ = (|| -> io::Result<()> {
                 let mut buf = [0u8; 4096];
@@ -146,24 +155,24 @@ impl Stream {
                     }
                     let mut state = thread_shared.state.lock();
                     state.buffer.extend(&buf[..n]);
-                    thread_shared.condvar.notify_all();
+                    let _ = thread_shared.condvar.notify_all();
                 }
                 Ok(())
             })();
 
             let mut state = thread_shared.state.lock();
             state.finished = true;
-            thread_shared.condvar.notify_all();
+            let _ = thread_shared.condvar.notify_all();
         });
 
-        Stream {
+        Self {
             shared,
             thread: Some(handle),
         }
     }
 
     /// Drain the current contents of the buffer.
-    fn drain(&self, state: &mut MutexGuard<InnerBuffer>, upto: Option<usize>) -> Vec<u8> {
+    fn drain(state: &mut MutexGuard<InnerBuffer>, upto: Option<usize>) -> Vec<u8> {
         match upto {
             Some(n) => {
                 if n > state.buffer.len() {
@@ -179,21 +188,23 @@ impl Stream {
     /// Read a line from the stream.
     /// This function is blocking, and will wait until a full line has been
     /// written to the stream. The line will then be removed from the Handle.
+    #[must_use]
+    #[allow(clippy::significant_drop_tightening)]
     pub fn read_line(&self) -> Option<String> {
         let mut state = self.shared.state.lock();
         loop {
             if let Some(pos) = state.buffer.iter().position(|&b| b == b'\n') {
-                let line = String::from_utf8_lossy(&self.drain(&mut state, Some(pos))).into_owned();
+                let line =
+                    String::from_utf8_lossy(&Self::drain(&mut state, Some(pos))).into_owned();
                 return Some(line);
             }
 
             if state.finished {
                 if !state.buffer.is_empty() {
-                    let rest = String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned();
+                    let rest = String::from_utf8_lossy(&Self::drain(&mut state, None)).into_owned();
                     return Some(rest);
-                } else {
-                    return None;
                 }
+                return None;
             }
             self.shared.condvar.wait(&mut state);
         }
@@ -201,39 +212,42 @@ impl Stream {
 
     /// Read the exact amount of bytes specified, or else throw an error.
     /// This function is blocking.
-    pub fn read_bytes(&self, bytes: Option<usize>) -> Result<Vec<u8>, Error> {
+    #[must_use]
+    #[allow(clippy::significant_drop_tightening)]
+    pub fn read_bytes(&self, bytes: Option<usize>) -> Vec<u8> {
         let mut state = self.shared.state.lock();
-        let mut res = self.drain(&mut state, bytes);
+        let mut res = Self::drain(&mut state, bytes);
         while res.is_empty() {
             self.shared.condvar.wait(&mut state);
-            res = self.drain(&mut state, bytes);
+            res = Self::drain(&mut state, bytes);
         }
-        Ok(res)
+        res
     }
 
     /// Read everything currently in the pipe, blocking.
+    ///
+    /// ## Errors
+    /// `Error::Child`: If no child exists.
     pub fn read_blocking(&mut self) -> Result<String, Error> {
         self.wait()?;
         let mut state = self.shared.state.lock();
-        Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
+        Ok(String::from_utf8_lossy(&Self::drain(&mut state, None)).into_owned())
     }
 
     /// Read everything currently in the pipe. Not blocking.
-    pub fn read_all(&mut self) -> Result<String, Error> {
+    pub fn read_all(&mut self) -> String {
         let mut state = self.shared.state.lock();
-        Ok(String::from_utf8_lossy(&self.drain(&mut state, None)).into_owned())
+        String::from_utf8_lossy(&Self::drain(&mut state, None)).into_owned()
     }
 
     /// Join the worker thread, waiting until the subprocess closes their side of the pipe.
+    ///
+    /// ## Errors
+    /// `Error::Child`: If no child exists.
     pub fn wait(&mut self) -> Result<(), Error> {
-        if let Some(handle) = self.thread.take() {
-            match handle.join() {
-                Ok(_) => Ok(()),
-                Err(_) => Err(Error::Child),
-            }
-        } else {
-            Ok(())
-        }
+        self.thread
+            .take()
+            .map_or(Ok(()), |handle| handle.join().map_err(|_| Error::Child))
     }
 }
 impl Drop for Stream {
@@ -267,7 +281,7 @@ pub struct Handle {
 
     /// A list of other Pids that the Handle should be responsible for,
     /// attached to the main child.
-    associated: Vec<Handle>,
+    associated: Vec<Self>,
 
     /// The child's standard input.
     stdin: Option<File>,
@@ -279,6 +293,7 @@ pub struct Handle {
     stderr: Option<Stream>,
 
     #[cfg(feature = "user")]
+    /// The mode the process is running under, to ensure signals are sent with the correct permissions.
     mode: user::Mode,
 }
 impl Handle {
@@ -292,7 +307,7 @@ impl Handle {
         stdin: Option<OwnedFd>,
         stdout: Option<OwnedFd>,
         stderr: Option<OwnedFd>,
-        associates: Vec<Handle>,
+        associates: Vec<Self>,
     ) -> Self {
         Self {
             name,
@@ -309,12 +324,14 @@ impl Handle {
     }
 
     /// Get the name of the handle.
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// Get the pid of the child.
-    pub fn pid(&self) -> &Option<Pid> {
+    #[must_use]
+    pub const fn pid(&self) -> &Option<Pid> {
         &self.child
     }
 
@@ -323,6 +340,9 @@ impl Handle {
     /// Note that this function uses a signal handler to ensure it does not
     /// hang the process, as well as efficiently wait the timeout. You cannot
     /// use this function in multi-threaded environments.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn wait_timeout(mut self, timeout: Duration) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([
@@ -372,6 +392,9 @@ impl Handle {
     ///
     /// Note that this function uses a signal handler to ensure it does not
     /// hang the process. You cannot use this function in multi-threaded environments.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn wait_and(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             let mut signals = Signals::new([signal::SIGTERM, signal::SIGINT, signal::SIGCHLD])?;
@@ -402,6 +425,9 @@ impl Handle {
     }
 
     /// Consume the handle and return the exit code of the process.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn wait(mut self) -> Result<i32, Error> {
         self.wait_and()
     }
@@ -410,6 +436,9 @@ impl Handle {
     ///
     /// This function is a thread-safe version of wait, but
     /// means that signals will not be caught.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn wait_blocking(&mut self) -> Result<i32, Error> {
         if let Some(pid) = self.alive()? {
             'outer: loop {
@@ -429,28 +458,32 @@ impl Handle {
     }
 
     /// Check if the process is still alive, non-blocking.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
+    #[allow(clippy::needless_continue)]
     pub fn alive(&mut self) -> Result<Option<Pid>, Error> {
         if let Some(pid) = self.child {
             loop {
                 match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
                     Ok(WaitStatus::StillAlive) => break Ok(Some(pid)),
                     Ok(WaitStatus::Exited(_, exit)) => {
-                        self.child.take();
+                        let _ = self.child.take();
                         self.exit = exit;
                         break Ok(None);
                     }
                     Ok(WaitStatus::Signaled(_, _, _)) => {
-                        self.child.take();
+                        let _ = self.child.take();
                         self.exit = -1;
                         break Ok(None);
                     }
-                    Ok(_) => continue,
                     Err(Errno::ECHILD) => {
                         self.child = None;
                         self.exit = -1;
                         break Ok(None);
                     }
                     Err(e) => break Err(Error::Comm(e)),
+                    Ok(_) => continue,
                 }
             }
         } else {
@@ -460,10 +493,13 @@ impl Handle {
 
     /// Terminate the process with a SIGTERM request, but
     /// do not consume the Handle.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn terminate(&mut self) -> Result<(), Error> {
         if let Some(pid) = self.alive()? {
             match self.signal(Signal::SIGTERM) {
-                Ok(_) => {
+                Ok(()) => {
                     let _ = waitpid(pid, None);
                 }
                 Err(e) => return Err(e),
@@ -473,6 +509,9 @@ impl Handle {
     }
 
     /// Send a signal to the child.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn signal(&mut self, sig: Signal) -> Result<(), Error> {
         if let Some(pid) = self.alive()? {
             #[cfg(feature = "user")]
@@ -485,7 +524,7 @@ impl Handle {
             let result = kill(pid, sig);
 
             match result {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(Errno::ESRCH) => {
                     self.child = None;
                     Ok(())
@@ -498,6 +537,9 @@ impl Handle {
     }
 
     /// Send the signal to the child, and all associated handles.
+    ///
+    /// ## Errors
+    /// `Error::Comm`: If `waitpid` returns an error
     pub fn signal_group(&mut self, sig: Signal) -> Result<(), Error> {
         if let Some(pid) = self.alive()? {
             #[cfg(feature = "user")]
@@ -510,7 +552,7 @@ impl Handle {
             let result = killpg(pid, sig);
 
             match result {
-                Ok(_) => Ok(()),
+                Ok(()) => Ok(()),
                 Err(Errno::ESRCH) => {
                     self.child = None;
                     Ok(())
@@ -540,13 +582,17 @@ impl Handle {
     ///  3. If you want to truly detach it, don't capture the return value. It will
     ///     run in the background, and will be killed if its still running at
     ///     program exit.
+    #[allow(
+        clippy::must_use_candidate,
+        reason = "It's fine to immediately drop the Pid if you don't want to manage it."
+    )]
     pub fn detach(mut self) -> Option<Pid> {
         self.child.take()
     }
 
     /// Returns a mutable reference to an associate within the Handle, if it exists.
     /// The associate is another Handle instance.
-    pub fn get_associate(&mut self, name: &str) -> Option<&mut Handle> {
+    pub fn get_associate(&mut self, name: &str) -> Option<&mut Self> {
         self.associated
             .iter_mut()
             .find(|handle| handle.name == name)
@@ -555,48 +601,50 @@ impl Handle {
     /// Return the Stream associated with the child's standard error, if it exists.
     /// Note that pulling from the Stream consumes the contents--calling `error_all`
     /// will only return the contents from when you last pulled from the Stream.
+    ///
+    /// ## Errors
+    /// `Error::NoFile` if standard error piping was not setup by `Spawn`
     pub fn error(&mut self) -> Result<&mut Stream, Error> {
-        if let Some(error) = &mut self.stderr {
-            Ok(error)
-        } else {
-            Err(Error::NoFile)
-        }
+        self.stderr.as_mut().map_or_else(|| Err(Error::NoFile), Ok)
     }
 
     /// Waits for the child to terminate, then returns its entire standard error.
+    /// ## Errors
+    /// `Error::NoFile` if standard error piping was not setup by `Spawn`
     pub fn error_all(mut self) -> Result<String, Error> {
-        self.wait_blocking()?;
-        if let Some(mut error) = self.stderr.take() {
-            error.read_blocking()
-        } else {
-            Err(Error::NoFile)
-        }
+        let _ = self.wait_blocking()?;
+        self.stderr
+            .take()
+            .map_or_else(|| Err(Error::NoFile), |mut error| error.read_blocking())
     }
 
     /// Return the Stream associate with the child's standard output, if it exists.
     /// Note that pulling from the Stream consumes the contents--calling `output_all`
     /// will only return the contents from when you last pulled from the Stream.
+    ///
+    /// ## Errors
+    /// `Error::NoFile` if standard input piping was not setup by `Spawn`
     pub fn output(&mut self) -> Result<&mut Stream, Error> {
-        if let Some(output) = &mut self.stdout {
-            Ok(output)
-        } else {
-            Err(Error::NoFile)
-        }
+        self.stdout.as_mut().map_or_else(|| Err(Error::NoFile), Ok)
     }
 
     /// Waits for the child to terminate, then returns its entire standard output.
-    /// If you need the exit code, use wait() first.
+    /// If you need the exit code, use `wait()` first.
+    ///
+    /// ## Errors
+    /// `Error::NoFile` if standard input piping was not setup by `Spawn`
     pub fn output_all(mut self) -> Result<String, Error> {
-        self.wait_blocking()?;
-        if let Some(mut output) = self.stdout.take() {
-            output.read_blocking()
-        } else {
-            Err(Error::NoFile)
-        }
+        let _ = self.wait_blocking()?;
+        self.stdout
+            .take()
+            .map_or_else(|| Err(Error::NoFile), |mut output| output.read_blocking())
     }
 
     /// Closes the Handle's side of the standard input pipe, if it exists.
     /// This sends an EOF to the child.
+    ///
+    /// ## Errors
+    /// `Error::NoFile` if stdin was not setup by `Spawn`
     pub fn close(&mut self) -> Result<(), Error> {
         if self.stdin.take().is_some() {
             Ok(())
@@ -610,7 +658,7 @@ impl Drop for Handle {
         if let Ok(pid) = self.alive() {
             if let Some(pid) = pid {
                 match self.signal(Signal::SIGTERM) {
-                    Ok(_) => {
+                    Ok(()) => {
                         if let Err(e) = waitpid(pid, None) {
                             warn!("Failed to wait for process {pid}: {e}");
                         }
@@ -619,22 +667,19 @@ impl Drop for Handle {
                 }
             }
         } else {
-            warn!("Could not communicate with child!")
+            warn!("Could not communicate with child!");
         }
     }
 }
 impl Write for Handle {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self.stdin.as_mut() {
-            Some(stdin) => stdin.write(buf),
-            None => Err(io::Error::new(io::ErrorKind::BrokenPipe, "stdin is closed")),
-        }
+        self.stdin.as_mut().map_or_else(
+            || Err(io::Error::new(io::ErrorKind::BrokenPipe, "stdin is closed")),
+            |stdin| stdin.write(buf),
+        )
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match self.stdin.as_mut() {
-            Some(stdin) => stdin.flush(),
-            None => Ok(()),
-        }
+        self.stdin.as_mut().map_or(Ok(()), io::Write::flush)
     }
 }

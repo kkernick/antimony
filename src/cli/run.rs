@@ -323,7 +323,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         Some(info.handle),
                         &info.name,
                         &info.sys_dir.to_string_lossy(),
-                        info.instance.name(),
+                        &info.instance.name(),
                         &info.home,
                         false,
                     )?
@@ -337,7 +337,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         Some(info.handle),
                         &info.name,
                         &info.sys_dir.to_string_lossy(),
-                        info.instance.name(),
+                        &info.instance.name(),
                         &info.home,
                         true,
                     )?
@@ -406,7 +406,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                     None,
                     &info.name,
                     &info.sys_dir.to_string_lossy(),
-                    info.instance.name(),
+                    &info.instance.name(),
                     &info.home,
                     false,
                 )?;

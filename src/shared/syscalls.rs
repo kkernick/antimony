@@ -1,4 +1,5 @@
 //! The bulk of the SECCOMP Logic.
+#![allow(clippy::absolute_paths)]
 
 use crate::{
     shared::{Set, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy},
@@ -41,6 +42,7 @@ pub enum Error {
 
     /// Errors from the `seccomp` crate.
     #[error("Filter Error: {0}")]
+    #[allow(clippy::absolute_paths)]
     Filter(#[from] seccomp::filter::Error),
 
     /// Errors interfacing with the database
@@ -66,10 +68,12 @@ fn new_connection() -> Result<Connection, Error> {
             fs::create_dir_all(parent)?;
         }
 
-        let conn = if !db.exists() {
+        let conn = if db.exists() {
+            Connection::open(db)?
+        } else {
             let conn = Connection::open(db)?;
             conn.execute_batch(
-                r#"
+                r"
                 PRAGMA foreign_keys = ON;
                 CREATE TABLE IF NOT EXISTS binaries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -101,11 +105,9 @@ fn new_connection() -> Result<Connection, Error> {
                     FOREIGN KEY (profile_id) REFERENCES profiles(id) ON DELETE CASCADE,
                     FOREIGN KEY (binary_id) REFERENCES binaries(id) ON DELETE CASCADE
                 );
-                "#,
+                ",
             )?;
             conn
-        } else {
-            Connection::open(db)?
         };
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -130,8 +132,8 @@ static CACHE: LazyLock<ThreadMap<String, i32>> = LazyLock::new(ThreadMap::defaul
 pub fn get_num(name: &str) -> i32 {
     // Insert if missing
     if !CACHE.contains_key(name) {
-        CACHE.insert(
-            name.to_string(),
+        let _ = CACHE.insert(
+            name.to_owned(),
             Syscall::from_name(name).unwrap().get_number(),
         );
     }

@@ -17,8 +17,8 @@
 //! ```
 //!
 //! The primitive is Reentrant, meaning that once a thread owns the object, subsequent
-//! calls do not cause recursive deadlock. The intializer will simply return None,
-//! and the original MutexGuard acquired by the thread further up the call-stack
+//! calls do not cause recursive deadlock. The initializer will simply return None,
+//! and the original `MutexGuard` acquired by the thread further up the call-stack
 //! will remain. This means that if you have multiple critical paths which may
 //! overlap, you do not need to worry about causing deadlock--the Singleton will
 //! remain owned by the thread for the scope highest in the call-chain:
@@ -48,22 +48,24 @@
 //! // The lock will drop here, allowing the entire critical path to execute without multiple acquisitions.
 //! ```
 
-use parking_lot::{Condvar, Mutex, MutexGuard, ReentrantMutex, ReentrantMutexGuard};
-use std::sync::{Arc, LazyLock};
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
+use std::{
+    mem,
+    sync::{
+        Arc, LazyLock,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 
-/// A Semaphore implementation. Includes A ReentrantMutex to check if the current thread owns
-/// the Singleton, a regular Mutex that holds a boolean we can modify to save whether the current
-/// mutex is held, and a condition variable to alert waiting threads when the Singleton is available.
-pub type Semaphore = Arc<(ReentrantMutex<()>, Mutex<bool>, Condvar)>;
+/// A Semaphore implementation.
+pub type Semaphore = Arc<ReentrantMutex<AtomicBool>>;
 
 /// More concise Mutex Guard types.
-type Guard = MutexGuard<'static, bool>;
-type ThreadGuard = ReentrantMutexGuard<'static, ()>;
+type ThreadGuard = ReentrantMutexGuard<'static, AtomicBool>;
 
 /// The Singleton is a Reentrant Synchronization Type that can only be held by a single thread.
 pub struct Singleton {
-    sem: Semaphore,
-    guard: Guard,
+    /// Internal Guard.
     _thread_guard: ThreadGuard,
 }
 impl Singleton {
@@ -74,42 +76,24 @@ impl Singleton {
     pub fn new(sem: &'static LazyLock<Semaphore>) -> Option<Self> {
         // Get the semaphore.
         let sem = Arc::clone(sem);
-        let (thread_lock, mutex, cvar) = &*sem;
+        let thread_lock = &*sem;
 
         // If we already own it, just return
         if thread_lock.is_owned_by_current_thread() {
             return None;
         }
 
-        // Otherwise, get a guard
-        let mut guard: Guard = unsafe {
-            let tmp_guard = mutex.lock();
-            std::mem::transmute::<MutexGuard<'_, bool>, Guard>(tmp_guard)
-        };
-        while *guard {
-            cvar.wait(&mut guard);
-        }
-
         // Get the thread guard as well.
-        let _thread_guard: ThreadGuard = unsafe {
+        let guard: ThreadGuard = unsafe {
             let tmp_guard = thread_lock.lock();
-            std::mem::transmute::<ReentrantMutexGuard<'_, ()>, ThreadGuard>(tmp_guard)
+            mem::transmute::<ReentrantMutexGuard<'_, AtomicBool>, ThreadGuard>(tmp_guard)
         };
 
         // Notify that the Singleton is owned.
-        *guard = true;
+        guard.store(true, Ordering::Relaxed);
         Some(Self {
-            sem,
-            guard,
-            _thread_guard,
+            _thread_guard: guard,
         })
-    }
-}
-impl Drop for Singleton {
-    fn drop(&mut self) {
-        *self.guard = false;
-        let (_, _, cvar) = &*self.sem;
-        cvar.notify_one();
     }
 }
 

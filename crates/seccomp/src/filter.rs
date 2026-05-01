@@ -1,4 +1,3 @@
-#![cfg(feature = "notify")]
 //! A wrapper around a SECCOMP context.
 
 use super::{action::Action, attribute::Attribute, raw, syscall::Syscall};
@@ -74,13 +73,18 @@ pub enum Error {
 /// ```
 ///
 pub struct Filter {
+    /// The raw context from libseccomp.
     ctx: raw::scmp_filter_ctx,
 
     #[cfg(feature = "notify")]
+    /// The notifier to call when loading the filter
     notifier: Option<Box<dyn Notifier>>,
 }
 impl Filter {
     /// Construct a new filter with a default action.
+    ///
+    /// ## Errors
+    /// `Error::Initialization`: If the underlying `seccomp_init()` does.
     pub fn new(def_action: Action) -> Result<Self, Error> {
         let ctx = unsafe { raw::seccomp_init(def_action.into()) };
         if ctx.is_null() {
@@ -100,10 +104,13 @@ impl Filter {
     #[cfg(feature = "notify")]
     /// Set a notifier monitor process. See the Notifier trait for more information.
     pub fn set_notifier(&mut self, f: impl Notifier) {
-        self.notifier = Some(Box::new(f))
+        self.notifier = Some(Box::new(f));
     }
 
     /// Set an attribute.
+    ///
+    /// ## Errors
+    /// `Error::SetAttribute`: If the underlying `seccomp_attr_set` does.
     pub fn set_attribute(&mut self, attr: Attribute) -> Result<(), Error> {
         match unsafe { raw::seccomp_attr_set(self.ctx, attr.name(), attr.value()) } {
             0 => Ok(()),
@@ -112,6 +119,9 @@ impl Filter {
     }
 
     /// Add a rule. Complex rules are not supported.
+    ///
+    /// ## Errors
+    /// `Error::AddRule`: If the underlying `seccomp_rule_add` does.
     pub fn add_rule(&mut self, action: Action, syscall: Syscall) -> Result<(), Error> {
         match unsafe { raw::seccomp_rule_add(self.ctx, action.into(), syscall.into(), 0) } {
             0 => Ok(()),
@@ -120,6 +130,9 @@ impl Filter {
     }
 
     /// Write the filter to a new file with the BPF format of the filter.
+    ///
+    /// ## Errors
+    /// `Error::Export`: If the underlying `seccomp_export_bpf` does.
     pub fn write(&self, path: &Path) -> Result<OwnedFd, Error> {
         let file = File::create(path)?;
         match unsafe { raw::seccomp_export_bpf(self.ctx, file.into_raw_fd()) } {
@@ -129,12 +142,15 @@ impl Filter {
     }
 
     /// Execute the notifier's setup functions. This is necessary
-    /// to call before calling load().
+    /// to call before calling `load()`.
+    ///
+    /// ## Errors
+    /// `Error::AddRule` if the underlying `seccomp_rule_add` does.
     #[cfg(feature = "notify")]
     pub fn setup(&mut self) -> Result<(), Error> {
         if let Some(notifier) = &mut self.notifier {
             for (action, call) in notifier.exempt() {
-                self.add_rule(action, call)?
+                self.add_rule(action, call)?;
             }
         }
 
@@ -147,8 +163,9 @@ impl Filter {
     #[cfg(feature = "notify")]
     /// Loads the policy, optionally executing a Notifier function.
     ///
-    /// Note that this function treats failure as fatal. It will panic
-    /// the program if the policy cannot be loaded.
+    /// ## Panics
+    /// This function will panic if `seccomp_load` fails.
+    #[allow(clippy::panic)]
     pub fn load(mut self) {
         if let Some(mut notifier) = self.notifier.take() {
             match unsafe { raw::seccomp_load(self.ctx) } {
@@ -157,15 +174,16 @@ impl Filter {
                     notifier.handle(fd);
                 }
                 errno => panic!("Failed to set filter: {errno}"),
-            };
+            }
         }
     }
 
     #[cfg(not(feature = "notify"))]
     /// Loads the policy.
     ///
-    /// Note that this function treats failure as fatal. It will panic
-    /// the program if the policy cannot be loaded.
+    /// ## Panics
+    /// This function will panic if `seccomp_load` fails.
+    #[allow(clippy::panic)]
     pub fn load(self) {
         let errno = unsafe { raw::seccomp_load(self.ctx) };
         if errno != 0 {

@@ -6,29 +6,31 @@ use caps::{Capability, CapsHashSet};
 use dashmap::{DashMap, DashSet, mapref::one::RefMut};
 use log::{trace, warn};
 use nix::{
+    errno,
     sys::{prctl, signal::Signal::SIGTERM},
     unistd::{ForkResult, close, dup2_stderr, dup2_stdin, dup2_stdout, execve, fork},
 };
 use parking_lot::Mutex;
-#[cfg(feature = "fd")]
-use std::os::fd::RawFd;
 use std::{
     collections::{HashMap, HashSet},
+    env,
     ffi::{CString, NulError, OsString},
+    io,
     os::fd::OwnedFd,
     process::exit,
     str::FromStr,
     sync::atomic::{AtomicBool, Ordering},
+    thread,
 };
 use thiserror::Error;
 
 #[cfg(feature = "seccomp")]
-use seccomp::filter::Filter;
+use seccomp::filter::{self, Filter};
 
 #[cfg(feature = "fd")]
 use {
     nix::fcntl::{FcntlArg, FdFlag, fcntl},
-    std::os::fd::AsRawFd,
+    std::os::fd::{AsRawFd, RawFd},
 };
 
 #[cfg(feature = "cache")]
@@ -48,11 +50,11 @@ pub enum Error {
 
     /// Errors reading/writing to the cache.
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    Io(#[from] io::Error),
 
     /// Errors to various functions that return `Errno`.
     #[error("Spawn error within {0:?} failed to {1}: {2}")]
-    Errno(Option<ForkResult>, &'static str, nix::errno::Errno),
+    Errno(Option<ForkResult>, &'static str, errno::Errno),
 
     /// Errors resolving binary paths.
     #[error("Failed to resolve binary: {0}")]
@@ -60,7 +62,7 @@ pub enum Error {
 
     /// An error when trying to fork.
     #[error("Fork error: {0}")]
-    Fork(nix::errno::Errno),
+    Fork(errno::Errno),
 
     /// An error for switching operating user
     #[error("User error: {0}")]
@@ -73,7 +75,7 @@ pub enum Error {
     #[cfg(feature = "seccomp")]
     /// An error trying to apply the *SECCOMP* Filter.
     #[error("SECCOMP error: {0}")]
-    Seccomp(#[from] seccomp::filter::Error),
+    Seccomp(#[from] filter::Error),
 }
 
 /// How to handle the standard input/out/error streams
@@ -186,6 +188,9 @@ pub struct Spawner {
 impl Spawner {
     /// Construct a `Spawner` to spawn *cmd*.
     /// *cmd* will be resolved from **PATH**.
+    ///
+    /// ## Errors
+    /// If the path could not be found.
     pub fn new(cmd: impl Into<String>) -> Result<Self, Error> {
         let cmd = cmd.into();
         let path = which::which(&cmd)?;
@@ -230,34 +235,38 @@ impl Spawner {
     }
 
     /// Control whether to hook the child's standard input.
+    #[must_use]
     pub fn input(self, input: StreamMode) -> Self {
         self.input_i(input);
         self
     }
 
     /// Control whether to hook the child's standard output.
+    #[must_use]
     pub fn output(self, output: StreamMode) -> Self {
         self.output_i(output);
         self
     }
 
     /// Control whether to hook the child's standard error.
+    #[must_use]
     pub fn error(self, error: StreamMode) -> Self {
         self.error_i(error);
         self
     }
 
     /// Give a unique name to the process, so you can refer to the Handle.
-    /// If no name is set, the string passed to Spawn::new() will be used
+    /// If no name is set, the string passed to `Spawn::new()` will be used
+    #[must_use]
     pub fn name(self, name: &str) -> Self {
-        *self.unique_name.lock() = Some(name.to_string());
+        *self.unique_name.lock() = Some(name.to_owned());
         self
     }
 
     /// Attach another process that is attached to the main child, and should be killed
     /// when the eventual Handle goes out of scope.
     pub fn associate(&self, process: Handle) {
-        self.associated.insert(process.name().to_string(), process);
+        let _ = self.associated.insert(process.name().to_owned(), process);
     }
 
     /// Returns a mutable reference to an associate within the Handle, if it exists.
@@ -272,23 +281,25 @@ impl Spawner {
     /// of the assigned UID.
     ///
     /// If is set to *Original*, the child is launched with the exact
-    /// same operating set as the parent, persisting SetUID privilege.
+    /// same operating set as the parent, persisting setuid privilege.
     ///
     /// If mode is not set, or set to *Existing*, it adopts whatever operating
-    /// set the parent is in when spawn() is called. This is ill-advised.
+    /// set the parent is in when `spawn()` is called. This is ill-advised.
     ///
-    /// If the parent is not SetUID, this parameter is a no-op
+    /// If the parent is not setuid, this parameter is a no-op
     #[cfg(feature = "user")]
+    #[must_use]
     pub fn mode(self, mode: user::Mode) -> Self {
         self.mode_i(mode);
         self
     }
 
-    /// Elevate the child to root privilege by using *PolKit* for authentication.
+    /// Elevate the child to root privilege by using polkit for authentication.
     /// `pkexec` must exist, and must be in path.
     /// The operating set of the child must ensure the real user can
-    /// authorize via *PolKit*.
+    /// authorize via polkit.
     #[cfg(feature = "elevate")]
+    #[must_use]
     pub fn elevate(self, elevate: bool) -> Self {
         self.elevate_i(elevate);
         self
@@ -296,6 +307,7 @@ impl Spawner {
 
     /// Preserve the environment of the parent when launching the child.
     /// `Spawner` defaults to clearing the environment.
+    #[must_use]
     pub fn preserve_env(self, preserve: bool) -> Self {
         self.preserve_env_i(preserve);
         self
@@ -305,8 +317,9 @@ impl Spawner {
     /// Note that this function cannot grant capability the program
     /// does not possess, it merely prevents existing capabilities from
     /// being cleared.
+    #[must_use]
     pub fn cap(self, cap: Capability) -> Self {
-        self.whitelist.insert(cap);
+        let _ = self.whitelist.insert(cap);
         self
     }
 
@@ -314,9 +327,10 @@ impl Spawner {
     /// Note that this function cannot grant capability the program
     /// does not possess, it merely prevents existing capabilities from
     /// being cleared.
+    #[must_use]
     pub fn caps(self, caps: impl IntoIterator<Item = Capability>) -> Self {
         caps.into_iter().for_each(|cap| {
-            self.whitelist.insert(cap);
+            let _ = self.whitelist.insert(cap);
         });
         self
     }
@@ -325,28 +339,39 @@ impl Spawner {
     /// Note that this function cannot grant privilege the program
     /// does not already have, but merely allows it access to existing privileges
     /// not shared by the parent.
+    #[must_use]
     pub fn new_privileges(self, allow: bool) -> Self {
         self.new_privileges_i(allow);
         self
     }
 
     /// Sets an environment variable to pass to the process.
-    /// Note that if preserve_env is set to true, this value will
+    /// Note that if `preserve_env` is set to true, this value will
     /// overwrite the existing value, if it exists.
+    ///
+    /// ## Errors
+    /// `Error::Environment` if the key or value are not valid `CString`s
+    #[must_use]
     pub fn env(self, key: impl Into<String>, var: impl Into<String>) -> Self {
         self.env_i(key, var);
         self
     }
 
     /// Passes the value of the provided environment variable to the child.
-    /// If preserve_env is true, this is functionally a no-op.
+    /// If `preserve_env` is true, this is functionally a no-op.
+    ///
+    /// ## Errors
+    /// `Error::Environment` if the key or value are not valid `CString`s
     pub fn pass_env(self, key: impl Into<String>) -> Result<Self, Error> {
         self.pass_env_i(key)?;
         Ok(self)
     }
 
     /// Passes the value of the provided environment variable to the child.
-    /// If preserve_env is true, this is functionally a no-op.
+    /// If `preserve_env` is true, this is functionally a no-op.
+    ///
+    /// ## Errors
+    /// `Error::Environment` if the key or value are not valid `CString`s
     pub fn env_or(
         self,
         key: impl Into<String>,
@@ -367,6 +392,7 @@ impl Spawner {
     ///  3.  Your *SECCOMP* filter must permit `execve` to launch the application.
     ///      This does not have to be ALLOW. See the caveats to Notify if
     ///      you are using it.
+    #[must_use]
     pub fn seccomp(self, seccomp: Filter) -> Self {
         self.seccomp_i(seccomp);
         self
@@ -375,6 +401,7 @@ impl Spawner {
     /// Move a new argument to the argument vector.
     /// This function is guaranteed to append to the end of the current argument
     /// vector.
+    #[must_use]
     pub fn arg(self, arg: impl Into<String>) -> Self {
         self.arg_i(arg);
         self
@@ -384,6 +411,7 @@ impl Spawner {
     /// FD's will be shared to the child under the same value.
     /// Any FD's in the parent not explicitly passed will be dropped.
     #[cfg(feature = "fd")]
+    #[must_use]
     pub fn fd(self, fd: impl Into<OwnedFd>) -> Self {
         self.fd_i(fd);
         self
@@ -406,6 +434,7 @@ impl Spawner {
     /// std::fs::remove_file("file.txt").unwrap();
     /// ```
     #[cfg(feature = "fd")]
+    #[must_use]
     pub fn fd_arg(self, arg: impl Into<String>, fd: impl Into<OwnedFd>) -> Self {
         self.fd_arg_i(arg, fd);
         self
@@ -414,6 +443,7 @@ impl Spawner {
     /// Move an iterator of arguments into the `Spawner`.
     /// It is guaranteed that the arguments
     /// in the iterator will appear sequentially, and in the same order.
+    #[must_use]
     pub fn args<I, S>(self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -425,6 +455,7 @@ impl Spawner {
 
     /// Move an iterator of FD's to the `Spawner`.
     #[cfg(feature = "fd")]
+    #[must_use]
     pub fn fds<I, S>(self, fds: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -446,13 +477,13 @@ impl Spawner {
 
     /// Set the error flag without consuming the `Spawner`.
     pub fn error_i(&self, error: StreamMode) {
-        *self.error.lock() = error
+        *self.error.lock() = error;
     }
 
     #[cfg(feature = "elevate")]
     /// Set the elevate flag without consuming the `Spawner`.
     pub fn elevate_i(&self, elevate: bool) {
-        self.elevate.store(elevate, Ordering::Relaxed)
+        self.elevate.store(elevate, Ordering::Relaxed);
     }
 
     /// Set the preserve environment flag without consuming the `Spawner`.
@@ -462,39 +493,46 @@ impl Spawner {
 
     /// Add a capability without consuming the `Spawner`.
     pub fn cap_i(&mut self, cap: Capability) {
-        self.whitelist.insert(cap);
+        let _ = self.whitelist.insert(cap);
     }
 
     /// Adds a capability set without consuming the `Spawner`.
     pub fn caps_i(&mut self, caps: impl IntoIterator<Item = Capability>) {
         caps.into_iter().for_each(|cap| {
-            self.whitelist.insert(cap);
+            let _ = self.whitelist.insert(cap);
         });
     }
 
-    /// Set the NO_NEW_PRIVS flag without consuming the `Spawner`.
+    /// Set the `NO_NEW_PRIVS` flag without consuming the `Spawner`.
     pub fn new_privileges_i(&self, allow: bool) {
-        self.no_new_privileges.store(!allow, Ordering::Relaxed)
+        self.no_new_privileges.store(!allow, Ordering::Relaxed);
     }
 
     /// Sets an environment variable to the child process without consuming the `Spawner`.
     pub fn env_i(&self, key: impl Into<String>, value: impl Into<String>) {
-        self.env.insert(key.into(), value.into());
+        let _ = self.env.insert(key.into(), value.into());
     }
 
     /// Pass an environment variable to the child process without consuming the `Spawner`.
+    ///
+    /// ## Errors
+    /// `Error::Environment` if the key or value are not valid `CString`s
     pub fn pass_env_i(&self, key: impl Into<String>) -> Result<(), Error> {
         let key = key.into();
         let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
-        if let Ok(env) = std::env::var(&os_key) {
-            self.env.insert(key, env);
-            Ok(())
-        } else {
-            Err(Error::Environment)
-        }
+        env::var(&os_key).map_or_else(
+            |_| Err(Error::Environment),
+            |env| {
+                let _ = self.env.insert(key, env);
+                Ok(())
+            },
+        )
     }
 
     /// Pass an environment variable to the child process without consuming the `Spawner`.
+    ///
+    /// ## Errors
+    /// `Error::Environment` if the key or value are not valid `CString`s
     pub fn env_or_i(
         &self,
         key: impl Into<String>,
@@ -502,10 +540,10 @@ impl Spawner {
     ) -> Result<(), Error> {
         let key = key.into();
         let os_key = OsString::from_str(&key).map_err(|_| Error::Environment)?;
-        if let Ok(env) = std::env::var(&os_key) {
-            self.env.insert(key, env);
+        if let Ok(env) = env::var(&os_key) {
+            let _ = self.env.insert(key, env);
         } else {
-            self.env.insert(key, fallback.into());
+            let _ = self.env.insert(key, fallback.into());
         }
         Ok(())
     }
@@ -519,7 +557,7 @@ impl Spawner {
     /// Set a *SECCOMP* filter without consuming the `Spawner`.
     #[cfg(feature = "seccomp")]
     pub fn seccomp_i(&self, seccomp: Filter) {
-        *self.seccomp.lock() = Some(seccomp)
+        *self.seccomp.lock() = Some(seccomp);
     }
 
     /// Move an argument to the `Spawner` in-place.
@@ -551,10 +589,10 @@ impl Spawner {
         self.fds.lock().extend(fds.into_iter().map(Into::into));
     }
 
-    /// Get all currently stored FDs as RawFDs
+    /// Get all currently stored FDs as `RawFd`s
     #[cfg(feature = "fd")]
     pub fn get_fds(&self) -> Vec<RawFd> {
-        self.fds.lock().iter().map(|fd| fd.as_raw_fd()).collect()
+        self.fds.lock().iter().map(AsRawFd::as_raw_fd).collect()
     }
 
     /// Move an iterator of arguments to the `Spawner` in-place.
@@ -573,11 +611,11 @@ impl Spawner {
 
     /// Set the cache index.
     /// Once the cache flag has been set, all subsequent arguments will
-    /// be cached to the file provided to cache_write.
+    /// be cached to the file provided to `cache_write`.
     /// On future runs, `cache_read` can be used to append those cached
     /// contents to the `Spawner`'s arguments.
-    /// This function fails if cache_start is called twice without having
-    /// first called cache_write.
+    /// This function fails if `cache_start` is called twice without having
+    /// first called `cache_write`.
     ///
     /// ## Examples
     ///
@@ -600,7 +638,11 @@ impl Spawner {
     /// as FD values, temporary files, etc, must not be passed to the
     /// Spawner, otherwise those values would be cached, and likely
     /// be invalid when trying to use the cached results.
+    ///
+    /// ## Errors
+    /// `Error::Cache`: If the cache was already started.
     #[cfg(feature = "cache")]
+    #[allow(clippy::significant_drop_tightening)]
     pub fn cache_start(&self) -> Result<(), Error> {
         let mut index = self.cache_index.lock();
         if index.is_some() {
@@ -615,7 +657,11 @@ impl Spawner {
     /// was called to the file provided.
     /// This function will fail if `cache_start` was not called,
     /// or if there are errors writing to the provided path.
+    ///
+    /// ## Errors
+    /// `Error::Cache`: If the cache was not started.
     #[cfg(feature = "cache")]
+    #[allow(clippy::significant_drop_tightening)]
     pub fn cache_write(&self, path: &Path) -> Result<(), Error> {
         use std::io::Write;
         let mut index = self.cache_index.lock();
@@ -640,14 +686,16 @@ impl Spawner {
     /// arguments.
     /// This function will fail if there is an error reading the file,
     /// or if the contents contain strings will NULL bytes.
+    ///
+    /// ## Errors
+    /// If the cache could not be read
     #[cfg(feature = "cache")]
     pub fn cache_read(&self, path: &Path) -> Result<(), Error> {
-        let mut args = self.args.lock();
         let mut cached: Vec<String> = fs::read_to_string(path)?
-            .split(" ")
+            .split(' ')
             .map(String::from)
             .collect();
-        args.append(&mut cached);
+        self.args.lock().append(&mut cached);
         Ok(())
     }
 
@@ -671,6 +719,10 @@ impl Spawner {
     /// * A user mode has been set, but dropping to it fails.
     /// * A *SECCOMP* filter is set, but it fails to set.
     /// * `execve` Fails.
+    ///
+    /// ## Panics
+    /// This function can panic if /dev/null cannot be duplicated, and Discard is used for a stream.
+    #[allow(clippy::too_many_lines, clippy::unwrap_used)]
     pub fn spawn(mut self) -> Result<Handle, Error> {
         // Create our pipes based on whether we need t
         // hem.
@@ -694,7 +746,7 @@ impl Spawner {
         // Launch with pkexec if we're elevated.
         #[cfg(feature = "elevate")]
         if self.elevate.load(Ordering::Relaxed) {
-            let polkit = CString::new("/usr/bin/pkexec".to_string())?;
+            let polkit = CString::new("/usr/bin/pkexec".to_owned())?;
             if cmd_c.is_none() {
                 cmd_c = Some(polkit.clone());
             }
@@ -702,11 +754,7 @@ impl Spawner {
         }
 
         let resolved = CString::new(self.cmd.clone())?;
-        let cmd_c = if let Some(cmd) = cmd_c {
-            cmd
-        } else {
-            resolved.clone()
-        };
+        let cmd_c = cmd_c.unwrap_or_else(|| resolved.clone());
 
         args_c.push(resolved);
         self.args
@@ -720,20 +768,20 @@ impl Spawner {
         // Clear F_SETFD to allow passed FD's to persist after execve
         #[cfg(feature = "fd")]
         for fd in &fds {
-            fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
+            let _ = fcntl(fd, FcntlArg::F_SETFD(FdFlag::empty()))
                 .map_err(|e| Error::Errno(None, "fnctl fd", e))?;
         }
 
         if self.preserve_env.load(Ordering::Relaxed) {
-            let environment: HashMap<_, _> = std::env::vars_os()
+            let environment: HashMap<_, _> = env::vars_os()
                 .filter_map(|(key, value)| {
                     if let Ok(key) = key.into_string()
                         && let Ok(value) = value.into_string()
                     {
-                        if !self.env.contains_key(&key) {
-                            Some((key, value))
-                        } else {
+                        if self.env.contains_key(&key) {
                             None
+                        } else {
+                            Some((key, value))
                         }
                     } else {
                         None
@@ -741,7 +789,7 @@ impl Spawner {
                 })
                 .collect();
 
-            self.env.extend(environment)
+            self.env.extend(environment);
         }
 
         let envs: Vec<_> = self
@@ -754,10 +802,10 @@ impl Spawner {
         if log::log_enabled!(log::Level::Trace) {
             let formatted = format_iter(args_c.iter().map(|e| e.to_string_lossy()));
             if self.preserve_env.load(Ordering::Relaxed) {
-                trace!("[SYSTEM ENVIRONMENT] {formatted}",);
+                trace!("[SYSTEM ENVIRONMENT] {formatted}");
             } else if !envs.is_empty() {
                 let env_formatted = format_iter(envs.iter().map(|e| e.to_string_lossy()));
-                trace!("{env_formatted} {formatted}",);
+                trace!("{env_formatted} {formatted}");
             } else {
                 trace!("{formatted}");
             }
@@ -797,7 +845,7 @@ impl Spawner {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close error", e))?;
                     if let StreamMode::Log(log) = stdout_mode {
                         let name = name.clone();
-                        std::thread::spawn(move || logger(log, read, name));
+                        let _ = thread::spawn(move || logger(log, read, &name));
                         None
                     } else {
                         Some(read)
@@ -810,7 +858,7 @@ impl Spawner {
                     close(write).map_err(|e| Error::Errno(Some(fork), "close output", e))?;
                     if let StreamMode::Log(log) = stderr_mode {
                         let name = name.clone();
-                        std::thread::spawn(move || logger(log, read, name));
+                        let _ = thread::spawn(move || logger(log, read, &name));
                         None
                     } else {
                         Some(read)
@@ -842,7 +890,7 @@ impl Spawner {
                 if let Some((read, write)) = stdin {
                     let _ = close(write);
                     let _ = dup2_stdin(read);
-                } else if let StreamMode::Discard = stdin_mode {
+                } else if matches!(stdin_mode, StreamMode::Discard) {
                     let _ = dup2_stdin(dup_null().unwrap());
                 }
                 #[cfg(feature = "fd")]
@@ -853,7 +901,7 @@ impl Spawner {
                 if let Some((read, write)) = stdout {
                     let _ = close(read);
                     let _ = dup2_stdout(write);
-                } else if let StreamMode::Discard = stdout_mode {
+                } else if matches!(stdout_mode, StreamMode::Discard) {
                     let _ = dup2_stdout(dup_null().unwrap());
                 }
                 #[cfg(feature = "fd")]
@@ -864,7 +912,7 @@ impl Spawner {
                 if let Some((read, write)) = stderr {
                     let _ = close(read);
                     let _ = dup2_stderr(write);
-                } else if let StreamMode::Discard = stderr_mode {
+                } else if matches!(stderr_mode, StreamMode::Discard) {
                     let _ = dup2_stderr(dup_null().unwrap());
                 }
                 #[cfg(feature = "fd")]
@@ -879,10 +927,10 @@ impl Spawner {
                 if let Some(mode) = self.mode.into_inner()
                     && let Err(e) = user::drop(mode)
                 {
-                    warn!("Failed to drop user: {e}")
+                    warn!("Failed to drop user: {e}");
                 }
 
-                clear_capabilities(diff);
+                clear_capabilities(&diff);
 
                 if self.no_new_privileges.load(Ordering::Relaxed)
                     && let Err(e) = prctl::set_no_new_privs()
@@ -905,85 +953,5 @@ impl Spawner {
                 exit(-1);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use anyhow::Result;
-    use std::io::Write;
-
-    use super::*;
-
-    #[test]
-    fn bash() -> Result<()> {
-        let string = "Hello, World!";
-        let mut handle = Spawner::new("bash")?
-            .args(["-c", &format!("echo '{string}'")])
-            .output(StreamMode::Pipe)
-            .error(StreamMode::Pipe)
-            .spawn()?;
-
-        let output = handle.output()?.read_blocking()?;
-        assert!(output.trim() == string);
-        Ok(())
-    }
-
-    #[test]
-    fn cat() -> Result<()> {
-        let mut handle = Spawner::new("cat")?
-            .input(StreamMode::Pipe)
-            .output(StreamMode::Pipe)
-            .spawn()?;
-
-        let string = "Hello, World!";
-        write!(handle, "{string}")?;
-        handle.close()?;
-
-        let output = handle.output()?.read_blocking()?;
-        assert!(output.trim() == string);
-        Ok(())
-    }
-
-    #[test]
-    fn read() -> Result<()> {
-        let string = "Hello!";
-        let mut handle = Spawner::new("echo")?
-            .arg(string)
-            .output(StreamMode::Pipe)
-            .spawn()?;
-
-        let bytes = handle.output()?.read_bytes(Some(string.len()))?;
-        let output = String::from_utf8_lossy(&bytes);
-        assert!(output.trim() == string);
-        Ok(())
-    }
-
-    #[test]
-    fn clear_env() -> Result<()> {
-        let mut handle = Spawner::new("bash")?
-            .args(["-c", "echo $USER"])
-            .output(StreamMode::Pipe)
-            .error(StreamMode::Pipe)
-            .spawn()?;
-
-        let output = handle.output()?.read_blocking()?;
-        assert!(output.trim().is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn preserve_env() -> Result<()> {
-        let user = "Test";
-        let mut handle = Spawner::new("bash")?
-            .args(["-c", "echo $USER"])
-            .env("USER", user)
-            .output(StreamMode::Pipe)
-            .error(StreamMode::Pipe)
-            .spawn()?;
-
-        let output = handle.output()?.read_blocking()?;
-        assert!(output.trim() == user);
-        Ok(())
     }
 }

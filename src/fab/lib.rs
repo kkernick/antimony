@@ -26,13 +26,13 @@ use std::{
     sync::LazyLock,
 };
 
-static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
-pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
-pub static ROOTS: LazyLock<ThreadSet<String>> = LazyLock::new(|| {
+static FILES: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+pub static DIRS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
     CONFIG_FILE
         .library_roots()
         .par_iter()
-        .map(|root| root.to_string())
+        .map(|root| Cow::Borrowed(root.as_str()))
         .collect()
 });
 
@@ -81,7 +81,7 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
 #[inline]
 pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     ROOTS.par_iter().try_for_each(|root| -> Result<()> {
-        let path = PathBuf::from(format!("{sof}{}", root.as_str()));
+        let path = PathBuf::from(format!("{sof}{}", root.as_ref()));
         if path.exists() {
             if sof.is_empty() {
                 handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()]);
@@ -132,8 +132,11 @@ impl WildcardFilter {
 }
 
 #[inline(always)]
-fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<String, StaticHash> {
-    let resolved = ThreadSet::default();
+fn resolve_wildcards(
+    set: Set<String>,
+    filter: WildcardFilter,
+) -> OwningIter<Cow<'static, str>, StaticHash> {
+    let resolved = ThreadSet::<Cow<'static, str>>::default();
 
     let (wildcards, flat): (Set<_>, Set<_>) = timer!(
         "::wildcard::partition",
@@ -143,14 +146,14 @@ fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<Str
     timer!("::wildcard::localize", {
         flat.into_par_iter().for_each(|e| {
             if e.starts_with("/") {
-                resolved.insert(e.to_string());
+                resolved.insert(Cow::Owned(e));
             } else if e.starts_with("~") {
-                resolved.insert(e.replace("~", HOME.as_str()));
+                resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
             } else {
                 for root in ROOTS.iter() {
-                    let path = format!("{}/{e}", root.as_str());
+                    let path = format!("{}/{e}", root.as_ref());
                     if Path::new(&path).exists() {
-                        resolved.insert(path);
+                        resolved.insert(Cow::Owned(path));
                         if filter == WildcardFilter::Files {
                             break;
                         }
@@ -225,7 +228,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     }
 
     ROOTS.iter().for_each(|lib_root| {
-        let name = format!("{}/{}", lib_root.as_str(), info.name);
+        let name = format!("{}/{}", lib_root.as_ref(), info.name);
         if Path::new(&name).exists() {
             let _ = info
                 .profile
@@ -319,8 +322,8 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                             } else {
                                 "--ro-bind"
                             },
-                            library.as_str(),
-                            library.as_str(),
+                            library,
+                            library,
                         ]);
                         false
                     }
@@ -328,7 +331,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 // Write the SOF version, as a hard link preferably.
                 .for_each(|lib| {
                     if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache) {
-                        error!("Failed to add {} to SOF: {e}", lib.as_str())
+                        error!("Failed to add {} to SOF: {e}", lib.as_ref())
                     }
                 })
         );

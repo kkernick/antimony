@@ -2,8 +2,7 @@
 //! Database to be used for profile generation.
 
 use antimony::shared::{
-    self, Set, ThreadMap, env::DATA_HOME, format_iter, profile::seccomp::SeccompPolicy, syscalls,
-    utility,
+    self, Set, ThreadMap, env::DATA_HOME, profile::seccomp::SeccompPolicy, syscalls, utility,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -661,12 +660,7 @@ fn main() -> Result<()> {
 
                             match binary_exist(&binary) {
                                 Ok(true) => {
-                                    println!(
-                                        "{}: {} => {}",
-                                        binary,
-                                        syscalls.len(),
-                                        format_iter(syscalls.iter())
-                                    );
+                                    println!("{}: {} => {syscalls:?}", binary, syscalls.len(),);
 
                                     // Insert into DB using the transaction
                                     if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {

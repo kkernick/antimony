@@ -7,7 +7,6 @@ This crate provides an interface to the `org.freedesktop.Notifications` interfac
 To use as a logger, simply call `notify::init` to initialize `notify` as the program logger, after which simply use `warn!`, `log!`, etc as usual. Control over the messages and level is done via two environment variables:
 
 * `RUST_LOG` control messages output to the terminal, identical to how `env_logger` works.
-* `NOTIFY` controls notifications sent to the Desktop Environment. By default, logs with `log::Level::Error` will be both printed to the terminal, and displayed via a Notification. Notifications can be displayed entirely at runtime by setting `NOTIFY=none`.
+* `NOTIFY` controls notifications sent to the Desktop Environment. By default, logs with `log::Level::Error` will be both printed to the terminal, and displayed via a Notification. Notifications can be disabled entirely at runtime by setting `NOTIFY=none`.
 
-A binary can be compiled from the repository, providing a means to notify the command line. 
-
+A binary can be compiled from the repository, providing a means to notify from the command line.

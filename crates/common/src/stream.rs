@@ -2,11 +2,11 @@
 
 use nix::{
     errno::Errno,
-    poll::{PollFd, PollFlags, PollTimeout},
+    poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::socket::{ControlMessageOwned, MsgFlags, recvmsg},
 };
 use std::{
-    io::IoSliceMut,
+    io::{self, IoSliceMut},
     os::{
         fd::{AsFd, AsRawFd, FromRawFd, OwnedFd, RawFd},
         unix::net::{UnixListener, UnixStream},
@@ -17,26 +17,29 @@ use std::{
 fn accept_with_timeout(
     listener: &UnixListener,
     timeout: PollTimeout,
-) -> Result<Option<UnixStream>, std::io::Error> {
+) -> Result<Option<UnixStream>, io::Error> {
     listener.set_nonblocking(true)?;
 
     let fd = listener.as_fd();
     let mut fds = [PollFd::new(fd, PollFlags::POLLIN)];
-    let res = nix::poll::poll(&mut fds, timeout)?;
+    let res = poll(&mut fds, timeout)?;
 
     if res == 0 {
         Ok(None)
     } else {
         match listener.accept() {
             Ok((stream, _addr)) => Ok(Some(stream)),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
             Err(e) => Err(e),
         }
     }
 }
 
 /// Receive a file descriptor from a Unix socket as an `OwnedFd`.
-pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, std::io::Error> {
+///
+/// ## Errors
+/// This function will fail if the message cannot be sent.
+pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, io::Error> {
     let stream = accept_with_timeout(listener, PollTimeout::from(1000u16))?;
     if let Some(stream) = stream {
         let mut buf = [0u8; 256];
@@ -60,7 +63,7 @@ pub fn receive_fd(listener: &UnixListener) -> Result<Option<(OwnedFd, String)>, 
         if let Some((fd, bytes)) = pair {
             let name = String::from_utf8_lossy(&buf[..bytes])
                 .trim_end_matches(char::from(0))
-                .to_string();
+                .to_owned();
             return Ok(Some((fd, name)));
         }
     }

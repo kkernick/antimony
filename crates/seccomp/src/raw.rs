@@ -36,24 +36,24 @@ pub struct seccomp_notif_resp {
 }
 
 /// Kill the process
-pub static SCMP_ACT_KILL_PROCESS: u32 = 0x80000000;
+pub static SCMP_ACT_KILL_PROCESS: u32 = 0x8000_0000;
 
 /// Kill the thread
-pub static SCMP_ACT_KILL_THREAD: u32 = 0x00000000;
+pub static SCMP_ACT_KILL_THREAD: u32 = 0x0000_0000;
 
 /// Trap Signal
-pub static SCMP_ACT_TRAP: u32 = 0x00030000;
+pub static SCMP_ACT_TRAP: u32 = 0x0003_0000;
 
 /// Request a decision from the notify monitor.
-pub static SCMP_ACT_NOTIFY: u32 = 0x7fc00000;
+pub static SCMP_ACT_NOTIFY: u32 = 0x7fc0_0000;
 
 /// Log the request to the Audit log
-pub static SCMP_ACT_LOG: u32 = 0x7ffc0000;
+pub static SCMP_ACT_LOG: u32 = 0x7ffc_0000;
 
 /// Allow the action.
-pub static SCMP_ACT_ALLOW: u32 = 0x7fff0000;
+pub static SCMP_ACT_ALLOW: u32 = 0x7fff_0000;
 
-/// Attributes. ACT_DEFAULT is not included because seccomp_init already takes it.
+/// Attributes. `ACT_DEFAULT` is not included because `seccomp_init` already takes it.
 #[repr(C)]
 pub enum scmp_filter_attr {
     SCMP_FLTATR_ACT_BADARCH = 2,
@@ -73,11 +73,11 @@ unsafe extern "C" {
     ///
     /// 0. Reserved.
     /// 1. Base Level
-    /// 2. Support for TSYNC.
-    /// 3. Support for LOG.
-    /// 4. Support for KILL_PROCESS
-    /// 5. Support for NOTIFY
-    /// 6. Simultaneous support for TSYNC and NOTIFY.
+    /// 2. Support for `TSYNC`.
+    /// 3. Support for `LOG`.
+    /// 4. Support for `KILL_PROCESS`
+    /// 5. Support for `NOTIFY`
+    /// 6. Simultaneous support for `TSYNC` and `NOTIFY`.
     ///
     /// Note: This function is never used by wrappers. You are
     /// expected to test the API if you want to use a particular feature.

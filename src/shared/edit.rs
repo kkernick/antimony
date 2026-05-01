@@ -1,5 +1,6 @@
 //! Edit a file.
 
+use crate::shared::env::EDITOR;
 use dialoguer::Confirm;
 use log::error;
 use serde::{Serialize, de::DeserializeOwned};
@@ -7,8 +8,6 @@ use spawn::Spawner;
 use std::{fs, io};
 use thiserror::Error;
 use user::{Mode, as_real};
-
-use crate::shared::env::EDITOR;
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]

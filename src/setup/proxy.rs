@@ -20,7 +20,6 @@ use log::debug;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
-    borrow::Cow,
     env,
     fs::{self, File},
     io::Write,
@@ -69,7 +68,7 @@ pub fn run(
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, Cow::Owned(library), &cache))?;
+                .try_for_each(|library| add_sof(&sof, library, &cache))?;
         });
     }
 

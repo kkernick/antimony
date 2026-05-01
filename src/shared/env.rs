@@ -65,6 +65,7 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     cache_dir
 });
 
+/// Where profiles and features are stored
 pub static AT_CONFIG: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config"));
 
 /// The user's home folder.

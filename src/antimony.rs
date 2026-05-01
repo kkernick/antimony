@@ -1,14 +1,14 @@
+#![allow(unused_crate_dependencies)]
 //! The main Antimony executable.
-
 use antimony::{
-    cli::{Run, run::as_symlink},
+    cli::{self, Run, run::as_symlink},
     shared::{self, config::CONFIG_FILE},
     timer,
 };
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-use std::thread::available_parallelism;
+use std::{env, thread::available_parallelism};
 
 fn main() -> Result<()> {
     // Somehow, using half the available parallel drastically improves performance.
@@ -24,8 +24,8 @@ fn main() -> Result<()> {
 
     rayon::spawn(|| {
         for (key, value) in CONFIG_FILE.environment() {
-            if std::env::var(key).is_err() {
-                unsafe { std::env::set_var(key, value) }
+            if env::var(key).is_err() {
+                unsafe { env::set_var(key, value) }
             }
         }
     });
@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     timer!("::set", user::set(user::Mode::Effective))?;
 
     let ret = if as_symlink().is_err() {
-        let cli = timer!("::cli", antimony::cli::Cli::parse());
+        let cli = timer!("::cli", cli::Cli::parse());
         timer!("::command", cli.command.run())
     } else {
         Ok(())
@@ -60,7 +60,7 @@ fn main() -> Result<()> {
                 (r.key().to_string(), *r.value())
             })
             .collect::<Vec<_>>();
-        sorted.sort_by(|a, b| a.1.cmp(&b.1));
+        sorted.sort_by_key(|a| a.1);
         sorted.reverse();
         for (k, v) in sorted {
             let weight: f64 = (v as f64 / total) * 100f64;
