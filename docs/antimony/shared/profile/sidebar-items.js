@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["Error"],"fn":["library_info"],"mod":["files","home","hooks","ipc","ns","seccomp"],"struct":["Profile"]};
+window.SIDEBAR_ITEMS = {"enum":["Error"],"mod":["files","home","hooks","ipc","lib","ns","seccomp"],"struct":["Profile"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["HookError"],"struct":["Hook","Hooks"]};
+window.SIDEBAR_ITEMS = {"enum":["HookError","Type"],"struct":["Hook","Hooks"]};

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"static":["CONFIG_FILE","CONFIG_PATH"],"struct":["ConfigFile"]};
+window.SIDEBAR_ITEMS = {"fn":["digest_config"],"static":["CONFIG_FILE","CONFIG_PATH"],"struct":["ConfigFile"]};

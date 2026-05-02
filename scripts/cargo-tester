@@ -6,7 +6,7 @@ DIR=$(cargo builder --recipe gdb)
 ROOT=$(git rev-parse --show-toplevel)
 OLD=$(pwd)
 
-cargo test --workspace --exclude notify
+cargo test --workspace
 
 cd $ROOT/tests
 

@@ -134,9 +134,9 @@ pub struct Profile {
     /// inherit itself is recursive, so if a profile inherits a profile, and that profile
     /// inherits something else, the top-level profile will inherit both.
     ///
-    /// When this value is not defined, it will default to [default], which will inherit
-    /// the user Default Profile. If you define inherits, if you do not put "default" in the
-    /// list the profile will exclude the default profile (In case you need to exempt a profile
+    /// When this value is not defined, it will default to only the user Default Profile.
+    /// If you define inherits, if you do not put "default" in the list, the profile will
+    /// exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
     #[serde(default = "default_inherits")]

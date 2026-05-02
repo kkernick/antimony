@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"struct":["Builder","Directory","File","Temp"],"trait":["BuilderCreate","Object"]};

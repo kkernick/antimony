@@ -115,7 +115,6 @@ fn new_connection() -> Result<Connection, Error> {
         conn.pragma_update(None, "temp_store", "MEMORY")?;
         conn.pragma_update(None, "cache_size", "-20000")?;
         conn.pragma_update(None, "busy_timeout", "100")?;
-        conn.set_prepared_statement_cache_capacity(100);
         Ok(conn)
     })
     .expect("Fatal user error")

@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["antimony","common","notify","seccomp","spawn","temp","user","which"];
-//{"start":21,"fragment_lengths":[10,9,9,10,8,7,7,8]}
+window.ALL_CRATES = ["antimony","antimony_bench","antimony_build","antimony_completions","antimony_dumper","antimony_lockdown","antimony_monitor","antimony_open","antimony_spawn","antimony_tracer"];
+//{"start":21,"fragment_lengths":[10,17,17,23,18,20,19,16,17,18]}

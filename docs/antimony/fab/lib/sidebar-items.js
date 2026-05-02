@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["add_sof","fabricate","get_sof_path","in_lib"]};
+window.SIDEBAR_ITEMS = {"enum":["WildcardFilter"],"fn":["add_sof","cache_dir","fabricate","mount_roots","sof_dir"],"static":["DIRS","ROOTS"]};

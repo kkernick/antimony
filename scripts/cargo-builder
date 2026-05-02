@@ -8,7 +8,7 @@ else
   TARGET=$ROOT/target
 fi
 
-cargo build --package utilities --bin antimony_build
+cargo build --bin antimony_build
 if [[ $1 == "builder" ]]; then
   $TARGET/debug/antimony_build "${@:2}"
 else

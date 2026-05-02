@@ -10,7 +10,7 @@ else
 fi
 
 echo "Compiling Bench Script"
-cargo build --package utilities --bin antimony_bench --bin antimony_build
+cargo build --bin antimony_bench --bin antimony_build
 
 echo "Benchmarking"
 

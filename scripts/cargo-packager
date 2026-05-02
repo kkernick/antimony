@@ -6,7 +6,7 @@ ROOT=$(git rev-parse --show-toplevel)
 export CARGO_TARGET_DIR=${ROOT}/target
 
 echo "Compiling Build Script"
-cargo build --package utilities --bin antimony_build --bin antimony_completions
+cargo build --bin antimony_build --bin antimony_completions
 
 ./target/debug/antimony_build --recipe release
 ./target/debug/antimony_completions

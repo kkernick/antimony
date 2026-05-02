@@ -12,7 +12,7 @@ fi
 
 
 echo "Compiling Build Script"
-cargo build --package utilities --bin antimony_build
+cargo build --bin antimony_build
 
 if [[ $1 == "deploy" ]]; then
   DIR=$($TARGET/debug/antimony_build "${@:2}")
