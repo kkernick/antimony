@@ -15,6 +15,7 @@ use clap::{Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
 
 /// Create run arguments from subcommand passthrough.
+#[allow(clippy::unreachable)]
 pub fn run_vec(profile: &str, mut passthrough: Vec<String>) -> run::Args {
     let mut command: Vec<String> = vec!["antimony", "run", profile]
         .into_iter()
@@ -90,5 +91,9 @@ impl Default for Command {
 
 #[enum_dispatch]
 pub trait Run {
+    /// Run the command.
+    ///
+    /// ## Errors
+    /// If the subcommand fails.
     fn run(self) -> Result<()>;
 }

@@ -1,4 +1,5 @@
-//! A SECCOMP Notify application that stores syscall information in a SQLite3
+#![allow(unused_crate_dependencies)]
+//! A SECCOMP Notify application that stores syscall information in a sqlite.
 //! Database to be used for profile generation.
 
 use antimony::shared::{
@@ -10,7 +11,7 @@ use common::stream::receive_fd;
 use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
 use nix::{
-    errno::Errno,
+    errno::{self, Errno},
     libc::{EPERM, PR_SET_SECCOMP},
     poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
@@ -27,10 +28,12 @@ use nix::{
 };
 use rusqlite::Transaction;
 use seccomp::{notify::Pair, syscall::Syscall};
+use signal_hook::{consts, flag};
 use spawn::{Spawner, StreamMode};
 use std::{
-    fmt::Display,
-    fs,
+    error,
+    fmt::{self, Display},
+    fs, io,
     os::{
         fd::{AsFd, AsRawFd, OwnedFd},
         unix::net::UnixListener,
@@ -48,34 +51,34 @@ use std::{
 #[derive(Debug)]
 pub enum Error {
     /// Errors relating to setting up the socket or reading/writing to the database.
-    Io(std::io::Error),
+    Io(io::Error),
 
     /// Generic Errno errors.
-    Errno(nix::errno::Errno),
+    Errno(errno::Errno),
 }
 impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Io(e) => write!(f, "I/O Error: {e}"),
             Self::Errno(e) => write!(f, "{e}"),
         }
     }
 }
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
             Self::Errno(e) => Some(e),
         }
     }
 }
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
         Self::Io(value)
     }
 }
-impl From<nix::errno::Errno> for Error {
-    fn from(value: nix::errno::Errno) -> Self {
+impl From<errno::Errno> for Error {
+    fn from(value: errno::Errno) -> Self {
         Self::Errno(value)
     }
 }
@@ -127,7 +130,7 @@ fn update_binary<'a, T: Iterator<Item = &'a i32>>(
 }
 
 /// Update the binaries used by a profile.
-fn update_profile<'a, T: Iterator<Item = &'a String>>(
+fn update_profile<'a, T: Iterator<Item = &'a str>>(
     tx: &Transaction,
     profile: &str,
     binaries: T,
@@ -147,21 +150,16 @@ fn update_profile<'a, T: Iterator<Item = &'a String>>(
 /// Note that if deferring, there is a chance that the process is
 /// killed before it can store the result.
 ///
-/// This usually happens as a result of SetUID privilege mismatch.
-fn commit_or_defer(
-    profile: &str,
-    path: String,
-    call: i32,
-    mut entry: RefMut<'_, String, Set<i32>>,
-) {
+/// This usually happens as a result of setuid privilege mismatch.
+fn commit_or_defer(profile: &str, path: &str, call: i32, mut entry: RefMut<'_, String, Set<i32>>) {
     let commit: Result<()> = syscalls::CONNECTION.with_borrow_mut(|conn| {
         let tx = conn.transaction()?;
-        update_binary(&tx, &path, [call].iter())?;
-        update_profile(&tx, profile, [&path].into_iter())?;
+        update_binary(&tx, path, [call].iter())?;
+        update_profile(&tx, profile, [path].into_iter())?;
         tx.commit()?;
         println!(
             "{path} => {}",
-            Syscall::get_name(call).unwrap_or(format!("{call}"))
+            Syscall::get_name(call).unwrap_or_else(|_| format!("{call}"))
         );
         Ok(())
     });
@@ -172,6 +170,10 @@ fn commit_or_defer(
     }
 }
 
+/// Poll with a 100ms timeout.
+///
+/// ## Errors
+/// If the poll call fails.
 pub fn poll_timeout(poll_fd: &mut [PollFd<'_>; 1], term: &Arc<AtomicBool>) -> Result<Option<()>> {
     match poll(poll_fd, PollTimeout::from(100u8)) {
         Ok(_) => {
@@ -194,10 +196,14 @@ pub fn poll_timeout(poll_fd: &mut [PollFd<'_>; 1], term: &Arc<AtomicBool>) -> Re
 
 /// Read from the Audit log
 ///
-/// This function requires CAP_AUDIT_READ.
+/// This function requires `CAP_AUDIT_READ`.
 ///
 /// Because we cannot Notify for the syscalls used to send the SECCOMP FD to
 /// the monitor, we LOG them instead.
+///
+/// ## Errors
+/// If binding to the audit socket fails or reading from it does.
+#[allow(clippy::needless_pass_by_value)]
 pub fn audit_reader(
     profile: String,
     term: Arc<AtomicBool>,
@@ -249,7 +255,7 @@ pub fn audit_reader(
                         exe_match
                             .trim_start_matches("exe=")
                             .trim_matches('"')
-                            .to_string()
+                            .to_owned()
                     } else {
                         continue;
                     };
@@ -260,7 +266,7 @@ pub fn audit_reader(
                     {
                         syscall_match
                             .trim_start_matches("syscall=")
-                            .to_string()
+                            .to_owned()
                             .parse::<i32>()
                     } else {
                         continue;
@@ -274,8 +280,12 @@ pub fn audit_reader(
                             continue;
                         }
 
-                        let entry = log.entry(exe.clone()).or_default();
-                        commit_or_defer(&profile, exe.clone(), syscall, entry);
+                        commit_or_defer(
+                            &profile,
+                            &exe,
+                            syscall,
+                            log.entry(exe.clone()).or_default(),
+                        );
                         allow.entry(exe).or_default().insert(syscall);
                     }
                 }
@@ -291,6 +301,9 @@ pub fn audit_reader(
 }
 
 /// Notify the user when a new syscall is used.
+///
+/// ## Errors
+/// If the process cannot be spawned.
 pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     let name = Syscall::get_name(call)?;
 
@@ -318,11 +331,26 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     .output(StreamMode::Pipe)
     .pass_env("DBUS_SESSION_BUS_ADDRESS")?
     .spawn()?.output_all()?;
-    Ok(String::from(&out[..out.len() - 1]))
+    Ok(String::from(out.strip_suffix('\n').unwrap_or(&out)))
 }
 
 /// A thread worker for listening on the Kernel FD, and storing data on used syscalls
 /// and binaries.
+///
+/// ## Errors
+/// If a notify pair cannot be created.
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::cast_possible_wrap,
+    clippy::cast_possible_truncation,
+    clippy::invalid_upcast_comparisons,
+    clippy::too_many_lines
+)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::missing_panics_doc,
+    reason = "If you do not have the seccomp syscall you cannot use this utility."
+)]
 pub fn notify_reader(
     term: Arc<AtomicBool>,
     stats: Arc<ThreadMap<String, Set<i32>>>,
@@ -360,13 +388,11 @@ pub fn notify_reader(
         let stats_clone = Arc::clone(&stats);
 
         match pair.recv(fd.as_raw_fd()) {
-            Ok(Some(_)) => {
+            Ok(Some(())) => {
                 let log = Arc::clone(&stats_clone);
-
                 let deny_clone = Arc::clone(&deny);
                 let allow_clone = Arc::clone(&allow);
                 let ask_clone = Arc::clone(&ask);
-
                 let raw = fd.as_raw_fd();
                 let profile_name = name.clone();
 
@@ -391,7 +417,6 @@ pub fn notify_reader(
 
                             // Get the syscall name
                             let call = req.data.nr;
-                            let entry = log.entry(path.clone()).or_default();
 
                             // Perform saved actions if the user has already encountered
                             // it.
@@ -413,7 +438,10 @@ pub fn notify_reader(
                             }
 
                             // Add new values.
-                            if !entry.contains(&call) {
+                            #[allow(irrefutable_let_patterns)]
+                            if let entry = log.entry(path.clone()).or_default()
+                                && !entry.contains(&call)
+                            {
                                 let commit = if ask_clone.load(Ordering::Relaxed) {
                                     let mut commit = false;
                                     match notify(&profile_name, call, &exe_path) {
@@ -428,12 +456,10 @@ pub fn notify_reader(
                                                         commit = true;
                                                         ask_clone.store(false, Ordering::Relaxed);
                                                     }
-                                                    "Save" => {
-                                                        commit = true;
-                                                    }
+                                                    "Save" => commit = true,
                                                     "Allow" => {
                                                         allow_clone
-                                                            .entry(path.to_string())
+                                                            .entry(path.clone())
                                                             .or_default()
                                                             .insert(call);
                                                     }
@@ -459,15 +485,11 @@ pub fn notify_reader(
                                                             println!("Failed to kill child: {e}");
                                                         }
                                                     }
-                                                    e => {
-                                                        println!("Unrecognized option: {e}");
-                                                    }
+                                                    e => println!("Unrecognized option: {e}"),
                                                 }
                                             }
                                         }
-                                        Err(e) => {
-                                            println!("Failed to ask user: {e}");
-                                        }
+                                        Err(e) => println!("Failed to ask user: {e}"),
                                     }
                                     commit
                                 } else {
@@ -475,7 +497,7 @@ pub fn notify_reader(
                                 };
 
                                 if commit {
-                                    commit_or_defer(&profile_name, path.clone(), call, entry);
+                                    commit_or_defer(&profile_name, &path, call, entry);
                                     allow_clone.entry(path).or_default().insert(call);
                                 }
                             }
@@ -496,16 +518,16 @@ pub fn notify_reader(
                         // anything. Chromium/Electron, for some reason, do not use seccomp_api_get
                         // to determine features, but instead send null pointers to test capabilities.
                         // We handle both cases, and only ignore filters that would have actually worked.
-                        if ((call == syscalls::get_num("prctl")
+                        if ((call == syscalls::get_num("prctl").unwrap()
                             && args[0] == PR_SET_SECCOMP as u64)
-                            || call == syscalls::get_num("seccomp"))
+                            || call == syscalls::get_num("seccomp").unwrap())
                             && args[2] != 0
                         {
                             println!("Ignoring SECCOMP request");
                             resp.flags = 0;
 
                         // Chromium/Electron use this to test that SECCOMP works.
-                        } else if call == syscalls::get_num("fchmod")
+                        } else if call == syscalls::get_num("fchmod").unwrap()
                             && args[0] as i32 == -1
                             && args[1] == 0o7777
                         {
@@ -531,6 +553,7 @@ pub fn notify_reader(
 }
 
 /// Receive and Respond to Notify Requests.
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
@@ -547,9 +570,6 @@ fn main() -> Result<()> {
     }
     let listener = UnixListener::bind(&monitor_path)?;
 
-    // We dispatch requests to a thread pool for performance.
-    rayon::ThreadPoolBuilder::new().build_global()?;
-
     println!(
         "SECCOMP Monitor Started! ({} using {})",
         cli.profile, cli.mode
@@ -559,22 +579,21 @@ fn main() -> Result<()> {
 
     // Ensure that we can record syscall info after the attached process dies.
     let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term))?;
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+    flag::register(consts::SIGTERM, Arc::clone(&term))?;
+    flag::register(consts::SIGINT, Arc::clone(&term))?;
 
     // Shared DashSet for stats.
     let stats = ThreadMap::default();
-    let mut threads = Vec::new();
 
     // We don't care about cleaning up audit thread, but it needs to stick around
     let _audit = if cli.audit {
         let audit = stats
-            .entry("audit".to_string())
+            .entry("audit".to_owned())
             .or_insert_with(|| Arc::new(ThreadMap::default()))
             .clone();
 
         println!("Spawning audit reader");
-        let audit_term = term.clone();
+        let audit_term = Arc::clone(&term);
         let profile_clone = cli.profile.clone();
         Some(thread::spawn(move || {
             audit_reader(profile_clone, audit_term, audit)
@@ -588,14 +607,13 @@ fn main() -> Result<()> {
         match receive_fd(&listener) {
             Ok(Some((fd, name))) => {
                 println!("New connection established with {name}!");
-
-                let term_clone = term.clone();
+                let term_clone = Arc::clone(&term);
                 let profile = stats
                     .entry(name.clone())
                     .or_insert_with(|| Arc::new(ThreadMap::default()))
                     .clone();
 
-                threads.push(thread::spawn(move || {
+                thread::spawn(move || {
                     notify_reader(
                         term_clone,
                         profile,
@@ -603,10 +621,10 @@ fn main() -> Result<()> {
                         name,
                         AtomicBool::new(cli.mode == SeccompPolicy::Notifying),
                     )
-                }));
+                });
             }
             Ok(None) => continue,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => {
                 println!("Failed to received fd: {e}");
                 break;
@@ -616,7 +634,6 @@ fn main() -> Result<()> {
 
     // Notify the threads to quit
     term.store(true, Ordering::Relaxed);
-
     if !stats.is_empty() {
         let write = || -> Result<()> {
             println!("Writing stats");
@@ -658,33 +675,28 @@ fn main() -> Result<()> {
                                 return None;
                             }
 
-                            match binary_exist(&binary) {
-                                Ok(true) => {
-                                    println!("{}: {} => {syscalls:?}", binary, syscalls.len(),);
-
-                                    // Insert into DB using the transaction
-                                    if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
-                                        println!("DB insert failed for {binary}: {e}");
-                                        return None;
-                                    }
-
-                                    if binary.contains("strace") {
-                                        None
-                                    } else {
-                                        Some(binary.clone())
-                                    }
+                            if matches!(binary_exist(&binary), Ok(true)) {
+                                // Insert into DB using the transaction
+                                if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
+                                    println!("DB insert failed for {binary}: {e}");
+                                    return None;
                                 }
-                                _ => {
-                                    println!("Ignoring ephemeral binary {binary}");
+
+                                if binary.contains("strace") {
                                     None
+                                } else {
+                                    Some(binary)
                                 }
+                            } else {
+                                println!("Ignoring ephemeral binary {binary}");
+                                None
                             }
                         })
                         .collect();
 
                     if name != "audit" && !binaries.is_empty() {
                         println!("Updating {name}");
-                        update_profile(&tx, &name, binaries.iter())
+                        update_profile(&tx, &name, binaries.iter().map(String::as_str))
                             .with_context(|| "Updating profile")?;
                     }
                 }

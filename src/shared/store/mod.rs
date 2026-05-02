@@ -1,3 +1,8 @@
+#![allow(
+    clippy::absolute_paths,
+    clippy::missing_errors_doc,
+    clippy::missing_docs_in_private_items
+)]
 //! Antimony can use different backends for its file and cache store.
 //! By defining a common interface, they can be swapped out relatively easily,
 //! and migrating from one to the other.
@@ -13,17 +18,18 @@ use crate::shared::{
 use log::info;
 use parking_lot::Mutex;
 use serde::de::DeserializeOwned;
-use std::{any::Any, error, fmt, fs, io, path::PathBuf, sync::LazyLock};
+use std::{any::Any, error, fmt, fs, io, path::PathBuf, string, sync::LazyLock};
 use thiserror::Error;
 
 pub static CACHE: Mutex<Option<bool>> = Mutex::new(None);
 
 pub struct Store {
-    backing: Box<dyn BackingStore>,
+    /// The underlying store we're pointing to.
+    backing: Box<dyn BackingStore + Send + Sync>,
 }
 impl Store {
     pub fn init(t: StoreType) -> Self {
-        let backing = match t {
+        let backing: Box<dyn BackingStore + Send + Sync> = match t {
             StoreType::System => Box::new(file::Store::new(
                 &format!("{}", AT_CONFIG.display()),
                 "toml",
@@ -34,12 +40,13 @@ impl Store {
                 "toml",
             )),
             StoreType::Cache => {
-                let cache: Box<dyn BackingStore> = Box::new(file::Store::new(
+                let cache: Box<dyn BackingStore + Send + Sync> = Box::new(file::Store::new(
                     &format!("{}", CACHE_DIR.display()),
                     "cache",
                 ));
 
-                if let Some(read) = *CACHE.lock() {
+                let value = *CACHE.lock();
+                if let Some(read) = value {
                     info!("{t:?} in Memory");
                     let name = format!("{t:?}_cache");
                     Box::new(mem::Store::new(&name, cache, read))
@@ -52,12 +59,11 @@ impl Store {
     }
 
     #[allow(clippy::should_implement_trait)]
+    #[must_use]
     pub fn borrow(&self) -> &dyn BackingStore {
         self.backing.as_ref()
     }
 }
-unsafe impl Sync for Store {}
-unsafe impl Send for Store {}
 
 pub static SYSTEM_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::System));
 pub static USER_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::User));
@@ -89,7 +95,7 @@ pub enum Error {
     User(#[from] user::Error),
 
     #[error("Pulling raw bytes from this backend cannot be returned as a string: {0}")]
-    UTF(#[from] std::string::FromUtf8Error),
+    UTF(#[from] string::FromUtf8Error),
 }
 
 /// Each Object, for iteration.
@@ -113,7 +119,7 @@ pub enum Object {
     Binaries,
 }
 impl Object {
-    fn name(self) -> &'static str {
+    const fn name(self) -> &'static str {
         match self {
             Self::Profile => "profiles",
             Self::Feature => "features",
@@ -178,7 +184,10 @@ pub fn load<
     }
 
     // Try and load a file absolutely if the file is given.
-    if name.ends_with(".toml") {
+    if std::path::Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+    {
         let path = PathBuf::from(name);
         if path.exists() {
             return Ok(toml::from_str(&fs::read_to_string(path)?)?);
@@ -214,6 +223,7 @@ mod tests {
         store::{BackingStore, Object, file},
     };
 
+    #[allow(clippy::needless_pass_by_value)]
     fn backend_test(store: Box<dyn BackingStore>) {
         let object = Object::Profile;
         for profile in store.get(object).expect("Failed to get profiles") {

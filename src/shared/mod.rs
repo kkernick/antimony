@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 pub mod config;
 pub mod edit;
 pub mod env;
@@ -79,8 +81,9 @@ pub fn utility(util: &str) -> String {
         .into_owned()
 }
 
-/// Our notify logger implementation. Because Antimony runs SetUID, we have to
+/// Our notify logger implementation. Because Antimony runs `SetUID`, we have to
 /// spawn a separate process to access the user bus.
+#[must_use]
 pub fn logger(record: &Record, level: Level) -> bool {
     let result = || -> anyhow::Result<()> {
         let code = Spawner::abs(utility("notify"))
@@ -112,7 +115,8 @@ pub fn direct_path(file: &str) -> PathBuf {
 }
 
 #[cfg(debug_assertions)]
-pub static TIME_MAP: std::sync::LazyLock<ThreadMap<&'static str, u128>> =
+#[allow(clippy::absolute_paths)]
+pub static TIME_MAP: std::sync::LazyLock<ThreadMap<&'static str, std::num::Saturating<u128>>> =
     std::sync::LazyLock::new(ThreadMap::default);
 
 /// Debug macro to record how long something took, but only in developer builds.
@@ -128,7 +132,7 @@ macro_rules! timer {
             let elapsed = start.elapsed().as_micros();
             $crate::shared::TIME_MAP
                 .entry($name)
-                .or_insert(0)
+                .or_default()
                 .value_mut()
                 .add_assign(elapsed);
             result
@@ -147,7 +151,7 @@ macro_rules! timer {
             let elapsed = start.elapsed().as_micros();
             $crate::shared::TIME_MAP
                 .entry($name)
-                .or_insert(0)
+                .or_default()
                 .value_mut()
                 .add_assign(elapsed);
             result

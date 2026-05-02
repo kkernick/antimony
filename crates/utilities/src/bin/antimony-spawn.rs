@@ -1,3 +1,4 @@
+#![allow(unused_crate_dependencies)]
 //! This application is an implementation of flatpak-spawn for Antimony.
 //! Some of its arguments are no-ops, and only exist for a compatible interface,
 //! but it's largely feature complete. There are two important distinctions:
@@ -19,6 +20,7 @@
 //! --watch-bus is a no-op: antimony-spawn will either exit if the child
 //! it runs does, or if it is hit with SIGTERM or SIGINT.
 
+use antimony::{cli, setup};
 use anyhow::Result;
 use clap::Parser;
 use nix::unistd::chdir;
@@ -34,6 +36,7 @@ use std::{
 #[command(name = "Antimony-Spawn")]
 #[command(version)]
 #[command(about = "An implementation of flatpak-spawn for Antimony")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// The command to run.
     pub command: String,
@@ -66,11 +69,11 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub sandbox: bool,
 
-    /// Files to pass ReadWrite
+    /// Files to pass `ReadWrite`
     #[arg(long)]
     pub sandbox_expose: Option<Vec<String>>,
 
-    /// Files to pass ReadOnly
+    /// Files to pass `ReadOnly`
     #[arg(long)]
     pub sandbox_expose_ro: Option<Vec<String>>,
 
@@ -106,7 +109,7 @@ fn main() -> Result<()> {
 
     let handle = if cli.sandbox {
         // Construct the relevant arguments.
-        let mut args = antimony::cli::run::Args {
+        let mut args = cli::run::Args {
             passthrough: cli.passthrough,
             ro: cli.sandbox_expose_ro,
             rw: cli.sandbox_expose,
@@ -115,7 +118,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
 
-        let info = antimony::setup::setup(Cow::Owned(cli.command), &mut args, false)?;
+        let info = setup::setup(Cow::Owned(cli.command), &mut args, false)?;
 
         // Forward FDs.
         if let Some(fds) = cli.forward_fd {

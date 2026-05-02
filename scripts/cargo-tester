@@ -1,5 +1,6 @@
 #!/bin/bash
-set -ex
+
+## DO NOT SET -x, it will break the tests!
 
 DIR=$(cargo builder --recipe gdb)
 ROOT=$(git rev-parse --show-toplevel)

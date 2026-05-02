@@ -59,7 +59,7 @@ pub fn install_filter(
                 handle.arg_i("--audit");
             }
             if log::log_enabled!(log::Level::Info) {
-                handle.pass_env_i("RUST_LOG")?
+                handle.pass_env_i("RUST_LOG")?;
             }
             monitor_parent.associate(handle.spawn()?);
         }
@@ -77,7 +77,7 @@ pub fn setup(args: &super::Args) -> Result<()> {
     match seccomp {
         SeccompPolicy::Disabled => {}
         policy => {
-            if !args.args.dry {
+            if !args.run.dry {
                 let binaries = &args.profile.binaries;
                 install_filter(
                     &args.name,

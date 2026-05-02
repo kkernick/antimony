@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{cli, shared::Set};
 use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
@@ -63,19 +65,19 @@ impl Ipc {
 
         if let Some(portals) = args.portals.take() {
             ipc.get_or_insert_default().portals = portals.into_iter().collect();
-        };
+        }
         if let Some(see) = args.see.take() {
             ipc.get_or_insert_default().sees = see.into_iter().collect();
-        };
+        }
         if let Some(talk) = args.talk.take() {
             ipc.get_or_insert_default().talks = talk.into_iter().collect();
-        };
+        }
         if let Some(own) = args.own.take() {
             ipc.get_or_insert_default().owns = own.into_iter().collect();
-        };
+        }
         if let Some(call) = args.call.take() {
             ipc.get_or_insert_default().calls = call.into_iter().collect();
-        };
+        }
 
         if args.user_bus {
             ipc.get_or_insert_default().user_bus = Some(true);
@@ -116,26 +118,26 @@ pub enum Portal {
     Secret = 15,
     NetworkMonitor = 16,
 }
-impl std::fmt::Display for Portal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Portal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Portal::Background => write!(f, "Background"),
-            Portal::Camera => write!(f, "Camera"),
-            Portal::Clipboard => write!(f, "Clipboard"),
-            Portal::Documents => write!(f, "Documents"),
-            Portal::FileChooser => write!(f, "FileChooser"),
-            Portal::GlobalShortcuts => write!(f, "GlobalShortcuts"),
-            Portal::Inhibit => write!(f, "Inhibit"),
-            Portal::Location => write!(f, "Location"),
-            Portal::Notifications => write!(f, "Notifications"),
-            Portal::OpenURI => write!(f, "OpenURI"),
-            Portal::ProxyResolver => write!(f, "ProxyResolver"),
-            Portal::Realtime => write!(f, "Realtime"),
-            Portal::ScreenCast => write!(f, "ScreenCast"),
-            Portal::Screenshot => write!(f, "Screenshot"),
-            Portal::Settings => write!(f, "Settings"),
-            Portal::Secret => write!(f, "Secret"),
-            Portal::NetworkMonitor => write!(f, "NetworkMonitor"),
+            Self::Background => write!(f, "Background"),
+            Self::Camera => write!(f, "Camera"),
+            Self::Clipboard => write!(f, "Clipboard"),
+            Self::Documents => write!(f, "Documents"),
+            Self::FileChooser => write!(f, "FileChooser"),
+            Self::GlobalShortcuts => write!(f, "GlobalShortcuts"),
+            Self::Inhibit => write!(f, "Inhibit"),
+            Self::Location => write!(f, "Location"),
+            Self::Notifications => write!(f, "Notifications"),
+            Self::OpenURI => write!(f, "OpenURI"),
+            Self::ProxyResolver => write!(f, "ProxyResolver"),
+            Self::Realtime => write!(f, "Realtime"),
+            Self::ScreenCast => write!(f, "ScreenCast"),
+            Self::Screenshot => write!(f, "Screenshot"),
+            Self::Settings => write!(f, "Settings"),
+            Self::Secret => write!(f, "Secret"),
+            Self::NetworkMonitor => write!(f, "NetworkMonitor"),
         }
     }
 }

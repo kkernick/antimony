@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc)]
 //! Shared functionality between the Fabricators. This contains the brunt of the library fabricator's logic.
 
 pub mod bin;
@@ -48,8 +49,10 @@ pub struct FabInfo<'a> {
     pub sys_dir: &'a Path,
 }
 
+/// `bilrost` compatible struct for saving cached data
 #[derive(Message, Debug)]
 struct Cache {
+    /// The data
     cache: Set<Cow<'static, str>>,
 }
 
@@ -57,7 +60,7 @@ struct Cache {
 #[inline]
 fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
     timer!("::get_cache", {
-        if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace("/", "-"), object) {
+        if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace('/', "-"), object) {
             let content = T::decode(bytes.as_slice())?;
             Ok(Some(content))
         } else {
@@ -73,7 +76,7 @@ fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Re
         let bytes = content.encode_to_bytes();
         CACHE_STORE
             .borrow()
-            .dump(&name.replace("/", "-"), object, &bytes)?;
+            .dump(&name.replace('/', "-"), object, &bytes)?;
         Ok(content)
     })
 }
@@ -106,7 +109,7 @@ static CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default)
 static LDD: LazyLock<cache::Cache<String, Set<String>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
-#[inline(always)]
+#[inline]
 /// LDD an executable to get its library dependencies.
 ///
 /// ```rust
@@ -114,52 +117,53 @@ static LDD: LazyLock<cache::Cache<String, Set<String>>> =
 /// ```
 ///
 pub fn ldd(path: &str) -> Result<&'static Set<String>> {
-    match LDD.get(path) {
-        Some(depends) => Ok(depends),
-        None => {
-            let depends = if elf_filter(path) {
-                Spawner::abs("/usr/bin/ldd")
-                    .arg(path)
-                    .output(StreamMode::Pipe)
-                    .error(StreamMode::Discard)
-                    .mode(user::Mode::Real)
-                    .spawn()?
-                    .output_all()?
-                    .lines()
-                    .filter_map(|e| {
-                        if let Some(start) = e.find("/")
-                            && let Some(end) = e[start..].find(' ')
-                        {
-                            Some(String::from(&e[start..start + end]))
-                        } else {
-                            None
-                        }
-                    })
-                    .map(|e| {
-                        let path = Path::new(&e);
-                        if let Some(parent) = path.parent()
-                            && let Ok(canon) = fs::canonicalize(parent)
-                        {
-                            let canon = canon.join(path.file_name().unwrap());
-                            canon.to_string_lossy().into_owned()
-                        } else {
-                            e
-                        }
-                    })
-                    .map(|e| {
-                        let formatted = format!("/usr{e}");
-                        if Path::new(&formatted).exists() {
-                            formatted
-                        } else {
-                            e
-                        }
-                    })
-                    .collect()
-            } else {
-                Set::default()
-            };
-            Ok(LDD.insert(path.to_string(), depends))
-        }
+    if let Some(depends) = LDD.get(path) {
+        Ok(depends)
+    } else {
+        let depends = if elf_filter(path) {
+            Spawner::abs("/usr/bin/ldd")
+                .arg(path)
+                .output(StreamMode::Pipe)
+                .error(StreamMode::Discard)
+                .mode(user::Mode::Real)
+                .spawn()?
+                .output_all()?
+                .lines()
+                .filter_map(|e| {
+                    if let Some(start) = e.find('/')
+                        && let Some(end) = e[start..].find(' ')
+                    {
+                        Some(String::from(
+                            &e[start..start.checked_add(end).unwrap_or(end)],
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .map(|e| {
+                    let path = Path::new(&e);
+                    if let Some(parent) = path.parent()
+                        && let Ok(canon) = fs::canonicalize(parent)
+                        && let Some(name) = path.file_name()
+                    {
+                        canon.join(name).to_string_lossy().into_owned()
+                    } else {
+                        e
+                    }
+                })
+                .map(|e| {
+                    let formatted = format!("/usr{e}");
+                    if Path::new(&formatted).exists() {
+                        formatted
+                    } else {
+                        e
+                    }
+                })
+                .collect()
+        } else {
+            Set::default()
+        };
+        Ok(LDD.insert(path.to_owned(), depends))
     }
 }
 
@@ -201,6 +205,11 @@ pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
 /// use antimony::fab::{get_wildcards,lib::WildcardFilter};
 /// get_wildcards("glib*", true, WildcardFilter::Files).expect("Failed to find Glib");
 /// ```
+#[allow(
+    clippy::unwrap_used,
+    clippy::missing_panics_doc,
+    reason = "Both unwraps are done with explicit knowledge that they cannot fail."
+)]
 pub fn get_wildcards(
     pattern: &str,
     lib: bool,
@@ -210,13 +219,13 @@ pub fn get_wildcards(
         let run = |dir: &str, base: &str| -> Result<Set<Cow<'static, str>>> {
             let handle = Spawner::abs("/usr/bin/find").arg(dir);
 
-            if base.contains("/") {
+            if base.contains('/') {
                 let whole = PathBuf::from(format!("{dir}/{base}"));
                 if !whole.parent().unwrap().exists() {
                     return Ok(Set::default());
                 }
-                let d = format!("{}", whole.components().collect::<Vec<_>>().len() - 1);
-                handle.args_i(["-maxdepth", &d, "-wholename", whole.to_str().unwrap()]);
+                let d = format!("{}", whole.components().count().saturating_sub(1));
+                handle.args_i(["-maxdepth", &d, "-wholename", &whole.display().to_string()]);
             } else {
                 handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base]);
             }
@@ -228,7 +237,7 @@ pub fn get_wildcards(
                 .spawn()?
                 .output_all()?
                 .lines()
-                .map(|e| Cow::Owned(e.to_string()))
+                .map(|e| Cow::Owned(e.to_owned()))
                 .collect())
         };
 
@@ -237,9 +246,9 @@ pub fn get_wildcards(
         }
 
         // If we have a direct path, call `find /path/to/parent -name file*`
-        let libraries = if pattern.starts_with("/") {
+        let libraries = if pattern.starts_with('/') {
             let i = pattern.rfind('/').unwrap();
-            run(&pattern[..i], &pattern[i + 1..])?
+            run(&pattern[..i], &pattern[i.checked_add(1).unwrap_or(i)..])?
 
         // If we're looking for libraries, check each library root.
         } else if lib {
@@ -310,7 +319,7 @@ pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
 pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
     timer!("::resolve", {
         if string.starts_with('~') {
-            string = Cow::Owned(string.replace("~", "/home/antimony"));
+            string = Cow::Owned(string.replace('~', "/home/antimony"));
         }
 
         if string.contains('$') {
@@ -328,7 +337,9 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
                             break;
                         }
                     }
-                    if !var_name.is_empty() {
+                    if var_name.is_empty() {
+                        resolved.push('$');
+                    } else {
                         // These values may not be defined in the environment, but have explicit
                         // values Antimony can fill.
                         let val = match var_name.as_str() {
@@ -339,11 +350,9 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
                             name => env::var(name).unwrap_or_else(|_| format!("${name}")),
                         };
                         resolved.push_str(&val);
-                    } else {
-                        resolved.push('$');
                     }
                 } else {
-                    resolved.push(ch)
+                    resolved.push(ch);
                 }
             }
             Cow::Owned(resolved)
@@ -362,7 +371,7 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
 /// assert!(antimony::fab::localize_home("/home/test/file") == "/home/antimony/file");
 /// ```
 #[inline]
-pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
+pub fn localize_home(path: &str) -> Cow<'_, str> {
     timer!("::localize_home", {
         if path.starts_with("/home") {
             Cow::Owned(path.replace(HOME.as_str(), "/home/antimony"))
@@ -375,11 +384,11 @@ pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
 /// Localize a path, returning the resolved source, and where it should be mounted in the sandbox.
 /// This is a rather complicated function because it handles a lot of different cases. Specifically:
 ///
-/// 1. Resolves environment variables ($AT_HOME => /usr/share/antimony)
+/// 1. Resolves environment variables ($`AT_HOME` => /usr/share/antimony)
 /// 2. Resolves home markers => (~/test => $HOME/test)
 /// 3. The destination is mapped to Antimony's home (/home/test/file => /home/antimony/file)
 /// 4. When the home flag is set, paths can be relative to home (file => $HOME/file)
-/// 5. An explicit mapping can be provided with an equal sign. ($AT_HOME/binary=/usr/bin/binary => /usr/bin/binary)
+/// 5. An explicit mapping can be provided with an equal sign. ($`AT_HOME/binary=/usr/bin/binary` => /usr/bin/binary)
 ///
 /// The return value is also rather complicated, and not entirely intuitive. The src aspect is optional,
 /// but the destination is always returned. That's because the source is the important aspect (Its the
@@ -405,15 +414,15 @@ pub fn localize_home<'a>(path: &'a str) -> Cow<'a, str> {
 ///
 /// assert!(localize_path(str.clone().as_ref(), false).unwrap() == (Some(str.clone()), str.into_owned()));
 ///
-/// assert!(localize_path("/etc/file", false).unwrap() == (None, "/etc/file".to_string()));
-/// assert!(localize_path("/etc/file=/file", false).unwrap() == (None, "/file".to_string()));
+/// assert!(localize_path("/etc/file", false).unwrap() == (None, "/etc/file".to_owned()));
+/// assert!(localize_path("/etc/file=/file", false).unwrap() == (None, "/file".to_owned()));
 ///
-/// assert!(localize_path("file", true).unwrap() == (None, "/home/antimony/file".to_string()));
-/// assert!(localize_path("~/file", true).unwrap() == (None, "/home/antimony/file".to_string()));
-/// assert!(localize_path("$HOME/file", true).unwrap() == (None, "/home/antimony/file".to_string()));
+/// assert!(localize_path("file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
+/// assert!(localize_path("~/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
+/// assert!(localize_path("$HOME/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
 ///
-/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_string()));
-/// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_string()));
+/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_owned()));
+/// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_owned()));
 /// ```
 pub fn localize_path(
     file: &str,

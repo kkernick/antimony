@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
 /// for persistent configurations and caches.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Eq, Message)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
@@ -37,7 +37,7 @@ impl Home {
         }
     }
 
-    pub fn from_args(args: &mut cli::run::Args) -> Self {
+    pub const fn from_args(args: &mut cli::run::Args) -> Self {
         Self {
             name: args.home_name.take(),
             policy: args.home_policy.take(),
@@ -47,10 +47,9 @@ impl Home {
     }
 
     pub fn path(&self, name: &str) -> PathBuf {
-        DATA_HOME.join("antimony").join(match &self.name {
-            Some(name) => name,
-            None => name,
-        })
+        DATA_HOME
+            .join("antimony")
+            .join(self.name.as_ref().map_or(name, |name| name))
     }
 }
 

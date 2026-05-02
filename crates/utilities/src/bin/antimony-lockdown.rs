@@ -1,7 +1,8 @@
-//! This application serves as a SetUID hand-off when Antimony is running in
+#![allow(unused_crate_dependencies)]
+//! This application serves as a setuid hand-off when Antimony is running in
 //! lock-down mode. In Lockdown, we run underneath a dedicated, isolated user,
 //! so Antimony needs to transition from $USER/antimony to lockdown/antimony.
-//! This is achieved by having a SetUID owned by the lockdown that does nothing
+//! This is achieved by having a setuid owned by the lockdown that does nothing
 //! but ingest a bubblewrap command and execute.
 
 use anyhow::{Result, anyhow};
@@ -66,7 +67,7 @@ fn main() -> Result<()> {
     // Pass all FDs Antimony tells us to.
     let fds: Vec<OwnedFd> = env::var("FDS")
         .unwrap_or_default()
-        .split(",")
+        .split(',')
         .filter_map(|fd: &str| -> Option<i32> { fd.parse::<i32>().ok() })
         .map(|fd| unsafe { OwnedFd::from_raw_fd(fd) })
         .collect();

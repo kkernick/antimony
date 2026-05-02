@@ -34,12 +34,11 @@ impl super::Run for Args {
                 toml::to_string(&store::load::<Profile, profile::Error>(&name, table, true)?)
             };
 
-            if let Ok(content) = content {
-                store::USER_STORE.borrow().store(
-                    src.file_name().unwrap().to_str().unwrap(),
-                    table,
-                    &content,
-                )?;
+            if let Ok(content) = content
+                && let Some(name) = src.file_name()
+                && let Some(str) = name.to_str()
+            {
+                store::USER_STORE.borrow().store(str, table, &content)?;
             } else {
                 warn!("Invalid {kind}: {}", src.display());
             }

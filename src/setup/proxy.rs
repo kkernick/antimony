@@ -68,7 +68,7 @@ pub fn run(
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
             libraries
                 .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, library, &cache))?;
+                .try_for_each(|library| add_sof(&sof, &library, &cache))?;
         });
     }
 
@@ -122,7 +122,7 @@ pub fn run(
             proxy.cache_start()?;
 
             let permit_call = |portal: &str| -> String {
-                let path = portal.replace(".", "/").to_ascii_lowercase();
+                let path = portal.replace('.', "/").to_ascii_lowercase();
                 format!("--call={portal}=org.freedesktop.DBus.Properties.*@{path}")
             };
 
@@ -161,11 +161,12 @@ pub fn run(
                 }
             }
             proxy.cache_write(&cache)?;
-        })
+        });
     }
     Ok(proxy)
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // Scope the lock
     let ipc = {
@@ -213,7 +214,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             run(&args.sys_dir, &args.profile, args.instance, &info, id)
         )?;
 
-        if !args.args.dry {
+        if !args.run.dry {
             // This is *very* paranoid, but the proxy gets confined by its
             // own policy when SECCOMP is enabled.
             if let Some(policy) = args.profile.seccomp {
@@ -226,8 +227,8 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                         &proxy,
                         &args.handle,
                         false,
-                    )?
-                })
+                    )?;
+                });
             }
 
             // Create the flatpak-info, but don't bother if we're running dry.
@@ -244,10 +245,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     "app-path=/usr",
                     "[Context]",
                     "sockets=session-bus;system-bus;",
-                ].into_iter().map(|e| e.to_string()).collect();
+                ].into_iter().map(ToOwned::to_owned).collect();
 
                 if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
-                    info_contents.push("shared=network;".to_string());
+                    info_contents.push("shared=network;".to_owned());
                 }
 
                 as_real!(Result<()>, {

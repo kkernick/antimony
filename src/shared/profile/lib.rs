@@ -23,7 +23,7 @@ impl Libraries {
     /// Merge two file set together.
     pub fn merge(&mut self, libraries: Self) {
         if self.no_sof.is_none() {
-            self.no_sof = libraries.no_sof
+            self.no_sof = libraries.no_sof;
         }
 
         self.roots.extend(libraries.roots);
@@ -44,7 +44,7 @@ impl Libraries {
             ret.get_or_insert_default().roots.extend(roots);
         }
         if args.no_sof {
-            ret.get_or_insert_default().no_sof = Some(true)
+            ret.get_or_insert_default().no_sof = Some(true);
         }
         ret
     }

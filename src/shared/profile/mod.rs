@@ -1,3 +1,8 @@
+#![allow(
+    clippy::absolute_paths,
+    clippy::missing_docs_in_private_items,
+    clippy::missing_errors_doc
+)]
 //! The Profile defines what application should be run, and what features it needs
 //! to function properly. It's the core of Antimony, and has been separated into
 //! separate files for readability.
@@ -73,7 +78,7 @@ pub enum Error {
 #[inline]
 fn default_inherits() -> Set<String> {
     if !CONFIG_FILE.system_mode() && USER_STORE.borrow().exists("default", Object::Profile) {
-        Set::from_iter(["default".to_string()])
+        Set::from_iter(["default".to_owned()])
     } else {
         Set::default()
     }
@@ -122,14 +127,14 @@ pub struct Profile {
     ///
     /// This can be used to create multiple variants of a single profiles, such as
     /// versions of an editor (Zed Preview inherits Zed), a baseline configuration
-    /// (LibreOffice), or different variants (A version of Chromium using the Home,
+    /// (`LibreOffice`), or different variants (A version of Chromium using the Home,
     /// and another without any home for a clean variant).
     ///
     /// path and id cannot be inherited. However,
     /// inherit itself is recursive, so if a profile inherits a profile, and that profile
     /// inherits something else, the top-level profile will inherit both.
     ///
-    /// When this value is not defined, it will default to ["default"], which will inherit
+    /// When this value is not defined, it will default to [default], which will inherit
     /// the user Default Profile. If you define inherits, if you do not put "default" in the
     /// list the profile will exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
@@ -180,12 +185,12 @@ pub struct Profile {
     /// Configurations act as embedded profiles, inheriting the main one.
     #[serde(skip_serializing_if = "Map::is_empty")]
     #[bilrost(recurses)]
-    pub configuration: Map<String, Profile>,
+    pub configuration: Map<String, Self>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
 
-    /// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+    /// Whether the program has unique privileges that `NO_NEW_PRIVS` can restrict.
     /// Note that this does grant privileges, it merely allows an application with existing privileges to
     /// keep them when running within the sandbox. However, this property being allowed in the sandbox
     /// means that an other unprivileged process could gain extra privilege if there's a binary in the
@@ -226,27 +231,27 @@ impl Profile {
         }
 
         if let Some(features) = args.features.take() {
-            profile.features.extend(features)
+            profile.features.extend(features);
         }
 
         if let Some(inherits) = args.inherits.take() {
-            profile.inherits.extend(inherits)
+            profile.inherits.extend(inherits);
         }
 
         if let Some(conflicts) = args.conflicts.take() {
-            profile.conflicts.extend(conflicts)
+            profile.conflicts.extend(conflicts);
         }
 
         if let Some(binaries) = args.binaries.take() {
-            profile.binaries.extend(binaries)
+            profile.binaries.extend(binaries);
         }
 
         if let Some(devices) = args.devices.take() {
-            profile.devices.extend(devices)
+            profile.devices.extend(devices);
         }
 
         if let Some(namespaces) = args.namespaces.take() {
-            profile.namespaces.extend(namespaces)
+            profile.namespaces.extend(namespaces);
         }
 
         profile.libraries = lib::Libraries::from_args(args);
@@ -255,11 +260,11 @@ impl Profile {
 
         if let Some(env) = args.env.take() {
             let environment = &mut profile.environment;
-            env.into_iter().for_each(|pair| {
+            for pair in env {
                 if let Some((key, value)) = pair.split_once('=') {
-                    environment.insert(key.to_string(), value.to_string());
+                    environment.insert(key.to_owned(), value.to_owned());
                 }
-            });
+            }
         }
 
         if let Some(lock) = args.home_lock.take() {
@@ -284,7 +289,7 @@ impl Profile {
         config: Option<String>,
         args: Option<&mut cli::run::Args>,
         foreign: bool,
-    ) -> Result<(Profile, String), Error> {
+    ) -> Result<(Self, String), Error> {
         debug!("Loading {name}");
 
         let mut profile = timer!(
@@ -293,8 +298,8 @@ impl Profile {
                 Ok(profile) => profile,
                 Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
                     debug!("No profile: {name}, assuming binary");
-                    Profile {
-                        path: Some(which::which(name)?.to_string()),
+                    Self {
+                        path: Some(which::which(name)?.to_owned()),
                         ..Default::default()
                     }
                 }
@@ -302,16 +307,20 @@ impl Profile {
             }
         );
         if name == "default" {
-            return Ok((profile, "default".to_string()));
+            return Ok((profile, "default".to_owned()));
         }
 
         if let Some(args) = args {
             if !CONFIG_FILE.system_mode() {
-                let cmd_profile = Profile::from_args(args)?;
-                profile = profile.base(cmd_profile)?
+                let cmd_profile = Self::from_args(args)?;
+                profile = profile.base(cmd_profile)?;
             }
-            if !name.ends_with(".toml") && profile.path.is_none() {
-                profile.path = Some(which::which(&profile.app_path(name))?.to_string());
+            if !std::path::Path::new(name)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
+                && profile.path.is_none()
+            {
+                profile.path = Some(which::which(&profile.app_path(name))?.to_owned());
             }
         }
 
@@ -325,8 +334,8 @@ impl Profile {
         }
 
         if let Some(path) = &profile.path {
-            if path.starts_with("~") {
-                profile.path = Some(path.replace("~", HOME.as_str()))
+            if path.starts_with('~') {
+                profile.path = Some(path.replace('~', HOME.as_str()));
             } else if path.starts_with("$AT_HOME")
                 && let Some(home) = &profile.home
             {
@@ -338,11 +347,11 @@ impl Profile {
         let path = Path::new(app_path.as_ref());
         if !as_real!(path.exists())? {
             match which::which(app_path.as_ref()) {
-                Ok(path) => profile.path = Some(path.to_string()),
+                Ok(path) => profile.path = Some(path.to_owned()),
                 Err(_) => {
                     if !foreign {
                         return Err(Error::NotFound(
-                            name.to_string(),
+                            name.to_owned(),
                             Cow::Borrowed("Profile binary does not exist on system"),
                         ));
                     }
@@ -352,36 +361,35 @@ impl Profile {
 
         debug!("No cache available");
         for inherit in profile.inherits.clone() {
-            profile.merge(Profile::new(&inherit, None, None, true)?.0)?;
+            profile.merge(Self::new(&inherit, None, None, true)?.0)?;
         }
 
         if let Some(config) = config {
             debug!("Loading configuration");
-            if !profile.configuration.is_empty() {
-                match profile.configuration.remove(&config) {
-                    Some(conf) => {
-                        let hooks = conf.hooks.clone();
-                        profile = profile.base(conf)?;
-                        if let Some(hooks) = hooks
-                            && !hooks.inherit.unwrap_or(true)
-                        {
-                            profile.hooks = Some(hooks);
-                        }
-                    }
-                    None => {
-                        return Err(Error::NotFound(
-                            name.to_string(),
-                            Cow::Owned(format!("Configuration {config} does not exist")),
-                        ));
-                    }
-                }
-            } else {
+            if profile.configuration.is_empty() {
                 return Err(Error::NotFound(
-                    name.to_string(),
+                    name.to_owned(),
                     Cow::Borrowed("Profile does not have any configurations"),
                 ));
             }
-        };
+            match profile.configuration.remove(&config) {
+                Some(conf) => {
+                    let hooks = conf.hooks.clone();
+                    profile = profile.base(conf)?;
+                    if let Some(hooks) = hooks
+                        && !hooks.inherit.unwrap_or(true)
+                    {
+                        profile.hooks = Some(hooks);
+                    }
+                }
+                None => {
+                    return Err(Error::NotFound(
+                        name.to_owned(),
+                        Cow::Owned(format!("Configuration {config} does not exist")),
+                    ));
+                }
+            }
+        }
 
         debug!("Fabricating features");
         fab::features::fabricate(&mut profile, name)?;
@@ -399,6 +407,7 @@ impl Profile {
     ///
     /// The difference is that values unaffected by `merge` persist in
     /// the caller.
+    #[allow(clippy::assigning_clones)]
     pub fn base(mut self, mut source: Self) -> Result<Self, Error> {
         source.id = self.id.take();
         source.inherits = self.inherits.clone();
@@ -443,15 +452,15 @@ impl Profile {
 
         if let Some(home) = profile.home {
             if let Some(s_home) = &mut self.home {
-                s_home.merge(home)
+                s_home.merge(home);
             } else {
-                self.home = Some(home)
+                self.home = Some(home);
             }
         }
 
         if let Some(files) = profile.files {
             if let Some(s_files) = &mut self.files {
-                s_files.merge(files)
+                s_files.merge(files);
             } else {
                 self.files = Some(files);
             }
@@ -459,7 +468,7 @@ impl Profile {
 
         if let Some(ipc) = profile.ipc {
             if let Some(s_ipc) = &mut self.ipc {
-                s_ipc.merge(ipc)
+                s_ipc.merge(ipc);
             } else {
                 self.ipc = Some(ipc);
             }
@@ -467,17 +476,17 @@ impl Profile {
 
         if let Some(hooks) = profile.hooks {
             if let Some(s_hooks) = &mut self.hooks {
-                s_hooks.merge(hooks)
+                s_hooks.merge(hooks);
             } else {
-                self.hooks = Some(hooks)
+                self.hooks = Some(hooks);
             }
         }
 
         if let Some(libraries) = profile.libraries {
             if let Some(s_lib) = &mut self.libraries {
-                s_lib.merge(libraries)
+                s_lib.merge(libraries);
             } else {
-                self.libraries = Some(libraries)
+                self.libraries = Some(libraries);
             }
         }
 
@@ -500,42 +509,45 @@ impl Profile {
     }
 
     /// Get the path of the profile binary.
+    #[must_use]
     pub fn app_path<'a>(&'a self, name: &'a str) -> Cow<'a, str> {
-        match &self.path {
-            Some(path) => Cow::Borrowed(path),
-            None => match which(name) {
-                Ok(path) => Cow::Borrowed(path),
-                Err(_) => Cow::Borrowed(name),
-            },
-        }
+        self.path.as_ref().map_or_else(
+            || which(name).map_or(Cow::Borrowed(name), Cow::Borrowed),
+            |path| Cow::Borrowed(path),
+        )
     }
 
     /// Get the id name, using as the Flatpak ID.
-    /// It's either the id name, or from name()
+    /// It's either the id name, or from `name()`
+    #[must_use]
     pub fn desktop<'a, 'b>(&'b self, name: &'a str) -> Cow<'a, str>
     where
         'b: 'a,
     {
-        if let Some(id) = &self.id {
-            Cow::Borrowed(id)
-        } else {
-            let path = self.app_path(name);
-            let bin_name = if let Some(i) = path.rfind('/') {
-                let slice = &path[i + 1..];
-                Cow::Owned(slice.to_string())
-            } else {
-                path
-            };
+        self.id.as_ref().map_or_else(
+            || {
+                let path = self.app_path(name);
+                let bin_name = if let Some(i) = path.rfind('/')
+                    && let Some(i) = i.checked_add(1)
+                {
+                    let slice = &path[i..];
+                    Cow::Owned(slice.to_owned())
+                } else {
+                    path
+                };
 
-            if bin_name.contains('.') {
-                bin_name
-            } else {
-                Cow::Borrowed(name)
-            }
-        }
+                if bin_name.contains('.') {
+                    bin_name
+                } else {
+                    Cow::Borrowed(name)
+                }
+            },
+            |id| Cow::Borrowed(id),
+        )
     }
 
     /// Format the id as the Flatpak ID.
+    #[must_use]
     pub fn id(&self, name: &str) -> String {
         let id = self.desktop(name);
         if id.contains('.') {
@@ -548,7 +560,7 @@ impl Profile {
     /// Get the numerical hash of the profile.
     pub fn num_hash(&self, config: &Option<String>) -> u64 {
         let mut bytes = Self::encode_to_bytes(self).to_vec();
-        bytes.push(CONFIG_FILE.system_mode() as u8);
+        bytes.push(u8::from(CONFIG_FILE.system_mode()));
         if let Some(config) = config {
             bytes.extend_from_slice(config.as_bytes());
         }
@@ -556,6 +568,7 @@ impl Profile {
     }
 
     /// Get the Profile's hash.
+    #[must_use]
     pub fn hash_str(&self, config: &Option<String>) -> String {
         format!("{}", self.num_hash(config))
     }
@@ -571,6 +584,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::panic)]
     fn validate_profiles() {
         for profile in store::SYSTEM_STORE
             .borrow()
@@ -583,7 +597,7 @@ mod tests {
                     .fetch(&profile, Object::Profile)
                     .expect("Failed to fetch"),
             )
-            .expect("Failed to fetch {profile}");
+            .unwrap_or_else(|_| panic!("Failed to fetch {profile}"));
         }
     }
 }

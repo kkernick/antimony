@@ -35,13 +35,13 @@ pub enum Namespace {
 impl std::fmt::Display for Namespace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Namespace::All => write!(f, "All"),
-            Namespace::User => write!(f, "User"),
-            Namespace::Ipc => write!(f, "Ipc"),
-            Namespace::Pid => write!(f, "Pid"),
-            Namespace::Net => write!(f, "Net"),
-            Namespace::Uts => write!(f, "Uts"),
-            Namespace::CGroup => write!(f, "Cgroup"),
+            Self::All => write!(f, "All"),
+            Self::User => write!(f, "User"),
+            Self::Ipc => write!(f, "Ipc"),
+            Self::Pid => write!(f, "Pid"),
+            Self::Net => write!(f, "Net"),
+            Self::Uts => write!(f, "Uts"),
+            Self::CGroup => write!(f, "Cgroup"),
         }
     }
 }

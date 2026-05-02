@@ -1,8 +1,11 @@
-use crate::cli;
-use crate::shared::{Map, Set};
+use crate::{
+    cli,
+    shared::{Map, Set},
+};
 use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// How a file should be exposed in the sandbox.
 #[derive(
@@ -26,7 +29,8 @@ pub enum FileMode {
 }
 impl FileMode {
     /// Get the bwrap argument for binding this file.
-    pub fn bind(&self, can_try: bool) -> &'static str {
+    #[must_use]
+    pub const fn bind(&self, can_try: bool) -> &'static str {
         match self {
             Self::ReadWrite => {
                 if can_try {
@@ -46,7 +50,8 @@ impl FileMode {
     }
 
     /// Get the chmod value that should be used for direct files.
-    pub fn chmod(&self) -> &'static str {
+    #[must_use]
+    pub const fn chmod(&self) -> &'static str {
         match self {
             Self::ReadOnly => "444",
             Self::ReadWrite => "666",
@@ -54,8 +59,8 @@ impl FileMode {
         }
     }
 }
-impl std::fmt::Display for FileMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for FileMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ReadOnly => write!(f, "ro"),
             Self::ReadWrite => write!(f, "rw"),
@@ -151,29 +156,29 @@ impl Files {
         let mut files: Option<Self> = None;
 
         if let Some(passthrough) = args.file_passthrough.take() {
-            files.get_or_insert_default().passthrough = Some(passthrough)
+            files.get_or_insert_default().passthrough = Some(passthrough);
         }
         if let Some(ro) = args.ro.take() {
             let files = files.get_or_insert_default();
-            ro.into_iter().for_each(|file| {
+            for file in ro {
                 let list = if file.starts_with("/home") {
                     &mut files.user
                 } else {
                     &mut files.platform
                 };
                 list.entry(FileMode::ReadOnly).or_default().insert(file);
-            });
+            }
         }
         if let Some(rw) = args.rw.take() {
             let files = files.get_or_insert_default();
-            rw.into_iter().for_each(|file| {
+            for file in rw {
                 let list = if file.starts_with("/home") {
                     &mut files.user
                 } else {
                     &mut files.platform
                 };
                 list.entry(FileMode::ReadWrite).or_default().insert(file);
-            });
+            }
         }
 
         if let Some(mut temp) = args.temp.take() {

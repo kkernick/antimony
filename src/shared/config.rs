@@ -1,3 +1,4 @@
+#![allow(clippy::missing_docs_in_private_items)]
 //! The configuration file is a global configuration for Antimony.
 
 use crate::shared::{
@@ -6,6 +7,7 @@ use crate::shared::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    env,
     fs::{self, read_to_string},
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -17,22 +19,22 @@ pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(digest_config);
 pub fn digest_config() -> ConfigFile {
     let mut config = ConfigFile::new(Path::new("/etc/antimony.toml"));
     if let Ok(iter) = fs::read_dir("/etc/antimony.d") {
-        for drop_in in iter.into_iter().filter_map(|d| d.ok()) {
+        for drop_in in iter.into_iter().filter_map(Result::ok) {
             config.merge(ConfigFile::new(&drop_in.path()));
         }
     }
 
-    if let Ok(env) = std::env::var("AT_FORCE_TEMP") {
-        config.force_temp = Some(env != "0")
+    if let Ok(env) = env::var("AT_FORCE_TEMP") {
+        config.force_temp = Some(env != "0");
     }
-    if let Ok(env) = std::env::var("AT_SYSTEM_MODE") {
-        config.system_mode = Some(env != "0")
+    if let Ok(env) = env::var("AT_SYSTEM_MODE") {
+        config.system_mode = Some(env != "0");
     }
-    if let Ok(env) = std::env::var("AT_AUTO_REFRESH") {
-        config.auto_refresh = Some(env != "0")
+    if let Ok(env) = env::var("AT_AUTO_REFRESH") {
+        config.auto_refresh = Some(env != "0");
     }
-    if let Ok(env) = std::env::var("AT_LIB_ROOTS") {
-        config.library_roots = env.split(" ").map(String::from).collect()
+    if let Ok(env) = env::var("AT_LIB_ROOTS") {
+        config.library_roots = env.split(' ').map(String::from).collect();
     }
 
     config
@@ -53,39 +55,44 @@ pub struct ConfigFile {
     pub environment: Map<String, String>,
 }
 impl ConfigFile {
+    #[must_use]
     pub fn auto_refresh(&self) -> bool {
         self.auto_refresh.unwrap_or(false)
     }
 
+    #[must_use]
     pub fn force_temp(&self) -> bool {
         self.force_temp.unwrap_or(false)
     }
 
+    #[must_use]
     pub fn system_mode(&self) -> bool {
         self.system_mode.unwrap_or(false)
     }
 
+    #[must_use]
     pub fn is_privileged(&self) -> bool {
-        if let Some(users) = &self.privileged_users {
-            users.contains(USER_NAME.as_str())
-        } else {
-            false
-        }
+        self.privileged_users
+            .as_ref()
+            .is_some_and(|users| users.contains(USER_NAME.as_str()))
     }
 
-    pub fn library_roots(&self) -> &Set<String> {
+    #[must_use]
+    pub const fn library_roots(&self) -> &Set<String> {
         &self.library_roots
     }
 
-    pub fn environment(&self) -> &Map<String, String> {
+    #[must_use]
+    pub const fn environment(&self) -> &Map<String, String> {
         &self.environment
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub fn edit(config: &str) -> Result<Option<String>, edit::Error> {
         edit::edit::<Self>(config)
     }
 
-    pub fn merge(&mut self, mut config: ConfigFile) {
+    pub fn merge(&mut self, mut config: Self) {
         let switch = |s: &mut Option<bool>, o: Option<bool>| {
             *s = match s {
                 Some(true) => Some(true),
@@ -113,7 +120,7 @@ impl ConfigFile {
                     Err(e) => eprintln!("Failed to read config {}: {e}", config_path.display()),
                 },
                 Err(e) => {
-                    eprintln!("Could not read config {}: {e}", config_path.display())
+                    eprintln!("Could not read config {}: {e}", config_path.display());
                 }
             }
         }

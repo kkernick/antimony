@@ -45,15 +45,15 @@ impl cli::Run for Args {
                 }
             }
         } else if self.profile.is_none() {
-            for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(|f| f.ok()) {
+            for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(Result::ok) {
                 let saved: Set<String> = fs::read_dir(hash.path())?
-                    .filter_map(|f| f.ok())
+                    .filter_map(Result::ok)
                     .filter_map(|f| f.file_name().into_string().ok())
                     .collect();
 
                 let session: Set<String> =
                     as_real!({ fs::read_dir(RUNTIME_DIR.join("antimony")) })??
-                        .filter_map(|f| f.ok())
+                        .filter_map(Result::ok)
                         .filter_map(|f| f.file_name().into_string().ok())
                         .collect();
 
@@ -74,21 +74,21 @@ impl cli::Run for Args {
 
         // If a single profile exist, refresh it and it alone.
         if let Some(profile) = self.profile {
-            let mut args = if let Some(passthrough) = self.passthrough {
-                run_vec(&profile, passthrough)
-            } else {
-                run::Args::default()
-            };
+            let mut args = self
+                .passthrough
+                .map_or_else(run::Args::default, |passthrough| {
+                    run_vec(&profile, passthrough)
+                });
 
             args.refresh = true;
             args.dry = self.dry;
-            args.profile = profile.clone();
+            args.profile = profile;
             args.run()?;
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
             let profiles = installed_profiles()?;
-            let pb = ProgressBar::new(profiles.len() as u64 + 1);
+            let pb = ProgressBar::new(profiles.len().checked_add(1).unwrap_or(0) as u64);
             pb.set_style(
                 ProgressStyle::default_spinner()
                     .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
@@ -130,6 +130,10 @@ impl cli::Run for Args {
     }
 }
 
+/// Get integrated profiles by polling ~/.local/bin for antimony symlinks.
+///
+/// ## Errors
+/// If we cannot read the bin directory.
 pub fn installed_profiles() -> Result<Vec<String>> {
     let profiles: Vec<String> = as_real!(Result<Vec<String>>, {
         let bin = HOME_PATH.join(".local").join("bin");

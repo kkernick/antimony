@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 //! Edit a file.
 
 use crate::shared::env::EDITOR;
@@ -82,9 +83,8 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
                     if string == original {
                         eprintln!("No modification made.");
                         return Ok(None);
-                    } else {
-                        break profile;
                     }
+                    break profile;
                 }
 
                 // If there's an error, make the user correct, or bail entirely.

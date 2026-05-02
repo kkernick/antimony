@@ -77,6 +77,8 @@ pedantic = "warn"
 suspicious = "warn"
 complexity = "warn"
 perf = "warn"
+implicit_hasher = {level = "allow", priority = 1}
+needless_continue = {level = "allow", priority = 1}
 
 [lints]
 workspace = true

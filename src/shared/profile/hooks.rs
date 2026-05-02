@@ -1,3 +1,5 @@
+#![allow(clippy::missing_docs_in_private_items, clippy::missing_errors_doc)]
+
 use crate::fab::resolve;
 use bilrost::{Enumeration, Message};
 use nix::{errno, unistd::pipe};
@@ -17,7 +19,7 @@ pub enum HookError {
     #[error("This hook cannot be attached")]
     Attach,
 
-    /// If the hook did not terminate successfully, and it's not no_fail
+    /// If the hook did not terminate successfully, and it's not `no_fail`
     #[error("Hooks failed with exit code: {0}")]
     Fail(i32),
 
@@ -39,7 +41,7 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq, Message)]
+#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
@@ -81,12 +83,13 @@ pub enum Type {
 }
 
 /// A Hook is a program run in coordination with the profile.
+///
 /// Hooks are run as the user.
 /// Hooks are invoked with the following environment variables:
-///     ANTIMONY_NAME: The name of the current profile.
-///     ANTIMONY_HOME: The path to the home folder, if it exists.
-///     ANTIMONY_CACHE: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Message)]
+///     `ANTIMONY_NAME`: The name of the current profile.
+///     `ANTIMONY_HOME`: The path to the home folder, if it exists.
+///     `ANTIMONY_CACHE`: The cache of the profile in /usr/share/antimony/cache
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
     /// An optional name to identify the process.
@@ -121,17 +124,18 @@ pub struct Hook {
     pub new_privileges: Option<bool>,
 
     /// Capture the sandbox's STDOUT and provide it to the Hook via
-    /// STDIN. Only one of capture_output and capture_error can be
-    /// set. If both are set, capture_error is used.
+    /// STDIN. Only one of `capture_output` and `capture_error` can be
+    /// set. If both are set, `capture_error` is used.
     pub capture_output: Option<bool>,
 
     /// Capture the sandbox's STDERR and provide it to the Hook via
-    /// STDIN. Only one of capture_output and capture_error can be
-    /// set. If both are set, capture_error is used.
+    /// STDIN. Only one of `capture_output` and `capture_error` can be
+    /// set. If both are set, `capture_error` is used.
     pub capture_error: Option<bool>,
 }
 impl Hook {
     /// Process the hook.
+    #[allow(clippy::unreachable)]
     pub fn process(
         &mut self,
         main: Option<Spawner>,
@@ -148,7 +152,7 @@ impl Hook {
                         Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])
                     }
                     Type::Program => Spawner::new(resolve(Cow::Borrowed(&self.content)))?,
-                    _ => unreachable!(),
+                    Type::Profile => unreachable!(),
                 }
                 .mode(user::Mode::Real)
                 .preserve_env(self.env.unwrap_or(false))
@@ -172,7 +176,7 @@ impl Hook {
                 .preserve_env(true)
                 .mode(user::Mode::Original),
         }
-        .name(self.name.get_or_insert_with(|| "hook".to_string()));
+        .name(self.name.get_or_insert_with(|| "hook".to_owned()));
         handle.args_i(self.arguments.drain(..));
 
         if parent {
@@ -197,12 +201,13 @@ impl Hook {
         } else {
             let handle = handle.spawn()?;
             if self.attach.unwrap_or(false) {
-                if let Some(m) = main {
-                    m.associate(handle);
-                    Ok(Some(m))
-                } else {
-                    Err(HookError::Attach)
-                }
+                main.map_or_else(
+                    || Err(HookError::Attach),
+                    |m| {
+                        m.associate(handle);
+                        Ok(Some(m))
+                    },
+                )
             } else {
                 let code = handle.wait()?;
                 if code != 0 && !self.can_fail.unwrap_or(false) {

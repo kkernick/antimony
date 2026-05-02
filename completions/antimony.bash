@@ -17,64 +17,64 @@ _antimony() {
                 cmd="antimony"
                 ;;
             antimony,edit)
-                cmd="antimony__edit"
+                cmd="antimony__subcmd__edit"
                 ;;
             antimony,export)
-                cmd="antimony__export"
+                cmd="antimony__subcmd__export"
                 ;;
             antimony,help)
-                cmd="antimony__help"
+                cmd="antimony__subcmd__help"
                 ;;
             antimony,import)
-                cmd="antimony__import"
+                cmd="antimony__subcmd__import"
                 ;;
             antimony,info)
-                cmd="antimony__info"
+                cmd="antimony__subcmd__info"
                 ;;
             antimony,integrate)
-                cmd="antimony__integrate"
+                cmd="antimony__subcmd__integrate"
                 ;;
             antimony,refresh)
-                cmd="antimony__refresh"
+                cmd="antimony__subcmd__refresh"
                 ;;
             antimony,remove)
-                cmd="antimony__remove"
+                cmd="antimony__subcmd__remove"
                 ;;
             antimony,run)
-                cmd="antimony__run"
+                cmd="antimony__subcmd__run"
                 ;;
             antimony,seccomp)
-                cmd="antimony__seccomp"
+                cmd="antimony__subcmd__seccomp"
                 ;;
-            antimony__help,edit)
-                cmd="antimony__help__edit"
+            antimony__subcmd__help,edit)
+                cmd="antimony__subcmd__help__subcmd__edit"
                 ;;
-            antimony__help,export)
-                cmd="antimony__help__export"
+            antimony__subcmd__help,export)
+                cmd="antimony__subcmd__help__subcmd__export"
                 ;;
-            antimony__help,help)
-                cmd="antimony__help__help"
+            antimony__subcmd__help,help)
+                cmd="antimony__subcmd__help__subcmd__help"
                 ;;
-            antimony__help,import)
-                cmd="antimony__help__import"
+            antimony__subcmd__help,import)
+                cmd="antimony__subcmd__help__subcmd__import"
                 ;;
-            antimony__help,info)
-                cmd="antimony__help__info"
+            antimony__subcmd__help,info)
+                cmd="antimony__subcmd__help__subcmd__info"
                 ;;
-            antimony__help,integrate)
-                cmd="antimony__help__integrate"
+            antimony__subcmd__help,integrate)
+                cmd="antimony__subcmd__help__subcmd__integrate"
                 ;;
-            antimony__help,refresh)
-                cmd="antimony__help__refresh"
+            antimony__subcmd__help,refresh)
+                cmd="antimony__subcmd__help__subcmd__refresh"
                 ;;
-            antimony__help,remove)
-                cmd="antimony__help__remove"
+            antimony__subcmd__help,remove)
+                cmd="antimony__subcmd__help__subcmd__remove"
                 ;;
-            antimony__help,run)
-                cmd="antimony__help__run"
+            antimony__subcmd__help,run)
+                cmd="antimony__subcmd__help__subcmd__run"
                 ;;
-            antimony__help,seccomp)
-                cmd="antimony__help__seccomp"
+            antimony__subcmd__help,seccomp)
+                cmd="antimony__subcmd__help__subcmd__seccomp"
                 ;;
             *)
                 ;;
@@ -96,7 +96,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__edit)
+        antimony__subcmd__edit)
             opts="-h --feature --stdin --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -110,7 +110,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__export)
+        antimony__subcmd__export)
             opts="-h --name --dest --feature --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -132,7 +132,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help)
+        antimony__subcmd__help)
             opts="run edit refresh integrate remove seccomp export import info help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -146,7 +146,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__edit)
+        antimony__subcmd__help__subcmd__edit)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -160,7 +160,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__export)
+        antimony__subcmd__help__subcmd__export)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -174,7 +174,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__help)
+        antimony__subcmd__help__subcmd__help)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -188,7 +188,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__import)
+        antimony__subcmd__help__subcmd__import)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -202,7 +202,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__info)
+        antimony__subcmd__help__subcmd__info)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -216,7 +216,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__integrate)
+        antimony__subcmd__help__subcmd__integrate)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -230,7 +230,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__refresh)
+        antimony__subcmd__help__subcmd__refresh)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -244,7 +244,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__remove)
+        antimony__subcmd__help__subcmd__remove)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -258,7 +258,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__run)
+        antimony__subcmd__help__subcmd__run)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -272,7 +272,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__help__seccomp)
+        antimony__subcmd__help__subcmd__seccomp)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -286,7 +286,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__import)
+        antimony__subcmd__import)
             opts="-h --feature --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -300,7 +300,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__info)
+        antimony__subcmd__info)
             opts="-h --feature --diff --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -314,7 +314,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__integrate)
+        antimony__subcmd__integrate)
             opts="-r -s -c -h --remove --shadow --config-mode --create-desktop --help <PROFILE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -336,7 +336,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__refresh)
+        antimony__subcmd__refresh)
             opts="-d -h --dry --hard --help [PROFILE] [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -350,7 +350,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__remove)
+        antimony__subcmd__remove)
             opts="-h --feature --yes --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -364,7 +364,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__run)
+        antimony__subcmd__run)
             opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --see --talk --own --call --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --new-privileges --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -506,7 +506,7 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__seccomp)
+        antimony__subcmd__seccomp)
             opts="-h --help optimize remove export merge clean [PATH]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )

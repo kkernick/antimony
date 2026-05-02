@@ -1,3 +1,5 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
 use crate::shared::profile::home::HomePolicy;
 use anyhow::{Result, anyhow};
 use inotify::WatchMask;
@@ -31,7 +33,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         }
 
         if home.lock.unwrap_or(false)
-            && !args.args.dry
+            && !args.run.dry
             && home_dir.exists()
             && policy != HomePolicy::Overlay
         {
@@ -42,7 +44,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             })??;
 
             match lock {
-                Ok(_) => args.handle.fd_i(file),
+                Ok(()) => args.handle.fd_i(file),
                 Err(TryLockError::WouldBlock) => {
                     {
                         // Attach a notify watch on the directory to see if the running instance closes it.
@@ -64,7 +66,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                     }
                                 }
                                 Err(error) if error.kind() == ErrorKind::WouldBlock => continue,
-                                _ => panic!("Error while reading events"),
+                                _ => return Err(anyhow!("Error while reading events")),
                             }
                         }
 
@@ -72,7 +74,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                     }
 
                     match file.try_lock() {
-                        Ok(_) => args.handle.fd_i(file),
+                        Ok(()) => args.handle.fd_i(file),
                         Err(_) => {
                             return Err(anyhow!(
                                 "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
@@ -89,10 +91,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             as_real!(fs::create_dir_all(&home_dir))??;
         }
 
-        let dest = match &home.path {
-            Some(path) => path,
-            None => "/home/antimony",
-        };
+        let dest = home.path.as_ref().map_or("/home/antimony", |path| path);
 
         match policy {
             HomePolicy::Enabled => {

@@ -11,8 +11,6 @@ seccomp = { path = "../seccomp" }
 spawn = { path = "../spawn", features = ["elevate"] }
 temp = { path = "../temp" }
 user = { path = "../user" }
-
-ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = {version = "1.0.100", default-features = false}
 caps = "0.5.6"
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }

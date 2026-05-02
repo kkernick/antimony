@@ -1,4 +1,6 @@
-id =  "com.github.hugolabe.Wike"
-home.policy = "Enabled"
+id = "com.github.hugolabe.Wike"
+features = ["libadwaita", "webkit", "python", "network"]
+devices = ["/dev/udmabuf"]
 
-features = ["libadwaita", "webkit", "python", "network", "gjs"]
+[home]
+policy = "Enabled"

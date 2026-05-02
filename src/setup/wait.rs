@@ -9,7 +9,7 @@ use crate::{shared::Set, timer};
 pub fn setup(
     mut watches: Set<WatchDescriptor>,
     mut inotify: Inotify,
-    handle: &mut Spawner,
+    handle: &Spawner,
     dry: bool,
 ) -> Result<()> {
     // Ensure the proxy didn't die.

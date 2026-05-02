@@ -3,7 +3,7 @@
 use crate::{
     cli::{self, Run},
     fab::localize_home,
-    setup::setup,
+    setup::{self, setup},
     shared::{
         config::CONFIG_FILE,
         env::RUNTIME_DIR,
@@ -25,6 +25,7 @@ use std::{borrow::Cow, env, fs, thread, time::Duration};
 use user::as_real;
 
 #[derive(clap::Args, Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Args {
     /// The name of the profile, or a command to sandbox.
     ///
@@ -197,7 +198,7 @@ impl cli::Run for Args {
             }
         }
         rayon::spawn(|| {
-            CACHE_STORE.borrow();
+            let _ = CACHE_STORE.borrow();
         });
 
         let result = || -> Result<()> {
@@ -217,6 +218,10 @@ impl cli::Run for Args {
     }
 }
 impl Args {
+    /// Run under refresh (Disables flushing caches)
+    ///
+    /// ## Errors
+    /// If the profile cannot be run
     pub fn refresh(mut self) -> Result<()> {
         let result = || -> Result<()> {
             let info = timer!(
@@ -236,12 +241,9 @@ impl Args {
 }
 
 /// Wait for a filesystem to be mounted.
+#[must_use]
 pub fn mounted(path: &str) -> bool {
-    if let Ok(file) = fs::read_to_string("/proc/self/mountinfo") {
-        file.contains(path)
-    } else {
-        false
-    }
+    fs::read_to_string("/proc/self/mountinfo").is_ok_and(|file| file.contains(path))
 }
 
 /// Wait for the document portal to be mounted.
@@ -253,36 +255,46 @@ pub fn wait_for_doc() {
 }
 
 /// Run the profile.
-pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
+///
+/// ## Errors
+/// If the profile cannot be run
+#[allow(
+    clippy::missing_panics_doc,
+    reason = "This function never actually panics"
+)]
+#[allow(clippy::too_many_lines)]
+pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     let sandbox_args = &info.profile.sandbox_args;
-    let add_regular = if !sandbox_args.is_empty() {
+    let add_regular = if sandbox_args.is_empty() {
+        true
+    } else {
         let mut add = true;
         if sandbox_args.iter().filter(|&e| *e == "#").count() > 1 {
             return Err(anyhow!("Conflicting features! Only one feature can use #"));
         }
 
-        let slice = match sandbox_args.iter().position(|e| e == "#") {
-            Some(index) => {
-                if index < sandbox_args.len() - 1 {
-                    &sandbox_args[index + 1..]
+        let slice = sandbox_args.iter().position(|e| e == "#").map_or_else(
+            || &sandbox_args[..],
+            |index| {
+                if let Some(sandbox_len) = sandbox_args.len().checked_sub(1)
+                    && let Some(index_len) = index.checked_add(1)
+                    && index < sandbox_len
+                {
+                    &sandbox_args[index_len..]
                 } else {
                     &sandbox_args[..]
                 }
-            }
-            None => &sandbox_args[..],
-        };
+            },
+        );
 
         for arg in slice {
             if arg == "!" {
                 add = false;
                 break;
-            } else {
-                info.handle.arg_i(arg)
             }
+            info.handle.arg_i(arg);
         }
         add
-    } else {
-        true
     };
 
     if add_regular {
@@ -315,6 +327,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             info.handle.new_privileges_i(true);
         }
 
+        #[allow(clippy::unwrap_used)]
         if let Some(hooks) = &mut info.profile.hooks {
             debug!("Processing pre-hooks");
             for hook in &mut hooks.pre {
@@ -323,11 +336,11 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         Some(info.handle),
                         &info.name,
                         &info.sys_dir.to_string_lossy(),
-                        &info.instance.name(),
+                        info.instance.name(),
                         &info.home,
                         false,
                     )?
-                    .unwrap()
+                    .unwrap();
             }
 
             // Attaching to the parent means info.handle becomes the parent
@@ -337,11 +350,11 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                         Some(info.handle),
                         &info.name,
                         &info.sys_dir.to_string_lossy(),
-                        &info.instance.name(),
+                        info.instance.name(),
                         &info.home,
                         true,
                     )?
-                    .unwrap()
+                    .unwrap();
             }
         }
 
@@ -378,7 +391,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
             }
 
             // Alert the user.
-            let error_name = Errno::from_raw(-code);
+            let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
             Spawner::abs(utility("notify")).mode(user::Mode::Real)
                 .pass_env("DBUS_SESSION_BUS_ADDRESS")?
                 .output(StreamMode::Pipe)
@@ -388,10 +401,10 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                 "--body",
                 &format!(
                     "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
-                    if error_name != Errno::UnknownErrno {
-                        format!("{error_name}")
-                    } else {
+                    if error_name == Errno::UnknownErrno {
                         format!("exit code: {code}")
+                    } else {
+                        format!("{error_name}")
                     }
                 ),
                 "--timeout", "5000",
@@ -406,7 +419,7 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
                     None,
                     &info.name,
                     &info.sys_dir.to_string_lossy(),
-                    &info.instance.name(),
+                    info.instance.name(),
                     &info.home,
                     false,
                 )?;
@@ -417,13 +430,15 @@ pub fn run(mut info: crate::setup::Info, args: &mut Args) -> Result<()> {
 }
 
 /// Use the symlink name as the profile name.
+///
+/// ## Errors
+/// If the current program is not antimony, or the arguments are invalid.
 pub fn as_symlink() -> Result<()> {
     match env::args().next() {
         Some(name) => {
-            let base = match name.rfind('/') {
-                Some(i) => &name[i + 1..],
-                _ => name.as_str(),
-            };
+            let base = name
+                .rfind('/')
+                .map_or(name.as_str(), |i| &name[i.checked_add(1).unwrap_or(i)..]);
             if base == "antimony" {
                 return Err(anyhow!(
                     "When running without a command, Antimony expects to be symlinked with the link \
@@ -436,7 +451,7 @@ pub fn as_symlink() -> Result<()> {
             if env::args().len() > 1 {
                 args.passthrough = Some(env::args().skip(1).collect());
             }
-            args.profile = base.to_string();
+            args.profile = String::from(base);
             args.run()?;
         }
         _ => return Err(anyhow!("Failed to parse arguments")),

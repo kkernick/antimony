@@ -1,3 +1,4 @@
+#![allow(unused_crate_dependencies)]
 //! A SECCOMP Notify application that reads the paths to `execve` to determine
 //! binaries called by the application.
 //!
@@ -134,13 +135,22 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
 }
 
 /// Listen on the Kernel FD and find paths.
+///
+/// ## Errors
+/// If a new pair cannot be made.
+#[allow(clippy::cast_possible_wrap, clippy::needless_pass_by_value)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::missing_panics_doc,
+    reason = "Antimony expects basic syscalls to exist"
+)]
 pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Result<()> {
     let found = Arc::new(ThreadMap::<u32, Vec<String>>::default());
 
     while !term.load(Ordering::Relaxed) {
         let pair = Pair::new()?;
         match pair.recv(fd.as_raw_fd()) {
-            Ok(Some(_)) => {
+            Ok(Some(())) => {
                 let _ = pair.reply(fd.as_raw_fd(), |req, resp| {
                     let pid = req.pid;
                     let call = req.data.nr;
@@ -165,7 +175,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                             if !local_found.contains(&path) {
                                 info!(
                                     "{} => {path}",
-                                    Syscall::get_name(call).unwrap_or(format!("{call}"))
+                                    Syscall::get_name(call).unwrap_or_else(|_| format!("{call}"))
                                 );
                                 println!("{path}");
                                 local_found.push(path);
@@ -174,8 +184,8 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
 
                     // We bail on these syscalls, since they're seen
                     // as the program falling into a steady-state.
-                    } else if call == syscalls::get_num("ppoll")
-                        || call == syscalls::get_num("wait4")
+                    } else if call == syscalls::get_num("ppoll").unwrap()
+                        || call == syscalls::get_num("wait4").unwrap()
                     {
                         term.store(true, Ordering::Relaxed);
                         let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
@@ -189,10 +199,11 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                     resp.flags = 1;
 
                     // Ignore SECCOMP and EXECVE.
-                    if (((call == syscalls::get_num("prctl") && args[0] == PR_SET_SECCOMP as u64)
-                        || call == syscalls::get_num("seccomp"))
+                    if (((call == syscalls::get_num("prctl").unwrap()
+                        && args[0] == PR_SET_SECCOMP as u64)
+                        || call == syscalls::get_num("seccomp").unwrap())
                         && args[2] != 0)
-                        || call == syscalls::get_num("execve")
+                        || call == syscalls::get_num("execve").unwrap()
                     {
                         resp.flags = 0;
                     }
@@ -206,6 +217,9 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
 }
 
 /// Collect syscall information from Kernel FDs.
+///
+/// ## Errors
+/// If we cannot bind to the socket or register the signal handler
 pub fn collection(args: AttachArgs) -> Result<()> {
     let listener = UnixListener::bind(args.socket)?;
     let filter: Arc<Vec<i32>> = Arc::new(args.filter.unwrap_or_default());
@@ -229,13 +243,19 @@ pub fn collection(args: AttachArgs) -> Result<()> {
 }
 
 /// Run the application under a monitor.
-#[allow(clippy::arithmetic_side_effects)]
+/// ## Errors
+/// If the path cannot be created, we cannot watch the temporary path, or SECCOMP Filter initializes fails.
 pub fn runner(args: RunArgs) -> Result<()> {
     let name = match args.path.rfind('/') {
-        Some(i) => args
-            .path
-            .get(i + 1..)
-            .ok_or(anyhow::anyhow!("Index error!"))?,
+        Some(i) => {
+            if let Some(i) = i.checked_add(1)
+                && let Some(arg) = args.path.get(i..)
+            {
+                arg
+            } else {
+                return Err(anyhow::anyhow!("Index error!"));
+            }
+        }
         None => &args.path,
     };
 
@@ -265,18 +285,21 @@ pub fn runner(args: RunArgs) -> Result<()> {
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     // Create an attached version to listen.
-    let mut _handle = Spawner::abs(utility("dumper"))
+    let handle = Spawner::abs(utility("dumper"))
         .args(["attach", &sock_str])
         .preserve_env(true)
         .new_privileges(true)
         .cap(Capability::CAP_SYS_PTRACE);
 
     if let Some(filter) = args.filter {
-        for call in filter {
-            _handle.args_i(["--filter", &format!("{}", get_num(&call))]);
-        }
+        filter
+            .into_iter()
+            .filter_map(|name| get_num(&name))
+            .for_each(|syscall| {
+                handle.args_i(["--filter", &format!("{syscall}")]);
+            });
     }
-    let _handle = _handle.spawn()?;
+    let _handle = handle.spawn()?;
 
     // Wait for it to be ready.
     let mut buffer = [0; 1024];
@@ -314,6 +337,6 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Run(args) => runner(args)?,
         Command::Attach(args) => collection(args)?,
-    };
+    }
     Ok(())
 }

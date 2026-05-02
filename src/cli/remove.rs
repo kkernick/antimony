@@ -67,7 +67,6 @@ impl cli::Run for Args {
             } else {
                 return Err(anyhow::anyhow!("No such {kind}"));
             }
-            Ok(())
         } else {
             let user: Set<_> = USER_STORE.borrow().get(table)?.into_iter().collect();
             let system: Set<_> = SYSTEM_STORE.borrow().get(table)?.into_iter().collect();
@@ -88,7 +87,7 @@ impl cli::Run for Args {
                     USER_STORE.borrow().remove(thing, table)?;
                 }
             }
-            Ok(())
         }
+        Ok(())
     }
 }

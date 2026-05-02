@@ -1,3 +1,4 @@
+#![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 //!  Features are miniature profiles used by the latter for common functionality.
 
 use super::profile::{ipc::Ipc, ns::Namespace};
@@ -83,7 +84,7 @@ pub struct Feature {
     /// count on.
     pub hooks: Option<Hooks>,
 
-    /// Whether the program has unique privileges that NO_NEW_PRIVS can restrict.
+    /// Whether the program has unique privileges that `NO_NEW_PRIVS` can restrict.
     /// Note that this does grant privileges, it merely allows an application with existing privileges to
     /// keep them when running within the sandbox. However, this property being allowed in the sandbox
     /// means that an other unprivileged process could gain extra privilege if there's a binary in the
@@ -120,6 +121,7 @@ mod tests {
     use crate::shared::store::SYSTEM_STORE;
 
     #[test]
+    #[allow(clippy::panic)]
     fn validate_features() {
         for feature in SYSTEM_STORE
             .borrow()
@@ -132,7 +134,7 @@ mod tests {
                     .fetch(&feature, Object::Feature)
                     .expect("Failed to fetch"),
             )
-            .expect("Failed to read {feature}");
+            .unwrap_or_else(|_| panic!("Failed to read {feature}"));
         }
     }
 }

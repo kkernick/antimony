@@ -13,8 +13,9 @@ use heck::ToTitleCase;
 use log::{debug, info};
 use std::{
     borrow::Cow,
+    fmt::Write as FormatWrite,
     fs::{self, File},
-    io::Write,
+    io::Write as IoWrite,
     os::unix::fs::symlink,
     path::Path,
 };
@@ -72,15 +73,17 @@ impl cli::Run for Args {
             };
 
             // Load directly, since we can remove profiles that don't exist
-            remove(&profile, self)
+            remove(&profile, &self)
         } else {
-            integrate(&Profile::new(&self.profile, None, None, false)?.0, self)
+            integrate(&Profile::new(&self.profile, None, None, false)?.0, &self)
         }
     }
 }
 
 /// Undo integration.
-pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
+/// ## Errors
+/// If antimony is improperly setup, or if it has inadequate permission to remove the files.
+pub fn remove(profile: &Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
     let name = &cmd.profile;
 
@@ -141,21 +144,21 @@ pub fn remove(profile: &Profile, cmd: Args) -> Result<()> {
 
 /// Fix the exec line to point to Antimony.
 fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cmd: &Args) {
-    let args = match line.find(' ') {
-        Some(index) => &line[index + 1..],
-        None => " ",
-    };
+    let args = line
+        .find(' ')
+        .map_or(" ", |index| &line[index.checked_add(1).unwrap_or(index)..]);
 
     match config {
         Some(config) => {
-            *line = format!(
-                "{name}=antimony run {} --config {config} {args}",
-                cmd.profile
-            )
-            .trim()
-            .to_string()
+            *line = String::from(
+                format!(
+                    "{name}=antimony run {} --config {config} {args}",
+                    cmd.profile
+                )
+                .trim(),
+            );
         }
-        None => *line = format!("{name}={local} {args}").trim().to_string(),
+        None => *line = String::from(format!("{name}={local} {args}").trim()),
     }
 }
 
@@ -200,7 +203,7 @@ fn manage_configurations(
                         fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
                     }
                     if line.starts_with("Name=") {
-                        line.push_str(&format!(" ({})", config.to_title_case()));
+                        let _ = write!(line, " ({})", config.to_title_case());
                     }
                 }
 
@@ -225,12 +228,12 @@ fn format_desktop(
         // Create a shadow copy to turn on NoDisplay
         let local_desktop: Vec<String> = fs::read_to_string(desktop_file)
             .with_context(|| "Failed to read desktop file")?
-            .split("\n")
+            .split('\n')
             .map(|e| {
                 if e.contains("Name=") {
-                    return e.to_string() + " (Native)\nNoDisplay=true";
+                    return e.to_owned() + " (Native)\nNoDisplay=true";
                 }
-                e.to_string()
+                e.to_owned()
             })
             .collect();
 
@@ -259,13 +262,13 @@ fn format_desktop(
     let desktop_actions = desktop.contains("Actions=");
     let append_actions = |line: &mut String| {
         for name in profile.configuration.keys() {
-            line.push_str(&format!("{name};"));
+            let _ = write!(line, "{name};");
         }
 
         line.push_str("native;");
     };
 
-    let mut contents: Vec<String> = desktop.lines().map(|e| e.to_string()).collect();
+    let mut contents: Vec<String> = desktop.lines().map(ToOwned::to_owned).collect();
     for line in &mut contents {
         // Point to the symlink
         if line.starts_with("Exec=") {
@@ -284,7 +287,7 @@ fn format_desktop(
         // instances of the app. However, this just causes D-Bus to launch the
         // application unconfined.
         if line.starts_with("DBusActivatable=") {
-            *line = "DBusActivatable=false".to_string();
+            *line = String::from("DBusActivatable=false");
         }
 
         if cmd.config_mode.unwrap_or_default() == ConfigMode::Action && line.starts_with("Actions=")
@@ -319,7 +322,10 @@ fn format_desktop(
 }
 
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
-pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
+///
+/// ## Errors
+/// If antimony is improperly setup, or if it has inadequate permission to create the files.
+pub fn integrate(profile: &Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
 
     // Collect environment.
@@ -350,7 +356,7 @@ pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
     if desktop_file.exists() {
         info!("Overriding Desktop File");
         format_desktop(
-            &cmd,
+            cmd,
             profile,
             name,
             &desktop_file,
@@ -365,19 +371,19 @@ pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
             "Type=Application",
         ]
         .into_iter()
-        .map(|e| e.to_string())
+        .map(ToOwned::to_owned)
         .collect();
 
-        let mut actions = "Actions=native;".to_string();
-        if let Some(ConfigMode::Action) = cmd.config_mode {
+        let mut actions = "Actions=native;".to_owned();
+        if cmd.config_mode == Some(ConfigMode::Action) {
             for config in profile.configuration.keys() {
-                actions.push_str(&format!("{config};"))
+                let _ = write!(actions, "{config};");
             }
         }
         contents.push(actions);
 
         contents.extend([
-            "[Desktop Action native]".to_string(),
+            "[Desktop Action native]".to_owned(),
             format!("Name=Run {} Natively", name.to_title_case()),
             format!("Exec={}", profile.app_path(&cmd.profile)),
         ]);
@@ -391,7 +397,7 @@ pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
         {
             fs::create_dir_all(parent)?;
         }
-        manage_configurations(&mut contents, &cmd, profile, name, &local)?;
+        manage_configurations(&mut contents, cmd, profile, name, &local)?;
         fs::write(out, contents.join("\n"))?;
     }
 
@@ -402,7 +408,7 @@ pub fn integrate(profile: &Profile, cmd: Args) -> Result<()> {
     if service_file.exists() {
         info!("Overriding XDG Service");
         format_desktop(
-            &cmd,
+            cmd,
             profile,
             name,
             &service_file,

@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use crate::{
     fab::localize_path,
     shared::{
@@ -15,7 +17,7 @@ use std::borrow::Cow;
 fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: bool) -> Result<()> {
     match localize_path(file, home)? {
         (Some(source), dest) => {
-            handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)])
+            handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)]);
         }
         (None, dest) => {
             let resolved = if home && !file.starts_with("/home") {
@@ -23,7 +25,7 @@ fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: b
             } else {
                 Cow::Borrowed(file)
             };
-            handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)])
+            handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)]);
         }
     }
     Ok(())
@@ -44,7 +46,7 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
                     files.into_par_iter().try_for_each(|file| {
                         localize(
                             mode,
-                            &file.replace("~", HOME.as_str()),
+                            &file.replace('~', HOME.as_str()),
                             true,
                             info.handle,
                             true,

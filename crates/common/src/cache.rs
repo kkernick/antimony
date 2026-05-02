@@ -90,7 +90,7 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
     /// static CACHE: CacheStatic<String, Cow<'static, str>> = LazyLock::new(DashMap::default);
     /// pub static MY_CACHE: LazyLock<Cache<String, Cow<'static, str>>> = LazyLock::new(|| Cache::new(&CACHE));
     ///
-    /// MY_CACHE.insert("Test".to_string(), Cow::Borrowed("Another"));
+    /// MY_CACHE.insert("Test".to_owned(), Cow::Borrowed("Another"));
     /// let value: &'static str = MY_CACHE.get("Test").unwrap();
     /// assert!(value == "Another");
     /// ```
@@ -117,7 +117,7 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
     /// static CACHE: CacheStatic<String, Cow<'static, str>> = LazyLock::new(DashMap::default);
     /// pub static MY_CACHE: LazyLock<Cache<String, Cow<'static, str>>> = LazyLock::new(|| Cache::new(&CACHE));
     ///
-    /// let interior: &'static str = MY_CACHE.insert("Test".to_string(), Cow::Borrowed("Another"));
+    /// let interior: &'static str = MY_CACHE.insert("Test".to_owned(), Cow::Borrowed("Another"));
     /// assert!(interior == "Another");
     /// ```
     #[allow(clippy::missing_panics_doc)]

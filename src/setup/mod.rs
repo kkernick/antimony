@@ -1,3 +1,5 @@
+#![allow(clippy::missing_docs_in_private_items, clippy::missing_errors_doc)]
+
 mod env;
 mod fab;
 mod files;
@@ -47,7 +49,7 @@ struct Args<'a> {
     pub watches: Set<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: &'a Temp,
-    pub args: &'a mut super::cli::run::Args,
+    pub run: &'a mut super::cli::run::Args,
 }
 
 /// The information passed back to `run`.
@@ -62,6 +64,7 @@ pub struct Info {
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
+#[allow(clippy::too_many_lines)]
 pub fn setup<'a>(
     name: Cow<'a, str>,
     mut args: &'a mut super::cli::run::Args,
@@ -121,8 +124,11 @@ pub fn setup<'a>(
                     .wait()?;
             } else {
                 debug!("Using refresh directory");
-                sys_dir = refresh_sof.clone();
-                instances = refresh_dir.clone();
+                #[allow(clippy::assigning_clones)]
+                {
+                    sys_dir = refresh_sof.clone();
+                    instances = refresh_dir.clone();
+                }
             }
         }
 
@@ -206,7 +212,7 @@ pub fn setup<'a>(
             if profile.lockdown.unwrap_or(false) {
                 utility("lockdown")
             } else {
-                "/usr/bin/bwrap".to_string()
+                "/usr/bin/bwrap".to_owned()
             }
         )
         .name(&args.profile)
@@ -250,7 +256,7 @@ pub fn setup<'a>(
         watches,
         sys_dir: sys_dir.clone(),
         instance: &instance,
-        args,
+        run: args,
     };
 
     timer!("::proxy", proxy::setup(&mut a))?;
@@ -264,14 +270,14 @@ pub fn setup<'a>(
     // soon as possible--as then we don't waste time waiting for the writing
     // to finish. We can't rely on the user interacting with the application
     // to conceal the flush, so we have to do it early.
-    if !flush_defer && a.args.dry {
+    if !flush_defer && a.run.dry {
         timer!("::flush", mem::flush());
     }
 
     let post = timer!("::post", post::setup(&mut a))?;
     timer!(
         "::wait",
-        wait::setup(a.watches, a.inotify, &mut a.handle, a.args.dry)
+        wait::setup(a.watches, a.inotify, &a.handle, a.run.dry)
     )?;
 
     Ok(Info {

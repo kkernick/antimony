@@ -10,10 +10,7 @@ use crate::{
     },
 };
 use dialoguer::console::style;
-use std::{
-    fs,
-    io::{Read, stdin},
-};
+use std::fs;
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -23,10 +20,6 @@ pub struct Args {
     /// Target the feature set rather than the profile set.
     #[arg(long)]
     pub feature: bool,
-
-    /// Read from stdin, rather than using an interactive editor.
-    #[arg(long)]
-    pub stdin: bool,
 }
 impl cli::Run for Args {
     fn run(self) -> anyhow::Result<()> {
@@ -55,23 +48,7 @@ impl cli::Run for Args {
             )
         };
 
-        let commit = if self.stdin {
-            let mut buffer = String::new();
-            if stdin().read_to_string(&mut buffer)? == 0 {
-                return Err(anyhow::anyhow!("Nothing to read on stdin."));
-            }
-
-            if (self.feature && toml::from_str::<Feature>(&buffer).is_ok())
-                || (!self.feature && toml::from_str::<Profile>(&buffer).is_ok())
-            {
-                Some(buffer)
-            } else {
-                if new {
-                    USER_STORE.borrow().remove(&self.name, table)?;
-                }
-                return Err(anyhow::anyhow!("Invalid {kind} on stdin."));
-            }
-        } else if self.feature {
+        let commit = if self.feature {
             Feature::edit(&buffer)?
         } else {
             Profile::edit(&buffer)?

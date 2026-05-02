@@ -326,17 +326,10 @@ impl Builder {
     ///
     /// ## Examples
     ///
-    /// Create a new temporary file as `/tmp/new_file`
+    /// Create a new temporary directory
     ///
     /// ```rust
-    /// let file = temp::Builder::new().name("new_file").create::<temp::File>().unwrap();
-    /// assert!(std::path::Path::new("/tmp/new_file").exists());
-    /// ```
-    ///
-    /// Create a new temporary directory in the current directory
-    ///
-    /// ```rust
-    /// temp::Builder::new().within("").create::<temp::Directory>().unwrap();
+    /// temp::Builder::new().create::<temp::Directory>().unwrap();
     /// ```
     ///
     /// ## Errors

@@ -12,16 +12,13 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     let mut post_args = Vec::new();
 
     post_args.append(&mut args.profile.arguments);
-    if let Some(passthrough) = &args.args.passthrough {
+    if let Some(passthrough) = &args.run.passthrough {
         post_args.extend(passthrough.iter().cloned());
     }
 
     if !post_args.is_empty() {
         let operation = match args.profile.files.take() {
-            Some(mut files) => match files.passthrough.take() {
-                Some(passthrough) => passthrough,
-                None => FileMode::ReadOnly,
-            },
+            Some(mut files) => files.passthrough.take().unwrap_or(FileMode::ReadOnly),
             None => FileMode::ReadOnly,
         };
 
@@ -29,7 +26,7 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
             let abs_arg = if as_real!(PWD.join(&arg).exists())? {
                 PWD.join(&arg).to_string_lossy().into_owned()
             } else {
-                arg.to_string()
+                arg.clone()
             };
 
             if as_real!(Path::new(&abs_arg).exists())? || abs_arg.starts_with("file://") {
@@ -40,9 +37,14 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
                     FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest]),
                     FileMode::Executable => {
                         let contents = as_real!(fs::read_to_string(file))??;
-                        super::files::add_file(&args.handle, file, contents, FileMode::Executable)?
+                        super::files::add_file(
+                            &args.handle,
+                            file,
+                            &contents,
+                            FileMode::Executable,
+                        )?;
                     }
-                };
+                }
                 *arg = dest;
             }
         }

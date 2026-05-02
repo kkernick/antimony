@@ -15,13 +15,7 @@ All Objects are held within the `Temp` structure, which mediates access to the u
 * `extension` dictates an optional file extension, useful for syntax highlighting, that is appended to the name.
 * `make` dictates whether the Object should actually be created upon instantiation. In cases of objects like Sockets, it may be needed to have another call, such as `bind` create the object, while still relying on `Temp` to clean it up.
 
-The Builder is consumed with the `create` call, which assembles the `Temp` instance. It accepts a template generic to define which instance of the Object we are creating. For example:
-
-```rust
-let file = temp::Builder::new().name("new_file").create::<temp::File>().unwrap();
-assert!(std::path::Path::new("/tmp/new_file").exists());
-```
-
+The Builder is consumed with the `create` call, which assembles the `Temp` instance. It accepts a template generic to define which instance of the Object we are creating.
 
 ## Features
 

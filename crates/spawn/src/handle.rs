@@ -461,7 +461,6 @@ impl Handle {
     ///
     /// ## Errors
     /// `Error::Comm`: If `waitpid` returns an error
-    #[allow(clippy::needless_continue)]
     pub fn alive(&mut self) -> Result<Option<Pid>, Error> {
         if let Some(pid) = self.child {
             loop {

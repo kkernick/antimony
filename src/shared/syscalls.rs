@@ -1,5 +1,5 @@
-//! The bulk of the SECCOMP Logic.
 #![allow(clippy::absolute_paths)]
+//! The bulk of the SECCOMP Logic.
 
 use crate::{
     shared::{Set, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy},
@@ -129,15 +129,19 @@ thread_local! {
 static CACHE: LazyLock<ThreadMap<String, i32>> = LazyLock::new(ThreadMap::default);
 
 /// Get the number for a given name.
-pub fn get_num(name: &str) -> i32 {
+pub fn get_num(name: &str) -> Option<i32> {
     // Insert if missing
-    if !CACHE.contains_key(name) {
-        let _ = CACHE.insert(
-            name.to_owned(),
-            Syscall::from_name(name).unwrap().get_number(),
-        );
-    }
-    *CACHE.get(name).unwrap().value()
+    CACHE.get(name).map_or_else(
+        || {
+            Syscall::from_name(name).ok().map(|syscall| {
+                *CACHE
+                    .entry(name.to_owned())
+                    .or_insert(syscall.get_number())
+                    .value()
+            })
+        },
+        |pair| Some(*pair.value()),
+    )
 }
 
 /// The Antimony Monitor Notifier Implementation.
@@ -157,6 +161,7 @@ pub struct Notifier {
 impl Notifier {
     /// Construct a new Notifier from the path the monitor should listen,
     /// and the name of the process.
+    #[must_use]
     pub fn new(path: PathBuf, name: String) -> Self {
         let notify = if let Ok(notify) = Inotify::init()
             && let Some(parent) = path.parent()
@@ -184,7 +189,7 @@ impl seccomp::notify::Notifier for Notifier {
         )]
     }
 
-    /// Setup the UnixStream. We wait for the Monitor to setup the socket.
+    /// Setup the `UnixStream`. We wait for the Monitor to setup the socket.
     fn prepare(&mut self) -> Result<(), String> {
         match as_real!({
             let mut notify = self.notify.take();
@@ -266,6 +271,7 @@ pub fn insert_binary(tx: &Transaction, path: &str) -> Result<i64, Error> {
 
 /// Map syscall names.
 #[inline]
+#[must_use]
 pub fn get_names(syscalls: Set<i32>) -> Vec<String> {
     syscalls
         .into_par_iter()
@@ -303,7 +309,7 @@ pub fn get_binary_syscalls(tx: &Transaction, binary: &str) -> Result<Set<i32>, E
             id_syscalls(tx, binary, id, &mut syscalls)?;
         }
     } else {
-        warn!("{binary} not found in binaries table")
+        warn!("{binary} not found in binaries table");
     }
     Ok(syscalls)
 }
@@ -316,10 +322,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
         None => binary,
     };
 
-    let resolved = match which::which(binary) {
-        Ok(resolved) => Cow::Borrowed(resolved),
-        Err(_) => Cow::Borrowed(binary),
-    };
+    let resolved = which::which(binary).map_or(Cow::Borrowed(binary), Cow::Borrowed);
 
     for syscall in get_binary_syscalls(tx, &resolved)? {
         syscalls.insert(syscall);
@@ -331,6 +334,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
 type PolicyPair = (Set<i32>, Set<i32>);
 
 /// Get all syscalls for the profile.
+#[must_use]
 pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
     let mut syscalls = Set::default();
     let mut bwrap = Set::default();
@@ -357,7 +361,7 @@ pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
         for b in p_binaries {
             binaries.insert(b.clone());
         }
-        binaries.iter().for_each(|bin| {
+        for bin in &binaries {
             if let Err(e) = extend(
                 &tx,
                 bin,
@@ -369,7 +373,7 @@ pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
             ) {
                 warn!("Failed to extend syscalls for binary {bin}: {e}");
             }
-        });
+        }
         Ok(())
     });
 
@@ -377,12 +381,17 @@ pub fn get_calls(name: &str, p_binaries: &Set<String>) -> PolicyPair {
         warn!("Could not query the SECCOMP Database: {e}. Filter is incomplete");
     }
 
-    bwrap = bwrap.difference(&syscalls).cloned().collect();
+    bwrap = bwrap.difference(&syscalls).copied().collect();
 
     (syscalls, bwrap)
 }
 
 /// Return a new Policy
+#[allow(
+    clippy::unwrap_used,
+    clippy::missing_panics_doc,
+    reason = "If your kernel does not have the sendmsg syscall then you need to update your computer."
+)]
 pub fn new(
     name: &str,
     instance: &Temp,
@@ -395,7 +404,7 @@ pub fn new(
         let mut filter = Filter::new(Action::Notify)?;
         filter.set_notifier(Notifier::new(
             instance.full().join("monitor"),
-            name.to_string(),
+            name.to_owned(),
         ));
 
         filter
@@ -415,7 +424,7 @@ pub fn new(
         syscalls.insert(Syscall::from_name(required)?.get_number());
     }
 
-    let audit = !syscalls.contains(&get_num("sendmsg"));
+    let audit = !syscalls.contains(&get_num("sendmsg").unwrap());
 
     let syscalls = syscalls.into_iter().collect::<Vec<_>>();
     timer!("::add_rules", {
@@ -441,11 +450,11 @@ pub fn new(
             fs::create_dir_all(parent)?;
         }
 
-        Some(if !bpf.exists() {
+        Some(if bpf.exists() {
+            File::open(&bpf)?.into()
+        } else {
             debug!("Writing filter...");
             filter.write(&bpf)?
-        } else {
-            File::open(&bpf)?.into()
         })
     } else {
         None

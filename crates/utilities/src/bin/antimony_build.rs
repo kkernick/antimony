@@ -1,3 +1,4 @@
+#![allow(unused_crate_dependencies)]
 //! Build antimony.
 //! This is just a cargo wrapper that uses predefined values.
 
@@ -5,7 +6,7 @@ use antimony::shared::env::HOME_PATH;
 use anyhow::Result;
 use clap::Parser;
 use spawn::{Spawner, StreamMode};
-use std::fs;
+use std::{env, fs};
 
 #[derive(Parser, Debug, Default)]
 #[command(name = "Antimony-Build")]
@@ -30,6 +31,7 @@ pub struct Cli {
     pub passthrough: Option<Vec<String>>,
 }
 
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init_error()?;
@@ -42,13 +44,9 @@ fn main() -> Result<()> {
         .error(StreamMode::Discard)
         .spawn()?
         .output_all()?;
-    let root = &root[..root.len() - 1];
+    let root = root.strip_suffix('\n').unwrap_or(&root);
 
-    let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
-        var
-    } else {
-        format!("{root}/target")
-    };
+    let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| format!("{root}/target"));
 
     let mut rust_flags = Vec::new();
     if cli.native {
@@ -59,7 +57,7 @@ fn main() -> Result<()> {
     let mut post_flags = Vec::new();
     if cli.nightly {
         cargo_flags.push("+nightly");
-        post_flags.push("-Zbuild-std=std,panic_abort")
+        post_flags.push("-Zbuild-std=std,panic_abort");
     }
 
     let target = "x86_64-unknown-linux-gnu";

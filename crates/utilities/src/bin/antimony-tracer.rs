@@ -1,3 +1,5 @@
+#![allow(unused_crate_dependencies)]
+
 use antimony::{
     fab::{get_libraries, get_wildcards, lib::WildcardFilter, resolve},
     shared::{
@@ -9,6 +11,7 @@ use antimony::{
     },
 };
 use rayon::prelude::*;
+use signal_hook::{consts, flag};
 use std::{
     borrow::Cow,
     io::{self, Write, stdin},
@@ -16,9 +19,10 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
+#[allow(clippy::too_many_lines)]
 fn main() -> anyhow::Result<()> {
     let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+    flag::register(consts::SIGINT, Arc::clone(&term))?;
 
     let mut err = Vec::new();
     let stdin = stdin();
@@ -42,10 +46,10 @@ fn main() -> anyhow::Result<()> {
     let not_found: Set<String> = err
         .par_iter()
         .filter(|e| e.contains("ENOENT"))
-        .map(|e| {
+        .filter_map(|e| {
             let l = e.find('"').unwrap_or(0);
             let r = e.rfind('"').unwrap_or(e.len());
-            e[l + 1..r].trim().to_string()
+            l.checked_add(1).map(|i| e[i..r].trim().to_owned())
         })
         .filter(|e| {
             let path = Path::new(e);
@@ -53,7 +57,9 @@ fn main() -> anyhow::Result<()> {
         })
         .collect();
 
-    if !not_found.is_empty() {
+    if not_found.is_empty() {
+        println!("Nothing to report!");
+    } else {
         println!("Generating Report...");
 
         // Get all features on the system.
@@ -73,7 +79,7 @@ fn main() -> anyhow::Result<()> {
 
         println!("============== FILES ==============");
         not_found.into_par_iter().try_for_each(|file| {
-            let database = arc.clone();
+            let database = Arc::clone(&arc);
             let mut features = Set::default();
 
             // For each file, try and see if any part of the file path
@@ -93,11 +99,10 @@ fn main() -> anyhow::Result<()> {
 
                     let found = if file.is_empty() {
                         false
-                    } else if d_name.contains("*") {
-                        match get_wildcards(&d_name, true, WildcardFilter::Files) {
-                            Ok(cards) => cards.contains(file.as_str()),
-                            Err(_) => false,
-                        }
+                    } else if d_name.contains('*') {
+                        get_wildcards(&d_name, true, WildcardFilter::Files)
+                            .unwrap_or_default()
+                            .contains(file.as_str())
                     } else {
                         *d_name == *file
                     };
@@ -183,25 +188,23 @@ fn main() -> anyhow::Result<()> {
                     }
 
                     if let Some(i) = file.rfind('/') {
-                        file = file[..i].to_string();
+                        file = file[..i].to_owned();
                     }
                 }
             });
 
             let io = io::stdout();
             let mut out = io.lock();
-            if !features.is_empty() {
+            if features.is_empty() {
+                writeln!(out, "{file}")?;
+            } else {
                 writeln!(out, "{file} can be provided with the following features")?;
                 for (feature, path, mode) in features {
                     println!("\t- {feature} (via {path}) as {mode}");
                 }
-            } else {
-                writeln!(out, "{file}")?;
             }
             Ok::<(), anyhow::Error>(())
         })?;
-    } else {
-        println!("Nothing to report!");
     }
 
     Ok(())

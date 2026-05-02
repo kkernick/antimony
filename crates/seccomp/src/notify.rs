@@ -203,15 +203,15 @@ impl Pair {
         // Send response
         let respond_ret = unsafe { raw::seccomp_notify_respond(fd.as_raw_fd(), self.resp) };
         if respond_ret < 0 {
-            #[allow(
-                clippy::arithmetic_side_effects,
-                reason = "The kernel returns `Errno` as negative values"
-            )]
-            let errno = Errno::from_raw(-respond_ret);
-            match errno {
-                Errno::ECANCELED => Ok(()),
-                e => Err(Error::Respond(e)),
-            }
+            respond_ret
+                .checked_mul(-1)
+                .map_or(
+                    Err(Error::Respond(Errno::EINVAL)),
+                    |errno| match Errno::from_raw(errno) {
+                        Errno::ECANCELED => Ok(()),
+                        e => Err(Error::Respond(e)),
+                    },
+                )
         } else {
             Ok(())
         }

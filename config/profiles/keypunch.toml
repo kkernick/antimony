@@ -1,0 +1,5 @@
+id = "dev.bragefuglseth.Keypunch.Devel"
+features = ["libadwaita"]
+
+[home]
+policy = "Enabled"

@@ -1,7 +1,11 @@
 path = "tubefeeder"
-id =  "de.schmidhuberj.tubefeeder"
-home.policy = "Enabled"
-features = ["libadwaita", "libclapper", "network", "libpeas", "gio"]
+id = "de.schmidhuberj.tubefeeder"
+features = ["libadwaita", "gio", "libclapper", "network", "libpeas"]
+inherits = ["default"]
+
+[home]
+policy = "Enabled"
 
 [ipc]
-owns = ["org.mpris.MediaPlayer2.tubefeeder"]
+portals = ["FileChooser"]
+owns = ["org.mpris.MediaPlayer2.tubefeeder.*"]

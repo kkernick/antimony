@@ -1,0 +1,5 @@
+id = "dev.mufeed.Wordbook"
+features = ["libadwaita", "python", "network", "locale"]
+
+[home]
+policy = "Enabled"

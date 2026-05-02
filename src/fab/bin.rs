@@ -1,6 +1,6 @@
+#![allow(clippy::missing_errors_doc)]
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
-//! it underneath a specialized SECCOMP Notifier. It then passes these binaries to the Library
-//! Fabricator to analyze under LDD.
+//! it underneath a specialized SECCOMP Notifier.
 
 use crate::{
     fab::{
@@ -33,8 +33,12 @@ use user::as_real;
 use which::which;
 
 #[derive(Message, Debug, Default)]
+/// A `bilrost` struct for serializing.
 struct Cache {
+    /// What the binary was identified as.
     t: Type,
+
+    /// What the binary needs.
     parse: Option<ParseReturn>,
 }
 
@@ -74,10 +78,12 @@ pub struct ParseReturn {
     pub directories: Set<String>,
 }
 impl ParseReturn {
+    /// Construct a new object
     fn new() -> Self {
         Self::default()
     }
 
+    /// Merge the contents of one `ParseReturn` into another.
     fn merge(&mut self, cache: &Self) {
         for elf in cache.elf.iter().cloned() {
             self.elf.insert(elf);
@@ -94,7 +100,7 @@ impl ParseReturn {
         for (k, v) in cache.symlinks.iter().cloned() {
             self.symlinks.insert((k, v));
         }
-        for (k, v) in cache.localized.iter() {
+        for (k, v) in &cache.localized {
             self.localized.insert(k.clone(), v.clone());
         }
     }
@@ -113,7 +119,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     } else if path.starts_with('/') {
         Cow::Borrowed(path)
     } else {
-        Cow::Borrowed(which(path).with_context(|| path.to_string())?)
+        Cow::Borrowed(which(path).with_context(|| path.to_owned())?)
     };
 
     if resolved.starts_with("/bin") {
@@ -124,6 +130,7 @@ fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
 }
 
 /// Parses binaries, specifically for shell scripts.
+#[allow(clippy::too_many_lines)]
 fn parse(
     path: &str,
     instance: &Temp,
@@ -131,7 +138,7 @@ fn parse(
     mut include_self: bool,
 ) -> Result<Cache> {
     // Avoid duplicate work
-    if !done.insert(path.to_string()) {
+    if !done.insert(path.to_owned()) {
         return Ok(Cache {
             t: Type::Done,
             parse: None,
@@ -143,11 +150,8 @@ fn parse(
         return Ok(cache);
     }
 
-    let resolved = match resolve_bin(path) {
-        Ok(path) => path,
-        Err(_) => {
-            return Ok(Cache::default());
-        }
+    let Ok(resolved) = resolve_bin(path) else {
+        return Ok(Cache::default());
     };
 
     let mut ret = ParseReturn::new();
@@ -157,7 +161,7 @@ fn parse(
         if !dest.is_absolute()
             && let Some(parent) = Path::new(resolved.as_ref()).parent()
         {
-            dest = parent.join(dest)
+            dest = parent.join(dest);
         }
 
         let dest = dest.canonicalize()?;
@@ -167,14 +171,14 @@ fn parse(
     // Ensure it's a valid binary.
     let t = {
         if let Ok(dest) = dest {
-            if let Some(parsed) = parse(&dest, instance, done.clone(), true)?.parse {
-                ret.merge(&parsed)
+            if let Some(parsed) = parse(&dest, instance, done, true)?.parse {
+                ret.merge(&parsed);
             }
             if include_self {
                 if !dest.contains("bin")
-                    && let Some(i) = dest.rfind("/")
+                    && let Some(i) = dest.rfind('/')
                 {
-                    ret.directories.insert(dest[..i].to_string());
+                    ret.directories.insert(dest[..i].to_owned());
                 }
 
                 ret.symlinks.insert((resolved.into_owned(), dest));
@@ -182,7 +186,7 @@ fn parse(
             Type::Link
         } else {
             if in_lib(path) {
-                if let Some(parent) = resolve_dir(path)?
+                if let Some(parent) = resolve_dir(path)
                     && PathBuf::from(&parent).is_dir()
                 {
                     ret.directories.insert(parent);
@@ -191,11 +195,8 @@ fn parse(
             }
 
             // Open it.
-            let mut file = match as_real!({ File::open(resolved.as_ref()) })? {
-                Ok(file) => file,
-                Err(_) => {
-                    return Ok(Cache::default());
-                }
+            let Ok(mut file) = as_real!({ File::open(resolved.as_ref()) })? else {
+                return Ok(Cache::default());
             };
 
             // Get the magic.
@@ -243,7 +244,7 @@ fn parse(
                 binaries.extend(
                     header
                         .split(' ')
-                        .map(|token| token.strip_prefix("#!").unwrap_or(token).to_string()),
+                        .map(|token| token.strip_prefix("#!").unwrap_or(token).to_owned()),
                 );
 
                 let out = Spawner::abs(utility("dumper"))
@@ -267,7 +268,7 @@ fn parse(
                 let out = out.lines().map(String::from);
                 binaries.extend(out);
                 for bin in binaries {
-                    let cache = parse(&bin, instance, done.clone(), true)?;
+                    let cache = parse(&bin, instance, Arc::clone(&done), true)?;
                     if let Some(parse) = cache.parse {
                         ret.merge(&parse);
                     }
@@ -295,16 +296,16 @@ fn parse(
 
 /// Get the immediate parent within /usr/lib.
 #[inline]
-fn resolve_dir(path: &str) -> Result<Option<String>> {
+fn resolve_dir(path: &str) -> Option<String> {
     let lib_root = Path::new("/usr/lib");
     let mut path = Path::new(&path);
     while let Some(parent) = path.parent() {
         if parent == lib_root {
-            return Ok(Some(path.to_string_lossy().into_owned()));
+            return Some(path.to_string_lossy().into_owned());
         }
         path = parent;
     }
-    Ok(None)
+    None
 }
 
 /// Localization means pointing things in $HOME to /home/antimony, ensuring
@@ -322,11 +323,11 @@ fn handle_localize(
     let file = which::which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
-            if let Some(parsed) = parse(file, instance, done.clone(), include_self)?.parse {
-                ret.merge(&parsed)
+            if let Some(parsed) = parse(file, instance, done, include_self)?.parse {
+                ret.merge(&parsed);
             }
         } else {
-            let parsed = parse(&src, instance, done.clone(), false)?;
+            let parsed = parse(&src, instance, Arc::clone(&done), false)?;
             if let Some(parsed) = parsed.parse {
                 ret.merge(&parsed);
             }
@@ -339,22 +340,14 @@ fn handle_localize(
                 Type::Link => {
                     let link = fs::read_link(src.as_ref())?;
                     let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
-                    ret.merge(&handle_localize(
-                        &ldst,
-                        instance,
-                        home,
-                        false,
-                        done.clone(),
-                    )?);
+                    ret.merge(&handle_localize(&ldst, instance, home, false, done)?);
                     ret.symlinks.insert((dst, ldst));
                 }
                 _ => {}
             }
         }
-    } else {
-        if let Some(parsed) = parse(file, instance, done.clone(), true)?.parse {
-            ret.merge(&parsed)
-        }
+    } else if let Some(parsed) = parse(file, instance, done, true)?.parse {
+        ret.merge(&parsed);
     }
     Ok(ret)
 }
@@ -362,6 +355,11 @@ fn handle_localize(
 /// Collection takes all the binaries defined in the profiles, and parses them.
 /// This includes resolving wildcards, and parsing files tagged as Executable
 /// in the files header.
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "The unwrapped Arc is only used in a scoped Rayon iterator."
+)]
 pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseReturn> {
     let mut ret = ParseReturn::default();
     let resolved = Arc::new(ThreadSet::<Cow<'static, str>>::default());
@@ -388,7 +386,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                     }
                     Err(e) => warn!("Failed to get wildcards for {w}: {e}"),
                 }
-            })
+            });
         });
     }
 
@@ -400,7 +398,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
             if let Some(x) = files.user.get(&FileMode::Executable) {
                 x.par_iter()
                     .filter_map(|file| {
-                        handle_localize(file, instance, true, true, done.clone()).ok()
+                        handle_localize(file, instance, true, true, Arc::clone(&done)).ok()
                     })
                     .collect::<Vec<_>>()
                     .iter()
@@ -409,7 +407,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
             if let Some(x) = files.resources.get(&FileMode::Executable) {
                 x.par_iter()
                     .filter_map(|file| {
-                        handle_localize(file, instance, false, true, done.clone()).ok()
+                        handle_localize(file, instance, false, true, Arc::clone(&done)).ok()
                     })
                     .collect::<Vec<_>>()
                     .iter()
@@ -418,7 +416,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
             if let Some(x) = files.platform.get(&FileMode::Executable) {
                 x.par_iter()
                     .filter_map(|file| {
-                        handle_localize(file, instance, false, true, done.clone()).ok()
+                        handle_localize(file, instance, false, true, Arc::clone(&done)).ok()
                     })
                     .collect::<Vec<_>>()
                     .iter()
@@ -433,7 +431,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                             instance,
                             false,
                             false,
-                            done.clone(),
+                            Arc::clone(&done),
                         )
                         .ok()
                     })
@@ -449,7 +447,9 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
         Arc::into_inner(resolved)
             .unwrap()
             .into_par_iter()
-            .filter_map(|binary| handle_localize(&binary, instance, false, true, done.clone()).ok())
+            .filter_map(|binary| {
+                handle_localize(&binary, instance, false, true, Arc::clone(&done)).ok()
+            })
             .collect::<Vec<_>>()
             .iter()
             .for_each(|parsed| {
@@ -460,6 +460,11 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
 }
 
 /// Fabricate the binaries.
+#[allow(
+    clippy::missing_panics_doc,
+    clippy::unwrap_used,
+    reason = "The unwrapped Arc is only used in a scoped Rayon iterator."
+)]
 pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     {
         let binaries = &info.profile.binaries;
@@ -481,12 +486,11 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
     info.handle.args_i(["--dir", "/usr/bin"]);
     let bin_cache = format!("{}-bin", info.instance.name());
-    let parsed = match get_cache(&bin_cache, Object::Binaries) {
-        Ok(Some(parsed)) => parsed,
-        _ => {
-            let parsed = timer!("::collect", collect(info.profile, info.name, info.instance))?;
-            write_cache(&bin_cache, parsed, Object::Binaries)?
-        }
+    let parsed = if let Ok(Some(parsed)) = get_cache(&bin_cache, Object::Binaries) {
+        parsed
+    } else {
+        let parsed = timer!("::collect", collect(info.profile, info.name, info.instance))?;
+        write_cache(&bin_cache, parsed, Object::Binaries)?
     };
 
     let elf_binaries = Arc::new(ThreadSet::default());
@@ -494,11 +498,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
     timer!("::elf", {
-        parsed.elf.into_par_iter().try_for_each(|elf| {
+        parsed.elf.into_par_iter().for_each(|elf| {
             info.handle.args_i(["--ro-bind", &elf, &elf]);
-            elf_binaries.insert(elf.to_string());
-            anyhow::Ok(())
-        })?;
+            elf_binaries.insert(elf);
+        });
     });
 
     // Scripts are consumed here, and are only bound to the sandbox.
@@ -513,7 +516,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         parsed
             .files
             .into_par_iter()
-            .for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]))
+            .for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]));
     });
 
     timer!("::localized", {
@@ -538,20 +541,16 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     }
 
     timer!("::symlinks", {
-        parsed
-            .symlinks
-            .into_par_iter()
-            .try_for_each(|(link, dest)| -> anyhow::Result<()> {
-                if !elf_binaries.contains(&dest) {
-                    info.handle.args_i(["--ro-bind", &dest, &dest]);
-                    elf_binaries.insert(dest.clone());
-                }
-                if !in_lib(&link) {
-                    info.handle.args_i(["--symlink", &dest, &link]);
-                }
-                Ok(())
-            })
-    })?;
+        parsed.symlinks.into_par_iter().for_each(|(link, dest)| {
+            if !elf_binaries.contains(&dest) {
+                info.handle.args_i(["--ro-bind", &dest, &dest]);
+                elf_binaries.insert(dest.clone());
+            }
+            if !in_lib(&link) {
+                info.handle.args_i(["--symlink", &dest, &link]);
+            }
+        });
+    });
 
     if let Some(home) = &info.profile.home {
         timer!("::home_binaries", {
@@ -560,7 +559,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 let home_str = home_dir.to_string_lossy();
                 lib::DIRS.insert(Cow::Owned(home_str.into_owned()));
             }
-        })
+        });
     }
 
     info.handle.args_i(["--symlink", "/usr/bin", "/bin"]);

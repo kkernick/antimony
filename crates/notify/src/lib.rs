@@ -146,7 +146,6 @@ fn console_msg(title: &str, body: &str, urgency: Option<Urgency>) -> String {
 }
 
 /// Convert the HTML tags defined by the Notification Spec to console formatting.
-#[allow(clippy::arithmetic_side_effects)]
 fn style_tag<F>(mut msg: String, open: &str, close: &str, style: F) -> String
 where
     F: Fn(&str) -> StyledObject<&str>,
@@ -155,9 +154,13 @@ where
         && let Some(end) = msg.find(close)
     {
         let pre = &msg[..start];
-        let post = &msg[end + close.len()..];
-        let extract = style(&msg[start + open.len()..end]).force_styling(true);
-        msg = format!("{pre}{extract}{post}");
+        if let Some(pi) = end.checked_add(close.len())
+            && let Some(start) = start.checked_add(open.len())
+        {
+            let post = &msg[pi..];
+            let extract = style(&msg[start..end]).force_styling(true);
+            msg = format!("{pre}{extract}{post}");
+        }
     }
     msg
 }

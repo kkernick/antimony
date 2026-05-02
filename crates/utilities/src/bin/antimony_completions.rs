@@ -1,19 +1,21 @@
+#![allow(unused_crate_dependencies)]
 //! Generate shell completions for Antimony.
 
+use antimony::cli;
 use clap::CommandFactory;
 use clap_complete::{generate, shells};
 use spawn::Spawner;
 use std::{fs, path::Path};
 
 fn main() -> anyhow::Result<()> {
-    let mut cli = antimony::cli::Cli::command();
+    let mut cli = cli::Cli::command();
 
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])
         .output(spawn::StreamMode::Pipe)
         .spawn()?
         .output_all()?;
-    let root = &root[..root.len() - 1];
+    let root = root.strip_suffix('\n').unwrap_or(&root);
 
     let path = Path::new(root).join("completions");
     if !path.exists() {

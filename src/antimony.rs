@@ -51,26 +51,30 @@ fn main() -> Result<()> {
     };
 
     #[cfg(debug_assertions)]
+    #[allow(clippy::absolute_paths)]
     {
-        let mut total = 0.0f64;
+        let mut total = std::num::Saturating(0u128);
         let mut sorted = shared::TIME_MAP
             .iter()
             .map(|r| {
-                total += *r.value() as f64;
-                (r.key().to_string(), *r.value())
+                total += *r.value();
+                (r.key().to_owned(), *r.value())
             })
             .collect::<Vec<_>>();
         sorted.sort_by_key(|a| a.1);
         sorted.reverse();
         for (k, v) in sorted {
-            let weight: f64 = (v as f64 / total) * 100f64;
-            if weight < 1.0 {
+            use std::ops::Div;
+
+            #[allow(clippy::cast_precision_loss)]
+            let weight = (v * std::num::Saturating(100)).div(total);
+            if weight < std::num::Saturating(1) {
                 continue;
             }
-            println!("{k} => {v} ({weight}%)");
+            log::info!("{k} => {v} ({weight}%)");
         }
 
-        println!("TOTAL => {total}");
+        log::info!("TOTAL => {total}");
     }
 
     ret

@@ -1,9 +1,10 @@
+#![allow(clippy::missing_errors_doc)]
 //! The Feature Fabricator composes all defined features defined in the Profile,
 //! recursively analyzes dependencies, strikes conflicts, and merges definitions
 //! into a single, complete Profile.
 //!
 //! Note that due to performance considerations, the feature fabricator is called on
-//! Profile::new(), and is cached separately from the other fabricators as well.
+//! `Profile::new()`, and is cached separately from the other fabricators as well.
 
 use crate::{
     fab::resolve,
@@ -15,7 +16,7 @@ use crate::{
 };
 use log::{debug, warn};
 use spawn::{Spawner, StreamMode};
-use std::borrow::Cow;
+use std::{borrow::Cow, num::Saturating};
 use thiserror::Error;
 
 /// Errors related to feature integration
@@ -37,10 +38,10 @@ fn format(mut str: String, map: &Map<&str, String>) -> Result<String, Error> {
         str = str.replace(key, val);
     }
 
-    if !str.contains('.') {
-        Err(Error::InvalidBus(str))
-    } else {
+    if str.contains('.') {
         Ok(str)
+    } else {
+        Err(Error::InvalidBus(str))
     }
 }
 
@@ -48,7 +49,7 @@ fn format(mut str: String, map: &Map<&str, String>) -> Result<String, Error> {
 #[inline]
 fn load_feature<'a>(name: &str, db: &'a mut Map<String, Feature>) -> Result<&'a Feature, Error> {
     Ok(db
-        .entry(name.to_string())
+        .entry(name.to_owned())
         .or_insert(Feature::new(name).map_err(Error::Feature)?))
 }
 
@@ -68,7 +69,7 @@ fn load_feature<'a>(name: &str, db: &'a mut Map<String, Feature>) -> Result<&'a 
 fn strike_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
-    features: &mut Map<String, u32>,
+    features: &mut Map<String, Saturating<u32>>,
 ) -> Result<(), Error> {
     // If we required this feature
     if features.contains_key(feature) {
@@ -85,7 +86,7 @@ fn strike_feature(
                     *feat -= 1;
 
                     // If this feature was the only one requiring this dependency, strike it as well.
-                    if *feat < 1 {
+                    if *feat < Saturating(1) {
                         strike_feature(&depend, db, features)?;
                     }
                 }
@@ -100,17 +101,17 @@ fn strike_feature(
 fn resolve_feature(
     feature: &str,
     db: &mut Map<String, Feature>,
-    features: &mut Map<String, u32>,
+    features: &mut Map<String, Saturating<u32>>,
     blacklist: &mut Set<String>,
     searched: &mut Set<String>,
 ) -> Result<(), Error> {
     // If we haven't search this already.
     if !searched.contains(feature) && !blacklist.contains(feature) {
         // Add this feature to our feature list if it doesn't exit.
-        *features.entry(feature.to_string()).or_insert(0) += 1;
+        *features.entry(feature.to_owned()).or_default() += 1;
 
         // Add to searched.
-        searched.insert(feature.to_string());
+        searched.insert(feature.to_owned());
 
         // Get a copy of the required features, and conflicting features.
         let (requires, conflicts) = {
@@ -143,6 +144,7 @@ fn resolve_feature(
     Ok(())
 }
 
+/// Resolve the final feature set, accounting for conflicts
 fn resolve_features(
     features: &Set<String>,
     conflicts: &Set<String>,
@@ -168,11 +170,9 @@ fn resolve_features(
         .collect())
 }
 
-fn add_feature(
-    profile: &mut Profile,
-    map: &Map<&str, String>,
-    mut feature: Feature,
-) -> Result<(), Error> {
+/// Add the definitions of a feature to a profile.
+#[allow(clippy::too_many_lines)]
+fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feature) {
     // Conditionals intentionally don't use any schema. It just runs the content through
     // bash. This lets you do something as simple requiring a certain file via `command`, or
     // something more complicated. It runs under the
@@ -193,7 +193,6 @@ fn add_feature(
             Ok(code) => {
                 if code != 0 {
                     debug!("Condition for feature {} not met", &feature.name);
-                    return Ok(());
                 }
             }
             Err(e) => {
@@ -201,7 +200,6 @@ fn add_feature(
                     "Failed to check condition for feature {}: {e}",
                     &feature.name
                 );
-                return Ok(());
             }
         }
     }
@@ -227,7 +225,7 @@ fn add_feature(
         for mode in FILE_MODES {
             if let Some(d_files) = direct.remove(&mode) {
                 p_direct.entry(mode).or_default().extend(d_files);
-            };
+            }
         }
 
         let mut system = files.platform;
@@ -383,16 +381,16 @@ fn add_feature(
         Some(false) | None => feature.new_privileges,
         Some(true) => Some(true),
     };
-    Ok(())
 }
 
+#[allow(clippy::literal_string_with_formatting_args)]
 pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
     let mut map = Map::default();
-    map.insert("{name}", name.to_string());
+    map.insert("{name}", name.to_owned());
     map.insert("{desktop}", profile.desktop(name).to_string());
 
     for feature in resolve_features(&profile.features, &profile.conflicts)? {
-        add_feature(profile, &map, feature)?;
+        add_feature(profile, &map, feature);
     }
     Ok(())
 }

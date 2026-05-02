@@ -175,7 +175,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (help)
 _arguments "${_arguments_options[@]}" : \
-":: :_antimony__help_commands" \
+":: :_antimony__subcmd__help_commands" \
 "*::: :->help" \
 && ret=0
 
@@ -250,18 +250,18 @@ _antimony_commands() {
     )
     _describe -t commands 'antimony commands' commands "$@"
 }
-(( $+functions[_antimony__edit_commands] )) ||
-_antimony__edit_commands() {
+(( $+functions[_antimony__subcmd__edit_commands] )) ||
+_antimony__subcmd__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony edit commands' commands "$@"
 }
-(( $+functions[_antimony__export_commands] )) ||
-_antimony__export_commands() {
+(( $+functions[_antimony__subcmd__export_commands] )) ||
+_antimony__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'antimony export commands' commands "$@"
 }
-(( $+functions[_antimony__help_commands] )) ||
-_antimony__help_commands() {
+(( $+functions[_antimony__subcmd__help_commands] )) ||
+_antimony__subcmd__help_commands() {
     local commands; commands=(
 'run:Run a profile' \
 'edit:Edit an existing profile' \
@@ -276,88 +276,88 @@ _antimony__help_commands() {
     )
     _describe -t commands 'antimony help commands' commands "$@"
 }
-(( $+functions[_antimony__help__edit_commands] )) ||
-_antimony__help__edit_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__edit_commands] )) ||
+_antimony__subcmd__help__subcmd__edit_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help edit commands' commands "$@"
 }
-(( $+functions[_antimony__help__export_commands] )) ||
-_antimony__help__export_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__export_commands] )) ||
+_antimony__subcmd__help__subcmd__export_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help export commands' commands "$@"
 }
-(( $+functions[_antimony__help__help_commands] )) ||
-_antimony__help__help_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__help_commands] )) ||
+_antimony__subcmd__help__subcmd__help_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help help commands' commands "$@"
 }
-(( $+functions[_antimony__help__import_commands] )) ||
-_antimony__help__import_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__import_commands] )) ||
+_antimony__subcmd__help__subcmd__import_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help import commands' commands "$@"
 }
-(( $+functions[_antimony__help__info_commands] )) ||
-_antimony__help__info_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__info_commands] )) ||
+_antimony__subcmd__help__subcmd__info_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help info commands' commands "$@"
 }
-(( $+functions[_antimony__help__integrate_commands] )) ||
-_antimony__help__integrate_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__integrate_commands] )) ||
+_antimony__subcmd__help__subcmd__integrate_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help integrate commands' commands "$@"
 }
-(( $+functions[_antimony__help__refresh_commands] )) ||
-_antimony__help__refresh_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__refresh_commands] )) ||
+_antimony__subcmd__help__subcmd__refresh_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help refresh commands' commands "$@"
 }
-(( $+functions[_antimony__help__remove_commands] )) ||
-_antimony__help__remove_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__remove_commands] )) ||
+_antimony__subcmd__help__subcmd__remove_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help remove commands' commands "$@"
 }
-(( $+functions[_antimony__help__run_commands] )) ||
-_antimony__help__run_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__run_commands] )) ||
+_antimony__subcmd__help__subcmd__run_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help run commands' commands "$@"
 }
-(( $+functions[_antimony__help__seccomp_commands] )) ||
-_antimony__help__seccomp_commands() {
+(( $+functions[_antimony__subcmd__help__subcmd__seccomp_commands] )) ||
+_antimony__subcmd__help__subcmd__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony help seccomp commands' commands "$@"
 }
-(( $+functions[_antimony__import_commands] )) ||
-_antimony__import_commands() {
+(( $+functions[_antimony__subcmd__import_commands] )) ||
+_antimony__subcmd__import_commands() {
     local commands; commands=()
     _describe -t commands 'antimony import commands' commands "$@"
 }
-(( $+functions[_antimony__info_commands] )) ||
-_antimony__info_commands() {
+(( $+functions[_antimony__subcmd__info_commands] )) ||
+_antimony__subcmd__info_commands() {
     local commands; commands=()
     _describe -t commands 'antimony info commands' commands "$@"
 }
-(( $+functions[_antimony__integrate_commands] )) ||
-_antimony__integrate_commands() {
+(( $+functions[_antimony__subcmd__integrate_commands] )) ||
+_antimony__subcmd__integrate_commands() {
     local commands; commands=()
     _describe -t commands 'antimony integrate commands' commands "$@"
 }
-(( $+functions[_antimony__refresh_commands] )) ||
-_antimony__refresh_commands() {
+(( $+functions[_antimony__subcmd__refresh_commands] )) ||
+_antimony__subcmd__refresh_commands() {
     local commands; commands=()
     _describe -t commands 'antimony refresh commands' commands "$@"
 }
-(( $+functions[_antimony__remove_commands] )) ||
-_antimony__remove_commands() {
+(( $+functions[_antimony__subcmd__remove_commands] )) ||
+_antimony__subcmd__remove_commands() {
     local commands; commands=()
     _describe -t commands 'antimony remove commands' commands "$@"
 }
-(( $+functions[_antimony__run_commands] )) ||
-_antimony__run_commands() {
+(( $+functions[_antimony__subcmd__run_commands] )) ||
+_antimony__subcmd__run_commands() {
     local commands; commands=()
     _describe -t commands 'antimony run commands' commands "$@"
 }
-(( $+functions[_antimony__seccomp_commands] )) ||
-_antimony__seccomp_commands() {
+(( $+functions[_antimony__subcmd__seccomp_commands] )) ||
+_antimony__subcmd__seccomp_commands() {
     local commands; commands=()
     _describe -t commands 'antimony seccomp commands' commands "$@"
 }

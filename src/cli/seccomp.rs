@@ -47,12 +47,13 @@ pub enum Operation {
 }
 
 impl super::Run for Args {
+    /// Run the seccomp subcommand.
+    ///
+    /// ## Errors
+    /// If there are permission errors on the syscalls folder, or querying the database.
+    #[allow(clippy::too_many_lines)]
     fn run(self) -> Result<()> {
-        if !privileged()? {
-            Err(anyhow!(
-                "Modifying the SECCOMP database is a privileged operation"
-            ))
-        } else {
+        if privileged()? {
             match self.operation {
                 Operation::Optimize => syscalls::CONNECTION.with_borrow_mut(|conn| {
                     conn.execute("VACUUM;", [])?;
@@ -68,9 +69,7 @@ impl super::Run for Args {
                 }
                 Operation::Export => {
                     let db = AT_HOME.join("seccomp").join("syscalls.db");
-                    if !db.exists() {
-                        return Err(anyhow!("No database exists!"));
-                    } else {
+                    if db.exists() {
                         let dest = match self.path {
                             Some(path) => PathBuf::from(path),
                             None => getcwd()?.join("syscalls.db"),
@@ -78,14 +77,15 @@ impl super::Run for Args {
 
                         as_real!({ io::copy(&mut File::open(db)?, &mut File::create(&dest)?) })??;
                         println!("Exported to {}", dest.display());
+                    } else {
+                        return Err(anyhow!("No database exists!"));
                     }
                     Ok(())
                 }
                 Operation::Merge => {
-                    let db = match self.path {
-                        Some(path) => PathBuf::from(path),
-                        None => PWD.join("syscalls.db"),
-                    };
+                    let db = self
+                        .path
+                        .map_or_else(|| PWD.join("syscalls.db"), PathBuf::from);
 
                     let temp = temp::Builder::new()
                         .within(AT_HOME.join("seccomp"))
@@ -206,6 +206,10 @@ impl super::Run for Args {
                     })
                 }
             }
+        } else {
+            Err(anyhow!(
+                "Modifying the SECCOMP database is a privileged operation"
+            ))
         }
     }
 }

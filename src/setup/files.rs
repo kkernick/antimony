@@ -1,3 +1,5 @@
+#![allow(clippy::missing_docs_in_private_items)]
+
 use crate::{
     fab::{localize_path, resolve},
     shared::{
@@ -15,6 +17,7 @@ use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs::{self, File},
+    io,
     os::fd::{AsRawFd, OwnedFd},
     path::Path,
 };
@@ -22,7 +25,7 @@ use user::{USER, as_real};
 
 /// Open a file and pass it as executable to the sandbox.
 #[inline]
-fn get_x<'a>(src: Option<Cow<'a, str>>, dst: &str, handle: &Spawner) -> Result<()> {
+fn get_x(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner) -> Result<()> {
     let src = src.unwrap_or(Cow::Borrowed(dst));
     let fd = OwnedFd::from(File::open(src.as_ref())?);
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst]);
@@ -32,12 +35,7 @@ fn get_x<'a>(src: Option<Cow<'a, str>>, dst: &str, handle: &Spawner) -> Result<(
 }
 
 #[inline]
-fn lockdown_file<'a>(
-    src: Option<Cow<'a, str>>,
-    dst: &str,
-    handle: &Spawner,
-    ro: bool,
-) -> Result<()> {
+fn lockdown_file(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner, ro: bool) -> Result<()> {
     let src = src.unwrap_or(Cow::Borrowed(dst));
     if !Path::new(src.as_ref()).is_file() {
         return Err(anyhow::anyhow!(
@@ -47,7 +45,7 @@ fn lockdown_file<'a>(
 
     let fd = match as_real!({ File::open(src.as_ref()) })? {
         Ok(file) => OwnedFd::from(file),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
             warn!("No such file: {src}");
             return Ok(());
         }
@@ -65,13 +63,13 @@ fn lockdown_file<'a>(
 }
 
 /// Add a file to the sandbox.
-pub fn add_file(handle: &Spawner, file: &str, contents: String, op: FileMode) -> Result<()> {
+pub fn add_file(handle: &Spawner, file: &str, contents: &str, op: FileMode) -> Result<()> {
     let path = direct_path(file);
     if !path.exists()
         && let Some(parent) = path.parent()
     {
         fs::create_dir_all(parent)?;
-        let contents = resolve(Cow::Borrowed(&contents));
+        let contents = resolve(Cow::Borrowed(contents));
         fs::write(&path, contents.as_ref())?;
     }
 
@@ -95,7 +93,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         && policy == HomePolicy::Enabled
     {
         let suffix = format!("{}/{}", USER.real.as_raw(), args.name);
-        let path = format!("/usr/share/antimony/lockdown/{suffix}",);
+        let path = format!("/usr/share/antimony/lockdown/{suffix}");
         args.handle.env_i("LOCKDOWN_HOME", suffix);
         args.handle.args_i(["--bind", &path, "/home/antimony"]);
     }
@@ -142,7 +140,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         for mode in FILE_MODES {
             if let Some(files) = direct.get(&mode) {
                 files.into_par_iter().try_for_each(|(file, contents)| {
-                    add_file(&args.handle, file, contents.clone(), mode)
+                    add_file(&args.handle, file, contents, mode)
                 })?;
             }
         }

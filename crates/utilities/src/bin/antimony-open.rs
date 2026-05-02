@@ -1,3 +1,4 @@
+#![allow(unused_crate_dependencies)]
 //! A simple implementation of xdg-open, without requiring Bash.
 
 use anyhow::{Result, anyhow};
@@ -9,11 +10,11 @@ use dbus::{
 };
 use std::{collections::HashMap, env, fs::File, os::fd::OwnedFd, path::Path, time::Duration};
 
+#[allow(clippy::absolute_paths)]
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    let arg = match args.get(1) {
-        Some(arg) => arg,
-        None => return Err(anyhow!("Invalid command line!")),
+    let Some(arg) = args.get(1) else {
+        return Err(anyhow!("Invalid command line!"));
     };
 
     let (uri, member) = if Path::new(arg).exists() {

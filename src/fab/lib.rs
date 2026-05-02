@@ -1,4 +1,7 @@
-//! The Library Fabricator is most important of all, as it assembles the SOF. It also touches almost every other fabricator, and is
+#![allow(clippy::missing_errors_doc)]
+//! The Library Fabricator is most important of all, as it assembles the SOF.
+//!
+//! It also touches almost every other fabricator, and is
 //! the central part of the most important path between bin-library-syscalls. It is also by the far the most complicated, as libraries
 //! can encompass files, wildcards, directories, and binaries. They can be sourced from just about anywhere on the system (IE /usr/bin,
 //! or /usr/share/application), and it needs to determine which files should be placed in the SOF, and what to do with their dependencies.
@@ -26,8 +29,13 @@ use std::{
     sync::LazyLock,
 };
 
+/// Library Files (i.e. .so files)
 static FILES: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+
+/// Library Directories (e.g. /usr/lib/qt6)
 pub static DIRS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+
+/// Roots to search for files and directories
 pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
     CONFIG_FILE
         .library_roots()
@@ -38,14 +46,17 @@ pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
 
 /// Add a file to the SOF.
 /// This function must be run underneath an effective UID
+///
+/// ## Errors
+/// If the path cannot be resolved, or the file cannot be added to the SOF.
 #[inline]
-pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
-    let sof_path = sof.join(&library.as_ref()[1..]);
+pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
+    let sof_path = sof.join(&library[1..]);
     if let Some(parent) = sof_path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent)?;
         }
-        let path = PathBuf::from(library.as_ref());
+        let path = PathBuf::from(library);
         let canon = fs::canonicalize(&path)?;
 
         if !sof_path.exists()
@@ -62,7 +73,7 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
             //
             // This reduces redundancy between profiles, and since shared exists
             // in the CACHE_DIR, hard links will work.
-            let shared_path = &cache.join("shared").join(&library.as_ref()[1..]);
+            let shared_path = &cache.join("shared").join(&library[1..]);
             if let Some(parent) = shared_path.parent() {
                 if !parent.exists() {
                     fs::create_dir_all(parent)?;
@@ -78,17 +89,18 @@ pub fn add_sof(sof: &Path, library: Cow<'_, str>, cache: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Mount the roots created in the SOF into the sandbox.
 #[inline]
 pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     ROOTS.par_iter().try_for_each(|root| -> Result<()> {
         let path = PathBuf::from(format!("{sof}{}", root.as_ref()));
         if path.exists() {
             if sof.is_empty() {
-                handle.args_i(["--ro-bind", path.to_str().unwrap(), root.as_ref()]);
+                handle.args_i(["--ro-bind", &path.display().to_string(), root.as_ref()]);
             } else {
                 handle.args_i([
                     "--overlay-src",
-                    path.to_str().unwrap(),
+                    &path.display().to_string(),
                     "--tmp-overlay",
                     root.as_ref(),
                 ]);
@@ -99,10 +111,12 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
 
     for root in ["/lib", "/lib64", "/usr/lib64"] {
         if let Ok(link) = fs::read_link(root) {
-            let link = if !link.is_absolute() {
-                Path::new(root).parent().unwrap().join(link)
-            } else {
+            let link = if link.is_absolute() {
                 link
+            } else if let Some(parent) = Path::new(root).parent() {
+                parent.join(link)
+            } else {
+                PathBuf::from(root)
             }
             .canonicalize()?;
 
@@ -117,21 +131,23 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     Ok(())
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum WildcardFilter {
     Files,
     Directories,
 }
 impl WildcardFilter {
-    pub fn find_filter(&self) -> &'static str {
+    #[must_use]
+    pub const fn find_filter(&self) -> &'static str {
         match self {
-            WildcardFilter::Files => "f,l",
-            WildcardFilter::Directories => "d",
+            Self::Files => "f,l",
+            Self::Directories => "d",
         }
     }
 }
 
-#[inline(always)]
+#[inline]
+/// Resolve any wildcards in the given set.
 fn resolve_wildcards(
     set: Set<String>,
     filter: WildcardFilter,
@@ -145,10 +161,10 @@ fn resolve_wildcards(
 
     timer!("::wildcard::localize", {
         flat.into_par_iter().for_each(|e| {
-            if e.starts_with("/") {
+            if e.starts_with('/') {
                 resolved.insert(Cow::Owned(e));
-            } else if e.starts_with("~") {
-                resolved.insert(Cow::Owned(e.replace("~", HOME.as_str())));
+            } else if e.starts_with('~') {
+                resolved.insert(Cow::Owned(e.replace('~', HOME.as_str())));
             } else {
                 for root in ROOTS.iter() {
                     let path = format!("{}/{e}", root.as_ref());
@@ -160,7 +176,7 @@ fn resolve_wildcards(
                     }
                 }
             }
-        })
+        });
     });
 
     timer!("::wildcard::resolve", {
@@ -170,7 +186,7 @@ fn resolve_wildcards(
                     resolved.insert(card);
                 });
             }
-        })
+        });
     });
 
     resolved.into_iter()
@@ -182,17 +198,19 @@ pub fn cache_dir() -> PathBuf {
 }
 
 #[inline]
+#[must_use]
 pub fn sof_dir(sys_dir: &Path) -> PathBuf {
     sys_dir.join("sof")
 }
 
 /// Generate the libraries for a program.
+#[allow(clippy::too_many_lines)]
 pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
-    let no_sof = if let Some(libraries) = &info.profile.libraries {
-        libraries.no_sof.unwrap_or(false)
-    } else {
-        false
-    };
+    let no_sof = info
+        .profile
+        .libraries
+        .as_ref()
+        .is_some_and(|libraries| libraries.no_sof.unwrap_or(false));
 
     // Each is sent to the library fabricator, in case they contain anything,
     // and are then mounted directly.
@@ -242,9 +260,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     timer!("::binaries", {
         info.profile.binaries.par_iter().for_each(|binary| {
             if let Ok(libraries) = get_libraries(binary) {
-                libraries.into_iter().for_each(|lib| {
-                    let _ = FILES.insert(lib);
-                });
+                for lib in libraries {
+                    {
+                        let _ = FILES.insert(lib);
+                    }
+                }
             }
         });
     });
@@ -280,7 +300,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                                 }
                                 FILES.insert(file);
                             })
-                    )
+                    );
                 },
             );
         });
@@ -330,8 +350,8 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 })
                 // Write the SOF version, as a hard link preferably.
                 .for_each(|lib| {
-                    if let Err(e) = add_sof(&sof, Cow::Borrowed(&lib), &cache) {
-                        error!("Failed to add {} to SOF: {e}", lib.as_ref())
+                    if let Err(e) = add_sof(&sof, &lib, &cache) {
+                        error!("Failed to add {} to SOF: {e}", lib.as_ref());
                     }
                 })
         );

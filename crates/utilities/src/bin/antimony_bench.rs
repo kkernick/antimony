@@ -1,3 +1,4 @@
+#![allow(unused_crate_dependencies)]
 //! For internal use only. Benchmark Antimony, with support for checking out
 //! earlier versions.
 //!
@@ -9,17 +10,14 @@
 use antimony::{cli::refresh::installed_profiles, shared};
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueEnum};
-use dialoguer::Input;
 use nix::unistd::chdir;
+use signal_hook::{consts, flag};
 use spawn::Spawner;
 use std::{
     borrow::Cow,
     env,
-    fs::read_to_string,
     path::Path,
     sync::{Arc, atomic::AtomicBool},
-    thread::sleep,
-    time::Duration,
 };
 
 #[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
@@ -35,7 +33,7 @@ pub enum Benchmark {
     ///     1.  Binary and library caches are shared. If one QT6 application scans /usr/lib/qt6, subsequent ones can use
     ///         those definitions for free. Similarly, parsed binaries are cached and shared.
     ///     2.  Non-SetUID installations created a shared folder for SOF/Bin. Once a single profile pulls in a resource
-    ///         through a copy, subsequent requests are as fast as SetUID, since they both just use hard-links.
+    ///         through a copy, subsequent requests are as fast as setuid, since they both just use hard-links.
     Refresh,
 }
 
@@ -80,11 +78,7 @@ pub struct Cli {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub bench: Option<Vec<Benchmark>>,
 
-    /// Pause the benchmark after each invocation to allow inspection of the cache.
-    #[arg(long, default_value_t = false)]
-    pub inspect: bool,
-
-    /// Give Antimony SetUID like in a system installation.
+    /// Give Antimony setuid like in a system installation.
     #[arg(long, default_value_t = false)]
     pub system: bool,
 
@@ -92,11 +86,11 @@ pub struct Cli {
     #[arg(long)]
     pub sleep: Option<u32>,
 
-    /// Where to point AT_HOME. If not set, defaults to the repository root.
+    /// Where to point `AT_HOME`. If not set, defaults to the repository root.
     #[arg(long)]
     pub home: Option<String>,
 
-    /// Additional commands to pass to antimony_builder
+    /// Additional commands to pass to `antimony_builder`
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub builder_args: Option<Vec<String>>,
 
@@ -109,40 +103,7 @@ pub struct Cli {
     pub hyperfine_args: Option<Vec<String>>,
 }
 
-fn cooldown(sensor: &Option<String>, target: &Option<u64>, inspect: bool) -> Result<()> {
-    if inspect {
-        let prompt = Input::<String>::new()
-            .allow_empty(true)
-            .with_prompt("The benchmarker has been paused to inspect the profile cache. Press any key to continue. Type quit to abort early").report(false).interact()?;
-
-        if prompt.to_lowercase() == "quit" {
-            return Err(anyhow::anyhow!("User aborted"));
-        }
-    }
-
-    if let Some(sensor) = &sensor
-        && Path::new(sensor).exists()
-        && let Some(target) = target
-    {
-        println!("Waiting for system to cool down");
-
-        loop {
-            let temp = read_to_string(sensor)?;
-            if let Some(first) = temp.lines().next()
-                && let Ok(degrees) = first.parse::<u64>()
-            {
-                if degrees <= *target {
-                    break;
-                }
-                sleep(Duration::from_secs(1));
-            } else {
-                eprintln!("Could not parse sensor'");
-            }
-        }
-    }
-    Ok(())
-}
-
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
@@ -158,19 +119,19 @@ fn main() -> Result<()> {
         .output(spawn::StreamMode::Pipe)
         .spawn()?
         .output_all()?;
-    let root = &root[..root.len() - 1];
+    let root = root.strip_suffix('\n').unwrap_or(&root);
     chdir(root)?;
 
     if cli.recipe.is_some() {
         // Set AT_HOME to our current config.
         if !cli.system {
-            unsafe { env::set_var("AT_HOME", cli.home.unwrap_or(root.to_string())) }
+            unsafe { env::set_var("AT_HOME", cli.home.unwrap_or_else(|| root.to_owned())) }
             unsafe { env::set_var("AT_FORCE_TEMP", "1") }
         }
     }
 
     let term = Arc::new(AtomicBool::new(false));
-    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term))?;
+    flag::register(consts::SIGINT, Arc::clone(&term))?;
 
     if let Some(checkout) = &cli.checkout {
         // We need to impose a minimum to ensure --sandbox-args is supported. This also allows us to use --hard without
@@ -181,7 +142,7 @@ fn main() -> Result<()> {
         match checkout.strip_prefix("tags/") {
             Some(version) => {
                 let split = version
-                    .split(".")
+                    .split('.')
                     .filter_map(|f| f.parse::<u32>().ok())
                     .collect::<Vec<_>>();
                 if (split[0] < 2) || (split[0] == 2 && split[1] < 4) {
@@ -212,7 +173,9 @@ fn main() -> Result<()> {
     }
 
     let antimony = || -> Result<String> {
-        let benchmarks = cli.bench.unwrap_or(vec![Benchmark::Cold, Benchmark::Hot]);
+        let benchmarks = cli
+            .bench
+            .unwrap_or_else(|| vec![Benchmark::Cold, Benchmark::Hot]);
 
         let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=microsecond"]
             .into_iter()
@@ -233,20 +196,16 @@ fn main() -> Result<()> {
             args.push(Cow::Borrowed("--show-output"));
         }
         if let Some(h_args) = cli.hyperfine_args {
-            args.extend(h_args.into_iter().map(Cow::Owned))
+            args.extend(h_args.into_iter().map(Cow::Owned));
         }
         if let Some(runs) = cli.runs {
-            args.extend([Cow::Borrowed("-M"), Cow::Owned(runs.to_string())])
+            args.extend([Cow::Borrowed("-M"), Cow::Owned(runs.to_string())]);
         }
         if let Some(min) = cli.min {
-            args.extend([Cow::Borrowed("-m"), Cow::Owned(min.to_string())])
+            args.extend([Cow::Borrowed("-m"), Cow::Owned(min.to_string())]);
         }
 
-        let target_dir = if let Ok(var) = std::env::var("CARGO_TARGET_DIR") {
-            var
-        } else {
-            format!("{root}/target")
-        };
+        let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| format!("{root}/target"));
 
         let antimony = if let Some(recipe) = &cli.recipe {
             println!("Building recipe");
@@ -258,7 +217,8 @@ fn main() -> Result<()> {
                 .new_privileges(true)
                 .spawn()?
                 .output_all()?;
-            let antimony: String = antimony[..antimony.len() - 1].to_string() + "/antimony";
+            let antimony: String =
+                antimony.strip_suffix('\n').unwrap_or(&antimony).to_owned() + "/antimony";
             if cli.system {
                 Spawner::abs("/usr/bin/sudo")
                     .args(["chown", "antimony:antimony", &antimony])
@@ -311,14 +271,12 @@ fn main() -> Result<()> {
             }
             antimony
         } else {
-            "antimony".to_string()
+            "antimony".to_owned()
         };
 
         println!("Using: {antimony}");
 
         for profile in &profiles {
-            cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
-
             if benchmarks.contains(&Benchmark::Cold) {
                 let mut command: Vec<String> = [&antimony, "refresh", profile, "--hard", "--"]
                     .into_iter()
@@ -327,7 +285,7 @@ fn main() -> Result<()> {
                 command.extend(sleep.iter().cloned());
 
                 if let Some(add) = &cli.antimony_args {
-                    command.push("--".to_string());
+                    command.push("--".to_owned());
                     command.extend(add.clone());
                 }
                 Spawner::new("hyperfine")?
@@ -343,8 +301,6 @@ fn main() -> Result<()> {
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
-
-                cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
             }
 
             if benchmarks.contains(&Benchmark::Hot) {
@@ -365,8 +321,6 @@ fn main() -> Result<()> {
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
-
-                cooldown(&cli.temp_sensor, &cli.temp, cli.inspect)?;
             }
         }
 
