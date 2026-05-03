@@ -97,7 +97,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__edit)
-            opts="-h --feature --stdin --help <NAME>"
+            opts="-h --feature --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

@@ -7,7 +7,7 @@ Antimony creates a sandboxed environment for applications to run in via Profiles
 Antimony’s default home is protected from frivolous modification, so you’ll need to use Antimony to mediate access. Creating a Profile is as easy as:
 
 ```bash
-antimony create my_profile
+antimony edit my_profile
 ```
 
 With the name of the profile provided as `my_profile`. This will open up an instance of your default editor (Specified via `EDITOR`, or defaulting to a series of commonly installed ones), allowing you to specify all the various attributes of the application. While the new profile documentation can look intimidating, Antimony needs very little information to properly confine a profile. Simple binaries, like `bash` and command line utilities, do not need profiles *at all*. If the argument to `antimony run` does not point to a valid Profile name, it is assumed to be a binary, and will run it (See [The Command Line Profile](Defaults.md). For example, there is no `zsh` profile defined, but this works:
@@ -24,7 +24,7 @@ Antimony only needs help in three areas:
 An important design philosophy of Antimony is that by default, the sandbox is completely restrictive. The above `zsh` call has no access to IPC, host files, or libraries outside of those needed to run `zsh`. The onus is on the user/administrator to make the decision on what features of the host should be provided to the sandbox.
 
 ### Features
-Rather than requiring users to specify all the various requirements for a Profile, they can instead use preexisting *Features*, which encompass a collection of files, resources, and functionality under a name. There a lot of features, which you can view via `antimony info feature`, but the general idea is to encapsulate a common feature of an application to reduce duplication and work. Examples include:
+Rather than requiring users to specify all the various requirements for a Profile, they can instead use preexisting *Features*, which encompass a collection of files, resources, and functionality under a name. There a lot of features, which you can view via `antimony info --feature`, but the general idea is to encapsulate a common feature of an application to reduce duplication and work. Examples include:
 * `gtk3`, `gtk4` and `libadwaita` for the feature set of GTK applications
 * `qt5`, `qt6` and `kf6` for the feature set of QT/KDE applications.
 * `electron` for Chromium and Electron Applications
@@ -63,10 +63,14 @@ id =  "org.kde.okular"
 home.policy = "Enabled"
 
 features = ["kf6"]
-libraries = ["libOkular6Core*"]
+
+[libraries]
+files = ["libOkular6Core*"]
+directories = ["qt6/plugins/okular_generators"]
 
 [ipc]
 portals = ["FileChooser"]
+
 ```
 
 The takeaway from this is that Profiles are not particularly verbose, nor do they take significant effort or grappling esoteric syntax to create.
@@ -79,7 +83,7 @@ Antimony provides a set of debugging tools to help make profile creation easier.
 `strace` is a program that traces a binary, printing syscall information. You can trace an application in the sandbox using the `trace` feature:
 
 ```bash
-antimony my_profile ---features trace
+antimony run my_profile ---features trace
 ```
 
 `trace` dumps the output of `strace` to your console, and will give you a summary at the end of program execution. This report informs you of every file that the sandbox tried to access, but couldn’t because the file didn’t exist, yet the same file *does* exist on the Host. This can help pin-point files that the profile needs to run, but that the sandbox doesn’t provide. If a Feature can provide that file, they will be listed underneath the file in question, as it can be excessively permissive. Consider the following report:
@@ -92,7 +96,7 @@ antimony my_profile ---features trace
 While the `udev` feature can indeed provide this file, it does so by providing the *entire* `/sys` folder. It would be more prudent that, if this file is necessary, to pass it directly, or one of it’s parents.
 
 #### Info
-The `info` command dumps information related to Features, Profiles, and [SECCOMP](SECCOMP.md). This can either list everything, or be narrowed down to a specific Feature or Profile. By passing increasing levels of verbosity (Through `-v`), you can get a deeper insight into the files provided by Features, Wildcards, etc. While not quite as verbose as `strace`, the output is still rather long as you add more `-vvvv`.
+The `info` command dumps information related to Features and Profiles. This can either list everything, or be narrowed down to a specific Feature or Profile.
 
 #### Debug Shell
 The `debug-shell` feature will create the sandbox for the Profile, but rather than executing the application will drop you into a shell with some utilities for navigating the command line. You can check the contents of the environment, validate files and libraries, and even try and run the application with your own arguments or under different traces (So long as you provide them with `binaries`).
@@ -135,7 +139,7 @@ Antimony supports integrating Profiles into your environment; this makes sandbox
 
 ### Binary Integration
 
-All Profiles integrate themselves by installing a symlink to Antimony at `~/.local/bin`. When running as a symlink, Antimony will use it’s name as the profile argument to the `run` command, so: executing the symlink `~/.local/bin/chromium -> /usr/bin/antimony`, would be equivalent to `antimony run chromium`.
+All Profiles integrate themselves by installing a symlink to Antimony at `~/.local/bin`. When running as a symlink, Antimony will use its name as the profile argument to the `run` command, so: executing the symlink `~/.local/bin/chromium -> /usr/bin/antimony`, would be equivalent to `antimony run chromium`.
 
 This behavior allows you to shadow the original application in shell environments. Simply define you PATH to have `~/.local/bin` in front, and calling `chromium` from the command line will use Antimony instead. This works particularly well for CLI applications. If you need to run the unconfined version on the host, you can just spell out the absolute path, such as `/usr/bin/chromium`.
 

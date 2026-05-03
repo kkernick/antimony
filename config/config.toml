@@ -12,10 +12,10 @@
 # auto_refresh = false
 
 # A set of user names that do not need to validate privilege via Polkit for
-# privileged operations (IE modifying the feature set, seccomp, or this file)
+# privileged operations (i.e. modifying the feature set, seccomp, or this file)
 # privileged_users = []
 
-# The backend for configurations (IE Profiles and Features)
+# The backend for configurations (i.e. Profiles and Features)
 # Updating this value directly does not actually switch the existing backends
 # contents. You'll want to use `antimony backend` instead.
 # config_store = "File"

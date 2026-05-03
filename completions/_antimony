@@ -93,7 +93,6 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 (edit)
 _arguments "${_arguments_options[@]}" : \
 '--feature[Target the feature set rather than the profile set]' \
-'--stdin[Read from stdin, rather than using an interactive editor]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name -- The object to edit:_default' \

@@ -63,27 +63,27 @@ id: ConfigCold
 *Normalized to a Debug, Non-System Build*.
 ### Older Implementations
 
-Antimony is the final iteration of a several year long object to create fast, usable, and function sandboxes for Linux. This project initially started as a Shell Script, borrowing from an example provided on the [Arch Wiki](https://wiki.archlinux.org/title/Bubblewrap) describing a way to coordinate a `bubblewrap` invocation with `xdg-dbus-proxy` to get Portals to work outside of Flatpak. That script eventually became too complicated, and turned into SB, a Python program. Speed and complexity eventually lead to a re-implementation in C++. 
+Antimony is the final iteration of a several-year-long project to create fast, usable, and function sandboxes for Linux. This project initially started as a Shell Script, borrowing from an example provided on the [Arch Wiki](https://wiki.archlinux.org/title/Bubblewrap) describing a way to coordinate a `bubblewrap` invocation with `xdg-dbus-proxy` to get Portals to work outside of Flatpak. That script eventually became too complicated, and turned into SB, a Python program. Speed and complexity eventually lead to a re-implementation in C++. 
 
 Antimony breaks off from SB (Only sharing a name and general goal), allowing a stark departure from the shell script roots. Despite that, all three programs serve the same purpose, and can thus be bench-marked against each other. 
 
 All test are run on an identical, Arch Virtual Machine. The raw numbers are not important—the difference between them are.
 
-| Profile Hot | SB    | SB++ | Antimony | Improvement |
-| ----------- | ----- | ---- | -------- | ----------- |
-| Chromium    | 104.0 | 7.8  | 3.7      | 2.1X        |
-| Zed         | 102.2 | 7.1  | 3.0      | 2.4X        |
-| Okular      | 100.8 | 7.5  | 2.8      | 2.7X        |
-| Syncthing   | 98.2  | 6.2  | 2.2      | 2.8X        |
+| Profile Hot | SB  | SB++  | Antimony | Improvement |
+| ----------- | --- | ----- | -------- | ----------- |
+| Chromium    | 1   | 0.075 | 0.036    | 2.1X        |
+| Zed         | 1   | 0.069 | 0.029    | 2.4X        |
+| Okular      | 1   | 0.074 | 0.028    | 2.7X        |
+| Syncthing   | 1   | 0.063 | 0.022    | 2.8X        |
 ^SBHot
 
 ```chart
 type: bar
-select: [SB, SB++, Antimony]
+select: [SB++, Antimony]
 id: SBHot
 ```
 
-*Comparison between Hot Startup, in Milliseconds. Each application has cached definitions, and this benchmark largely shows how quickly the program can read its caches and launch bubblewrap.*
+*Comparison between Hot Startup, normalized to SB. Each application has cached definitions, and this benchmark largely shows how quickly the program can read its caches and launch bubblewrap.*
 
 | Profile Cold | SB  | SB++ | Antimony | Improvement |
 | ------------ | --- | ---- | -------- | ----------- |
@@ -95,10 +95,10 @@ id: SBHot
 
 ```chart
 type: bar
-select: [SB, SB++, Antimony]
+select: [SB++, Antimony]
 id: SBCold
 ```
-*Comparison between Cold Startup, in Milliseconds. Each application has its cache removed prior to execution.*
+*Comparison between Cold Startup, normalized to SB. Each application has its cache removed prior to execution.*
 
 \* SB is run via `benchmark.sh python main $PROFILE` from the [SB](https://github.com/kkernick/sb) repository.
 \** SB++ is run via `benchmark.sh cpp main $PROFILE`.
@@ -111,25 +111,25 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 >[!note]
 >These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
 
->[!warning]
->Versions before 2.6.0 utilized a naive, 100 millisecond timeout when waiting for the sandbox to terminate This imposes a considerable performance penalty in these benchmarks. To try and reconcile this, the below charts have elected to eliminate that delay wholesale, and as such versions in **bold** have had this correction made.
+>[!note] 
+>Significant regressions have been prefixed with an `X.` to not skew the chart.
 
 #### Hot
 
-| Profile Hot / Release | Chromium | Zed  | Okular | Syncthing | Sh   |
-| --------------------- | -------- | ---- | ------ | --------- | ---- |
-| 2.4.1                 | 16.5     | 16.5 | 17.0   | 11.0      | 10.2 |
-| 2.4.2                 | 17.0     | 15.8 | 15.9   | 10.8      | 10.0 |
-| 2.4.3                 | 16.1     | 16.3 | 16.8   | 11.1      | 10.1 |
-| 2.5.0                 | 17.5     | 16.6 | 16.6   | 10.5      | 10.7 |
-| 2.6.0                 | 22.8     | 17.4 | 19.0   | 10.8      | 10.1 |
-| 3.0.0                 | 21.8     | 17.8 | 18.9   | 10.6      | 10.5 |
-| 4.0.0                 | 21.7     | 19.3 | 19.1   | 11.4      | 11.1 |
-| 4.1.0                 | 22.6     | 19.1 | 19.6   | 11.6      | 11.9 |
-| 4.1.1                 | 23.2     | 19.4 | 20.5   | 11.4      | 11.2 |
-| 4.2.0                 | 22.8     | 19.0 | 19.8   | 10.8      | 12.0 |
-| 4.2.1                 | 22.7     | 20.3 | 20.7   | 11.5      | 12.2 |
-| 5.0.0                 | 18.3     | 16.1 | 19.7   | 9.0       | 8.5  |
+| Profile Hot / Release | Chromium | Zed     | Okular  | Syncthing | Sh      |
+| --------------------- | -------- | ------- | ------- | --------- | ------- |
+| 2.4.1                 | X.121.0  | X.121.3 | X.120.5 | X.113.1   | X.112.1 |
+| 2.4.2                 | X.121.4  | X.120.4 | X.120.7 | X112.5    | X.112.4 |
+| 2.4.3                 | X.120.6  | X.120.2 | X.121.1 | X.112.6   | X.112.0 |
+| 2.5.0                 | X.120.4  | X.122.0 | X.121.9 | X.112.6   | X.111.4 |
+| 2.6.0                 | 34.0     | 24.8    | 27.2    | 14.9      | 14.5    |
+| 3.0.0                 | 32.1     | 25.1    | 26.2    | 16.1      | 14.6    |
+| 4.0.0                 | 33.1     | 26.5    | 28.3    | 15.3      | 16.0    |
+| 4.1.0                 | 34.0     | 27.8    | 28.9    | 15.5      | 15.3    |
+| 4.1.1                 | 33.3     | 27.4    | 28.4    | 14.7      | 16.3    |
+| 4.2.0                 | 33.6     | 27.9    | 28.5    | 16.4      | 16.0    |
+| 4.2.1                 | 33.1     | 27.2    | 29.0    | 15.6      | 15.9    |
+| 5.0.0                 | 31.0     | 23.5    | 28.5    | 13.7      | 13.3    |
 ^HistoryHot
 
 ```chart
@@ -141,23 +141,20 @@ spanGaps: true
 
 #### Cold
 
->[!note] 
->Significant regressions have been prefixed with an `X.` to not skew the chart.
-
-| Profile Cold / Release | Chromium | Zed   | Okular | Syncthing | Sh   |
-| ---------------------- | -------- | ----- | ------ | --------- | ---- |
-| 2.4.1                  | 444.9    | 109.0 | 948.0  | 86.8      | 75.3 |
-| 2.4.2                  | 447.0    | 110.0 | 965.4  | 78.7      | 63.9 |
-| 2.4.3                  | 392.9    | 56.7  | 891.2  | 34.9      | 12.4 |
-| 2.5.0                  | 395.3    | 55.8  | 902.0  | 24.9      | 12.2 |
-| 2.6.0                  | 451.4    | 58.2  | 996.4  | 35.4      | 22.1 |
-| 3.0.0                  | 362.0    | 82.2  | 514.1  | 53.7      | 19.0 |
-| 4.0.0                  | 241.3    | 80.2  | 329.9  | 26.4      | 22.1 |
-| 4.1.0                  | 371.3    | 114.5 | 912.6  | 25.8      | 21.7 |
-| 4.1.1                  | 248.8    | 79.9  | 324.7  | 25.9      | 22.1 |
-| 4.2.0                  | 217.5    | 73.7  | 919.7  | 25.9      | 21.0 |
-| 4.2.1                  | 209.9    | 71.0  | 168.1  | 23.2      | 19.4 |
-| 5.0.0                  | 148.8    | 46.0  | 245.2  | 18.9      | 17.5 |
+| Profile Cold / Release | Chromium | Zed   | Okular | Syncthing | Sh      |
+| ---------------------- | -------- | ----- | ------ | --------- | ------- |
+| 2.4.1                  | 732.4    | 258.2 | 1291.6 | X.225.2   | X.205.3 |
+| 2.4.2                  | 726.0    | 255.3 | 1207.6 | X.224.6   | X.202.5 |
+| 2.4.3                  | 647.5    | 176.4 | 1188.5 | X.147.9   | X.128.4 |
+| 2.5.0                  | 645.4    | 177.9 | 1207.6 | X.148.6   | X.128.2 |
+| 2.6.0                  | 640.1    | 85.9  | 1223.7 | 50.5      | 30.0    |
+| 3.0.0                  | 500.1    | 109.1 | 2024.3 | 67.5      | 31.4    |
+| 4.0.0                  | 325.1    | 109.1 | 1571.2 | 36.2      | 30.1    |
+| 4.1.0                  | 514.7    | 171.6 | 2127.1 | 35.5      | 29.5    |
+| 4.1.1                  | 338.8    | 112.2 | 1603.6 | 35.7      | 29.8    |
+| 4.2.0                  | 291.1    | 102.8 | 1131.7 | 34.9      | 28.6    |
+| 4.2.1                  | 279.4    | 99.2  | 1326.1 | 32.8      | 26.8    |
+| 5.0.0                  | 213.2    | 76.8  | 364.5  | 24.2      | 21.5    |
 ^HistoryCold
 
 ```chart

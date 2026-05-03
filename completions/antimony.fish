@@ -107,7 +107,6 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'P
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Add libraries'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
-complete -c antimony -n "__fish_antimony_using_subcommand edit" -l stdin -d 'Read from stdin, rather than using an interactive editor'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'

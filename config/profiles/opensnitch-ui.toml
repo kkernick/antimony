@@ -1,15 +1,10 @@
 id = "opensnitch_ui"
-features = ["qt5", "python", "tray"]
+features = ["kf6", "python", "tray", "qt6-sql"]
 namespaces = ["Pid"]
 
 [home]
 policy = "Enabled"
 
 [files.platform]
+ro = ["/etc/services"]
 rw = ["/tmp"]
-
-[[hooks.pre]]
-type = "Program"
-name = "sleep"
-content = "sleep"
-arguments = ["0.5"]

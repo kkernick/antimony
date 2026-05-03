@@ -5,14 +5,11 @@ A Feature is the building block of a Profile. While a Profile defines an *Applic
 ```toml
 name = "wayland"  
 description = "Provide the wayland socket."  
+libraries.files = ["libwayland*"]  
   
-files.resources.ro = [  
- "/usr/share/X11/xkb",  
-]  
-  
-files.user.ro = [  
- "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY",  
-]  
+[files]  
+resources.ro = ["/usr/share/X11/xkb"]  
+user.ro = ["$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"]  
   
 [environment]  
 "WAYLAND_DISPLAY" = "$WAYLAND_DISPLAY"  
@@ -67,14 +64,22 @@ mpris
 Note that these simply define the dependencies of each feature. The result is that the Chromium definition turns from:
 
 ```toml
-home.policy = "Enabled"
-home.lock = true
-
-features = ["electron", "pipewire", "vaapi", "network", "xdg-open", "mpris"]
-arguments = ["--ozone-platform=wayland"]
-
-[ipc]
-portals = ["FileChooser"]
+features = ["pipewire", "vaapi", "xdg-open", "electron", "mpris", "network"]  
+inherits = ["default"]  
+  
+[home]  
+name = "chromium"  
+policy = "Enabled"  
+lock = true  
+  
+[ipc]  
+portals = ["Camera", "FileChooser", "ScreenCast"]  
+  
+[configuration.clean]  
+inherits = ["default"]  
+  
+[configuration.clean.home]  
+policy = "None"
 ```
 
 Into:

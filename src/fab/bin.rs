@@ -32,8 +32,8 @@ use temp::Temp;
 use user::as_real;
 use which::which;
 
-#[derive(Message, Debug, Default)]
 /// A `bilrost` struct for serializing.
+#[derive(Message, Debug, Default)]
 struct Cache {
     /// What the binary was identified as.
     t: Type,
@@ -311,7 +311,7 @@ fn resolve_dir(path: &str) -> Option<String> {
 /// Localization means pointing things in $HOME to /home/antimony, ensuring
 /// that environment variables in the filename are properly resolved, and
 /// that symlinks are properly managed. It also parses all intermediary files
-/// (IE the destination to a symlink).
+/// (i.e. the destination to a symlink).
 fn handle_localize(
     file: &str,
     instance: &Temp,
@@ -465,10 +465,12 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
     clippy::unwrap_used,
     reason = "The unwrapped Arc is only used in a scoped Rayon iterator."
 )]
+#[allow(clippy::too_many_lines)]
 pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     {
         let binaries = &info.profile.binaries;
-        if binaries.contains("/usr/bin") {
+        let skip = binaries.contains("/usr/bin");
+        if skip {
             #[rustfmt::skip]
             info.handle.args_i([
                 "--overlay-src", "/usr/bin",
@@ -480,6 +482,27 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 "--symlink", "/usr/bin", "/bin",
                 "--symlink", "/usr/sbin", "/sbin",
             ]);
+
+            info.profile.binaries = info
+                .profile
+                .binaries
+                .iter()
+                .map(|binary| {
+                    if Path::new(binary).exists() {
+                        binary.clone()
+                    } else {
+                        let resolved = match localize_path(binary, false) {
+                            Ok((Some(src), dest)) => {
+                                info.handle.args_i(["--ro-bind", &src, &dest]);
+                                dest
+                            }
+                            Ok((None, dst)) => dst,
+                            Err(_) => binary.clone(),
+                        };
+                        which(&resolved).map_or_else(|_| binary.clone(), ToOwned::to_owned)
+                    }
+                })
+                .collect();
             return Ok(());
         }
     }
@@ -523,7 +546,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         parsed.localized.into_par_iter().try_for_each(
             |(src, dst): (String, String)| -> anyhow::Result<()> {
                 info.handle.args_i(["--ro-bind", &src, &dst]);
-                if as_real!(elf_filter(&src))? {
+                if as_real!(elf_filter(&src))?? {
                     elf_binaries.insert(src);
                 }
                 Ok(())

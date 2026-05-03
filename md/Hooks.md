@@ -2,7 +2,7 @@
 
 Antimony supports *Hooks*, which are arbitrary commands run on the host before and after the sandbox is run. They can be used to prepare the host for sandbox execute, run an auxiliary program alongside the sandbox, and cleanup the system after the sandbox is finished. 
 
-Hooks are run as the regular user (IE the user invoking Antimony).
+Hooks are run as the regular user (i.e. the user invoking Antimony).
 
 >[!note] 
 >Antimony already prepares and cleans up the sandbox; you do not need to use hooks to manage the sandbox state yourself.
@@ -11,18 +11,21 @@ Hooks are defined in the profile, particularly using either the `[[hooks.pre]]` 
 
 ```toml
 [[hooks.pre]]  
-path = "/usr/bin/prepare"  
+type = "Program"
+content = "/usr/bin/prepare"  
 attach = true 
 env = true  
 can_fail = false  
   
 [[hooks.pre]]  
+type = "Shell"
 content = "echo 'Starting up!'"
 attach = false  
 env = true  
 can_fail = false
 
 [[hooks.post]]
+type = "Shell"
 content = "echo 'Shutting down!'"
 attach = false
 env = false
@@ -34,20 +37,18 @@ can_fail = true
 
 ## Name
 
-You can optionally give your Hook a name, which is chiefly used for logging. It can help with troubleshooting, but isn’t strictly necessary.
+You can optionally give your Hook a `name`, which is chiefly used for logging. It can help with troubleshooting, but isn’t strictly necessary.
 
-## Path/Content
-Antimony can execute hooks in one of two ways:
+## Type/Content
 
-1. Execute a binary provided via the `path` argument. You will need to ensure that the binary is executable, and available to the chosen user.
-2. Execute a shell-script provided via the `content` argument. This script is parsed via `/usr/bin/bash`
+There are three Hook `types`, which dictate how the Hook behaves, and controls how the `content` field is interpreted:
 
->[!warning]
->You must provided *either* a `path`, or `content`. If both are provided, the `path` is used.
+1. The `Program` hook dictates a standalone executable. Content points to the path of the binary.
+2. The `Shell` hook dictates the Content should be interpreted by a shell, namely `bash`. You can use `"""` for multi-line strings for more complex scripts.
+3. The `Profile` hook dictates another profile should be run. Content specifies the profile name.
+## Arguments
 
-## Args
-
-As with profiles, you can define additional arguments to the hook, though this is really only useful when using `path` semantics. 
+As with profiles, you can define additional `arguments` to the hook, though this is really only useful when using `path` semantics. 
 
 ## Attach
 
@@ -82,6 +83,7 @@ Antimony can pass the Standard Output or Standard Error of the sandbox directly 
 
 ```toml
 [hooks.parent]  
+type = "Program"
 name = "tracer"  
 path = "$AT_HOME/utilities/antimony-tracer"  
 capture_error = true
@@ -114,15 +116,13 @@ One use for hooks it to spawn sub-processes in a pre-hook, which profiles can us
 
 ```toml
 [[hooks.pre]]  
-path = "antimony"  
-args = ["run", "syncthing"]  
+type = "Profile"
+content = "syncthing"  
 attach = true  
-env = true
-new_privileges = true
 ```
 
 
-In this case, we’re running Syncthing itself under Antimony (Which requires `env`), and then attach it, such that the Profile won’t hang on Syncthing, and let the Tray start right after. When we close the tray, Syncthing closes with it.
+In this case, we’re running Syncthing itself under Antimony and then attach it, such that the Profile won’t hang on Syncthing, and let the Tray start right after. When we close the tray, Syncthing closes with it.
 
 ### Parent For Web Services
 
@@ -130,10 +130,9 @@ Another use-case is when a service is sandboxed, to have a web-browser or simila
 
 ```toml
 [hooks.parent]  
-path = "antimony"  
-args = ["run", "chromium", "http://localhost:7070"]  
-env = true
-new_privileges = true
+type = "Profile"
+content = "chromium"  
+arguments = ["http://localhost:7070"]  
 ```
 
 Again, we use Antimony to sandbox the browser as well. In this setup, the `yarr` profile automatically launches `chromium`, and when that instance of Chromium closes, the profile goes with it. You can use the `--create-desktop` argument for the `integrate` sub-command to create a `.desktop` entry for `yarr`, that way you can launch both service and browser from your DE.
@@ -158,10 +157,12 @@ name = "HOME_NAME"
 policy = "Enabled"
 
 [[configuration.email.hooks.pre]]  
+type = "Shell"
 content = 'kdialog --password "Enter the password" | gocryptfs PATH_TO_ENC $ANTIMONY_HOME'
 env = true  
   
 [[configuration.email.hooks.post]]  
+type = "Shell"
 content = "umount $ANTIMONY_HOME"  
 ```
 

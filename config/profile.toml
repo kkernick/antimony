@@ -25,7 +25,7 @@
 # changes to the underlying source.
 #
 # Lockdown mode offers an additional layer of defense for applications that do not use user files.
-# This includes everything in $HOME, and everything in /run/$UID (IE the wayland socket). Because
+# This includes everything in $HOME, and everything in /run/$UID (i.e. the wayland socket). Because
 # it is run under a separate user, the sandbox home is also separated from the user home and placed
 # in /usr/share/antimony/lockdown.
 #
@@ -37,7 +37,7 @@
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
 # the desktop file installed in /usr/share/applications, which in many cases is
-# just the name (IE chromium -> chromium.desktop). Do not provide the .desktop extension.
+# just the name (i.e. chromium -> chromium.desktop). Do not provide the .desktop extension.
 # id = "desktop"
 
 # Features are the most important aspect of the profile, as they are named pieces of

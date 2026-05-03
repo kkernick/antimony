@@ -20,23 +20,26 @@ This allows specialized behavior for different ways you might want to run an app
 ```toml
 path = "/usr/lib/zed/zed-editor"  
 id = "dev.zed.Zed"  
-features = ["wayland", "dri", "vulkan", "fonts", "shell"]  
+features = ["dri", "fonts", "shell", "vulkan", "wayland"]  
   
 [home]  
 policy = "Overlay"  
   
 [ipc]  
-portals = ["Settings", "FileChooser", "Documents"]  
+portals = ["Documents", "FileChooser", "Settings"]  
   
 [files]  
-passthrough = "ReadWrite"  
+passthrough = "rw"  
   
-[configuration.rust]  
-features = ["rust-devel", "network"]  
+[configuration.ide]  
+features = ["bin", "include", "network", "rust-devel", "shell"]  
   
-[configuration.rust.home]  
-name = "zed-rust"  
-policy = "Enabled"
+[configuration.ide.home]  
+name = "zed-ide"  
+policy = "Enabled"  
+  
+[configuration.ide.environment]  
+CARGO_TARGET_DIR = "/tmp/cargo/target"
 ```
 
 There’s a key feature of Configurations: Home Specialization. By merely changing the `home.name` attribute of the Configuration, you can create a separate home folder for the Configuration in `$XDG_DATA_HOME`.

@@ -105,7 +105,7 @@ pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from(RUNTI
 pub static USER_NAME: LazyLock<String> = LazyLock::new(|| unsafe {
     let passwd = getpwuid(USER.real.as_raw());
 
-    // This happens if we don't have a /etc/passwd (IE within Antimony itself)
+    // This happens if we don't have a /etc/passwd (i.e. within Antimony itself)
     if passwd.is_null() || (*passwd).pw_name.is_null() {
         env::var("USER").unwrap_or_else(|_| "unknown".to_owned())
     } else {

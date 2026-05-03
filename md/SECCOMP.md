@@ -129,8 +129,8 @@ Timeout --> Kernel: Allow
 
 
 In *Notify* Mode, Antimony operates similarly to *Permissive*, but rather than the Monitor allowing and storing all Syscalls encountered, it will ask for the user to make a selection via `notify-send`. This will result in a notification appearing on the user’s Desktop, outlining the Profile and Syscall, with the following options:
-1. Allow: The Syscall will be permitted, and stored in the Database (IE subsequent runs will allow this without prompt).
-2. Deny: The Syscall will fail with `EPERM`. This decision persists across the instance (IE subsequent runs will request permission for this Syscall)
+1. Allow: The Syscall will be permitted, and stored in the Database (i.e. subsequent runs will allow this without prompt).
+2. Deny: The Syscall will fail with `EPERM`. This decision persists across the instance (i.e. subsequent runs will request permission for this Syscall)
 3. Kill: Send the process that requested the Syscall `SIGKILL`. Then, send `SIGTERM` to the entire process group, gracefully tearing down the sandbox.
 
 If no response is provided to the Notification, Antimony will permit the Syscall, but it will *not* store it in the database. An explicit Allow is required to trust the Syscall for this profile.
@@ -138,11 +138,5 @@ If no response is provided to the Notification, Antimony will permit the Syscall
 >[!warning]
 >*Notify* should be used in between *Permissive* and *Enforcing*, where the majority of the Syscalls have already been stored in the former mode. Running a profile in *Notify* mode without any existing filter will send a torrent of notifications, often enough that the Desktop Environment may impose a cooldown.
 
-
-## The Database
-
-There are two ways of interacting with the SECCOMP Database:
-1. `antimony info seccomp` will provide information about the binaries used by a profile, and the syscalls used by a binary.
-2. `antimony seccomp` performs actions against the database itself. You can use it to optimize the database, delete it, export it wherever you want, or merge it with another database.
 
 

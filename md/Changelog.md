@@ -18,6 +18,7 @@
 * The `config` command has been removed, as the configuration file is now a root-owned config in `/etc`.
 * The `backend` command has been removed, and the database backend has been removed. There is no use case where it performs better than files. 
 * The `cache_store` and `config_store` keys are no longer valid in the configuration file, and will need to be removed.
+* Fedora (`.rpm`) packages are no longer built, and are no longer supported.
 
 #### Utilities
 * `antimony-bench` has been updated, and can only be used to benchmark version 2.4.0 and greater. 

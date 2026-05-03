@@ -41,7 +41,7 @@ pub type Map<K, V> = HashMap<K, V, StaticHash>;
 pub type ThreadMap<K, V> = DashMap<K, V, StaticHash>;
 
 /// Check that the Real User is privileged. This is used to allow modifying the
-/// Antimony system, it does not correlate to actual administrative access (IE sudo/polkit)
+/// Antimony system, it does not correlate to actual administrative access (i.e. sudo/polkit)
 pub fn privileged() -> anyhow::Result<bool> {
     if CONFIG_FILE.is_privileged() {
         Ok(true)

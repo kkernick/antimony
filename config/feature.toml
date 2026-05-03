@@ -1,6 +1,6 @@
 # Features define system resources required for a specific function. This can include, say,
-# inclusion and setup of a specific library to use in the sandbox (IE hardened-malloc), to
-# support for entire graphics toolkits (IE qt6).
+# inclusion and setup of a specific library to use in the sandbox (i.e. hardened-malloc), to
+# support for entire graphics toolkits (i.e. qt6).
 
 # Every feature needs a name. This must be the same as the file name.
 name = "feature"

@@ -25,7 +25,7 @@ Rather than running as the user, Antimony can run the sandbox underneath a dedic
 
 There are some significant caveats to consider, however:
 
-1. *No* user files can be directly provided into the sandbox—even if they are globally accessible. Antimony will read each file (IE No directories of any kind), and create a copy within the sandbox `ro/rw` defines the permissions on that copy in the Sandbox, but modifications within the sandbox copy will not reflect on the host. This means no:
+1. *No* user files can be directly provided into the sandbox—even if they are globally accessible. Antimony will read each file (i.e. No directories of any kind), and create a copy within the sandbox `ro/rw` defines the permissions on that copy in the Sandbox, but modifications within the sandbox copy will not reflect on the host. This means no:
 	1. Directories in `$HOME`
 	2. Graphical applications (No access to Wayland)
 	3. Sound (No access to Pipewire)

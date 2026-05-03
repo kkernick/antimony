@@ -1,7 +1,9 @@
-id =  "org.kde.filelight"
-home.policy = "Enabled"
+id = "org.kde.filelight"
+features = ["qt6-qml", "kf6"]
+inherits = ["default"]
 
-features = ["kf6"]
+[home]
+policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser"]

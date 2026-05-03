@@ -3,9 +3,9 @@
 //!
 //! It also touches almost every other fabricator, and is
 //! the central part of the most important path between bin-library-syscalls. It is also by the far the most complicated, as libraries
-//! can encompass files, wildcards, directories, and binaries. They can be sourced from just about anywhere on the system (IE /usr/bin,
+//! can encompass files, wildcards, directories, and binaries. They can be sourced from just about anywhere on the system (i.e. /usr/bin,
 //! or /usr/share/application), and it needs to determine which files should be placed in the SOF, and what to do with their dependencies.
-//! It relies on LDD to determine ELF dependencies (IE .so files), and Find to scour directories. Everything is aggressively cached, and
+//! It relies on LDD to determine ELF dependencies (i.e. .so files), and Find to scour directories. Everything is aggressively cached, and
 //! even more aggressively parallelized.
 
 use crate::{
@@ -146,8 +146,8 @@ impl WildcardFilter {
     }
 }
 
-#[inline]
 /// Resolve any wildcards in the given set.
+#[inline]
 fn resolve_wildcards(
     set: Set<String>,
     filter: WildcardFilter,
@@ -258,15 +258,19 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     });
 
     timer!("::binaries", {
-        info.profile.binaries.par_iter().for_each(|binary| {
-            if let Ok(libraries) = get_libraries(binary) {
-                for lib in libraries {
-                    {
-                        let _ = FILES.insert(lib);
+        info.profile
+            .binaries
+            .par_iter()
+            .for_each(|binary| match get_libraries(binary) {
+                Ok(libraries) => {
+                    for lib in libraries {
+                        {
+                            let _ = FILES.insert(lib);
+                        }
                     }
                 }
-            }
-        });
+                Err(e) => warn!("Could not get libraries for {binary}: {e}"),
+            });
     });
 
     if let Some(libraries) = info.profile.libraries.take() {

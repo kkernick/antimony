@@ -1,5 +1,5 @@
-home.policy = "Enabled"
-home.lock = true
-
-features = ["electron", "network", "pipewire"]
+features = ["electron", "network", "pipewire", "tray"]
 arguments = ["--ozone-platform=wayland"]
+
+[home]
+policy = "Enabled"

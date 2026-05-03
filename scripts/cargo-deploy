@@ -10,7 +10,6 @@ else
   TARGET=$ROOT/target
 fi
 
-
 echo "Compiling Build Script"
 cargo build --bin antimony_build
 
@@ -32,7 +31,7 @@ sudo cp --remove-destination -v "$DIR/antimony-dumper" "/usr/share/antimony/util
 sudo cp --remove-destination -v "$DIR/antimony-open" "/usr/share/antimony/utilities/antimony-open"
 sudo cp --remove-destination -v "$DIR/antimony-tracer" "/usr/share/antimony/utilities/antimony-tracer"
 sudo cp --remove-destination -v "$DIR/antimony-lockdown" "/usr/share/antimony/utilities/antimony-lockdown"
-sudo cp --remove-destination -v "$DIR/notify" "/usr/share/antimony/utilities/antimony-notify"
+sudo cp --remove-destination -v "$DIR/antimony-notify" "/usr/share/antimony/utilities/antimony-notify"
 
 echo "Setting SetUID"
 exec="/usr/bin/antimony"

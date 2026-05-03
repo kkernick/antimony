@@ -22,7 +22,7 @@ use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
-use log::debug;
+use log::{debug, warn};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -30,7 +30,7 @@ use std::{
     env,
     fmt::Debug,
     fs::{self, File},
-    io::Read,
+    io::{self, Read},
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -90,16 +90,14 @@ pub fn in_lib(path: &str) -> bool {
 
 /// Filter non-elf files.
 #[inline]
-fn elf_filter(path: &str) -> bool {
-    timer!("::elf_filter", {
-        if let Ok(mut file) = File::open(path) {
+fn elf_filter(path: &str) -> io::Result<bool> {
+    match File::open(path) {
+        Ok(mut file) => {
             let mut magic = [0u8; 4];
-            if file.read_exact(&mut magic).is_ok() && magic == ELF_MAGIC {
-                return true;
-            }
+            file.read_exact(&mut magic).map(|()| magic == ELF_MAGIC)
         }
-        false
-    })
+        Err(e) => Err(e),
+    }
 }
 
 /// Cache LDD calls ephemerally.
@@ -109,18 +107,18 @@ static CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default)
 static LDD: LazyLock<cache::Cache<String, Set<String>>> =
     LazyLock::new(|| cache::Cache::new(&CACHE));
 
-#[inline]
 /// LDD an executable to get its library dependencies.
 ///
 /// ```rust
 /// antimony::fab::ldd("/usr/bin/bash").expect("Failed to LDD bash");
 /// ```
 ///
+#[inline]
 pub fn ldd(path: &str) -> Result<&'static Set<String>> {
     if let Some(depends) = LDD.get(path) {
         Ok(depends)
     } else {
-        let depends = if elf_filter(path) {
+        let depends = if elf_filter(path)? {
             Spawner::abs("/usr/bin/ldd")
                 .arg(path)
                 .output(StreamMode::Pipe)
@@ -161,6 +159,9 @@ pub fn ldd(path: &str) -> Result<&'static Set<String>> {
                 })
                 .collect()
         } else {
+            if !path.contains('.') {
+                warn!("Not an ELF binary: {path}");
+            }
             Set::default()
         };
         Ok(LDD.insert(path.to_owned(), depends))
@@ -181,7 +182,7 @@ pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
         }
 
         let libraries: Set<Cow<'static, str>> = Spawner::abs("/usr/bin/find")
-            .args([dir, "-executable", "-type", "f"])
+            .args([dir, "-type", "f"])
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
             .spawn()?

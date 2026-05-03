@@ -1,8 +1,13 @@
-home.policy = "Enabled"
-home.lock = true
-
 features = ["electron", "network"]
+inherits = ["default"]
 arguments = ["--ozone-platform=wayland"]
+
+[home]
+policy = "Enabled"
+lock = true
 
 [ipc]
 portals = ["FileChooser", "Documents"]
+
+[libraries]
+directories = ["electron*"]

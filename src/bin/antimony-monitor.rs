@@ -560,7 +560,7 @@ fn main() -> Result<()> {
     notify::set_notifier(Box::new(shared::logger))?;
     user::set(user::Mode::Real)?;
 
-    // All binaries use the same monitor for a profile (IE proxy and sandbox)
+    // All binaries use the same monitor for a profile (i.e. proxy and sandbox)
     let monitor_path = PathBuf::from(cli.instance).join("monitor");
 
     if let Some(parent) = monitor_path.parent()
