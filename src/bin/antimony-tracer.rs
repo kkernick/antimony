@@ -64,15 +64,20 @@ fn main() -> anyhow::Result<()> {
 
         // Get all features on the system.
         let feature_database: ThreadMap<String, Feature> = ThreadMap::default();
-        for name in SYSTEM_STORE.borrow().get(Object::Feature)? {
-            let feature = SYSTEM_STORE.borrow().fetch(&name, Object::Feature)?;
-            feature_database.insert(name, toml::from_str(&feature)?);
+
+        if let Ok(features) = SYSTEM_STORE.borrow().get(Object::Feature) {
+            for name in features {
+                let feature = SYSTEM_STORE.borrow().fetch(&name, Object::Feature)?;
+                feature_database.insert(name, toml::from_str(&feature)?);
+            }
         }
 
         // Replace user override
-        for name in USER_STORE.borrow().get(Object::Feature)? {
-            let feature = USER_STORE.borrow().fetch(&name, Object::Feature)?;
-            feature_database.insert(name, toml::from_str(&feature)?);
+        if let Ok(features) = USER_STORE.borrow().get(Object::Feature) {
+            for name in features {
+                let feature = USER_STORE.borrow().fetch(&name, Object::Feature)?;
+                feature_database.insert(name, toml::from_str(&feature)?);
+            }
         }
 
         let arc = Arc::new(feature_database);

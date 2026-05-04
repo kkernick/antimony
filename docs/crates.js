@@ -1,2 +1,2 @@
-window.ALL_CRATES = ["antimony","antimony_bench","antimony_build","antimony_completions","antimony_dumper","antimony_lockdown","antimony_monitor","antimony_open","antimony_spawn","antimony_tracer"];
-//{"start":21,"fragment_lengths":[10,17,17,23,18,20,19,16,17,18]}
+window.ALL_CRATES = ["antimony","antimony_bench","antimony_build","antimony_completions","antimony_dumper","antimony_lockdown","antimony_monitor","antimony_notify","antimony_open","antimony_spawn","antimony_tracer"];
+//{"start":21,"fragment_lengths":[10,17,17,23,18,20,19,18,16,17,18]}
