@@ -1,7 +1,11 @@
 # This file contains global configuration for Antimony itself.
 
 # For the use of /tmp as the SOF backing store.
-# Can be set at runtime by setting AT_FORCE_TEMP to anything besides 0
+# Can be set at runtime by setting AT_FORCE_TEMP to anything besides 0.
+#
+# By default, Antimony will use $AT_HOME/cache. This can allow for hard-links,
+# which drastically improves performance. Forcing a temporary cache requires
+# copies for the SOF, and will not persist after reboot.
 # force_temp = false
 
 # Disregard user configurations and ignore the command line.
@@ -12,15 +16,18 @@
 # auto_refresh = false
 
 # A set of user names that do not need to validate privilege via Polkit for
-# privileged operations (i.e. modifying the feature set, seccomp, or this file)
+# privileged operations (i.e. modifying the feature set, seccomp)
 # privileged_users = []
 
-# The backend for configurations (i.e. Profiles and Features)
-# Updating this value directly does not actually switch the existing backends
-# contents. You'll want to use `antimony backend` instead.
-# config_store = "File"
+# Locations that Antimony should search for libraries.
+#
+# If you installed Antimony through a package, a system-specific drop-in should already
+# provide these values in /etc/antimony.d. If not, or if you're manually installing, you
+# will need to define which locations to search (i.e. /usr/lib, /usr/lib64 (If it's not a symlink)
+# library_roots = []
 
-# The backend for caches
-# Updating this value directly does not actually switch the existing backends
-# contents. You'll want to use `antimony backend --cache` instead.
-# cache_store = "File"
+# You can also pass any arbitrary environment variable that will be set at execution start if it
+# is not defined. This allows you to override this definition by just passing the key-pair on the
+# command line, or defining it in your system.
+# [environment]
+# KEY = "VALUE"

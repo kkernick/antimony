@@ -190,14 +190,6 @@ pub struct Profile {
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
 
-    /// Whether the program has unique privileges that `NO_NEW_PRIVS` can restrict.
-    /// Note that this does grant privileges, it merely allows an application with existing privileges to
-    /// keep them when running within the sandbox. However, this property being allowed in the sandbox
-    /// means that an other unprivileged process could gain extra privilege if there's a binary in the
-    /// sandbox with privilege, and this flag is enabled (Though note the sandbox cannot elevate to root,
-    /// regardless of privilege).
-    pub new_privileges: Option<bool>,
-
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -218,7 +210,6 @@ impl Profile {
             dir: args.dir.take(),
             lockdown: args.lockdown.take(),
             seccomp: args.seccomp.take(),
-            new_privileges: args.new_privileges.take(),
             ..Default::default()
         };
 
@@ -444,10 +435,6 @@ impl Profile {
 
         if self.seccomp.is_none() {
             self.seccomp = profile.seccomp;
-        }
-
-        if self.new_privileges.is_none() {
-            self.new_privileges = profile.new_privileges;
         }
 
         if let Some(home) = profile.home {

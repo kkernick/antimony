@@ -32,7 +32,7 @@
 # The threat model for this setting is to combat a potential sandbox escape. Under normal operations,
 # such an exploit would allow unfettered access to the user's home, which constitutes a privacy risk.
 # Under lockdown, the attack would be thwarted, as the user only has access to /usr/share/antimony/lockdown.
-# lockdowns = false
+# lockdown = false
 
 # The id defaults to the name of the profile, and is used internally, and for desktop
 # integration. If your profile is for a graphical application, this value should match
@@ -49,7 +49,7 @@
 #   * "xdg-open": To open Files/URIs on the host with the default application.
 #   * "locale": For system locale
 #   * "secrets": To use your DE's password store (gnome-keyring, kwallet) to store secrets.
-# Use `antimony list` to see all available features.
+# Use `antimony info --feature` to see all available features.
 # features = []
 
 # Conflicts define features that cannot be included in the profile. This bars them from
@@ -89,23 +89,13 @@
 # in this list, additional definitions for the same attribute will be ignored.
 # inherits = ["default"]
 
-# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
+# Additional binaries to pass to the sandbox. You can provide HOST=DEST semantics and $ENV.
 # binaries = []
-
-# Additional libraries to pass to the sandbox. There are three different formats:
-#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
-#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
-#   3.  Wildcards, which can match files or directories, and
-#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
-# libraries = []
 
 # Devices to pass, such as /dev/dri
 # devices = []
 
 # Namespaces: "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
-# Unless you know what you are doing, don't add namespaces to the profile.
-# Relevant features, such as "network" or "electron" will add needed namespaces
-# automatically.
 # namespaces = []
 
 # A list of arguments to pass to the sandbox before adding the main application. This can be used
@@ -125,6 +115,25 @@
 # 2.  Exclusively. You use both # and ! to ensure only your arguments are passed. Debug-Shell and Stats
 #     does this, as it changed how the sandbox behaves.
 # sandbox_args = []
+
+# Additional libraries to pass to the sandbox.
+# [libraries]
+#
+# Skip generating an SOF, and mount the library roots directory. This is fast, but can be a
+# security risk depending on your threat model.
+# no_sof = false
+#
+# A list of paths to search for libraries. This definition is added to the system definition
+# defined in the configuration file; this allows you to add profile-specific roots, like /usr/lib32
+# roots = []
+#
+# Files and Directories. You can match them both either as:
+#
+# 1. Absolute Paths, disregarding roots. (i.e /usr/lib/libseccomp.so or /usr/lib/chromium)
+# 2. Wildcards, searching each root for a match (i.e libseccomp* or glycin-*)
+# 3. Localized paths, searching each root (i.e libseccomp.so or chromium
+# files = []
+# directories = []
 
 # Home specifies whether to create a home folder for the application, located at:
 # ~/.local/share/antimony/{name}
@@ -151,6 +160,16 @@
 # By default, the name of the home folder will be the name of the profile. You can override
 # this, however, which can be useful for configurations.
 # name = "name"
+# 
+# Where the home should be mounted in the sandbox. 
+# path = ~/antimony
+# 
+# Antimony can optionally lock the home folder with a cooperative futex. This means the folder doesn't
+# actually become inaccessible or restricted, but programs that look and respect this lock (i.e other
+# Antimony instances) can return an error. Some profiles, like Chromium, get upset if you try and run
+# multiple instances, so this lock can be an alternative to Overlay that will raise an error if an 
+# instance is already running
+# lock = false
 
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.
@@ -265,24 +284,23 @@
 # used to run dependencies, setup the environment, and perform additional cleanup.
 # [hooks]
 #
-# Whether to inherit hooks from the default/parent (For configurations).
-# inherits = false
+# By default hooks are inherited by other profiles, so if you defined a hook in your Default, it would
+# be run on each profile. For some profiles and configurations, this can cause issues, so profiles can
+# opt out of this behavior.
+# inherit = true
 #
 # A pre-hook is run before the sandbox starts.
 # [[pre]]
 #
+# A Program hook points to another binary to execute
+# type = "Program"
+#
 # An explicit path to a binary to execute. This is run
 # under the regular user.
-# path = "/path/to/script"
-#
-# The contents of a shell script to execute instead of a
-# path. This is interpreted by bash as the regular user.
-# If a hook defines both path and content, the path is
-# used.
-# content = "echo 'Hello, world!'"
+# content = "/path/to/script"
 #
 # Arguments for the hook rx
-# args = []
+# arguments = []
 #
 # Whether to attach the pre-hook to the sandbox.
 # By default, Antimony will wait until all
@@ -302,16 +320,35 @@
 # By default, a failed hook will abort sandbox startup.
 # can_fail = false
 #
+# If your script requires new privileges.
+# new_privileges = false
+#
+# Redirect the stdout of the sandbox to this hook's stdin. Note
+# only one capture mode is allowed
+# capture_output = false
+#
+# Redirect the stderr of the sandbox to this hook's stdin. Note
+# only one capture mode is allowed
+# capture_error = false
+#
 # Post hooks run after the sandbox has finished, but before
 # Antimony performs its own cleanup. Syntactically, they are
 # identical to pre-hooks, but cannot be attached for obvious
 # reasons.
 # [[post]]
-# path = "/path/to/hook"
+#
+# A shell hook runs content in bash.
+# type = "Shell"
+#
+# Content defines the script
 # content = "echo 'Hello, world!'"
-# args = []
+#
+# arguments = []
 # env = false
 # can_fail = false
+# new_privileges = false
+# capture_output = false
+# capture_error = false
 #
 # The parent hook (Notice, this is a single value, not a list),
 # is a specialized Pre-Hook that takes ownership of the sandbox.
@@ -323,8 +360,16 @@
 #
 # You can only have a single parent hook defined for a profile.
 # [parent]
-# path = "/path/to/hook"
-# content = "echo 'Hello, world'"
-# args = []
+#
+# A Profile Hook runs another Profile.
+# type = Profile
+#
+# Content is the profile name.
+# content = "chromium"
+#
+# arguments = []
 # env = false
 # can_fail
+# new_privileges = false
+# capture_output = false
+# capture_error = false

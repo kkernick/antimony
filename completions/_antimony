@@ -51,10 +51,10 @@ permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"
 notifying\:"The policy is enforced\: unrecognized syscalls are presented to the user for decision"))' \
 '*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor)' \
-'*--see=[Add busses the sandbox can see]:SEE:_default' \
-'*--talk=[Add busses the sandbox can talk to]:TALK:_default' \
-'*--own=[Add busses the sandbox owns]:OWN:_default' \
-'*--call=[Add busses the sandbox can call]:CALL:_default' \
+'*--sees=[Add busses the sandbox can see]:SEES:_default' \
+'*--talks=[Add busses the sandbox can talk to]:TALKS:_default' \
+'*--owns=[Add busses the sandbox owns]:OWNS:_default' \
+'*--calls=[Add busses the sandbox can call]:CALLS:_default' \
 '--file-passthrough=[Override the file passthrough mode]:FILE_PASSTHROUGH:((read-only\:"Only allow reads"
 read-write\:"Allow writes"
 executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
@@ -74,7 +74,6 @@ net\:"Use the network feature instead"
 uts\:"Enable the UTS namespace"
 c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
-'--new-privileges=[Allow the sandbox to acquire new privileges]:NEW_PRIVILEGES:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
 '-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \

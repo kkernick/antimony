@@ -232,10 +232,6 @@ pub fn setup<'a>(
         ])
         .mode(user::Mode::Real);
 
-        if profile.new_privileges.unwrap_or(false) {
-            handle.new_privileges_i(true);
-        }
-
         if let Some(dir) = &profile.dir {
             handle.args_i(["--chdir", dir]);
         }

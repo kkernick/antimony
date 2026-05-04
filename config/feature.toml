@@ -14,7 +14,7 @@ description = ""
 # conditional = ""
 
 # The caveat is any warning that should be displayed when a profile uses this feature. This could
-# include anything from performance consideration (hardened_malloc), attack surface increases (lib),
+# include anything from performance considerations (hardened_malloc), attack surface increases (lib),
 # etc.
 # caveat = ""
 
@@ -28,18 +28,14 @@ description = ""
 # if a required feature is conflicts and is removed.
 # conflicts = []
 
-# Additional binaries to pass to the sandbox.You can provide HOST=DEST semantics.
+# Additional binaries to pass to the sandbox. You can provide HOST=DEST semantics and $ENV.
 # binaries = []
-
-# Additional libraries to pass to the sandbox. There are three different formats:
-#   1.  Absolute paths to pointing to files: "/usr/lib/mylib.so"
-#   2.  Directories, to which all contents will be resolved: "/usr/lib/mylib"
-#   3.  Wildcards, which can match files or directories, and
-#       localize at /usr/lib unless a path is provided: "/usr/lib/mylib*" or "mylib*"
-# libraries = []
 
 # Devices to pass, such as /dev/dri
 # devices = []
+
+# Namespaces: "All", "User", "Ipc", "Pid", "Net", "Uts", "CGroup"
+# namespaces = []
 
 # A list of arguments to pass to the sandbox before adding the main application. This can be used
 # to add arguments to Bubblewrap directly, or to install a wrapper (Such as zypak). There are special
@@ -59,6 +55,25 @@ description = ""
 #     does this, as it changed how the sandbox behaves.
 # sandbox_args = []
 
+# Additional libraries to pass to the sandbox.
+# [libraries]
+#
+# Skip generating an SOF, and mount the library roots directory. This is fast, but can be a
+# security risk depending on your threat model.
+# no_sof = false
+#
+# A list of paths to search for libraries. This definition is added to the system definition
+# defined in the configuration file; this allows you to add profile-specific roots, like /usr/lib32
+# roots = []
+#
+# Files and Directories. You can match them both either as:
+#
+# 1. Absolute Paths, disregarding roots. (i.e /usr/lib/libseccomp.so or /usr/lib/chromium)
+# 2. Wildcards, searching each root for a match (i.e libseccomp* or glycin-*)
+# 3. Localized paths, searching each root (i.e libseccomp.so or chromium
+# files = []
+# directories = []
+
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.
 # [ipc]
@@ -67,26 +82,17 @@ description = ""
 # IPC. No proxy is run, no access to the User/System bus is provided. This is useful to
 # pass on the command line if you need to temporarily disable Portals--say to open a file
 # exposed in the sandbox itself, and not one from the host.
-#
-# Note that for Features, you can set disable to false and guarantee it will be set to false.
-# Other features and profiles will not interfere with this flag if you've set it to false.
 # disable = false
 #
 # If you need unrestricted access to the user bus, this mounts it directly into the sandbox. However, unless
 # your application explicitly requires this permission (Such as DBus Monitors like Bustle), you should use
 # the more fine-grained controls below. Setting this option disregards those aforementioned settings, as the
 # proxy is not run.
-#
-# In the same fashion as above, you can guarantee that setting this to true will reflect in
-# the end sandbox. Features can only set to true if the value is unset.
 # user_bus = false
 #
 # If you want to expose the system bus to the program, you can do so here; this is likely not necessary. There
 # is not way to filter the system bus. You either pass it entirely, or you don't (And you almost definitely
 # don't need to unless your application talks to privileged busses, like virt-manager).
-#
-# In the same fashion as above, you can guarantee that setting this to true will reflect in
-# the end sandbox. Features can only set to true if the value is unset.
 # system_bus = false
 #
 # Portals are used primarily by Flatpak to provide functionality within a sandbox, use as Background to
@@ -124,7 +130,7 @@ description = ""
 # passthrough = "ro"
 # passthrough = "rw"
 # passthrough = "rx"
-# 
+#
 # Locations to mount a tmpfs in the sandbox.
 # temp = []
 #
@@ -176,21 +182,23 @@ description = ""
 # YOU MUST, YOU MUST SET conflicts TO EVERY FEATURE THAT DOES THE SAME.
 # [hooks]
 #
+# By default hooks are inherited by other profiles, so if you defined a hook in your Default, it would
+# be run on each profile. For some profiles and configurations, this can cause issues, so profiles can
+# opt out of this behavior.
+# inherit = true
+#
 # A pre-hook is run before the sandbox starts.
 # [[pre]]
 #
+# A Program hook points to another binary to execute
+# type = "Program"
+#
 # An explicit path to a binary to execute. This is run
 # under the regular user.
-# path = "/path/to/script"
-#
-# The contents of a shell script to execute instead of a
-# path. This is interpreted by bash as the regular user.
-# If a hook defines both path and content, the path is
-# used.
-# content = "echo 'Hello, world!'"
+# content = "/path/to/script"
 #
 # Arguments for the hook rx
-# args = []
+# arguments = []
 #
 # Whether to attach the pre-hook to the sandbox.
 # By default, Antimony will wait until all
@@ -210,16 +218,35 @@ description = ""
 # By default, a failed hook will abort sandbox startup.
 # can_fail = false
 #
+# If your script requires new privileges.
+# new_privileges = false
+#
+# Redirect the stdout of the sandbox to this hook's stdin. Note
+# only one capture mode is allowed
+# capture_output = false
+#
+# Redirect the stderr of the sandbox to this hook's stdin. Note
+# only one capture mode is allowed
+# capture_error = false
+#
 # Post hooks run after the sandbox has finished, but before
 # Antimony performs its own cleanup. Syntactically, they are
 # identical to pre-hooks, but cannot be attached for obvious
 # reasons.
 # [[post]]
-# path = "/path/to/hook"
+#
+# A shell hook runs content in bash.
+# type = "Shell"
+#
+# Content defines the script
 # content = "echo 'Hello, world!'"
-# args = []
+#
+# arguments = []
 # env = false
 # can_fail = false
+# new_privileges = false
+# capture_output = false
+# capture_error = false
 #
 # The parent hook (Notice, this is a single value, not a list),
 # is a specialized Pre-Hook that takes ownership of the sandbox.
@@ -231,8 +258,16 @@ description = ""
 #
 # You can only have a single parent hook defined for a profile.
 # [parent]
-# path = "/path/to/hook"
-# content = "echo 'Hello, world'"
-# args = []
+#
+# A Profile Hook runs another Profile.
+# type = Profile
+#
+# Content is the profile name.
+# content = "chromium"
+#
+# arguments = []
 # env = false
 # can_fail
+# new_privileges = false
+# capture_output = false
+# capture_error = false

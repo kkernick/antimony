@@ -3,7 +3,6 @@ conflicts = ["hardened_malloc"]
 inherits = ["default"]
 seccomp = "Disabled"
 devices = ["/dev"]
-new_privileges = true
 
 [home]
 policy = "Enabled"

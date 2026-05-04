@@ -365,7 +365,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__run)
-            opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --see --talk --own --call --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --new-privileges --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
+            opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -431,19 +431,19 @@ _antimony() {
                     COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor" -- "${cur}"))
                     return 0
                     ;;
-                --see)
+                --sees)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --talk)
+                --talks)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --own)
+                --owns)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                --call)
+                --calls)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -489,10 +489,6 @@ _antimony() {
                     ;;
                 --env)
                     COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --new-privileges)
-                    COMPREPLY=($(compgen -W "true false" -- "${cur}"))
                     return 0
                     ;;
                 --sandbox-args)

@@ -66,16 +66,16 @@ impl Ipc {
         if let Some(portals) = args.portals.take() {
             ipc.get_or_insert_default().portals = portals.into_iter().collect();
         }
-        if let Some(see) = args.see.take() {
+        if let Some(see) = args.sees.take() {
             ipc.get_or_insert_default().sees = see.into_iter().collect();
         }
-        if let Some(talk) = args.talk.take() {
+        if let Some(talk) = args.talks.take() {
             ipc.get_or_insert_default().talks = talk.into_iter().collect();
         }
-        if let Some(own) = args.own.take() {
+        if let Some(own) = args.owns.take() {
             ipc.get_or_insert_default().owns = own.into_iter().collect();
         }
-        if let Some(call) = args.call.take() {
+        if let Some(call) = args.calls.take() {
             ipc.get_or_insert_default().calls = call.into_iter().collect();
         }
 

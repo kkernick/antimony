@@ -192,13 +192,13 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         match code {
             Ok(code) => {
                 if code != 0 {
-                    debug!("Condition for feature {} not met", &feature.name);
+                    debug!("Condition for feature {} not met", feature.name);
                 }
             }
             Err(e) => {
                 debug!(
                     "Failed to check condition for feature {}: {e}",
-                    &feature.name
+                    feature.name
                 );
             }
         }
@@ -376,11 +376,6 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
             p_hooks.parent = hooks.parent;
         }
     }
-
-    profile.new_privileges = match profile.new_privileges {
-        Some(false) | None => feature.new_privileges,
-        Some(true) => Some(true),
-    };
 }
 
 #[allow(clippy::literal_string_with_formatting_args)]

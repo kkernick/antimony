@@ -238,7 +238,10 @@ mod tests {
             .expect("Failed to store profile");
 
         assert!(store.exists("test", object));
-        assert!(store.fetch("test", object).expect("Failed to get profile") == content);
+        assert_eq!(
+            store.fetch("test", object).expect("Failed to get profile"),
+            content
+        );
 
         store
             .remove("test", object)

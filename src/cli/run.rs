@@ -103,19 +103,19 @@ pub struct Args {
 
     /// Add busses the sandbox can see.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub see: Option<Vec<String>>,
+    pub sees: Option<Vec<String>>,
 
     /// Add busses the sandbox can talk to.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub talk: Option<Vec<String>>,
+    pub talks: Option<Vec<String>>,
 
     /// Add busses the sandbox owns.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub own: Option<Vec<String>>,
+    pub owns: Option<Vec<String>>,
 
     /// Add busses the sandbox can call.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub call: Option<Vec<String>>,
+    pub calls: Option<Vec<String>>,
 
     /// Disable all IPC. This overrules all other IPC settings.
     #[arg(long, default_value_t = false)]
@@ -176,10 +176,6 @@ pub struct Args {
     /// Add environment variables in KEY=VALUE syntax
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
-
-    /// Allow the sandbox to acquire new privileges.
-    #[arg(long)]
-    pub new_privileges: Option<bool>,
 
     /// Arguments to pass to bubblewrap/wrapper
     #[arg(long, value_delimiter = ' ', num_args = 1..)]

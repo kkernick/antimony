@@ -73,10 +73,10 @@ screenshot\t''
 settings\t''
 secret\t''
 network-monitor\t''"
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l see -d 'Add busses the sandbox can see' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l talk -d 'Add busses the sandbox can talk to' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l own -d 'Add busses the sandbox owns' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l call -d 'Add busses the sandbox can call' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l sees -d 'Add busses the sandbox can see' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l talks -d 'Add busses the sandbox can talk to' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l owns -d 'Add busses the sandbox owns' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l calls -d 'Add busses the sandbox can call' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l file-passthrough -d 'Override the file passthrough mode' -r -f -a "read-only\t'Only allow reads'
 read-write\t'Allow writes'
 executable\t'Executable files need to be created as copies, so that chmod will work correctly'"
@@ -96,8 +96,6 @@ net\t'Use the network feature instead'
 uts\t'Enable the UTS namespace'
 c-group\t'Allow the sandbox to be managed/manage the system C-Groups'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l new-privileges -d 'Allow the sandbox to acquire new privileges' -r -f -a "true\t''
-false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
