@@ -17,14 +17,14 @@
 
 ***
 
-Antimony is a [fast](./docs/Speed.md), [powerful](./docs/Profiles.md), [customizable](./docs/Configurations.md), and [secure](./docs/SECCOMP.md) sandboxing application. It’s dynamic dependency resolution, and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
+Antimony is a [fast](./md/Speed.md), [powerful](./md/Profiles.md), [customizable](./md/Configurations.md), and [secure](./md/SECCOMP.md) sandboxing application. Its dynamic dependency resolution and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
 
 ## Installation
 Antimony is available for:
 * Debian-Based Distributions (Ubuntu)
 * Arch-Based Distributions
 
-Releases provides packages for all three distribution types, which can be installed with your package manager of choice.
+Releases provides packages for both distribution types, which can be installed with your package manager of choice.
 
 Antimony relies on the following runtime-dependencies:
 * `glibc`
@@ -52,7 +52,7 @@ To build, simply execute `cargo build --release` to generate the required binari
 
 ### Packaging
 
-If you want to install Antimony without the help of a package manager, just run the `deploy` script. Otherwise, you can use `fpm` to build a package for your distribution. Simply execute `fpm -t package_type` to output the package.
+If you want to install Antimony without the help of a package manager, just run the `cargo-deploy` script. Otherwise, you can use `fpm` to build a package for your distribution. Simply execute `fpm -t package_type` to output the package.
 
 You’ll need the following dependencies to run the package script:
 * `fpm` (Recommended through `gem install fpm`)
@@ -67,6 +67,9 @@ sudo chmod ug+s /usr/bin/antimony
 
 >[!note]
 >Antimony does not *require* SetUID to function, all that is required is that the `AT_HOME` environment variable points to somewhere it has write access. Note, however, that provided a globally accessible home for Antimony can allowed for trivial sandbox compromise by writing to the sandboxes SOF folder. It also allows erroneous modifications to be made to Profiles and Features without Antimony being able to mediate it.
+
+>[!note]
+>If you intend to use the Lockdown functionality, you will additonally need to create a new `antimony-lockdown` user and create a dedicated directory for it in `$AT_HOME`
 
 2.  Antimony creates hard-links from the system library folder (`/usr/lib` and `/usr/lib64`). Some distributions and hardened kernels enforce the `fs.protected_hardlinks` sysctl, which denies this. 
 
