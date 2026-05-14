@@ -1,19 +1,17 @@
-home.policy = "Enabled"
+features = ["gtk3", "python", "gtksourceview", "network"]
 
-features = ["gtk3", "python", "network", "gtksourceview"]
-libraries.files = ["libvirt*", "libosinfo*", "libspice-client*"]
-
-[files]
-resources.ro = [
-  "/usr/share/osinfo",
-  "/usr/share/hwdata",
-  "/usr/share/misc",
-]
-platform.ro = [
-  "/var/run/libvirt",
-  "/sys"
-]
+[home]
+policy = "Enabled"
 
 [ipc]
 system_bus = true
 owns = ["org.virt-manager.virt-manager"]
+
+[files.platform]
+ro = ["/sys", "/var/run/libvirt"]
+
+[files.resources]
+ro = ["/usr/share/osinfo", "/usr/share/misc", "/usr/share/hwdata"]
+
+[libraries]
+files = ["libosinfo*", "libvirt*", "libspice-client*"]

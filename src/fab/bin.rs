@@ -471,6 +471,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         let binaries = &info.profile.binaries;
         let skip = binaries.contains("/usr/bin");
         if skip {
+            info.profile
+                .binaries
+                .insert(info.profile.app_path(info.name).into_owned());
+
             #[rustfmt::skip]
             info.handle.args_i([
                 "--overlay-src", "/usr/bin",
@@ -488,7 +492,9 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 .binaries
                 .iter()
                 .map(|binary| {
-                    if Path::new(binary).exists() {
+                    if let Ok(Ok(path)) = as_real!(Path::new(binary).canonicalize())
+                        && path.exists()
+                    {
                         binary.clone()
                     } else {
                         let resolved = match localize_path(binary, false) {

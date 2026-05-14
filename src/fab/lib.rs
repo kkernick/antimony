@@ -28,6 +28,7 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
+use user::as_real;
 
 /// Library Files (i.e. .so files)
 static FILES: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
@@ -245,70 +246,72 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         return mount_roots("", info.handle);
     }
 
-    ROOTS.iter().for_each(|lib_root| {
-        let name = format!("{}/{}", lib_root.as_ref(), info.name);
-        if Path::new(&name).exists() {
-            let _ = info
-                .profile
-                .libraries
-                .get_or_insert_default()
-                .directories
-                .insert(name);
-        }
-    });
+    as_real!({
+        ROOTS.iter().for_each(|lib_root| {
+            let name = format!("{}/{}", lib_root.as_ref(), info.name);
+            if Path::new(&name).exists() {
+                let _ = info
+                    .profile
+                    .libraries
+                    .get_or_insert_default()
+                    .directories
+                    .insert(name);
+            }
+        });
 
-    timer!("::binaries", {
-        info.profile
-            .binaries
-            .par_iter()
-            .for_each(|binary| match get_libraries(binary) {
-                Ok(libraries) => {
-                    for lib in libraries {
-                        {
-                            let _ = FILES.insert(lib);
+        timer!("::binaries", {
+            info.profile
+                .binaries
+                .par_iter()
+                .for_each(|binary| match get_libraries(binary) {
+                    Ok(libraries) => {
+                        for lib in libraries {
+                            {
+                                let _ = FILES.insert(lib);
+                            }
                         }
                     }
-                }
-                Err(e) => warn!("Could not get libraries for {binary}: {e}"),
-            });
-    });
-
-    if let Some(libraries) = info.profile.libraries.take() {
-        timer!("::lib::resolve", {
-            rayon::join(
-                move || {
-                    timer!(
-                        "::lib::directories",
-                        resolve_wildcards(libraries.directories, WildcardFilter::Directories)
-                            .par_bridge()
-                            .for_each(|e| {
-                                if let Ok(libraries) = get_dir(&e) {
-                                    libraries.into_par_iter().for_each(|lib| {
-                                        let _ = FILES.insert(lib);
-                                    });
-                                }
-                                DIRS.insert(e);
-                            })
-                    );
-                },
-                move || {
-                    timer!(
-                        "::lib::files",
-                        resolve_wildcards(libraries.files, WildcardFilter::Files)
-                            .par_bridge()
-                            .for_each(|file| {
-                                if let Ok(libraries) = get_libraries(&file) {
-                                    libraries.into_par_iter().for_each(|lib| {
-                                        let _ = FILES.insert(lib);
-                                    });
-                                }
-                                FILES.insert(file);
-                            })
-                    );
-                },
-            );
+                    Err(e) => warn!("Could not get libraries for {binary}: {e}"),
+                });
         });
-    }
+
+        if let Some(libraries) = info.profile.libraries.take() {
+            timer!("::lib::resolve", {
+                rayon::join(
+                    move || {
+                        timer!(
+                            "::lib::directories",
+                            resolve_wildcards(libraries.directories, WildcardFilter::Directories)
+                                .par_bridge()
+                                .for_each(|e| {
+                                    if let Ok(libraries) = get_dir(&e) {
+                                        libraries.into_par_iter().for_each(|lib| {
+                                            let _ = FILES.insert(lib);
+                                        });
+                                    }
+                                    DIRS.insert(e);
+                                })
+                        );
+                    },
+                    move || {
+                        timer!(
+                            "::lib::files",
+                            resolve_wildcards(libraries.files, WildcardFilter::Files)
+                                .par_bridge()
+                                .for_each(|file| {
+                                    if let Ok(libraries) = get_libraries(&file) {
+                                        libraries.into_par_iter().for_each(|lib| {
+                                            let _ = FILES.insert(lib);
+                                        });
+                                    }
+                                    FILES.insert(file);
+                                })
+                        );
+                    },
+                );
+            });
+        }
+    })?;
 
     let sof = sof_dir(info.sys_dir);
     let cache = timer!("::setup", {
