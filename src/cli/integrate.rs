@@ -8,7 +8,7 @@ use crate::{
     },
 };
 use anyhow::{Context, Result};
-use clap::ValueEnum;
+use clap::{ValueEnum, ValueHint};
 use heck::ToTitleCase;
 use log::{debug, info};
 use std::{
@@ -23,6 +23,7 @@ use std::{
 #[derive(clap::Args, Default)]
 pub struct Args {
     /// The name of the profile
+    #[arg(value_hint = ValueHint::CommandName)]
     pub profile: String,
 
     /// Undo integration for the profile.

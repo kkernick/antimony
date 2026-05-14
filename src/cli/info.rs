@@ -4,12 +4,14 @@ use crate::{
     cli,
     shared::store::{Object, SYSTEM_STORE, USER_STORE},
 };
+use clap::ValueHint;
 use dialoguer::console::style;
 use similar::{Algorithm, TextDiff};
 
 #[derive(clap::Args, Default)]
 pub struct Args {
     /// The object to edit.
+    #[arg(value_hint = ValueHint::CommandName)]
     name: Option<String>,
 
     /// Target the feature set rather than the profile set.

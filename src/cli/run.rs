@@ -16,7 +16,7 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use heck::ToTitleCase;
 use log::{debug, error};
 use nix::errno::Errno;
@@ -37,6 +37,7 @@ pub struct Args {
     /// This allows you to run any application in Antimony, without needing
     /// to make a profile for it (Although it's strongly recommended to
     /// create a profile for integration and repeated use).
+    #[arg(value_hint = ValueHint::CommandName)]
     pub profile: String,
 
     /// Generate the profile, but do not run the executable.
@@ -48,13 +49,13 @@ pub struct Args {
     pub refresh: bool,
 
     /// The path to the binary
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::FilePath)]
     pub path: Option<String>,
 
     /// The path to start in within the sandbox. Usually, this is not
     /// necessary unless your binary uses local paths that requires
     /// being within a specific directory.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub dir: Option<String>,
 
     /// Run in lockdown mode
@@ -74,7 +75,7 @@ pub struct Args {
     pub conflicts: Option<Vec<String>>,
 
     /// Additional inheritance.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub inherits: Option<Vec<String>>,
 
     /// Override the home policy
@@ -86,7 +87,7 @@ pub struct Args {
     pub home_name: Option<String>,
 
     /// Override the home mount
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub home_path: Option<String>,
 
     /// Override the home lock
@@ -134,31 +135,31 @@ pub struct Args {
     pub file_passthrough: Option<FileMode>,
 
     /// Add read-only files
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
     pub ro: Option<Vec<String>>,
 
     /// Add read-write files.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
     pub rw: Option<Vec<String>>,
 
     /// Add temporary directories.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
     pub temp: Option<Vec<String>>,
 
     /// Add binaries
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub binaries: Option<Vec<String>>,
 
     /// Add libraries
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
     pub libraries: Option<Vec<String>>,
 
     /// Add library directories
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub directories: Option<Vec<String>>,
 
     /// Add library roots
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub roots: Option<Vec<String>>,
 
     /// Add libraries
@@ -166,7 +167,7 @@ pub struct Args {
     pub no_sof: bool,
 
     /// Add devices
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub devices: Option<Vec<String>>,
 
     /// Add namespaces

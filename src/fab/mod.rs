@@ -12,7 +12,7 @@ use crate::{
     fab::lib::{ROOTS, WildcardFilter},
     shared::{
         Set,
-        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
+        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME, PWD},
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
@@ -321,6 +321,13 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
     timer!("::resolve", {
         if string.starts_with('~') {
             string = Cow::Owned(string.replace('~', "/home/antimony"));
+        }
+
+        if let Ok(path) = Path::new(string.as_ref()).canonicalize()
+            && !path.exists()
+            && PWD.join(string.as_ref()).exists()
+        {
+            string = Cow::Owned(format!("{}/{string}", PWD.to_string_lossy()));
         }
 
         if string.contains('$') {

@@ -6,12 +6,14 @@ use crate::shared::{
     store::{self, Object},
 };
 use anyhow::anyhow;
+use clap::ValueHint;
 use log::warn;
 use std::path::Path;
 
 #[derive(clap::Args)]
 pub struct Args {
     /// The path of the object. Can also be a directory, which will import all files within.
+    #[arg(value_hint = ValueHint::CommandName)]
     name: String,
 
     /// Target the feature set rather than the profile set.

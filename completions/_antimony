@@ -30,21 +30,21 @@ _antimony() {
         case $line[1] in
             (run)
 _arguments "${_arguments_options[@]}" : \
-'--path=[The path to the binary]:PATH:_default' \
-'--dir=[The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory]:DIR:_default' \
+'--path=[The path to the binary]:PATH:_files' \
+'--dir=[The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory]:DIR:_files -/' \
 '-l+[Run in lockdown mode]:LOCKDOWN:(true false)' \
 '--lockdown=[Run in lockdown mode]:LOCKDOWN:(true false)' \
 '-c+[Use a configuration within the profile]:CONFIG:_default' \
 '--config=[Use a configuration within the profile]:CONFIG:_default' \
 '*--features=[Additional features]:FEATURES:_default' \
 '*--conflicts=[Conflicting features]:CONFLICTS:_default' \
-'*--inherits=[Additional inheritance]:INHERITS:_default' \
+'*--inherits=[Additional inheritance]:INHERITS:_command_names -e' \
 '--home-policy=[Override the home policy]:HOME_POLICY:((none\:"Do not use a home profile"
 enabled\:"The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox"
 read-only\:"Mount the Home Folder as a Read-Only overlay"
 overlay\:"Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn'\''t typically support multiple instances (Zed, Chromium, etc)"))' \
 '--home-name=[Override the home name]:HOME_NAME:_default' \
-'--home-path=[Override the home mount]:HOME_PATH:_default' \
+'--home-path=[Override the home mount]:HOME_PATH:_files -/' \
 '--home-lock=[Override the home lock]:HOME_LOCK:(true false)' \
 '--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
 permissive\:"Syscalls are logged to construct a policy for the profile"
@@ -58,14 +58,14 @@ notifying\:"The policy is enforced\: unrecognized syscalls are presented to the 
 '--file-passthrough=[Override the file passthrough mode]:FILE_PASSTHROUGH:((read-only\:"Only allow reads"
 read-write\:"Allow writes"
 executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
-'*--ro=[Add read-only files]:RO:_default' \
-'*--rw=[Add read-write files]:RW:_default' \
-'*--temp=[Add temporary directories]:TEMP:_default' \
-'*--binaries=[Add binaries]:BINARIES:_default' \
-'*--libraries=[Add libraries]:LIBRARIES:_default' \
-'*--directories=[Add library directories]:DIRECTORIES:_default' \
-'*--roots=[Add library roots]:ROOTS:_default' \
-'*--devices=[Add devices]:DEVICES:_default' \
+'*--ro=[Add read-only files]:RO:_files' \
+'*--rw=[Add read-write files]:RW:_files' \
+'*--temp=[Add temporary directories]:TEMP:_files' \
+'*--binaries=[Add binaries]:BINARIES:_command_names -e' \
+'*--libraries=[Add libraries]:LIBRARIES:_files' \
+'*--directories=[Add library directories]:DIRECTORIES:_files -/' \
+'*--roots=[Add library roots]:ROOTS:_files -/' \
+'*--devices=[Add devices]:DEVICES:_files -/' \
 '*--namespaces=[Add namespaces]:NAMESPACES:((all\:"Enable all namespaces"
 user\:"The user namespace is needed to create additional sandboxes (Such as chromium)"
 ipc\:"Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy"
@@ -85,7 +85,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '--no-sof[Add libraries]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':profile -- The name of the profile, or a command to sandbox:_default' \
+':profile -- The name of the profile, or a command to sandbox:_command_names -e' \
 '*::passthrough -- Arguments to pass to the profile application:_default' \
 && ret=0
 ;;
@@ -94,7 +94,7 @@ _arguments "${_arguments_options[@]}" : \
 '--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':name -- The object to edit:_default' \
+':name -- The object to edit:_command_names -e' \
 && ret=0
 ;;
 (refresh)
@@ -104,7 +104,7 @@ _arguments "${_arguments_options[@]}" : \
 '--hard[Delete the entire Cache directory. Will break any instance currently running!]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_default' \
+'::profile -- Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run:_command_names -e' \
 '*::passthrough -- Run arguments:_default' \
 && ret=0
 ;;
@@ -121,7 +121,7 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 '--create-desktop[Create a desktop file if one does not exist]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
-':profile -- The name of the profile:_default' \
+':profile -- The name of the profile:_command_names -e' \
 && ret=0
 ;;
 (remove)
@@ -130,7 +130,7 @@ _arguments "${_arguments_options[@]}" : \
 '--yes[Do not ask for confirmation]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name -- The name of the profile. If absent, resets profiles that are identical to the system:_default' \
+'::name -- The name of the profile. If absent, resets profiles that are identical to the system:_command_names -e' \
 && ret=0
 ;;
 (seccomp)
@@ -142,13 +142,13 @@ remove\:"Remove the database completely"
 export\:"Export the database to a path"
 merge\:"Merge another database into the system database"
 clean\:"Remove binaries that no longer exist from the database"))' \
-'::path -- An optional path, used by Export/Merge:_default' \
+'::path -- An optional path, used by Export/Merge:_files' \
 && ret=0
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
-'--name=[The name of the profile/feature to export. If absent, export all user-profiles/features]:NAME:_default' \
-'--dest=[Where to export to. Defaults to current directory]:DEST:_default' \
+'--name=[The name of the profile/feature to export. If absent, export all user-profiles/features]:NAME:_command_names -e' \
+'--dest=[Where to export to. Defaults to current directory]:DEST:_files -/' \
 '--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -159,7 +159,7 @@ _arguments "${_arguments_options[@]}" : \
 '--feature[Target the feature set rather than the profile set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':name -- The path of the object. Can also be a directory, which will import all files within:_default' \
+':name -- The path of the object. Can also be a directory, which will import all files within:_command_names -e' \
 && ret=0
 ;;
 (info)
@@ -168,7 +168,7 @@ _arguments "${_arguments_options[@]}" : \
 '--diff[Display the difference between system and user profiles]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name -- The object to edit:_default' \
+'::name -- The object to edit:_command_names -e' \
 && ret=0
 ;;
 (help)

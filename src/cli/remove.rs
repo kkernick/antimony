@@ -11,12 +11,14 @@ use crate::{
     },
 };
 use anyhow::Result;
+use clap::ValueHint;
 use dialoguer::Confirm;
 use log::debug;
 
 #[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile. If absent, resets profiles that are identical to the system.
+    #[arg(value_hint = ValueHint::CommandName)]
     pub name: Option<String>,
 
     /// Target a feature, rather than a profile.

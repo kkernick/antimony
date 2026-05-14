@@ -5,17 +5,18 @@ use crate::shared::{
     store::{Object, SYSTEM_STORE, USER_STORE},
 };
 use anyhow::Result;
+use clap::ValueHint;
 use std::{fs, path::PathBuf};
 use user::as_real;
 
 #[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile/feature to export. If absent, export all user-profiles/features.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::CommandName)]
     name: Option<String>,
 
     /// Where to export to. Defaults to current directory
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     dest: Option<String>,
 
     /// Target the feature set rather than the profile set.

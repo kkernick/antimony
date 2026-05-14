@@ -10,6 +10,7 @@ use crate::{
     },
 };
 use anyhow::Result;
+use clap::ValueHint;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
 use std::{fs, time::Duration};
@@ -19,6 +20,7 @@ use user::as_real;
 pub struct Args {
     /// Run a profile, but refresh its contents.
     /// If not defined, all profiles are refreshed, but nothing is run.
+    #[arg(value_hint = ValueHint::CommandName)]
     pub profile: Option<String>,
 
     /// Just delete the cache, don't repopulate.

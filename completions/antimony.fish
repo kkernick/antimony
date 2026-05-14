@@ -36,20 +36,20 @@ complete -c antimony -n "__fish_antimony_needs_command" -f -a "export" -d 'Expor
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "import" -d 'Import user profiles'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "info" -d 'Get information about profiles/features'
 complete -c antimony -n "__fish_antimony_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l dir -d 'The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l path -d 'The path to the binary' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l dir -d 'The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s l -l lockdown -d 'Run in lockdown mode' -r -f -a "true\t''
 false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s c -l config -d 'Use a configuration within the profile' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l features -d 'Additional features' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l conflicts -d 'Conflicting features' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l inherits -d 'Additional inheritance' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l inherits -d 'Additional inheritance' -r -f -a "(__fish_complete_command)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-policy -d 'Override the home policy' -r -f -a "none\t'Do not use a home profile'
 enabled\t'The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox'
 read-only\t'Mount the Home Folder as a Read-Only overlay'
 overlay\t'Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn\'t typically support multiple instances (Zed, Chromium, etc)'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-name -d 'Override the home name' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-path -d 'Override the home mount' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-path -d 'Override the home mount' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-lock -d 'Override the home lock' -r -f -a "true\t''
 false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l seccomp -d 'Override the seccomp policy' -r -f -a "disabled\t'Disable SECCOMP'
@@ -80,14 +80,14 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l calls -d 'Add 
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l file-passthrough -d 'Override the file passthrough mode' -r -f -a "read-only\t'Only allow reads'
 read-write\t'Allow writes'
 executable\t'Executable files need to be created as copies, so that chmod will work correctly'"
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l directories -d 'Add library directories' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l roots -d 'Add library roots' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r -f -a "(__fish_complete_command)"
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l directories -d 'Add library directories' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l roots -d 'Add library roots' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t'Enable all namespaces'
 user\t'The user namespace is needed to create additional sandboxes (Such as chromium)'
 ipc\t'Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy'
@@ -119,8 +119,8 @@ complete -c antimony -n "__fish_antimony_using_subcommand remove" -l feature -d 
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -l yes -d 'Do not ask for confirmation'
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l name -d 'The name of the profile/feature to export. If absent, export all user-profiles/features' -r
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l dest -d 'Where to export to. Defaults to current directory' -r
+complete -c antimony -n "__fish_antimony_using_subcommand export" -l name -d 'The name of the profile/feature to export. If absent, export all user-profiles/features' -r -f -a "(__fish_complete_command)"
+complete -c antimony -n "__fish_antimony_using_subcommand export" -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand import" -l feature -d 'Target the feature set rather than the profile set'

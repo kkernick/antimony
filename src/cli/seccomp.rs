@@ -7,7 +7,7 @@ use crate::shared::{
     syscalls,
 };
 use anyhow::{Result, anyhow};
-use clap::ValueEnum;
+use clap::{ValueEnum, ValueHint};
 use nix::unistd::getcwd;
 use rusqlite::params;
 use spawn::{Spawner, StreamMode};
@@ -24,6 +24,7 @@ pub struct Args {
     pub operation: Operation,
 
     /// An optional path, used by Export/Merge.
+    #[arg(value_hint = ValueHint::FilePath)]
     pub path: Option<String>,
 }
 
