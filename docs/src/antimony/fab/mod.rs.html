@@ -12,7 +12,7 @@
 <a href=#12 id=12 data-nosnippet>12</a>    fab::lib::{ROOTS, WildcardFilter},
 <a href=#13 id=13 data-nosnippet>13</a>    shared::{
 <a href=#14 id=14 data-nosnippet>14</a>        Set,
-<a href=#15 id=15 data-nosnippet>15</a>        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME, PWD},
+<a href=#15 id=15 data-nosnippet>15</a>        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
 <a href=#16 id=16 data-nosnippet>16</a>        profile::Profile,
 <a href=#17 id=17 data-nosnippet>17</a>        store::{CACHE_STORE, Object},
 <a href=#18 id=18 data-nosnippet>18</a>    },
@@ -310,155 +310,165 @@
 <a href=#310 id=310 data-nosnippet>310</a>///     std::env::set_var("FD", "2");
 <a href=#311 id=311 data-nosnippet>311</a>/// }
 <a href=#312 id=312 data-nosnippet>312</a>///
-<a href=#313 id=313 data-nosnippet>313</a>/// assert!(resolve(Cow::Borrowed("$HOME/test")) == "/home/test/test");
-<a href=#314 id=314 data-nosnippet>314</a>/// assert!(resolve(Cow::Borrowed("/run/$UID/test")) == "/run/1000/test");
-<a href=#315 id=315 data-nosnippet>315</a>/// assert!(resolve(Cow::Borrowed("/proc/$PID/fd/$FD")) == "/proc/1/fd/2");
-<a href=#316 id=316 data-nosnippet>316</a>/// assert!(resolve(Cow::Borrowed("$HOME$UID$PID$FD")) == "/home/test100012");
-<a href=#317 id=317 data-nosnippet>317</a>/// assert!(resolve(Cow::Borrowed("$NOT_A_VAR")) == "$NOT_A_VAR");
-<a href=#318 id=318 data-nosnippet>318</a>/// assert!(resolve(Cow::Borrowed("$$$")) == "$$$");
-<a href=#319 id=319 data-nosnippet>319</a>/// ```
-<a href=#320 id=320 data-nosnippet>320</a></span><span class="kw">pub fn </span>resolve(<span class="kw-2">mut </span>string: Cow&lt;<span class="lifetime">'_</span>, str&gt;) -&gt; Cow&lt;<span class="lifetime">'_</span>, str&gt; {
-<a href=#321 id=321 data-nosnippet>321</a>    <span class="macro">timer!</span>(<span class="string">"::resolve"</span>, {
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">if </span>string.starts_with(<span class="string">'~'</span>) {
-<a href=#323 id=323 data-nosnippet>323</a>            string = Cow::Owned(string.replace(<span class="string">'~'</span>, <span class="string">"/home/antimony"</span>));
-<a href=#324 id=324 data-nosnippet>324</a>        }
-<a href=#325 id=325 data-nosnippet>325</a>
-<a href=#326 id=326 data-nosnippet>326</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(path) = Path::new(string.as_ref()).canonicalize()
-<a href=#327 id=327 data-nosnippet>327</a>            &amp;&amp; !path.exists()
-<a href=#328 id=328 data-nosnippet>328</a>            &amp;&amp; PWD.join(string.as_ref()).exists()
-<a href=#329 id=329 data-nosnippet>329</a>        {
-<a href=#330 id=330 data-nosnippet>330</a>            string = Cow::Owned(<span class="macro">format!</span>(<span class="string">"{}/{string}"</span>, PWD.to_string_lossy()));
-<a href=#331 id=331 data-nosnippet>331</a>        }
-<a href=#332 id=332 data-nosnippet>332</a>
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">if </span>string.contains(<span class="string">'$'</span>) {
-<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">let </span><span class="kw-2">mut </span>resolved = String::new();
-<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">let </span><span class="kw-2">mut </span>chars = string.chars().peekable();
-<a href=#336 id=336 data-nosnippet>336</a>
-<a href=#337 id=337 data-nosnippet>337</a>            <span class="kw">while let </span><span class="prelude-val">Some</span>(ch) = chars.next() {
-<a href=#338 id=338 data-nosnippet>338</a>                <span class="kw">if </span>ch == <span class="string">'$' </span>{
-<a href=#339 id=339 data-nosnippet>339</a>                    <span class="kw">let </span><span class="kw-2">mut </span>var_name = String::new();
-<a href=#340 id=340 data-nosnippet>340</a>                    <span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>next) = chars.peek() {
-<a href=#341 id=341 data-nosnippet>341</a>                        <span class="kw">if </span>next.is_ascii_uppercase() || next.is_ascii_digit() || next == <span class="string">'_' </span>{
-<a href=#342 id=342 data-nosnippet>342</a>                            var_name.push(next);
-<a href=#343 id=343 data-nosnippet>343</a>                            chars.next();
-<a href=#344 id=344 data-nosnippet>344</a>                        } <span class="kw">else </span>{
-<a href=#345 id=345 data-nosnippet>345</a>                            <span class="kw">break</span>;
-<a href=#346 id=346 data-nosnippet>346</a>                        }
-<a href=#347 id=347 data-nosnippet>347</a>                    }
-<a href=#348 id=348 data-nosnippet>348</a>                    <span class="kw">if </span>var_name.is_empty() {
-<a href=#349 id=349 data-nosnippet>349</a>                        resolved.push(<span class="string">'$'</span>);
-<a href=#350 id=350 data-nosnippet>350</a>                    } <span class="kw">else </span>{
-<a href=#351 id=351 data-nosnippet>351</a>                        <span class="comment">// These values may not be defined in the environment, but have explicit
-<a href=#352 id=352 data-nosnippet>352</a>                        // values Antimony can fill.
-<a href=#353 id=353 data-nosnippet>353</a>                        </span><span class="kw">let </span>val = <span class="kw">match </span>var_name.as_str() {
-<a href=#354 id=354 data-nosnippet>354</a>                            <span class="string">"UID" </span>=&gt; <span class="macro">format!</span>(<span class="string">"{}"</span>, user::USER.real),
-<a href=#355 id=355 data-nosnippet>355</a>                            <span class="string">"AT_HOME" </span>=&gt; AT_HOME.display().to_string(),
-<a href=#356 id=356 data-nosnippet>356</a>                            <span class="string">"XDG_CONFIG_HOME" </span>=&gt; CONFIG_HOME.display().to_string(),
-<a href=#357 id=357 data-nosnippet>357</a>                            <span class="string">"XDG_DATA_HOME" </span>=&gt; DATA_HOME.display().to_string(),
-<a href=#358 id=358 data-nosnippet>358</a>                            name =&gt; env::var(name).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"${name}"</span>)),
-<a href=#359 id=359 data-nosnippet>359</a>                        };
-<a href=#360 id=360 data-nosnippet>360</a>                        resolved.push_str(<span class="kw-2">&amp;</span>val);
-<a href=#361 id=361 data-nosnippet>361</a>                    }
-<a href=#362 id=362 data-nosnippet>362</a>                } <span class="kw">else </span>{
-<a href=#363 id=363 data-nosnippet>363</a>                    resolved.push(ch);
-<a href=#364 id=364 data-nosnippet>364</a>                }
-<a href=#365 id=365 data-nosnippet>365</a>            }
-<a href=#366 id=366 data-nosnippet>366</a>            Cow::Owned(resolved)
-<a href=#367 id=367 data-nosnippet>367</a>        } <span class="kw">else </span>{
-<a href=#368 id=368 data-nosnippet>368</a>            string
-<a href=#369 id=369 data-nosnippet>369</a>        }
-<a href=#370 id=370 data-nosnippet>370</a>    })
-<a href=#371 id=371 data-nosnippet>371</a>}
-<a href=#372 id=372 data-nosnippet>372</a>
-<a href=#373 id=373 data-nosnippet>373</a><span class="doccomment">/// Localize a home path to /home/antimony
-<a href=#374 id=374 data-nosnippet>374</a>///
-<a href=#375 id=375 data-nosnippet>375</a>/// ## Examples
-<a href=#376 id=376 data-nosnippet>376</a>///
-<a href=#377 id=377 data-nosnippet>377</a>/// ```rust
-<a href=#378 id=378 data-nosnippet>378</a>/// unsafe {std::env::set_var("HOME", "/home/test")}
-<a href=#379 id=379 data-nosnippet>379</a>/// assert!(antimony::fab::localize_home("/home/test/file") == "/home/antimony/file");
-<a href=#380 id=380 data-nosnippet>380</a>/// ```
-<a href=#381 id=381 data-nosnippet>381</a></span><span class="attr">#[inline]
-<a href=#382 id=382 data-nosnippet>382</a></span><span class="kw">pub fn </span>localize_home(path: <span class="kw-2">&amp;</span>str) -&gt; Cow&lt;<span class="lifetime">'_</span>, str&gt; {
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="macro">timer!</span>(<span class="string">"::localize_home"</span>, {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">if </span>path.starts_with(<span class="string">"/home"</span>) {
-<a href=#385 id=385 data-nosnippet>385</a>            Cow::Owned(path.replace(HOME.as_str(), <span class="string">"/home/antimony"</span>))
-<a href=#386 id=386 data-nosnippet>386</a>        } <span class="kw">else </span>{
-<a href=#387 id=387 data-nosnippet>387</a>            Cow::Borrowed(path)
-<a href=#388 id=388 data-nosnippet>388</a>        }
-<a href=#389 id=389 data-nosnippet>389</a>    })
-<a href=#390 id=390 data-nosnippet>390</a>}
-<a href=#391 id=391 data-nosnippet>391</a>
-<a href=#392 id=392 data-nosnippet>392</a><span class="doccomment">/// Localize a path, returning the resolved source, and where it should be mounted in the sandbox.
-<a href=#393 id=393 data-nosnippet>393</a>/// This is a rather complicated function because it handles a lot of different cases. Specifically:
-<a href=#394 id=394 data-nosnippet>394</a>///
-<a href=#395 id=395 data-nosnippet>395</a>/// 1. Resolves environment variables ($`AT_HOME` =&gt; /usr/share/antimony)
-<a href=#396 id=396 data-nosnippet>396</a>/// 2. Resolves home markers =&gt; (~/test =&gt; $HOME/test)
-<a href=#397 id=397 data-nosnippet>397</a>/// 3. The destination is mapped to Antimony's home (/home/test/file =&gt; /home/antimony/file)
-<a href=#398 id=398 data-nosnippet>398</a>/// 4. When the home flag is set, paths can be relative to home (file =&gt; $HOME/file)
-<a href=#399 id=399 data-nosnippet>399</a>/// 5. An explicit mapping can be provided with an equal sign. ($`AT_HOME/binary=/usr/bin/binary` =&gt; /usr/bin/binary)
-<a href=#400 id=400 data-nosnippet>400</a>///
-<a href=#401 id=401 data-nosnippet>401</a>/// The return value is also rather complicated, and not entirely intuitive. The src aspect is optional,
-<a href=#402 id=402 data-nosnippet>402</a>/// but the destination is always returned. That's because the source is the important aspect (Its the
-<a href=#403 id=403 data-nosnippet>403</a>/// location on the host), so if it doesn't exist, the callers can just check src and drop the entire
-<a href=#404 id=404 data-nosnippet>404</a>/// thing otherwise.
-<a href=#405 id=405 data-nosnippet>405</a>///
-<a href=#406 id=406 data-nosnippet>406</a>/// ## Examples
-<a href=#407 id=407 data-nosnippet>407</a>///
-<a href=#408 id=408 data-nosnippet>408</a>/// ```rust
-<a href=#409 id=409 data-nosnippet>409</a>/// use antimony::fab::localize_path;
-<a href=#410 id=410 data-nosnippet>410</a>/// use std::borrow::Cow;
-<a href=#411 id=411 data-nosnippet>411</a>///
-<a href=#412 id=412 data-nosnippet>412</a>/// unsafe {
-<a href=#413 id=413 data-nosnippet>413</a>///     std::env::set_var("HOME", "/home/test");
-<a href=#414 id=414 data-nosnippet>414</a>///     std::env::set_var("UID", "1000");
-<a href=#415 id=415 data-nosnippet>415</a>///     std::env::set_var("PID", "1");
-<a href=#416 id=416 data-nosnippet>416</a>///     std::env::set_var("FD", "2");
-<a href=#417 id=417 data-nosnippet>417</a>/// }
-<a href=#418 id=418 data-nosnippet>418</a>///
-<a href=#419 id=419 data-nosnippet>419</a>/// let temp = temp::Builder::new().create::&lt;temp::File&gt;().unwrap();
-<a href=#420 id=420 data-nosnippet>420</a>/// let path = temp.full();
-<a href=#421 id=421 data-nosnippet>421</a>/// let str = path.to_string_lossy();
-<a href=#422 id=422 data-nosnippet>422</a>///
-<a href=#423 id=423 data-nosnippet>423</a>/// assert!(localize_path(str.clone().as_ref(), false).unwrap() == (Some(str.clone()), str.into_owned()));
-<a href=#424 id=424 data-nosnippet>424</a>///
-<a href=#425 id=425 data-nosnippet>425</a>/// assert!(localize_path("/etc/file", false).unwrap() == (None, "/etc/file".to_owned()));
-<a href=#426 id=426 data-nosnippet>426</a>/// assert!(localize_path("/etc/file=/file", false).unwrap() == (None, "/file".to_owned()));
-<a href=#427 id=427 data-nosnippet>427</a>///
-<a href=#428 id=428 data-nosnippet>428</a>/// assert!(localize_path("file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
-<a href=#429 id=429 data-nosnippet>429</a>/// assert!(localize_path("~/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
-<a href=#430 id=430 data-nosnippet>430</a>/// assert!(localize_path("$HOME/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
-<a href=#431 id=431 data-nosnippet>431</a>///
-<a href=#432 id=432 data-nosnippet>432</a>/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_owned()));
-<a href=#433 id=433 data-nosnippet>433</a>/// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_owned()));
-<a href=#434 id=434 data-nosnippet>434</a>/// ```
-<a href=#435 id=435 data-nosnippet>435</a></span><span class="kw">pub fn </span>localize_path(
-<a href=#436 id=436 data-nosnippet>436</a>    file: <span class="kw-2">&amp;</span>str,
-<a href=#437 id=437 data-nosnippet>437</a>    home: bool,
-<a href=#438 id=438 data-nosnippet>438</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'_</span>, str&gt;&gt;, String), user::Error&gt; {
-<a href=#439 id=439 data-nosnippet>439</a>    <span class="macro">timer!</span>(<span class="string">"::localize_path"</span>, {
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">let </span>(source, dest) = <span class="kw">if let </span><span class="prelude-val">Some</span>((source, dest)) = file.split_once(<span class="string">'='</span>) {
-<a href=#441 id=441 data-nosnippet>441</a>            (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
-<a href=#442 id=442 data-nosnippet>442</a>        } <span class="kw">else </span>{
-<a href=#443 id=443 data-nosnippet>443</a>            <span class="kw">let </span><span class="kw-2">mut </span>resolved = resolve(Cow::Borrowed(file));
-<a href=#444 id=444 data-nosnippet>444</a>            <span class="kw">if </span>home
-<a href=#445 id=445 data-nosnippet>445</a>                &amp;&amp; !resolved.starts_with(<span class="string">"/home"</span>)
-<a href=#446 id=446 data-nosnippet>446</a>                &amp;&amp; (!resolved.starts_with(<span class="string">'/'</span>)
-<a href=#447 id=447 data-nosnippet>447</a>                    || !<span class="macro">as_real!</span>({ Path::new(resolved.as_ref()).exists() })<span class="question-mark">?</span>)
-<a href=#448 id=448 data-nosnippet>448</a>            {
-<a href=#449 id=449 data-nosnippet>449</a>                resolved = Cow::Owned(<span class="macro">format!</span>(<span class="string">"{}/{resolved}"</span>, HOME.as_str()));
-<a href=#450 id=450 data-nosnippet>450</a>            }
-<a href=#451 id=451 data-nosnippet>451</a>            (resolved.clone(), resolved)
-<a href=#452 id=452 data-nosnippet>452</a>        };
-<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">let </span>dest = localize_home(<span class="kw-2">&amp;</span>dest);
-<a href=#454 id=454 data-nosnippet>454</a>
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="prelude-val">Ok</span>(<span class="kw">if </span><span class="macro">as_real!</span>({ Path::new(source.as_ref()).exists() })<span class="question-mark">? </span>{
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="macro">debug!</span>(<span class="string">"{source} =&gt; {dest}"</span>);
-<a href=#457 id=457 data-nosnippet>457</a>            (<span class="prelude-val">Some</span>(source), dest.into_owned())
-<a href=#458 id=458 data-nosnippet>458</a>        } <span class="kw">else </span>{
-<a href=#459 id=459 data-nosnippet>459</a>            <span class="macro">debug!</span>(<span class="string">"{source} (does not exist) =&gt; {dest}"</span>);
-<a href=#460 id=460 data-nosnippet>460</a>            (<span class="prelude-val">None</span>, dest.into_owned())
-<a href=#461 id=461 data-nosnippet>461</a>        })
-<a href=#462 id=462 data-nosnippet>462</a>    })
-<a href=#463 id=463 data-nosnippet>463</a>}
+<a href=#313 id=313 data-nosnippet>313</a>/// std::fs::File::create("test.txt");
+<a href=#314 id=314 data-nosnippet>314</a>/// let current_dir = std::env::current_dir().unwrap();
+<a href=#315 id=315 data-nosnippet>315</a>///
+<a href=#316 id=316 data-nosnippet>316</a>/// assert!(resolve(Cow::Borrowed("$HOME/test")) == "/home/test/test");
+<a href=#317 id=317 data-nosnippet>317</a>/// assert!(resolve(Cow::Borrowed("/run/$UID/test")) == "/run/1000/test");
+<a href=#318 id=318 data-nosnippet>318</a>/// assert!(resolve(Cow::Borrowed("/proc/$PID/fd/$FD")) == "/proc/1/fd/2");
+<a href=#319 id=319 data-nosnippet>319</a>/// assert!(resolve(Cow::Borrowed("$HOME$UID$PID$FD")) == "/home/test100012");
+<a href=#320 id=320 data-nosnippet>320</a>/// assert!(resolve(Cow::Borrowed("$NOT_A_VAR")) == "$NOT_A_VAR");
+<a href=#321 id=321 data-nosnippet>321</a>/// assert!(resolve(Cow::Borrowed("$$$")) == "$$$");
+<a href=#322 id=322 data-nosnippet>322</a>/// assert!(resolve(Cow::Borrowed("test.txt")) == current_dir.join("test.txt").to_string_lossy());
+<a href=#323 id=323 data-nosnippet>323</a>///
+<a href=#324 id=324 data-nosnippet>324</a>/// std::fs::remove_file("test.txt");
+<a href=#325 id=325 data-nosnippet>325</a>/// ```
+<a href=#326 id=326 data-nosnippet>326</a></span><span class="kw">pub fn </span>resolve(<span class="kw-2">mut </span>string: Cow&lt;<span class="lifetime">'_</span>, str&gt;) -&gt; Cow&lt;<span class="lifetime">'_</span>, str&gt; {
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="macro">timer!</span>(<span class="string">"::resolve"</span>, {
+<a href=#328 id=328 data-nosnippet>328</a>        <span class="kw">if </span>string.starts_with(<span class="string">'~'</span>) {
+<a href=#329 id=329 data-nosnippet>329</a>            string = Cow::Owned(string.replace(<span class="string">'~'</span>, <span class="string">"/home/antimony"</span>));
+<a href=#330 id=330 data-nosnippet>330</a>        }
+<a href=#331 id=331 data-nosnippet>331</a>
+<a href=#332 id=332 data-nosnippet>332</a>        <span class="kw">let </span><span class="kw-2">mut </span>resolved = <span class="kw">if </span>string.contains(<span class="string">'$'</span>) {
+<a href=#333 id=333 data-nosnippet>333</a>            <span class="kw">let </span><span class="kw-2">mut </span>resolved = String::new();
+<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">let </span><span class="kw-2">mut </span>chars = string.chars().peekable();
+<a href=#335 id=335 data-nosnippet>335</a>
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="kw">while let </span><span class="prelude-val">Some</span>(ch) = chars.next() {
+<a href=#337 id=337 data-nosnippet>337</a>                <span class="kw">if </span>ch == <span class="string">'$' </span>{
+<a href=#338 id=338 data-nosnippet>338</a>                    <span class="kw">let </span><span class="kw-2">mut </span>var_name = String::new();
+<a href=#339 id=339 data-nosnippet>339</a>                    <span class="kw">while let </span><span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>next) = chars.peek() {
+<a href=#340 id=340 data-nosnippet>340</a>                        <span class="kw">if </span>next.is_ascii_uppercase() || next.is_ascii_digit() || next == <span class="string">'_' </span>{
+<a href=#341 id=341 data-nosnippet>341</a>                            var_name.push(next);
+<a href=#342 id=342 data-nosnippet>342</a>                            chars.next();
+<a href=#343 id=343 data-nosnippet>343</a>                        } <span class="kw">else </span>{
+<a href=#344 id=344 data-nosnippet>344</a>                            <span class="kw">break</span>;
+<a href=#345 id=345 data-nosnippet>345</a>                        }
+<a href=#346 id=346 data-nosnippet>346</a>                    }
+<a href=#347 id=347 data-nosnippet>347</a>                    <span class="kw">if </span>var_name.is_empty() {
+<a href=#348 id=348 data-nosnippet>348</a>                        resolved.push(<span class="string">'$'</span>);
+<a href=#349 id=349 data-nosnippet>349</a>                    } <span class="kw">else </span>{
+<a href=#350 id=350 data-nosnippet>350</a>                        <span class="comment">// These values may not be defined in the environment, but have explicit
+<a href=#351 id=351 data-nosnippet>351</a>                        // values Antimony can fill.
+<a href=#352 id=352 data-nosnippet>352</a>                        </span><span class="kw">let </span>val = <span class="kw">match </span>var_name.as_str() {
+<a href=#353 id=353 data-nosnippet>353</a>                            <span class="string">"UID" </span>=&gt; <span class="macro">format!</span>(<span class="string">"{}"</span>, user::USER.real),
+<a href=#354 id=354 data-nosnippet>354</a>                            <span class="string">"AT_HOME" </span>=&gt; AT_HOME.display().to_string(),
+<a href=#355 id=355 data-nosnippet>355</a>                            <span class="string">"XDG_CONFIG_HOME" </span>=&gt; CONFIG_HOME.display().to_string(),
+<a href=#356 id=356 data-nosnippet>356</a>                            <span class="string">"XDG_DATA_HOME" </span>=&gt; DATA_HOME.display().to_string(),
+<a href=#357 id=357 data-nosnippet>357</a>                            name =&gt; env::var(name).unwrap_or_else(|<span class="kw">_</span>| <span class="macro">format!</span>(<span class="string">"${name}"</span>)),
+<a href=#358 id=358 data-nosnippet>358</a>                        };
+<a href=#359 id=359 data-nosnippet>359</a>                        resolved.push_str(<span class="kw-2">&amp;</span>val);
+<a href=#360 id=360 data-nosnippet>360</a>                    }
+<a href=#361 id=361 data-nosnippet>361</a>                } <span class="kw">else </span>{
+<a href=#362 id=362 data-nosnippet>362</a>                    resolved.push(ch);
+<a href=#363 id=363 data-nosnippet>363</a>                }
+<a href=#364 id=364 data-nosnippet>364</a>            }
+<a href=#365 id=365 data-nosnippet>365</a>            Cow::Owned(resolved)
+<a href=#366 id=366 data-nosnippet>366</a>        } <span class="kw">else </span>{
+<a href=#367 id=367 data-nosnippet>367</a>            string
+<a href=#368 id=368 data-nosnippet>368</a>        };
+<a href=#369 id=369 data-nosnippet>369</a>
+<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let _ </span>= <span class="macro">as_real!</span>({
+<a href=#371 id=371 data-nosnippet>371</a>            <span class="kw">let </span>path = Path::new(resolved.as_ref());
+<a href=#372 id=372 data-nosnippet>372</a>            <span class="kw">if </span>(!path.is_absolute() || !path.exists())
+<a href=#373 id=373 data-nosnippet>373</a>                &amp;&amp; <span class="kw">let </span><span class="prelude-val">Ok</span>(canon) = path.canonicalize()
+<a href=#374 id=374 data-nosnippet>374</a>            {
+<a href=#375 id=375 data-nosnippet>375</a>                resolved = Cow::Owned(canon.to_string_lossy().into_owned());
+<a href=#376 id=376 data-nosnippet>376</a>            }
+<a href=#377 id=377 data-nosnippet>377</a>        });
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>        resolved
+<a href=#380 id=380 data-nosnippet>380</a>    })
+<a href=#381 id=381 data-nosnippet>381</a>}
+<a href=#382 id=382 data-nosnippet>382</a>
+<a href=#383 id=383 data-nosnippet>383</a><span class="doccomment">/// Localize a home path to /home/antimony
+<a href=#384 id=384 data-nosnippet>384</a>///
+<a href=#385 id=385 data-nosnippet>385</a>/// ## Examples
+<a href=#386 id=386 data-nosnippet>386</a>///
+<a href=#387 id=387 data-nosnippet>387</a>/// ```rust
+<a href=#388 id=388 data-nosnippet>388</a>/// unsafe {std::env::set_var("HOME", "/home/test")}
+<a href=#389 id=389 data-nosnippet>389</a>/// assert!(antimony::fab::localize_home("/home/test/file") == "/home/antimony/file");
+<a href=#390 id=390 data-nosnippet>390</a>/// ```
+<a href=#391 id=391 data-nosnippet>391</a></span><span class="attr">#[inline]
+<a href=#392 id=392 data-nosnippet>392</a></span><span class="kw">pub fn </span>localize_home(path: <span class="kw-2">&amp;</span>str) -&gt; Cow&lt;<span class="lifetime">'_</span>, str&gt; {
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="macro">timer!</span>(<span class="string">"::localize_home"</span>, {
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">if </span>path.starts_with(<span class="string">"/home"</span>) {
+<a href=#395 id=395 data-nosnippet>395</a>            Cow::Owned(path.replace(HOME.as_str(), <span class="string">"/home/antimony"</span>))
+<a href=#396 id=396 data-nosnippet>396</a>        } <span class="kw">else </span>{
+<a href=#397 id=397 data-nosnippet>397</a>            Cow::Borrowed(path)
+<a href=#398 id=398 data-nosnippet>398</a>        }
+<a href=#399 id=399 data-nosnippet>399</a>    })
+<a href=#400 id=400 data-nosnippet>400</a>}
+<a href=#401 id=401 data-nosnippet>401</a>
+<a href=#402 id=402 data-nosnippet>402</a><span class="doccomment">/// Localize a path, returning the resolved source, and where it should be mounted in the sandbox.
+<a href=#403 id=403 data-nosnippet>403</a>/// This is a rather complicated function because it handles a lot of different cases. Specifically:
+<a href=#404 id=404 data-nosnippet>404</a>///
+<a href=#405 id=405 data-nosnippet>405</a>/// 1. Resolves environment variables ($`AT_HOME` =&gt; /usr/share/antimony)
+<a href=#406 id=406 data-nosnippet>406</a>/// 2. Resolves home markers =&gt; (~/test =&gt; $HOME/test)
+<a href=#407 id=407 data-nosnippet>407</a>/// 3. The destination is mapped to Antimony's home (/home/test/file =&gt; /home/antimony/file)
+<a href=#408 id=408 data-nosnippet>408</a>/// 4. When the home flag is set, paths can be relative to home (file =&gt; $HOME/file)
+<a href=#409 id=409 data-nosnippet>409</a>/// 5. An explicit mapping can be provided with an equal sign. ($`AT_HOME/binary=/usr/bin/binary` =&gt; /usr/bin/binary)
+<a href=#410 id=410 data-nosnippet>410</a>///
+<a href=#411 id=411 data-nosnippet>411</a>/// The return value is also rather complicated, and not entirely intuitive. The src aspect is optional,
+<a href=#412 id=412 data-nosnippet>412</a>/// but the destination is always returned. That's because the source is the important aspect (Its the
+<a href=#413 id=413 data-nosnippet>413</a>/// location on the host), so if it doesn't exist, the callers can just check src and drop the entire
+<a href=#414 id=414 data-nosnippet>414</a>/// thing otherwise.
+<a href=#415 id=415 data-nosnippet>415</a>///
+<a href=#416 id=416 data-nosnippet>416</a>/// ## Examples
+<a href=#417 id=417 data-nosnippet>417</a>///
+<a href=#418 id=418 data-nosnippet>418</a>/// ```rust
+<a href=#419 id=419 data-nosnippet>419</a>/// use antimony::fab::localize_path;
+<a href=#420 id=420 data-nosnippet>420</a>/// use std::borrow::Cow;
+<a href=#421 id=421 data-nosnippet>421</a>///
+<a href=#422 id=422 data-nosnippet>422</a>/// unsafe {
+<a href=#423 id=423 data-nosnippet>423</a>///     std::env::set_var("HOME", "/home/test");
+<a href=#424 id=424 data-nosnippet>424</a>///     std::env::set_var("UID", "1000");
+<a href=#425 id=425 data-nosnippet>425</a>///     std::env::set_var("PID", "1");
+<a href=#426 id=426 data-nosnippet>426</a>///     std::env::set_var("FD", "2");
+<a href=#427 id=427 data-nosnippet>427</a>/// }
+<a href=#428 id=428 data-nosnippet>428</a>///
+<a href=#429 id=429 data-nosnippet>429</a>/// let temp = temp::Builder::new().create::&lt;temp::File&gt;().unwrap();
+<a href=#430 id=430 data-nosnippet>430</a>/// let path = temp.full();
+<a href=#431 id=431 data-nosnippet>431</a>/// let str = path.to_string_lossy();
+<a href=#432 id=432 data-nosnippet>432</a>///
+<a href=#433 id=433 data-nosnippet>433</a>/// assert!(localize_path(str.clone().as_ref(), false).unwrap() == (Some(str.clone()), str.into_owned()));
+<a href=#434 id=434 data-nosnippet>434</a>///
+<a href=#435 id=435 data-nosnippet>435</a>/// assert!(localize_path("/etc/file", false).unwrap() == (None, "/etc/file".to_owned()));
+<a href=#436 id=436 data-nosnippet>436</a>/// assert!(localize_path("/etc/file=/file", false).unwrap() == (None, "/file".to_owned()));
+<a href=#437 id=437 data-nosnippet>437</a>///
+<a href=#438 id=438 data-nosnippet>438</a>/// assert!(localize_path("file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
+<a href=#439 id=439 data-nosnippet>439</a>/// assert!(localize_path("~/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
+<a href=#440 id=440 data-nosnippet>440</a>/// assert!(localize_path("$HOME/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
+<a href=#441 id=441 data-nosnippet>441</a>///
+<a href=#442 id=442 data-nosnippet>442</a>/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_owned()));
+<a href=#443 id=443 data-nosnippet>443</a>/// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_owned()));
+<a href=#444 id=444 data-nosnippet>444</a>/// ```
+<a href=#445 id=445 data-nosnippet>445</a></span><span class="kw">pub fn </span>localize_path(
+<a href=#446 id=446 data-nosnippet>446</a>    file: <span class="kw-2">&amp;</span>str,
+<a href=#447 id=447 data-nosnippet>447</a>    home: bool,
+<a href=#448 id=448 data-nosnippet>448</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(<span class="prelude-ty">Option</span>&lt;Cow&lt;<span class="lifetime">'_</span>, str&gt;&gt;, String), user::Error&gt; {
+<a href=#449 id=449 data-nosnippet>449</a>    <span class="macro">timer!</span>(<span class="string">"::localize_path"</span>, {
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">let </span>(source, dest) = <span class="kw">if let </span><span class="prelude-val">Some</span>((source, dest)) = file.split_once(<span class="string">'='</span>) {
+<a href=#451 id=451 data-nosnippet>451</a>            (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
+<a href=#452 id=452 data-nosnippet>452</a>        } <span class="kw">else </span>{
+<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">let </span><span class="kw-2">mut </span>resolved = resolve(Cow::Borrowed(file));
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">if </span>home
+<a href=#455 id=455 data-nosnippet>455</a>                &amp;&amp; !resolved.starts_with(<span class="string">"/home"</span>)
+<a href=#456 id=456 data-nosnippet>456</a>                &amp;&amp; (!resolved.starts_with(<span class="string">'/'</span>)
+<a href=#457 id=457 data-nosnippet>457</a>                    || !<span class="macro">as_real!</span>({ Path::new(resolved.as_ref()).exists() })<span class="question-mark">?</span>)
+<a href=#458 id=458 data-nosnippet>458</a>            {
+<a href=#459 id=459 data-nosnippet>459</a>                resolved = Cow::Owned(<span class="macro">format!</span>(<span class="string">"{}/{resolved}"</span>, HOME.as_str()));
+<a href=#460 id=460 data-nosnippet>460</a>            }
+<a href=#461 id=461 data-nosnippet>461</a>            (resolved.clone(), resolved)
+<a href=#462 id=462 data-nosnippet>462</a>        };
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="kw">let </span>dest = localize_home(<span class="kw-2">&amp;</span>dest);
+<a href=#464 id=464 data-nosnippet>464</a>
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="prelude-val">Ok</span>(<span class="kw">if </span><span class="macro">as_real!</span>({ Path::new(source.as_ref()).exists() })<span class="question-mark">? </span>{
+<a href=#466 id=466 data-nosnippet>466</a>            <span class="macro">debug!</span>(<span class="string">"{source} =&gt; {dest}"</span>);
+<a href=#467 id=467 data-nosnippet>467</a>            (<span class="prelude-val">Some</span>(source), dest.into_owned())
+<a href=#468 id=468 data-nosnippet>468</a>        } <span class="kw">else </span>{
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="macro">debug!</span>(<span class="string">"{source} (does not exist) =&gt; {dest}"</span>);
+<a href=#470 id=470 data-nosnippet>470</a>            (<span class="prelude-val">None</span>, dest.into_owned())
+<a href=#471 id=471 data-nosnippet>471</a>        })
+<a href=#472 id=472 data-nosnippet>472</a>    })
+<a href=#473 id=473 data-nosnippet>473</a>}
 </code></pre></div></section></main></body></html>
