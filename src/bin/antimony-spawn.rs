@@ -22,7 +22,7 @@
 
 use antimony::{cli, setup};
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use nix::unistd::chdir;
 use spawn::Spawner;
 use std::{
@@ -39,6 +39,7 @@ use std::{
 #[allow(clippy::struct_excessive_bools)]
 pub struct Cli {
     /// The command to run.
+    #[arg(value_hint = ValueHint::CommandName)]
     pub command: String,
 
     /// No-op
@@ -70,11 +71,11 @@ pub struct Cli {
     pub sandbox: bool,
 
     /// Files to pass `ReadWrite`
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::AnyPath)]
     pub sandbox_expose: Option<Vec<String>>,
 
     /// Files to pass `ReadOnly`
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::AnyPath)]
     pub sandbox_expose_ro: Option<Vec<String>>,
 
     /// Run in the current environment.
@@ -82,7 +83,7 @@ pub struct Cli {
     pub host: bool,
 
     /// Directory to start the spawned command in.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub directory: Option<String>,
 
     /// Passthrough args.

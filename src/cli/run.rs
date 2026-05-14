@@ -135,11 +135,11 @@ pub struct Args {
     pub file_passthrough: Option<FileMode>,
 
     /// Add read-only files
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::AnyPath)]
     pub ro: Option<Vec<String>>,
 
     /// Add read-write files.
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::AnyPath)]
     pub rw: Option<Vec<String>>,
 
     /// Add temporary directories.

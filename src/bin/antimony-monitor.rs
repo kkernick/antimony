@@ -6,7 +6,7 @@ use antimony::shared::{
     self, Set, ThreadMap, env::DATA_HOME, profile::seccomp::SeccompPolicy, syscalls, utility,
 };
 use anyhow::{Context, Result, anyhow};
-use clap::Parser;
+use clap::{Parser, ValueHint};
 use common::stream::receive_fd;
 use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
@@ -88,12 +88,12 @@ impl From<errno::Errno> for Error {
 #[command(version)]
 #[command(about = "A SECCOMP-Notify application")]
 pub struct Cli {
-    /// The instance ID of the Antimony Profile
-    #[arg(short, long)]
+    /// The instance path of the Antimony Profile
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
     pub instance: String,
 
     /// The profile name
-    #[arg(short, long)]
+    #[arg(short, long, value_hint = ValueHint::CommandName)]
     pub profile: String,
 
     /// What policy we're working under.

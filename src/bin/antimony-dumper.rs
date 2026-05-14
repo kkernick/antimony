@@ -17,7 +17,7 @@ use antimony::shared::{
 };
 use anyhow::Result;
 use caps::Capability;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueHint};
 use common::stream::receive_fd;
 use inotify::{Inotify, WatchMask};
 use log::info;
@@ -69,11 +69,11 @@ pub enum Command {
 #[derive(clap::Args, Debug, Default, Clone)]
 pub struct RunArgs {
     /// The path to the binary to monitor
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::CommandName)]
     path: String,
 
-    /// The instance path for localizing the socket. This can be any value.
-    #[arg(long)]
+    /// The instance path for localizing the socket. This can be any directory.
+    #[arg(long, value_hint = ValueHint::DirPath)]
     instance: String,
 
     /// Do not enforce a timeout on the application.

@@ -9,7 +9,7 @@
 
 use antimony::{cli::refresh::installed_profiles, shared};
 use anyhow::{Result, anyhow};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, ValueEnum, ValueHint};
 use nix::unistd::chdir;
 use signal_hook::{consts, flag};
 use spawn::Spawner;
@@ -43,7 +43,7 @@ pub enum Benchmark {
 #[command(about = "A Utility for Benchmarking Antimony, using Hyperfine")]
 pub struct Cli {
     /// The profiles to benchmark. Defaults to integrated profiles.
-    #[arg(value_delimiter = ' ', num_args = 1..)]
+    #[arg(value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub profiles: Option<Vec<String>>,
 
     /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
@@ -87,7 +87,7 @@ pub struct Cli {
     pub sleep: Option<u32>,
 
     /// Where to point `AT_HOME`. If not set, defaults to the repository root.
-    #[arg(long)]
+    #[arg(long, value_hint = ValueHint::DirPath)]
     pub home: Option<String>,
 
     /// Additional commands to pass to `antimony_builder`
