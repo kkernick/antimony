@@ -275,6 +275,7 @@ impl Profile {
     }
 
     /// Load a new profile from all supported locations.
+    #[allow(clippy::too_many_lines)]
     pub fn new(
         name: &str,
         config: Option<String>,
@@ -288,6 +289,9 @@ impl Profile {
             match store::load::<Self, Error>(name, Object::Profile, true) {
                 Ok(profile) => profile,
                 Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
+                    if name == "default" {
+                        return Ok((Self::default(), "default".to_owned()));
+                    }
                     debug!("No profile: {name}, assuming binary");
                     Self {
                         path: Some(which::which(name)?.to_owned()),

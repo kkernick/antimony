@@ -177,7 +177,7 @@ fn main() -> Result<()> {
             .bench
             .unwrap_or_else(|| vec![Benchmark::Cold, Benchmark::Hot]);
 
-        let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=microsecond"]
+        let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
             .into_iter()
             .map(Cow::Borrowed)
             .collect();
