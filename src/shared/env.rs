@@ -41,6 +41,10 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
     if CONFIG_FILE.force_temp()
+        || (!cache_dir.exists()
+            && as_effective!(fs::create_dir_all(&cache_dir))
+                .unwrap()
+                .is_err())
         || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err()).unwrap()
     {
         debug!(
