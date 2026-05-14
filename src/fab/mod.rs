@@ -12,7 +12,7 @@ use crate::{
     fab::lib::{ROOTS, WildcardFilter},
     shared::{
         Set,
-        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME, PWD},
+        env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
@@ -310,12 +310,18 @@ pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
 ///     std::env::set_var("FD", "2");
 /// }
 ///
+/// std::fs::File::create("test.txt");
+/// let current_dir = std::env::current_dir().unwrap();
+///
 /// assert!(resolve(Cow::Borrowed("$HOME/test")) == "/home/test/test");
 /// assert!(resolve(Cow::Borrowed("/run/$UID/test")) == "/run/1000/test");
 /// assert!(resolve(Cow::Borrowed("/proc/$PID/fd/$FD")) == "/proc/1/fd/2");
 /// assert!(resolve(Cow::Borrowed("$HOME$UID$PID$FD")) == "/home/test100012");
 /// assert!(resolve(Cow::Borrowed("$NOT_A_VAR")) == "$NOT_A_VAR");
 /// assert!(resolve(Cow::Borrowed("$$$")) == "$$$");
+/// assert!(resolve(Cow::Borrowed("test.txt")) == current_dir.join("test.txt").to_string_lossy());
+///
+/// std::fs::remove_file("test.txt");
 /// ```
 pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
     timer!("::resolve", {
@@ -323,14 +329,7 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
             string = Cow::Owned(string.replace('~', "/home/antimony"));
         }
 
-        if let Ok(path) = Path::new(string.as_ref()).canonicalize()
-            && !path.exists()
-            && PWD.join(string.as_ref()).exists()
-        {
-            string = Cow::Owned(format!("{}/{string}", PWD.to_string_lossy()));
-        }
-
-        if string.contains('$') {
+        let mut resolved = if string.contains('$') {
             let mut resolved = String::new();
             let mut chars = string.chars().peekable();
 
@@ -366,7 +365,18 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
             Cow::Owned(resolved)
         } else {
             string
-        }
+        };
+
+        let _ = as_real!({
+            let path = Path::new(resolved.as_ref());
+            if (!path.is_absolute() || !path.exists())
+                && let Ok(canon) = path.canonicalize()
+            {
+                resolved = Cow::Owned(canon.to_string_lossy().into_owned());
+            }
+        });
+
+        resolved
     })
 }
 
