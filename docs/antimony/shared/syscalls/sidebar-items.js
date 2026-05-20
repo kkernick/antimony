@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["CONNECTION"],"enum":["Error"],"fn":["binary_id","get_binary_syscalls","get_calls","get_names","get_num","id_syscalls","insert_binary","insert_profile","new","profile_id"],"struct":["Notifier"]};

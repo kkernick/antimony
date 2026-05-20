@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Type"],"fn":["collect","fabricate"],"struct":["ParseReturn"]};

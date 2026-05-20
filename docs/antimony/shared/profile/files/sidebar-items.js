@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["FileMode"],"static":["FILE_MODES"],"struct":["Files"],"type":["FileList"]};

@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["Error"],"mod":["files","home","hooks","ipc","lib","ns","seccomp"],"struct":["Profile"]};

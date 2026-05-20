@@ -1,0 +1,12 @@
+id = "io.missioncenter.MissionCenter"
+features = ["cgroup", "network", "sys", "passwd", "libadwaita", "gio", "applications"]
+inherits = ["default"]
+binaries = ["missioncenter-magpie", "/usr/bin/missioncenter-magpie=/usr/bin/missioncenter-magpie-glibc", "sh", "/usr/share/antimony/utilities/antimony-spawn=/app/bin/missioncenter-spawner"]
+devices = ["/dev/udmabuf"]
+namespaces = ["Pid"]
+
+[files.platform]
+ro = ["/run/udev/data"]
+
+[libraries]
+files = ["libdrm*"]

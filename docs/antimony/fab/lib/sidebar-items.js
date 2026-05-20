@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["WildcardFilter"],"fn":["add_sof","cache_dir","fabricate","mount_roots","sof_dir"],"static":["DIRS","ROOTS"]};

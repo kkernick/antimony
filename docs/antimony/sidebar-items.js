@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"macro":["timer"],"mod":["cli","fab","setup","shared"]};
