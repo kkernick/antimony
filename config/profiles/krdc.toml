@@ -1,5 +1,11 @@
-id =  "org.kde.krdc"
-home.policy = "Enabled"
+id = "org.kde.krdc"
+features = ["network", "freerdp", "kf6"]
 
-features = ["kf6", "network", "freerdp"]
-libraries.files = ["libkrdc*"]
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[libraries]
+files = ["libkrdc*"]

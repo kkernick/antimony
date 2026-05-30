@@ -1,7 +1,8 @@
-id =  "org.qbittorrent.qBittorrent"
-home.policy = "Enabled"
+id = "org.qbittorrent.qBittorrent"
+features = ["network", "kf6"]
 
-features = ["kf6", "network"]
+[home]
+policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser"]

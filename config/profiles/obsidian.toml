@@ -1,5 +1,4 @@
 features = ["electron", "network"]
-inherits = ["default"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]

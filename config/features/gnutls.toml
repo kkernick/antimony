@@ -1,16 +1,13 @@
 name = "gnutls"
 description = "TLS for secure network communications."
-requires = ["gir", "locale"]
+requires = ["locale", "gir"]
 
 [libraries]
 files = ["libgnutls*"]
 directories = ["pkcs11"]
 
-[files]
-platform.ro = [
-  "/etc/gnutls",
-  "/etc/pkcs11",
-]
-resources.ro = [
-  "/usr/share/p11-kit/",
-]
+[files.platform]
+ro = ["/etc/gnutls", "/etc/pkcs11"]
+
+[files.resources]
+ro = ["/usr/share/p11-kit/"]

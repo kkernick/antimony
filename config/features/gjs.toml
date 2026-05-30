@@ -1,3 +1,5 @@
 name = "gjs"
 description = "Gnome JavaScript."
-libraries.directories = ["gjs"]
+
+[libraries]
+directories = ["gjs"]

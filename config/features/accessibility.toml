@@ -1,8 +1,8 @@
 name = "accessibility"
 description = "Access to the Accesibility Bus"
 
-[files]
-platform.ro = ["$XDG_RUNTIME_DIR/at-spi"]
-
 [ipc]
 talks = ["org.a11y.Bus"]
+
+[files.platform]
+ro = ["$XDG_RUNTIME_DIR/at-spi"]

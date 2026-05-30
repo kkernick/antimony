@@ -1,4 +1,5 @@
-id =  "org.kde.kcalc"
-home.policy = "Enabled"
-
+id = "org.kde.kcalc"
 features = ["kf6"]
+
+[home]
+policy = "Enabled"

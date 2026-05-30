@@ -1,4 +1,8 @@
 name = "gir"
 description = "An XML format used by GObject-Introspection"
-libraries.directories = ["girepository-1.0"]
-files.resources.ro = ["/usr/share/gir-1.0/"]
+
+[libraries]
+directories = ["girepository-1.0"]
+
+[files.resources]
+ro = ["/usr/share/gir-1.0/"]

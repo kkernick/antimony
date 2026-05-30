@@ -3,7 +3,4 @@ description = "Give access to the MPRIS bus for Media Control"
 
 [ipc]
 talks = ["org.freedesktop.PowerManagement.*"]
-owns = [
-  "org.mpris.MediaPlayer2.{name}.*",
-  "org.mpris.MediaPlayer2.{desktop}.*",
-]
+owns = ["org.mpris.MediaPlayer2.{desktop}.*", "org.mpris.MediaPlayer2.{name}.*"]

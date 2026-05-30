@@ -1,2 +1,4 @@
-home.policy = "Enabled"
 features = ["network"]
+
+[home]
+policy = "Enabled"

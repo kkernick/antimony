@@ -2,5 +2,5 @@ name = "enchant"
 description = "Spell Checking Library"
 
 [libraries]
-directories = ["enchant-2"]
 files = ["libenchant*"]
+directories = ["enchant-2"]

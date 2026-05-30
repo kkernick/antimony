@@ -1,19 +1,15 @@
 name = "pipewire"
 description = "The PipeWire socket for video/audio."
 
-files.platform.ro = [
- "$XDG_RUNTIME_DIR/pipewire-0",
- "$XDG_RUNTIME_DIR/pulse",
- "/etc/pipewire",
-]
-files.resources.ro = [
-  "/usr/share/pipewire",
-]
-
-files.user.ro = [
-  "$XDG_CONFIG_HOME/pulse"
-]
-
 [libraries]
-directories = ["pipewire-0.3", "spa-0.2", "pulseaudio"]
 files = ["libpipewire*"]
+directories = ["pipewire-0.3", "pulseaudio", "spa-0.2"]
+
+[files.user]
+ro = ["$XDG_CONFIG_HOME/pulse"]
+
+[files.platform]
+ro = ["/etc/pipewire", "$XDG_RUNTIME_DIR/pulse", "$XDG_RUNTIME_DIR/pipewire-0"]
+
+[files.resources]
+ro = ["/usr/share/pipewire"]

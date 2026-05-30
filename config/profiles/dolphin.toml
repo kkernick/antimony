@@ -1,9 +1,11 @@
 id = "org.kde.dolphin"
-features = ["kf6", "xdg-open"]
-libraries.files = ["libdolphin*"]
+features = ["xdg-open", "kf6"]
 
 [ipc]
 owns = ["org.kde.dolphin.*"]
 
 [files.user]
 rw = ["/"]
+
+[libraries]
+files = ["libdolphin*"]

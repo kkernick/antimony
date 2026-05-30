@@ -6,4 +6,4 @@ requires = ["qt6"]
 files = ["qt6/QtWebEngineProcess"]
 
 [ipc]
-portals = ["ProxyResolver", "NetworkMonitor"]
+portals = ["NetworkMonitor", "ProxyResolver"]

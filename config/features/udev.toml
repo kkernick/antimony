@@ -1,11 +1,7 @@
 name = "udev"
 description = "Device information"
 caveat = "This provides access to /sys, allowing the sandbox to see all devices."
-binaries = ["udevadm", "dmidecode"]
+binaries = ["dmidecode", "udevadm"]
 
-[files]
-platform.ro = [
-  "/etc/udev",
-  "/usr/share/hwdata",
-  "/sys"
-]
+[files.platform]
+ro = ["/usr/share/hwdata", "/sys", "/etc/udev"]

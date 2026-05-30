@@ -1,16 +1,12 @@
 name = "glycin"
 description = "Gnome Image Loading."
-requires = ["gir", "flatpak-spawn"]
+requires = ["flatpak-spawn", "gir"]
 conflicts = ["hardened_malloc"]
-
-files.resources.ro = [
-  "/usr/include/glycin-2/",
-  "/usr/include/glycin-gtk4-2/",
-  "/usr/share/glycin-loaders/"
-]
-
 binaries = ["prlimit"]
 
 [libraries]
-directories = ["glycin-loaders"]
 files = ["libglycin*", "librsvg*"]
+directories = ["glycin-loaders"]
+
+[files.resources]
+ro = ["/usr/share/glycin-loaders/", "/usr/include/glycin-2/", "/usr/include/glycin-gtk4-2/"]

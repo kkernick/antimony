@@ -1,10 +1,12 @@
 id = "org.kde.kommit"
-features = ["kf6", "xdg-open"]
+features = ["xdg-open", "kf6"]
 binaries = ["kommitdiff", "kommitmerge"]
-libraries.files = ["libkommit*"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser"]
+
+[libraries]
+files = ["libkommit*"]

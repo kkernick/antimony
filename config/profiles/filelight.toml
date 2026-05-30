@@ -1,6 +1,5 @@
 id = "org.kde.filelight"
 features = ["qt6-qml", "kf6"]
-inherits = ["default"]
 
 [home]
 policy = "Enabled"

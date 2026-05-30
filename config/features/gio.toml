@@ -1,8 +1,10 @@
 name = "gio"
 description = "Gnome General Networking and IO"
 requires = ["gnutls"]
-ipc.portals = ["NetworkMonitor", "ProxyResolver"]
 
 [libraries]
-directories = ["gio"]
 files = ["libproxy*"]
+directories = ["gio"]
+
+[ipc]
+portals = ["NetworkMonitor", "ProxyResolver"]

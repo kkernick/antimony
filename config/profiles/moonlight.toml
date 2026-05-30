@@ -1,5 +1,5 @@
 id = "com.moonlight_stream.Moonlight"
-features = ["qt6-network", "qt6-qml", "pipewire", "sdl", "vaapi", "vulkan"]
+features = ["sdl", "pipewire", "vaapi", "vulkan", "qt6-qml", "qt6-network"]
 
 [home]
 policy = "Enabled"

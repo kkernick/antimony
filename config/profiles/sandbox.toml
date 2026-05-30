@@ -1,10 +1,10 @@
 path = "sh"
-features = ["bin", "lib", "dev", "etc", "sys", "debug-shell"]
+features = ["bin", "etc", "lib", "debug-shell", "dev", "sys"]
 namespaces = ["All"]
 
 [ipc]
-user_bus = true
 system_bus = true
+user_bus = true
 
 [files.resources]
 ro = ["/usr/share/antimony"]

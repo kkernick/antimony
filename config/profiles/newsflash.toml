@@ -1,5 +1,5 @@
 path = "io.gitlab.news_flash.NewsFlash"
-features = ["libadwaita", "mpris", "libclapper", "network", "webkit", "xdg-open"]
+features = ["libadwaita", "libclapper", "webkit", "mpris", "network", "xdg-open"]
 
 [home]
 policy = "Enabled"

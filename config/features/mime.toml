@@ -1,6 +1,8 @@
 name = "mime"
 description = "MIME types to know default applications"
 
-[files]
-platform.ro = ["/usr/share/mime"]
-user.ro = ["$XDG_DATA_HOME/mime"]
+[files.user]
+ro = ["$XDG_DATA_HOME/mime"]
+
+[files.platform]
+ro = ["/usr/share/mime"]

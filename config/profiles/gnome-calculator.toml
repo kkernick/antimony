@@ -1,4 +1,5 @@
 id = "org.gnome.Calculator"
-home.policy = "Enabled"
-
 features = ["libadwaita"]
+
+[home]
+policy = "Enabled"

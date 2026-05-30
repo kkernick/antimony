@@ -1,20 +1,9 @@
 name = "network"
 description = "Give applications network connectivity."
-
 namespaces = ["Net"]
 
-files.platform.ro = [
-  "/etc/gai.conf",
-  "/etc/host.conf",
-  "/etc/hosts",
-  "/etc/nsswitch.conf",
-  "/etc/resolv.conf",
-  "/etc/ca-certificates",
-  "/etc/pki",
-  "/etc/ssl",
-]
-files.resources.ro = [
-  "/usr/share/ca-certificates",
-  "/usr/share/pki",
-  "/usr/share/ssl",
-]
+[files.platform]
+ro = ["/etc/hosts", "/etc/pki", "/etc/resolv.conf", "/etc/nsswitch.conf", "/etc/gai.conf", "/etc/ca-certificates", "/etc/host.conf", "/etc/ssl"]
+
+[files.resources]
+ro = ["/usr/share/ssl", "/usr/share/pki", "/usr/share/ca-certificates"]

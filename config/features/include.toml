@@ -1,7 +1,5 @@
 name = "include"
 description = "Source headers"
 
-files.platform.ro = [
-  "/usr/share/include",
-  "/usr/include"
-]
+[files.platform]
+ro = ["/usr/share/include", "/usr/include"]

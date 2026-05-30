@@ -1,32 +1,23 @@
 name = "gtk4"
 description = "For GTK4 applications"
-requires = ["wayland", "fonts", "themes", "mime", "dri", "accessibility", "gdk-pixbuf", "vulkan"]
-
-[libraries]
-directories = ["gtk-4.0", "tinysparql-3.0"]
-files = ["libgdk-4*", "libgtk-4*"]
-
-[files]
-resources.ro = [
-  "/usr/share/gtk",
-  "/usr/share/glib-2.0",
-  "/usr/share/gtk-2.0",
-  "/usr/share/gtk-4.0",
-]
-platform.ro = [
-  "/etc/xdg/gtk-4.0/",
-]
-user.ro = [
-  "$XDG_CONFIG_HOME/gtkrc",
-  "$XDG_CONFIG_HOME/gtkrc-2.0",
-  "$XDG_CONFIG_HOME/gtk-2.0",
-  "$XDG_CONFIG_HOME/gtk-4.0",
-  "$HOME/.gtkrc-2.0",
-]
+requires = ["dri", "vulkan", "gdk-pixbuf", "mime", "accessibility", "wayland", "fonts", "themes"]
 
 [environment]
-"GTK_USE_PORTAL" = "1"
-"GTK_A11Y" = "none"
+GTK_USE_PORTAL = "1"
+GTK_A11Y = "none"
+
+[libraries]
+files = ["libgdk-4*", "libgtk-4*"]
+directories = ["gtk-4.0", "tinysparql-3.0"]
 
 [ipc]
 owns = ["{desktop}"]
+
+[files.user]
+ro = ["$HOME/.gtkrc-2.0", "$XDG_CONFIG_HOME/gtk-4.0", "$XDG_CONFIG_HOME/gtk-2.0", "$XDG_CONFIG_HOME/gtkrc-2.0", "$XDG_CONFIG_HOME/gtkrc"]
+
+[files.platform]
+ro = ["/etc/xdg/gtk-4.0/"]
+
+[files.resources]
+ro = ["/usr/share/glib-2.0", "/usr/share/gtk", "/usr/share/gtk-2.0", "/usr/share/gtk-4.0"]

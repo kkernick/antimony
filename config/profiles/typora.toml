@@ -1,8 +1,9 @@
-home.policy = "Enabled"
-home.lock = true
-
 features = ["electron"]
 arguments = ["--ozone-platform=wayland"]
+
+[home]
+policy = "Enabled"
+lock = true
 
 [ipc]
 portals = ["FileChooser"]

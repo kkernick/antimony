@@ -1,17 +1,12 @@
 name = "themes"
 description = "Pass host themes, cursors, and icons"
-
 requires = ["mime"]
-
-[files]
-platform.ro = [
-  "/usr/share/themes", "/usr/share/color-schemes",
-  "/usr/share/icons", "/usr/share/pixmaps",
-  "/usr/share/cursors"
-]
-user.ro = [
-  "$XDG_DATA_HOME/pixmaps",
-]
 
 [ipc]
 portals = ["Settings"]
+
+[files.user]
+ro = ["$XDG_DATA_HOME/pixmaps"]
+
+[files.platform]
+ro = ["/usr/share/pixmaps", "/usr/share/color-schemes", "/usr/share/themes", "/usr/share/icons", "/usr/share/cursors"]

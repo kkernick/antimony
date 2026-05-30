@@ -1,4 +1,5 @@
-id =  "ca.desrt.dconf-editor"
-home.policy = "Enabled"
-
+id = "ca.desrt.dconf-editor"
 features = ["gtk3"]
+
+[home]
+policy = "Enabled"

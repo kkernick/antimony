@@ -1,7 +1,8 @@
-id =  "org.kde.kclock"
-home.policy = "Enabled"
-
+id = "org.kde.kclock"
 features = ["kf6"]
+
+[home]
+policy = "Enabled"
 
 [ipc]
 talks = ["org.kde.kclockd"]

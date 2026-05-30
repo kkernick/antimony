@@ -1,7 +1,8 @@
-id =  "org.kde.plasmatube"
-home.policy = "Enabled"
+id = "org.kde.plasmatube"
+features = ["sdl", "network", "kf6"]
 
-features = ["kf6", "network", "sdl"]
+[home]
+policy = "Enabled"
 
 [ipc]
 owns = ["org.kde.plasmatube"]

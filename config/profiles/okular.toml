@@ -1,11 +1,12 @@
-id =  "org.kde.okular"
-home.policy = "Enabled"
-
+id = "org.kde.okular"
 features = ["kf6"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
 
 [libraries]
 files = ["libOkular6Core*"]
 directories = ["qt6/plugins/okular_generators"]
-
-[ipc]
-portals = ["FileChooser"]

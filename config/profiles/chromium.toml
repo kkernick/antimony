@@ -1,8 +1,9 @@
-home.policy = "Enabled"
-home.lock = true
-
-features = ["electron", "pipewire", "vaapi", "network", "xdg-open", "mpris"]
+features = ["pipewire", "vaapi", "xdg-open", "electron", "network", "mpris"]
 arguments = ["--ozone-platform=wayland"]
+
+[home]
+policy = "Enabled"
+lock = true
 
 [ipc]
 portals = ["FileChooser"]

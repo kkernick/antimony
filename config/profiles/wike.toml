@@ -1,5 +1,5 @@
 id = "com.github.hugolabe.Wike"
-features = ["libadwaita", "webkit", "python", "network"]
+features = ["libadwaita", "python", "webkit", "network"]
 devices = ["/dev/udmabuf"]
 
 [home]

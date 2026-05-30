@@ -1,7 +1,8 @@
-id =  "io.bassi.Amberol"
-home.policy = "Enabled"
+id = "io.bassi.Amberol"
+features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
 
-features = ["libadwaita", "mpris", "pipewire", "gst", "vaapi"]
+[home]
+policy = "Enabled"
 
 [ipc]
 portals = ["Background", "FileChooser", "Inhibit"]

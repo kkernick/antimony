@@ -1,11 +1,10 @@
 name = "shell"
 description = "Provide /usr/bin/sh"
-
 requires = ["passwd"]
 binaries = ["/usr/bin/sh"]
 
-[files.resources]
-ro = ["/usr/share/terminfo"]
-
 [environment]
 TERM = "$TERM"
+
+[files.resources]
+ro = ["/usr/share/terminfo"]

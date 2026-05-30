@@ -1,4 +1,6 @@
 name = "libhandy"
 description = "GTK3 for mobile devices"
 requires = ["gtk3"]
-libraries.files = ["libhandy*"]
+
+[libraries]
+files = ["libhandy*"]

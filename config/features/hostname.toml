@@ -1,3 +1,5 @@
 name = "hostname"
 description = "Give the host's name to the sandbox"
-files.platform.ro = ["/etc/hostname"]
+
+[files.platform]
+ro = ["/etc/hostname"]

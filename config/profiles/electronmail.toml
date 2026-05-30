@@ -1,6 +1,9 @@
-home.policy = "Enabled"
-home.lock = true
-
-features = ["electron", "network", "xdg-open", "tray", "secrets"]
+features = ["network", "secrets", "xdg-open", "electron", "tray"]
 arguments = ["--ozone-platform=wayland"]
-libraries.directories = ["/opt/ElectronMail"]
+
+[home]
+policy = "Enabled"
+lock = true
+
+[libraries]
+directories = ["/opt/ElectronMail"]

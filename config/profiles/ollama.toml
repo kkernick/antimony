@@ -4,5 +4,5 @@ features = ["vulkan", "dri", "network"]
 policy = "Enabled"
 
 [environment]
-OLLAMA_HOST = "http://0.0.0.0:11434"
 OLLAMA_VULKAN = "1"
+OLLAMA_HOST = "http://0.0.0.0:11434"

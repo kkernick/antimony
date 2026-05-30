@@ -1,13 +1,13 @@
 id = "calibre-gui"
-features = ["kf6", "python"]
-binaries = ["calibre-*", "calibredb", "ebook-*", "fetch-ebook-metadata", "lrf*", "markdown-calibre", "pdftohtml", "web2disk"]
-
-[libraries]
-directories = ["calibre"]
-files = ["libxxhash*"]
+features = ["python", "kf6"]
+binaries = ["calibredb", "ebook-*", "fetch-ebook-metadata", "pdftohtml", "web2disk", "lrf*", "calibre-*", "markdown-calibre"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser"]
+
+[libraries]
+files = ["libxxhash*"]
+directories = ["calibre"]

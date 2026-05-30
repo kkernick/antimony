@@ -1,1 +1,1 @@
-binaries = ["cat", "id", "ls", "vim"]
+binaries = ["id", "vim", "cat", "ls"]

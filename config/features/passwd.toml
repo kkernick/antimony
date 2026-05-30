@@ -2,5 +2,9 @@ name = "passwd"
 description = "Provide a /etc/passwd"
 
 [files.direct.ro]
-"/etc/passwd" = "antimony:x:$UID:$UID:Antimony:/home/antimony:/usr/bin/sh\n"
-"/etc/group" = "antimony:x:$UID:antimony\n"
+"/etc/group" = """
+antimony:x:$UID:antimony
+"""
+"/etc/passwd" = """
+antimony:x:$UID:$UID:Antimony:/home/antimony:/usr/bin/sh
+"""

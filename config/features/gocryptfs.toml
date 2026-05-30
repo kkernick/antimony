@@ -1,12 +1,11 @@
 name = "gocryptfs"
 description = "Encrypt your home folder with gocryptfs."
-
-caveat = "You must have a home folder defined in your profile! If you've already run the sandbox and created a home, rename the folder to allow Antimony to create a new one, then copy the contents into the mount."
 conditional = "command -v /usr/bin/dirname && command -v /usr/bin/kdialog && command -v /usr/bin/gocryptfs"
+caveat = "You must have a home folder defined in your profile! If you've already run the sandbox and created a home, rename the folder to allow Antimony to create a new one, then copy the contents into the mount."
 
 [[hooks.pre]]
-type = "Shell"
 name = "gocryptfs init"
+type = "Shell"
 content = """
 set -e
 if [[ -z $ANTIMONY_HOME ]]; then exit 0; fi
@@ -21,8 +20,8 @@ env = true
 new_privileges = true
 
 [[hooks.pre]]
-type = "Shell"
 name = "gocryptfs mount"
+type = "Shell"
 content = """
 set -e
 if [[ -z $ANTIMONY_HOME ]]; then exit 0; fi
@@ -33,7 +32,7 @@ env = true
 new_privileges = true
 
 [[hooks.post]]
-type = "Shell"
 name = "gocryptfs unmount"
+type = "Shell"
 content = 'if [[ -z $ANTIMONY_HOME ]]; then exit 0; else umount "${ANTIMONY_HOME}"; fi'
 new_privileges = true

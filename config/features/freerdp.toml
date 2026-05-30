@@ -4,4 +4,4 @@ requires = ["network"]
 
 [libraries]
 files = ["libwinpr*", "libfreerdp3*"]
-directories = ["freerdp", "ossl-modules"]
+directories = ["ossl-modules", "freerdp"]

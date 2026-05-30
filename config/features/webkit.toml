@@ -1,10 +1,10 @@
 name = "webkit"
 description = "WebKit for rendering web-content"
-requires = ["gir", "gio"]
+requires = ["gio", "gir"]
 
 [libraries]
-directories = ["webkitgtk-6.0"]
 files = ["libjavascriptcoregtk*", "libwebkitgtk*"]
+directories = ["webkitgtk-6.0"]
 
 [ipc]
 portals = ["Realtime"]

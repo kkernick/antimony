@@ -1,5 +1,4 @@
-id =  "com.mattjakeman.ExtensionManager"
-
+id = "com.mattjakeman.ExtensionManager"
 features = ["libadwaita", "network", "gio"]
 
 [ipc]

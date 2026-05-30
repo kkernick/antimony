@@ -1,10 +1,11 @@
-id =  "com.github.neithern.g4music"
-home.policy = "Enabled"
+id = "com.github.neithern.g4music"
+features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
 
-features = ["libadwaita", "mpris", "pipewire", "gst", "vaapi"]
-
-[files]
-user.rw = ["Music"]
+[home]
+policy = "Enabled"
 
 [ipc]
 portals = ["Background", "FileChooser", "Inhibit"]
+
+[files.user]
+rw = ["Music"]

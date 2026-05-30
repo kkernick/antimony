@@ -1,8 +1,9 @@
-home.policy = "Enabled"
-home.lock = true
-
-features = ["electron", "network", "shell", "xdg-open"]
+features = ["shell", "xdg-open", "electron", "network"]
 arguments = ["--ozone-platform=wayland"]
 
-[files]
-platform.ro = ["/usr/share/applications/proton-mail.desktop"]
+[home]
+policy = "Enabled"
+lock = true
+
+[files.platform]
+ro = ["/usr/share/applications/proton-mail.desktop"]

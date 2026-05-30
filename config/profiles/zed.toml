@@ -1,11 +1,12 @@
 path = "/usr/lib/zed/zed-editor"
-id =  "dev.zed.Zed"
-home.policy = "Enabled"
+id = "dev.zed.Zed"
+features = ["dri", "vulkan", "fonts", "shell", "wayland"]
 
-features = ["wayland", "dri", "vulkan", "fonts", "shell"]
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser", "Settings", "Documents"]
 
 [files]
 passthrough = "rw"
-
-[ipc]
-portals = ["Settings", "FileChooser", "Documents"]

@@ -1,5 +1,4 @@
-features = ["electron", "kf6", "tray"]
-libraries.files = ["libsyncthing*"]
+features = ["tray", "electron", "kf6"]
 namespaces = ["Net"]
 
 [home]
@@ -7,3 +6,6 @@ policy = "Enabled"
 
 [ipc]
 portals = ["Notifications"]
+
+[libraries]
+files = ["libsyncthing*"]

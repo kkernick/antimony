@@ -2,8 +2,8 @@ name = "log"
 description = "Dump errors to a temporary file."
 
 [hooks.parent]
-type = "Shell"
 name = "logger"
+type = "Shell"
 content = """
 cat > /tmp/antimony-$ANTIMONY_NAME-log.txt
 echo "Log written to /tmp/antimony-$ANTIMONY_NAME-log.txt"

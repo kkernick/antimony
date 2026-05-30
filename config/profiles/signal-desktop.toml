@@ -1,4 +1,4 @@
-features = ["electron", "network", "pipewire", "tray"]
+features = ["pipewire", "electron", "network", "tray"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]

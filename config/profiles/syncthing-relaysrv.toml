@@ -1,3 +1,5 @@
 features = ["network"]
 arguments = ["-pools="]
-home.policy = "Enabled"
+
+[home]
+policy = "Enabled"

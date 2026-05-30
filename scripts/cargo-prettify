@@ -1,0 +1,16 @@
+#!/bin/bash
+
+export AT_HOME=$(git rev-parse --show-toplevel)
+
+if [[ -n $CARGO_TARGET_DIR ]]; then
+  TARGET=$CARGO_TARGET_DIR
+else
+  TARGET=$AT_HOME/target
+fi
+
+cargo build --bin antimony_prettify
+if [[ $1 == "prettify" ]]; then
+  $TARGET/debug/antimony_prettify "${@:2}"
+else
+  $TARGET/debug/antimony_prettify "${@:1}"
+fi

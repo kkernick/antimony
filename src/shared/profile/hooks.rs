@@ -45,11 +45,11 @@ pub enum HookError {
 #[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
-    #[serde(default = "Vec::default")]
+    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
     pub pre: Vec<Hook>,
 
     /// Post-Hooks are run on cleanup.
-    #[serde(default = "Vec::default")]
+    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
     pub post: Vec<Hook>,
 
     /// The parent Hook is an Attached Pre-Hook who controls the lifespan of the
@@ -105,7 +105,7 @@ pub struct Hook {
     pub content: String,
 
     /// A list of arguments to be passed to the hook
-    #[serde(default = "Vec::default")]
+    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
 
     /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside

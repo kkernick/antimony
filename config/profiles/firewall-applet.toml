@@ -1,5 +1,4 @@
-features = ["gdk-pixbuf", "gir", "kf6", "python", "tray"]
-libraries.files = ["libnotify*"]
+features = ["python", "gir", "tray", "gdk-pixbuf", "kf6"]
 
 [ipc]
 system_bus = true
@@ -9,3 +8,6 @@ rw = ["$XDG_CONFIG_HOME/firewall"]
 
 [files.platform]
 ro = ["/etc/firewall"]
+
+[libraries]
+files = ["libnotify*"]

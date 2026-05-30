@@ -1,4 +1,8 @@
 name = "gvfs"
 description = "Gnome's Virtual File System for Network Shares"
-libraries.directories = ["gvfs"]
-ipc.talks = ["org.gtk.vfs.*"]
+
+[libraries]
+directories = ["gvfs"]
+
+[ipc]
+talks = ["org.gtk.vfs.*"]

@@ -1,23 +1,16 @@
 name = "qt5"
 description = "Provide necessary files for QT5 applications"
-
-requires = ["wayland", "fonts", "themes", "mime", "dri", "locale"]
-
-[libraries]
-directories = ["qt/plugins", "qt/qml", "qt5/plugins", "qt5/qml"]
-files = ["libQt5*"]
-
-[files]
-user.ro = [
-  "$XDG_CONFIG_HOME/kdedefaults",
-  "$XDG_CONFIG_HOME/breezerc",
-  "$XDG_CONFIG_HOME/kdeglobals",
-  "$XDG_CONFIG_HOME/Trolltech.conf",
-  "$XDG_CONFIG_HOME/kde.org"
-]
-resources.ro = [
-  "/usr/share/qt6"
-]
+requires = ["fonts", "dri", "locale", "mime", "themes", "wayland"]
 
 [environment]
-"QT_QPA_PLATFORM" = "wayland"
+QT_QPA_PLATFORM = "wayland"
+
+[libraries]
+files = ["libQt5*"]
+directories = ["qt/plugins", "qt/qml", "qt5/qml", "qt5/plugins"]
+
+[files.user]
+ro = ["$XDG_CONFIG_HOME/kdedefaults", "$XDG_CONFIG_HOME/kdeglobals", "$XDG_CONFIG_HOME/breezerc", "$XDG_CONFIG_HOME/Trolltech.conf", "$XDG_CONFIG_HOME/kde.org"]
+
+[files.resources]
+ro = ["/usr/share/qt6"]

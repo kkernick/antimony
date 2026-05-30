@@ -1,6 +1,5 @@
-id =  "com.rafaelmardojai.Blanket"
-
-features = ["libadwaita", "mpris", "pipewire", "gst", "vaapi"]
+id = "com.rafaelmardojai.Blanket"
+features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
 
 [ipc]
 portals = ["Background", "FileChooser", "Inhibit"]

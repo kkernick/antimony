@@ -1,6 +1,11 @@
 name = "vulkan"
 description = "Vulkan libraries and configuration."
 
-files.platform.ro = ["/etc/vulkan"]
-files.resources.ro = ["/usr/share/vulkan"]
-libraries.files = ["libvulkan*", "libVkLayer*"]
+[libraries]
+files = ["libVkLayer*", "libvulkan*"]
+
+[files.platform]
+ro = ["/etc/vulkan"]
+
+[files.resources]
+ro = ["/usr/share/vulkan"]

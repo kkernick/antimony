@@ -1,7 +1,8 @@
-id =  "org.gnome.Loupe"
-home.policy = "Enabled"
-
+id = "org.gnome.Loupe"
 features = ["libadwaita", "gdk-pixbuf"]
+
+[home]
+policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser", "Documents"]

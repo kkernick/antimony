@@ -1,14 +1,11 @@
 name = "locale"
 description = "Provide localization information"
 
-libraries.directories = ["locale"]
-
-[files]
-platform.ro = [
-  "/etc/localtime",
-  "/usr/share/zoneinfo",
-  "/usr/share/locale"
-]
-
 [environment]
 LANG = "$LANG"
+
+[libraries]
+directories = ["locale"]
+
+[files.platform]
+ro = ["/etc/localtime", "/usr/share/locale", "/usr/share/zoneinfo"]

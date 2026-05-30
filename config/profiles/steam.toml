@@ -1,6 +1,5 @@
-features = ["bin", "vulkan", "passwd", "network", "ld", "pipewire", "xorg", "electron", "tray"]
+features = ["vulkan", "bin", "passwd", "ld", "wayland", "network", "pipewire", "xorg", "electron", "tray"]
 conflicts = ["hardened_malloc"]
-inherits = ["default"]
 seccomp = "Disabled"
 devices = ["/dev"]
 
@@ -11,7 +10,7 @@ policy = "Enabled"
 user_bus = true
 
 [files.platform]
-ro = ["/etc/machine-id"]
+ro = ["/etc/machine-id", "/sys", "/run/udev"]
 
 [libraries]
 no_sof = true

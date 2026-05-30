@@ -1,14 +1,14 @@
 id = "com.obsproject.Studio"
-features = ["pipewire", "python", "qt6", "sdl", "tray", "vaapi"]
+features = ["python", "pipewire", "sdl", "vaapi", "qt6", "tray"]
 seccomp = "Permissive"
 binaries = ["obs-ffmpeg-mux"]
-
-[libraries]
-directories = ["obs-plugins"]
-files = ["libobs*"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
 portals = ["FileChooser", "ScreenCast"]
+
+[libraries]
+files = ["libobs*"]
+directories = ["obs-plugins"]

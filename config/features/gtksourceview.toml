@@ -1,10 +1,9 @@
 name = "gtksourceview"
 description = "GTK Syntax Highlighting"
 requires = ["gtk4"]
-libraries.files = ["libgtksourceview*"]
 
-[files]
-resources.ro = [
-  "/usr/share/gtksourceview-5/",
-  "/usr/share/gtksourceview-4/",
-]
+[libraries]
+files = ["libgtksourceview*"]
+
+[files.resources]
+ro = ["/usr/share/gtksourceview-5/", "/usr/share/gtksourceview-4/"]

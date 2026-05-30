@@ -1,4 +1,5 @@
-id =  "org.gnome.Connections"
-home.policy = "Enabled"
+id = "org.gnome.Connections"
+features = ["libadwaita", "secrets", "freerdp"]
 
-features = ["libadwaita", "freerdp", "secrets"]
+[home]
+policy = "Enabled"

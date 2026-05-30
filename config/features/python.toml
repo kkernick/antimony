@@ -1,6 +1,7 @@
 name = "python"
 description = "Provide Python"
 requires = ["ld"]
-
 binaries = ["python"]
-libraries.directories = ["python*"]
+
+[libraries]
+directories = ["python*"]

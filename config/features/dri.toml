@@ -3,18 +3,11 @@ description = "DRI for accelerated video rendering"
 devices = ["/dev/dri"]
 
 [libraries]
-directories = ["dri", "gbm"]
 files = ["libMesa*", "libGL*", "libEGL*"]
+directories = ["dri", "gbm"]
 
-[files]
-platform.ro = [
-  "/sys/devices/pci0000:00",
-  "/sys/dev/char",
-  "/etc/OpenCL/",
-]
+[files.platform]
+ro = ["/sys/dev/char", "/sys/devices/pci0000:00", "/etc/OpenCL/"]
 
-resources.ro = [
-  "/usr/share/glvnd",
-  "/usr/share/libdrm",
-  "/usr/share/drirc.d",
-]
+[files.resources]
+ro = ["/usr/share/libdrm", "/usr/share/drirc.d", "/usr/share/glvnd"]
