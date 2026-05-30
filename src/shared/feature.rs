@@ -4,7 +4,7 @@
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
     Map, Set, edit,
-    profile::{files::Files, hooks::Hooks, lib::Libraries},
+    profile::{self, files::Files, hooks::Hooks, lib::Libraries},
     store::{self, Object},
 };
 use serde::{Deserialize, Serialize};
@@ -52,6 +52,9 @@ pub struct Feature {
 
     /// A list of other features this feature conflicts with.
     pub conflicts: Option<Set<String>>,
+
+    /// The SECCOMP policy dictates whether to use SECCOMP to constrain the sandbox.
+    pub seccomp: Option<profile::seccomp::SeccompPolicy>,
 
     /// Required binaries
     pub binaries: Option<Set<String>>,

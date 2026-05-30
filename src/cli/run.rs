@@ -295,8 +295,16 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     };
 
     if add_regular {
-        info.handle
-            .arg_i(localize_home(&info.profile.app_path(&info.name)));
+        let app_path = info.profile.app_path(&info.name);
+        if let Some(home) = &info.profile.home
+            && let path = home.path(&info.name)
+            && path.exists()
+        {
+            info.handle
+                .arg_i(app_path.replace(path.to_string_lossy().as_ref(), "/home/antimony"));
+        } else {
+            info.handle.arg_i(localize_home(&app_path));
+        }
         info.handle.args_i(info.post);
     }
 

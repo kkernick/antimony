@@ -65,7 +65,7 @@ pub enum ConfigMode {
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
         if self.remove {
-            let profile = match Profile::new(&self.profile, None, None, false) {
+            let profile = match Profile::new(&self.profile, None, None, true) {
                 Ok(profile) => profile.0,
                 Err(_) => Profile {
                     path: Some(self.profile.clone()),

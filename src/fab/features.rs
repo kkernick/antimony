@@ -11,7 +11,7 @@ use crate::{
     shared::{
         Map, Set,
         feature::{self, Feature},
-        profile::{Profile, files::FILE_MODES},
+        profile::{Profile, files::FILE_MODES, seccomp::SeccompPolicy},
     },
 };
 use log::{debug, warn};
@@ -375,6 +375,13 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         if p_hooks.parent.is_none() {
             p_hooks.parent = hooks.parent;
         }
+    }
+
+    if let Some(policy) = feature.seccomp.take()
+        && ((profile.seccomp.is_some() && policy == SeccompPolicy::Disabled)
+            || profile.seccomp.is_none())
+    {
+        profile.seccomp = Some(policy);
     }
 }
 

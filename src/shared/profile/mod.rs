@@ -84,6 +84,10 @@ fn default_inherits() -> Set<String> {
     }
 }
 
+fn empty_inherits(inherits: &Set<String>) -> bool {
+    inherits.is_empty() || inherits.len() == 1 && inherits.contains("default")
+}
+
 /// The definitions needed to sandbox an application.
 #[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message)]
 #[serde(deny_unknown_fields, default)]
@@ -140,7 +144,7 @@ pub struct Profile {
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
     #[serde(default = "default_inherits")]
-    #[serde(skip_serializing_if = "Set::is_empty")]
+    #[serde(skip_serializing_if = "empty_inherits")]
     pub inherits: Set<String>,
 
     /// Configuration for the profile's home.
