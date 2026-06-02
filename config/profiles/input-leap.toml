@@ -1,0 +1,12 @@
+id = "io.github.input_leap.input-leap"
+features = ["qt6", "qt6-plugins", "qt6-qml", "network", "tray"]
+binaries = ["input-leapc", "input-leaps"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["RemoteDesktop"]
+
+[libraries]
+files = ["/usr/lib/libnss*"]

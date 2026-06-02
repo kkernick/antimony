@@ -94,7 +94,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
                         .interact()?;
 
                     if !retry {
-                        return Ok(Some(string));
+                        return Ok(None);
                     }
                 }
             },

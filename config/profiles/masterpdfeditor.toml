@@ -1,0 +1,15 @@
+path = "/usr/bin/masterpdfeditor5"
+id = "net.code-industry.masterpdfeditor5"
+features = ["os-release", "qt5"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[files]
+passthrough = "rw"
+
+[files.resources]
+ro = ["/opt/master-pdf-editor-5"]

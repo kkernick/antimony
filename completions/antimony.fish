@@ -72,7 +72,9 @@ screen-cast\t''
 screenshot\t''
 settings\t''
 secret\t''
-network-monitor\t''"
+network-monitor\t''
+remote-desktop\t''
+input-capture\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sees -d 'Add busses the sandbox can see' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l talks -d 'Add busses the sandbox can talk to' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l owns -d 'Add busses the sandbox owns' -r

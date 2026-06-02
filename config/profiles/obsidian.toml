@@ -1,4 +1,4 @@
-features = ["electron", "network"]
+features = ["electron"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]
@@ -7,6 +7,3 @@ lock = true
 
 [ipc]
 portals = ["FileChooser", "Documents"]
-
-[libraries]
-directories = ["electron*"]

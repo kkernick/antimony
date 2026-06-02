@@ -50,7 +50,7 @@ overlay\:"Once an application has been configured, Overlay effectively freezes i
 permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"
 notifying\:"The policy is enforced\: unrecognized syscalls are presented to the user for decision"))' \
-'*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor)' \
+'*--portals=[Add portals]:PORTALS:(background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor remote-desktop input-capture)' \
 '*--sees=[Add busses the sandbox can see]:SEES:_default' \
 '*--talks=[Add busses the sandbox can talk to]:TALKS:_default' \
 '*--owns=[Add busses the sandbox owns]:OWNS:_default' \

@@ -1,0 +1,4 @@
+inherits = ["firefox"]
+
+[home]
+policy = "None"

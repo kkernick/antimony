@@ -1,0 +1,16 @@
+id = "com.jeffser.Alpaca"
+features = ["webkit", "hunspell", "network", "libadwaita", "python", "gtksourceview", "vte", "gst", "pipewire", "libspelling"]
+conflicts = ["hardened_malloc"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+owns = ["com.jeffser.Alpaca.Service"]
+
+[files.resources]
+ro = ["usr/share/Alpaca"]
+
+[libraries]
+files = ["libportaudio*"]

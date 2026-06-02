@@ -448,7 +448,7 @@ _antimony() {
                     return 0
                     ;;
                 --portals)
-                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor" -- "${cur}"))
+                    COMPREPLY=($(compgen -W "background camera clipboard documents file-chooser global-shortcuts inhibit location notifications open-uri proxy-resolver realtime screen-cast screenshot settings secret network-monitor remote-desktop input-capture" -- "${cur}"))
                     return 0
                     ;;
                 --sees)

@@ -117,6 +117,8 @@ pub enum Portal {
     Settings = 14,
     Secret = 15,
     NetworkMonitor = 16,
+    RemoteDesktop = 17,
+    InputCapture = 18,
 }
 impl fmt::Display for Portal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -138,6 +140,8 @@ impl fmt::Display for Portal {
             Self::Settings => write!(f, "Settings"),
             Self::Secret => write!(f, "Secret"),
             Self::NetworkMonitor => write!(f, "NetworkMonitor"),
+            Self::RemoteDesktop => write!(f, "RemoteDesktop"),
+            Self::InputCapture => write!(f, "InputCapture"),
         }
     }
 }

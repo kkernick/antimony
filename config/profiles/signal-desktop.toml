@@ -1,5 +1,9 @@
-features = ["pipewire", "electron", "network", "tray"]
+id = "signal"
+features = ["pipewire", "locale", "electron", "network", "tray"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]
 policy = "Enabled"
+
+[ipc]
+portals = ["Camera", "ScreenCast"]
