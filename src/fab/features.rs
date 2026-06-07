@@ -254,7 +254,6 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
 
         let mut user = files.user;
         let p_user = &mut p_files.user;
-
         for mode in FILE_MODES {
             if let Some(user_files) = user.remove(&mode) {
                 p_user.entry(mode).or_default().extend(
@@ -264,6 +263,21 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
                 );
             }
         }
+
+        let mut runtime = files.runtime;
+        let p_runtime = &mut p_files.runtime;
+        for mode in FILE_MODES {
+            if let Some(runtime_files) = runtime.remove(&mode) {
+                p_runtime.entry(mode).or_default().extend(
+                    runtime_files
+                        .into_iter()
+                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
+                );
+            }
+        }
+
+        p_files.temp.extend(files.temp);
+        p_files.links.extend(files.links);
     }
 
     if let Some(binaries) = feature.binaries.take() {

@@ -5,9 +5,13 @@ conflicts = ["wayland"]
 
 [environment]
 DESKTOP_SESSION = "$DESKTOP_SESSION"
-XDG_CURRENT_DESKTOP = "$XDG_CURRENT_DESKTOP"
 XAUTHORITY = "$XAUTHORITY"
+XDG_CURRENT_DESKTOP = "$XDG_CURRENT_DESKTOP"
+QT_QPA_PLATFORM = "xcb"
 DISPLAY = "$DISPLAY"
 
 [files.resources]
-ro = ["/usr/share/X11", "/tmp/.X11-unix/", "$XAUTHORITY"]
+ro = ["/usr/share/X11", "/tmp/.X11-unix"]
+
+[files.runtime]
+ro = ["$XAUTHORITY"]

@@ -761,7 +761,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "spawn"
 version = "0.1.0"
-source = "git+https://github.com/kkernick/spawn#8dac6f52101922d564203565d44b369487b759e7"
+source = "git+https://github.com/kkernick/spawn#814d4cfcd3fbbc0a28543c74f5cc0be95b5a58a2"
 dependencies = [
  "caps",
  "dashmap",

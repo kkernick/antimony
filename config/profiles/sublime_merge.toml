@@ -1,0 +1,16 @@
+path = "smerge"
+features = ["gtk3", "daemon"]
+conflicts = ["hardened_malloc"]
+binaries = ["git"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[files.user]
+rw = [".local/share/git"]
+
+[libraries]
+files = ["libcurl*"]

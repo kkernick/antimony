@@ -1,0 +1,6 @@
+name = "qt6-plugins"
+description = "Qt6 Plugins"
+requires = ["qt6"]
+
+[libraries]
+directories = ["qt6/plugins"]

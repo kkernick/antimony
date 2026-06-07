@@ -257,7 +257,7 @@ pub fn setup<'a>(
 
     timer!("::proxy", proxy::setup(&mut a))?;
     let home = timer!("::home", home::setup(&mut a))?;
-    timer!("::env", env::setup(&a));
+    timer!("::env", env::setup(&a))?;
     timer!("::fab", fab::setup(&mut a))?;
     timer!("::file", files::setup(&mut a))?;
     timer!("::syscalls", syscalls::setup(&a))?;

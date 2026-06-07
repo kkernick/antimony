@@ -60,6 +60,7 @@ read-write\:"Allow writes"
 executable\:"Executable files need to be created as copies, so that chmod will work correctly"))' \
 '*--ro=[Add read-only files]:RO:_files' \
 '*--rw=[Add read-write files]:RW:_files' \
+'*--link=[Add symlinks in SRC=DST syntax]:LINK:_default' \
 '*--temp=[Add temporary directories]:TEMP:_files' \
 '*--binaries=[Add binaries]:BINARIES:_command_names -e' \
 '*--libraries=[Add libraries]:LIBRARIES:_files' \

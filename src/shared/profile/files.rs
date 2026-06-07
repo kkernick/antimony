@@ -104,9 +104,22 @@ pub struct Files {
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub resources: FileList,
 
+    /// Runtime files are system files with unstable paths (i.e environment variables
+    /// Or files located on temporary file systems). These are normalized outside
+    /// caching (With all the benefits and drawbacks that entails.)
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub runtime: FileList,
+
     /// Direct files take a path, and file contents.
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub direct: Map<FileMode, Map<String, String>>,
+
+    /// Symlinks within the sandbox. Note that the source/destination should be
+    /// normalized for the sandbox, not host (i.e /home/antimony), and you will
+    /// need to ensure the source exists in the sandbox (Either through a standard
+    /// file passthrough or by adding the file to the profile home)
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub links: Map<String, String>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -148,7 +161,16 @@ impl Files {
             }
         }
 
+        let mut runtime = files.runtime;
+        let s_user = &mut self.runtime;
+        for mode in FILE_MODES {
+            if let Some(map) = runtime.remove(&mode) {
+                s_user.entry(mode).or_default().extend(map);
+            }
+        }
+
         self.temp.append(&mut files.temp);
+        self.links.extend(files.links);
     }
 
     /// Construct a file set from the command line.
@@ -184,6 +206,15 @@ impl Files {
         if let Some(mut temp) = args.temp.take() {
             let files = files.get_or_insert_default();
             files.temp.append(&mut temp);
+        }
+
+        if let Some(link) = args.link.take() {
+            let links = &mut files.get_or_insert_default().links;
+            for pair in link {
+                if let Some((src, dst)) = pair.split_once('=') {
+                    links.insert(src.to_owned(), dst.to_owned());
+                }
+            }
         }
 
         files

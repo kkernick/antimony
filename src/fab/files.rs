@@ -14,7 +14,13 @@ use std::borrow::Cow;
 
 /// Localize and bind
 #[inline]
-fn localize(mode: FileMode, file: &str, home: bool, handle: &Spawner, can_try: bool) -> Result<()> {
+pub fn localize(
+    mode: FileMode,
+    file: &str,
+    home: bool,
+    handle: &Spawner,
+    can_try: bool,
+) -> Result<()> {
     match localize_path(file, home)? {
         (Some(source), dest) => {
             handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)]);
@@ -37,6 +43,10 @@ pub fn fabricate(info: &super::FabInfo) -> Result<()> {
     if let Some(files) = &info.profile.files {
         for temp in &files.temp {
             info.handle.args_i(["--tmpfs", temp]);
+        }
+
+        for (src, dst) in &files.links {
+            info.handle.args_i(["--symlink", src, dst]);
         }
 
         if !lockdown {

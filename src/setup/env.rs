@@ -1,12 +1,16 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
-use crate::shared::env::HOME;
+use crate::{
+    fab::files::localize,
+    shared::{env::HOME, profile::files::FILE_MODES},
+};
+use anyhow::Result;
 use log::debug;
 use rayon::prelude::*;
 use std::env;
 
 #[inline]
-pub fn setup(args: &super::Args) {
+pub fn setup(args: &super::Args) -> Result<()> {
     debug!("Setting up environment");
     args.profile.environment.par_iter().for_each(|(key, val)| {
         let mut val = val.replace(HOME.as_str(), "/home/antimony");
@@ -16,4 +20,16 @@ pub fn setup(args: &super::Args) {
         }
         args.handle.args_i(["--setenv", key, &val]);
     });
+
+    if let Some(files) = &args.profile.files {
+        let runtime = &files.runtime;
+        for mode in FILE_MODES {
+            if let Some(files) = runtime.get(&mode) {
+                files
+                    .into_par_iter()
+                    .try_for_each(|file| localize(mode, file, false, &args.handle, true))?;
+            }
+        }
+    }
+    Ok(())
 }

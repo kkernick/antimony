@@ -3,3 +3,4 @@ description = "GObject Plugin System"
 
 [libraries]
 files = ["libpeas*"]
+directories = ["libpeas-*"]

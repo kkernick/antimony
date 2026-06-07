@@ -1,0 +1,15 @@
+path = "subl"
+features = ["gtk3", "daemon"]
+conflicts = ["hardened_malloc"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[files]
+passthrough = "rw"
+
+[libraries]
+files = ["libcurl*"]

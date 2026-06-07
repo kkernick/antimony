@@ -142,6 +142,10 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::AnyPath)]
     pub rw: Option<Vec<String>>,
 
+    /// Add symlinks in SRC=DST syntax
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub link: Option<Vec<String>>,
+
     /// Add temporary directories.
     #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
     pub temp: Option<Vec<String>>,

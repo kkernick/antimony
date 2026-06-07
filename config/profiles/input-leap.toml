@@ -6,7 +6,7 @@ binaries = ["input-leapc", "input-leaps"]
 policy = "Enabled"
 
 [ipc]
-portals = ["RemoteDesktop"]
+portals = ["RemoteDesktop", "InputCapture"]
 
 [libraries]
 files = ["/usr/lib/libnss*"]

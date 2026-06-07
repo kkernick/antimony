@@ -84,6 +84,7 @@ read-write\t'Allow writes'
 executable\t'Executable files need to be created as copies, so that chmod will work correctly'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r -F
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l link -d 'Add symlinks in SRC=DST syntax' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r -F
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r -f -a "(__fish_complete_command)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r -F

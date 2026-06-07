@@ -1,11 +1,14 @@
 id = "io.missioncenter.MissionCenter"
-features = ["libadwaita", "network", "gio", "cgroup", "passwd", "sys", "applications"]
-binaries = ["/usr/bin/missioncenter-magpie=/usr/bin/missioncenter-magpie-glibc", "sh", "missioncenter-magpie", "/usr/share/antimony/utilities/antimony-spawn=/app/bin/missioncenter-spawner"]
+features = ["libadwaita", "applications", "network", "gio", "passwd", "sys", "cgroup"]
+binaries = ["/usr/share/antimony/utilities/antimony-spawn=/app/bin/missioncenter-spawner", "missioncenter-magpie", "sh"]
 devices = ["/dev/udmabuf"]
 namespaces = ["Pid"]
 
 [files.platform]
 ro = ["/run/udev/data"]
+
+[files.links]
+"/usr/bin/missioncenter-magpie" = "/usr/bin/missioncenter-magpie-glibc"
 
 [libraries]
 files = ["libdrm*"]
