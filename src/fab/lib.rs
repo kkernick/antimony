@@ -57,11 +57,15 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
         if !parent.exists() {
             fs::create_dir_all(parent)?;
         }
-        let path = PathBuf::from(library);
-        let canon = fs::canonicalize(&path)?;
+        let path: Cow<'_, Path> = Cow::Owned(PathBuf::from(library));
+        let canon = if path.is_symlink() {
+            Cow::Owned(fs::canonicalize(path.as_ref())?)
+        } else {
+            Cow::Borrowed(path.as_ref())
+        };
 
         if !sof_path.exists()
-            && let Err(e) = fs::hard_link(&canon, &sof_path)
+            && let Err(e) = fs::hard_link(canon.as_ref(), &sof_path)
         {
             warn!(
                 "Failed to hardlink {} => {}: {e}",
@@ -81,7 +85,7 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
                 }
 
                 if !shared_path.exists() {
-                    fs::copy(&canon, shared_path)?;
+                    fs::copy(canon.as_ref(), shared_path)?;
                 }
                 fs::hard_link(shared_path, &sof_path)?;
             }
@@ -337,30 +341,36 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     if !FILES.is_empty() {
         timer!(
             "::write_files",
-            FILES
-                .par_iter()
-                .filter(|library| {
-                    if in_lib(library) {
-                        true
-                    } else {
-                        info.handle.args_i([
-                            if library.starts_with("/home/") {
-                                "--bind"
-                            } else {
-                                "--ro-bind"
-                            },
-                            library,
-                            library,
-                        ]);
-                        false
-                    }
-                })
-                // Write the SOF version, as a hard link preferably.
-                .for_each(|lib| {
-                    if let Err(e) = add_sof(&sof, &lib, &cache) {
-                        error!("Failed to add {} to SOF: {e}", lib.as_ref());
-                    }
-                })
+            if let Some((package, false)) = info.package {
+                for lib in FILES.iter() {
+                    package.add_library(&lib, &lib)?;
+                }
+            } else {
+                FILES
+                    .par_iter()
+                    .filter(|library| {
+                        if in_lib(library) {
+                            true
+                        } else {
+                            info.handle.args_i([
+                                if library.starts_with("/home/") {
+                                    "--bind"
+                                } else {
+                                    "--ro-bind"
+                                },
+                                library,
+                                library,
+                            ]);
+                            false
+                        }
+                    })
+                    // Write the SOF version, as a hard link preferably.
+                    .for_each(|lib| {
+                        if let Err(e) = add_sof(&sof, &lib, &cache) {
+                            error!("Failed to add {} to SOF: {e}", lib.as_ref());
+                        }
+                    });
+            }
         );
 
         let sof_str = sof.to_string_lossy();
@@ -369,24 +379,23 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
     if !DIRS.is_empty() {
         timer!("::mount_directories", {
-            DIRS.par_iter().try_for_each(|dir| -> Result<()> {
+            for dir in DIRS.iter() {
                 if in_lib(dir.as_ref()) {
                     let sof_path = sof.join(&dir[1..]);
                     if !sof_path.exists() {
                         fs::create_dir_all(sof_path)?;
                     }
                 }
-                info.handle.args_i([
-                    if dir.starts_with("/home/") {
-                        "--bind"
-                    } else {
-                        "--ro-bind"
-                    },
-                    dir.as_ref(),
-                    localize_home(dir.as_ref()).as_ref(),
-                ]);
-                Ok(())
-            })?;
+                let local = localize_home(dir.as_ref());
+                let home = dir.starts_with("/home/");
+
+                info.handle
+                    .args_i([if home { "--bind" } else { "--ro-bind" }, &dir, &local]);
+
+                if !home && let Some((package, false)) = info.package.as_mut() {
+                    package.add_library(&dir, &local)?;
+                }
+            }
         });
     }
     Ok(())

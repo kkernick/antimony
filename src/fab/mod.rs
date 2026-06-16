@@ -13,6 +13,7 @@ use crate::{
     shared::{
         Set,
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
+        package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
     },
@@ -23,13 +24,14 @@ use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use log::{debug, warn};
+use path_clean::clean;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
     fmt::Debug,
-    fs::{self, File},
+    fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -47,6 +49,7 @@ pub struct FabInfo<'a> {
     pub name: &'a str,
     pub instance: &'a Temp,
     pub sys_dir: &'a Path,
+    pub package: &'a mut Option<(Package, bool)>,
 }
 
 /// `bilrost` compatible struct for saving cached data
@@ -119,7 +122,7 @@ pub fn ldd(path: &str) -> Result<&'static Set<String>> {
         Ok(depends)
     } else {
         let depends = if elf_filter(path)? {
-            Spawner::abs("/usr/bin/ldd")
+            Spawner::new("ldd")?
                 .arg(path)
                 .output(StreamMode::Pipe)
                 .error(StreamMode::Discard)
@@ -141,10 +144,13 @@ pub fn ldd(path: &str) -> Result<&'static Set<String>> {
                 .map(|e| {
                     let path = Path::new(&e);
                     if let Some(parent) = path.parent()
-                        && let Ok(canon) = fs::canonicalize(parent)
                         && let Some(name) = path.file_name()
                     {
-                        canon.join(name).to_string_lossy().into_owned()
+                        let mut path = clean(parent).join(name);
+                        if !ROOTS.iter().any(|root| path.starts_with(root.as_ref())) {
+                            path = path.canonicalize().unwrap_or(path);
+                        }
+                        path.to_string_lossy().into_owned()
                     } else {
                         e
                     }
@@ -181,7 +187,7 @@ pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
             return Ok(libraries.cache.into_iter().collect());
         }
 
-        let libraries: Set<Cow<'static, str>> = Spawner::abs("/usr/bin/find")
+        let libraries: Set<Cow<'static, str>> = Spawner::new("find")?
             .args([dir, "-type", "f"])
             .output(StreamMode::Pipe)
             .mode(user::Mode::Real)
@@ -218,7 +224,7 @@ pub fn get_wildcards(
 ) -> Result<Set<Cow<'static, str>>> {
     timer!("::get_wildcards", {
         let run = |dir: &str, base: &str| -> Result<Set<Cow<'static, str>>> {
-            let handle = Spawner::abs("/usr/bin/find").arg(dir);
+            let handle = Spawner::new("find")?.arg(dir);
 
             if base.contains('/') {
                 let whole = PathBuf::from(format!("{dir}/{base}"));
@@ -369,10 +375,8 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
 
         let _ = as_real!({
             let path = Path::new(resolved.as_ref());
-            if (!path.is_absolute() || !path.exists())
-                && let Ok(canon) = path.canonicalize()
-            {
-                resolved = Cow::Owned(canon.to_string_lossy().into_owned());
+            if !path.is_absolute() || !path.exists() {
+                resolved = Cow::Owned(clean(path).to_string_lossy().into_owned());
             }
         });
 

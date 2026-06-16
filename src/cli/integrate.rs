@@ -3,7 +3,7 @@
 use crate::{
     cli,
     shared::{
-        env::{CONFIG_HOME, DATA_HOME, HOME_PATH},
+        env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
         profile::Profile,
     },
 };
@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use clap::{ValueEnum, ValueHint};
 use heck::ToTitleCase;
 use log::{debug, info};
+use spawn::Spawner;
 use std::{
     borrow::Cow,
     fmt::Write as FormatWrite,
@@ -19,7 +20,9 @@ use std::{
     os::unix::fs::symlink,
     path::Path,
 };
+use user::{Mode, USER};
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Args, Default)]
 pub struct Args {
     /// The name of the profile
@@ -39,6 +42,24 @@ pub struct Args {
     /// may need to use this option.
     #[arg(short, long, default_value_t = false)]
     pub shadow: bool,
+
+    /// Setup a user systemd service to run the sandbox on startup.
+    /// Antimony has a race condition with autostart because the session bus
+    /// may not be available when it starts. This impacts setting a sandbox
+    /// to autostart via your DE, or /etc/xdg/autostart configurations.
+    /// Antimony fixes this by installing the sandbox as a user-level
+    /// service that waits for the bus before launching.
+    ///
+    /// Because this behavior differs from how /etc/xdg/autostart usually
+    /// works, you need to explicitly opt-in to autostart, even if the
+    /// program is set to autostart by the system. Antimony will stub
+    /// the usual autostart mechanism and use a service.
+    #[arg(short, long, default_value_t = false)]
+    pub autostart: bool,
+
+    /// If autostart, enable the service immediately.
+    #[arg(short, long, default_value_t = false)]
+    pub enable: bool,
 
     /// How to integrate configurations
     #[arg(short, long)]
@@ -129,6 +150,17 @@ pub fn remove(profile: &Profile, cmd: &Args) -> Result<()> {
         }
     }
 
+    let service = CONFIG_HOME
+        .join("systemd")
+        .join("user")
+        .join(format!("antimony-{name}.service"));
+    if service.exists() {
+        match fs::remove_file(&service) {
+            Err(e) => eprintln!("{}: {e}.", service.display()),
+            Ok(()) => println!("Removed autostart service file"),
+        }
+    }
+
     let copy = DATA_HOME
         .join("applications")
         .join(format!("{name}.desktop"));
@@ -216,6 +248,19 @@ fn manage_configurations(
     Ok(())
 }
 
+fn make_shadow(desktop_file: &Path) -> Result<Vec<String>> {
+    Ok(fs::read_to_string(desktop_file)
+        .with_context(|| "Failed to read desktop file")?
+        .split('\n')
+        .map(|e| {
+            if e.contains("Name=") {
+                return e.to_owned() + " (Native)\nNoDisplay=true";
+            }
+            e.to_owned()
+        })
+        .collect())
+}
+
 /// Format a desktop file to point to Antimony
 fn format_desktop(
     cmd: &Args,
@@ -227,16 +272,7 @@ fn format_desktop(
 ) -> Result<()> {
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
         // Create a shadow copy to turn on NoDisplay
-        let local_desktop: Vec<String> = fs::read_to_string(desktop_file)
-            .with_context(|| "Failed to read desktop file")?
-            .split('\n')
-            .map(|e| {
-                if e.contains("Name=") {
-                    return e.to_owned() + " (Native)\nNoDisplay=true";
-                }
-                e.to_owned()
-            })
-            .collect();
+        let local_desktop = make_shadow(desktop_file)?;
 
         // Write it out.
         let shadow = out_path.join(format!("{}.desktop", profile.desktop(name)));
@@ -402,20 +438,105 @@ pub fn integrate(profile: &Profile, cmd: &Args) -> Result<()> {
         fs::write(out, contents.join("\n"))?;
     }
 
-    let service_file = Path::new("/etc")
-        .join("xdg")
-        .join("autostart")
-        .join(format!("{}.desktop", profile.desktop(name)));
-    if service_file.exists() {
-        info!("Overriding XDG Service");
-        format_desktop(
-            cmd,
-            profile,
-            name,
-            &service_file,
-            &local,
-            &CONFIG_HOME.join("autostart"),
-        )?;
+    if cmd.autostart {
+        let autostart_name = format!("{}.desktop", profile.desktop(name));
+        let service_file = Path::new("/etc")
+            .join("xdg")
+            .join("autostart")
+            .join(&autostart_name);
+        if service_file.exists() {
+            info!("Overriding XDG Service");
+            let shadow = make_shadow(&service_file)?;
+            let shadow_path = CONFIG_HOME.join("autostart").join(autostart_name);
+            if let Some(parent) = shadow_path.parent()
+                && !parent.exists()
+            {
+                fs::create_dir_all(parent)?;
+            }
+
+            fs::write(shadow_path, shadow.join("\n"))?;
+        }
+
+        let service_vec = |config: bool| -> Vec<_> {
+            let mut description = format!("Description=Run {name} under Antimony");
+            if config {
+                description.push_str(" with Configuration %i");
+            }
+            let after = format!("After=run-user-{}.mount", USER.real);
+            let requires = format!("Requires=run-user-{}.mount", USER.real);
+            let condition = format!("ConditionPathExists=/run/user/{}/bus", USER.real);
+            let environment = format!(
+                "Environment=DBUS_SESSION_BUS_ADDRESS={}",
+                SESSION_BUS.as_str()
+            );
+            let mut exec = format!("ExecStart=antimony run {name}");
+            if config {
+                exec.push_str(" -c %i");
+            }
+
+            [
+                "[Unit]",
+                &description,
+                &after,
+                &requires,
+                &condition,
+                "[Service]",
+                "Type=simple",
+                "Restart=on-failure",
+                "RestartSec=1",
+                "StartLimitBurst=10",
+                "StartLimitIntervalSec=60",
+                &environment,
+                "Environment=NOTIFY=none",
+                &exec,
+                "[Install]",
+                "WantedBy=default.target",
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect()
+        };
+
+        let mut service_path = CONFIG_HOME
+            .join("systemd")
+            .join("user")
+            .join(format!("antimony-{name}.service"));
+        if let Some(parent) = service_path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&service_path, service_vec(false).join("\n"))?;
+
+        if !profile.configuration.is_empty() {
+            service_path.set_file_name(format!("antimony-{name}@.service"));
+            fs::write(&service_path, service_vec(true).join("\n"))?;
+            println!("This profile has a configuration! A configuration service has been added.");
+        }
+
+        if cmd.enable {
+            Spawner::abs("/usr/bin/systemctl")
+                .args(["--user", "daemon-reload"])
+                .mode(Mode::Real)
+                .preserve_env(true)
+                .spawn()?
+                .wait()?;
+
+            if profile.configuration.is_empty() {
+                Spawner::abs("/usr/bin/systemctl")
+                    .args(["--user", "enable", &format!("antimony-{name}.service")])
+                    .mode(Mode::Real)
+                    .preserve_env(true)
+                    .spawn()?
+                    .wait()?;
+            } else {
+                println!(
+                    "Configuration found, not enabling. Enable a specific configuration with antimony-{name}@config.service. To enable the non-config profile, enable antimony-{name}.service"
+                );
+            }
+        } else {
+            println!("Service in place. Reload the daemon or reboot, and enable it!");
+        }
     }
 
     Ok(())

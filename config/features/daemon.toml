@@ -9,5 +9,5 @@ sandbox_args = ["#", "daemon-wait"]
 "/usr/bin/daemon-wait" = """
 #!/bin/sh
 $@
-while [[ $(ps | wc -l ) -gt 6 ]]; do sleep 1; done
+while [ $(ps | wc -l ) -gt 6 ]; do sleep 1; done
 """

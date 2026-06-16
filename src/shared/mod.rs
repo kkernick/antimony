@@ -4,13 +4,14 @@ pub mod config;
 pub mod edit;
 pub mod env;
 pub mod feature;
+pub mod package;
 pub mod profile;
 pub mod store;
 pub mod syscalls;
 
 use crate::shared::{
     config::CONFIG_FILE,
-    env::{AT_HOME, CACHE_DIR},
+    env::{AT_HOME, CACHE_DIR, SESSION_BUS},
 };
 use dashmap::{DashMap, DashSet};
 use log::{Level, Record};
@@ -88,7 +89,7 @@ pub fn logger(record: &Record, level: Level) -> bool {
     let result = || -> anyhow::Result<()> {
         let code = Spawner::abs(utility("notify"))
             .mode(user::Mode::Real)
-            .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
             .args([
                 "--title",
                 &format!("{}: {}", level_name(level), record.target()),

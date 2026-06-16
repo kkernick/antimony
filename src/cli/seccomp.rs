@@ -174,7 +174,7 @@ impl super::Run for Args {
                             let remove = if path.starts_with("/home/antimony") {
                                 // If any profile's home has the binary in it, we preserve.
                                 let wild = path.replace("/home/antimony", "*");
-                                Spawner::abs("/usr/bin/find")
+                                Spawner::new("find")?
                                     .arg(DATA_HOME.join("antimony").to_string_lossy())
                                     .args(["-wholename", &wild])
                                     .mode(user::Mode::Real)

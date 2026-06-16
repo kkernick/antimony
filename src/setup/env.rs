@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use std::env;
 
 #[inline]
-pub fn setup(args: &super::Args) -> Result<()> {
+pub fn setup(args: &mut super::Args) -> Result<()> {
     debug!("Setting up environment");
     args.profile.environment.par_iter().for_each(|(key, val)| {
         let mut val = val.replace(HOME.as_str(), "/home/antimony");
@@ -25,9 +25,9 @@ pub fn setup(args: &super::Args) -> Result<()> {
         let runtime = &files.runtime;
         for mode in FILE_MODES {
             if let Some(files) = runtime.get(&mode) {
-                files
-                    .into_par_iter()
-                    .try_for_each(|file| localize(mode, file, false, &args.handle, true))?;
+                for file in files {
+                    localize(mode, file, false, &args.handle, true, &mut None)?;
+                }
             }
         }
     }

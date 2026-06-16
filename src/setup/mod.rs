@@ -15,7 +15,8 @@ use crate::{
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
-        profile::Profile,
+        package::Package,
+        profile::{Profile, seccomp::SeccompPolicy},
         store::mem,
         utility,
     },
@@ -49,6 +50,9 @@ struct Args<'a> {
     pub watches: Set<WatchDescriptor>,
     pub sys_dir: PathBuf,
     pub instance: &'a Temp,
+
+    /// If the boolean is false, we are *creating* the package. If true, we are *using* the package.
+    pub package: Option<(Package, bool)>,
     pub run: &'a mut super::cli::run::Args,
 }
 
@@ -61,19 +65,92 @@ pub struct Info {
     pub instance: Temp,
     pub home: Option<String>,
     pub sys_dir: PathBuf,
+    pub package: Option<(Package, bool)>,
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
 #[allow(clippy::too_many_lines)]
 pub fn setup<'a>(
-    name: Cow<'a, str>,
+    mut name: Cow<'a, str>,
     mut args: &'a mut super::cli::run::Args,
     flush_defer: bool,
+    mut package: Option<(Package, bool)>,
 ) -> Result<Info> {
-    let (mut profile, hash) = timer!(
-        "::profile_load",
-        Profile::new(&name, args.config.take(), Some(&mut args), false)
-    )?;
+    let (mut profile, hash, profile_args) = if let Some((_, true)) = package {
+        let path = PathBuf::from(name.into_owned());
+        let mut profile_path = None;
+
+        for file in path.read_dir()?.filter_map(Result::ok) {
+            if let Some(extension) = file.path().extension()
+                && extension == "toml"
+            {
+                profile_path = Some(file.path());
+                break;
+            }
+        }
+
+        let Some(profile_path) = profile_path else {
+            return Err(anyhow!("Could not find package profile"));
+        };
+        name = Cow::Owned(profile_path.file_stem().map_or_else(
+            || profile_path.to_string_lossy().into_owned(),
+            |stem| stem.to_string_lossy().into_owned(),
+        ));
+
+        let mut profile: Profile = toml::from_str(&fs::read_to_string(profile_path)?)?;
+        let hash = profile.hash_str(&None);
+
+        // These do not work without a system installation.
+        profile.seccomp = Some(SeccompPolicy::Disabled);
+        profile.lockdown = Some(false);
+
+        let mut profile_args = Vec::new();
+        let root = path.join("root");
+        if root.exists() {
+            #[rustfmt::skip]
+            profile_args.extend([
+                "--overlay-src", &root.to_string_lossy(),
+                "--tmp-overlay", "/"
+            ].map(String::from));
+        }
+
+        let bin = path.join("bin");
+        if bin.exists() {
+            #[rustfmt::skip]
+            profile_args.extend([
+                "--ro-bind", &bin.to_string_lossy(), "/usr/bin",
+                "--symlink", "/usr/bin", "/bin",
+                "--symlink", "/usr/bin", "/sbin",
+                "--symlink", "/usr/bin", "/usr/sbin",
+            ].map(String::from));
+        }
+
+        let lib = path.join("lib");
+        if lib.exists() {
+            profile_args
+                .extend(["--ro-bind", &lib.to_string_lossy(), "/usr/lib"].map(String::from));
+            if let Some(libraries) = &profile.libraries {
+                for root in &libraries.roots {
+                    if root != "/usr/lib" {
+                        profile_args.extend(["--symlink", "/usr/lib", root].map(String::from));
+                    }
+                }
+                if !libraries.roots.contains("/usr/lib64") {
+                    #[rustfmt::skip]
+                    profile_args.extend([
+                        "--symlink", "/usr/lib", "/usr/lib64",
+                        "--symlink", "/usr/lib64", "/lib64"
+                    ].map(String::from));
+                }
+            }
+        }
+
+        package = Some((Package::default(), true));
+        (profile, hash, profile_args)
+    } else {
+        let (profile, hash) = Profile::new(&name, args.config.take(), Some(&mut args), false)?;
+        (profile, hash, Vec::new())
+    };
 
     let mut sys_dir = CACHE_DIR.join("run").join(&hash);
     let mut instances = RUNTIME_DIR.join("antimony").join(&hash);
@@ -118,7 +195,7 @@ pub fn setup<'a>(
                 fs::rename(&refresh_sof, &sys_dir)?;
 
                 debug!("Removing stale command caches.");
-                Spawner::abs("/usr/bin/find")
+                Spawner::new("find")?
                     .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])
                     .spawn()?
                     .wait()?;
@@ -211,11 +288,13 @@ pub fn setup<'a>(
         let handle = Spawner::abs(
             if profile.lockdown.unwrap_or(false) {
                 utility("lockdown")
+
             } else {
                 "/usr/bin/bwrap".to_owned()
             }
         )
         .name(&args.profile)
+        .args(profile_args)
         .args([
             "--new-session", "--die-with-parent", "--clearenv",
             "--proc", "/proc",
@@ -253,11 +332,12 @@ pub fn setup<'a>(
         sys_dir: sys_dir.clone(),
         instance: &instance,
         run: args,
+        package,
     };
 
     timer!("::proxy", proxy::setup(&mut a))?;
     let home = timer!("::home", home::setup(&mut a))?;
-    timer!("::env", env::setup(&a))?;
+    timer!("::env", env::setup(&mut a))?;
     timer!("::fab", fab::setup(&mut a))?;
     timer!("::file", files::setup(&mut a))?;
     timer!("::syscalls", syscalls::setup(&a))?;
@@ -281,6 +361,7 @@ pub fn setup<'a>(
         handle: a.handle,
         post,
         profile: a.profile,
+        package: a.package,
         instance,
         home,
         sys_dir,

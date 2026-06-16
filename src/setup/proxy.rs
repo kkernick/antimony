@@ -1,6 +1,8 @@
 //! Antimony uses xdg-dbus-proxy to proxy the user bus. It does this by spawning an associated process
 //! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
 
+#[cfg(debug_assertions)]
+use crate::shared::env::SESSION_BUS;
 use crate::{
     fab::{
         get_libraries,
@@ -20,7 +22,6 @@ use log::debug;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
-    env,
     fs::{self, File},
     io::Write,
     os::fd::AsRawFd,
@@ -72,14 +73,15 @@ pub fn run(
         });
     }
 
+    let path = which::which("xdg-dbus-proxy")?;
     let proxy = timer!("::spawner", {
         #[rustfmt::skip]
-        let proxy = Spawner::abs("/usr/bin/bwrap")
+        let proxy = Spawner::new("bwrap")?
         .name("proxy")
         .error(StreamMode::Log(log::Level::Error))
         .mode(user::Mode::Real).args([
             "--new-session",
-            "--ro-bind", "/usr/bin/xdg-dbus-proxy", "/usr/bin/xdg-dbus-proxy",
+            "--ro-bind", path, "/usr/bin/xdg-dbus-proxy",
             "--clearenv",
             "--disable-userns",
             "--assert-userns-disabled",
@@ -102,7 +104,7 @@ pub fn run(
         proxy.args_i([
             "--",
             "/usr/bin/xdg-dbus-proxy",
-            &env::var("DBUS_SESSION_BUS_ADDRESS")?,
+            SESSION_BUS.as_str(),
             &app_dir.join("bus").to_string_lossy(),
             "--filter",
         ]);
@@ -267,7 +269,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 args.handle.args_i([
                     "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
                     "--ro-bind", "/run/dbus", "/run/dbus",
-                    "--setenv", "DBUS_SESSION_BUS_ADDRESS", &format!("unix:path=/run/user/{}/bus", user::USER.real),
+                    "--setenv", "DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str(),
                     "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
                     "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
                 ]);

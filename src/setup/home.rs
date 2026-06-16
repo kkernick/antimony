@@ -110,11 +110,11 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                     fs::create_dir_all(&work)?;
 
                     #[rustfmt::skip]
-                                args.handle.args_i([
-                                    "--overlay-src", &work_str,
-                                    "--overlay-src", &home_str,
-                                    "--ro-overlay", dest,
-                                ]);
+                    args.handle.args_i([
+                        "--overlay-src", &work_str,
+                        "--overlay-src", &home_str,
+                        "--ro-overlay", dest,
+                    ]);
                 }
             }
         }

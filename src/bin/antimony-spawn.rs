@@ -119,7 +119,7 @@ fn main() -> Result<()> {
             ..Default::default()
         };
 
-        let info = setup::setup(Cow::Owned(cli.command), &mut args, false)?;
+        let info = setup::setup(Cow::Owned(cli.command), &mut args, false, None)?;
 
         // Forward FDs.
         if let Some(fds) = cli.forward_fd {

@@ -526,39 +526,38 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
-    timer!("::elf", {
-        parsed.elf.into_par_iter().for_each(|elf| {
-            info.handle.args_i(["--ro-bind", &elf, &elf]);
-            elf_binaries.insert(elf);
-        });
-    });
+    for elf in parsed.elf {
+        info.handle.args_i(["--ro-bind", &elf, &elf]);
+        if let Some((package, false)) = info.package.as_mut() {
+            package.add_binary(&elf, &elf)?;
+        }
+        elf_binaries.insert(elf);
+    }
 
     // Scripts are consumed here, and are only bound to the sandbox.
-    timer!("::scripts", {
-        parsed
-            .scripts
-            .into_par_iter()
-            .for_each(|script| info.handle.args_i(["--ro-bind", &script, &script]));
-    });
+    for script in parsed.scripts {
+        info.handle.args_i(["--ro-bind", &script, &script]);
+        if let Some((package, false)) = info.package.as_mut() {
+            package.add_binary(&script, &script)?;
+        }
+    }
 
-    timer!("::bin::files", {
-        parsed
-            .files
-            .into_par_iter()
-            .for_each(|file| info.handle.args_i(["--ro-bind", &file, &file]));
-    });
+    for file in parsed.files {
+        info.handle.args_i(["--ro-bind", &file, &file]);
+        if let Some((package, false)) = info.package.as_mut() {
+            package.add_binary(&file, &file)?;
+        }
+    }
 
-    timer!("::localized", {
-        parsed.localized.into_par_iter().try_for_each(
-            |(src, dst): (String, String)| -> anyhow::Result<()> {
-                info.handle.args_i(["--ro-bind", &src, &dst]);
-                if as_real!(elf_filter(&src))?? {
-                    elf_binaries.insert(src);
-                }
-                Ok(())
-            },
-        )
-    })?;
+    for (src, dst) in parsed.localized {
+        info.handle.args_i(["--ro-bind", &src, &dst]);
+        if as_real!(elf_filter(&src))?? {
+            if let Some((package, false)) = info.package.as_mut() {
+                package.add_binary(&src, &dst)?;
+            }
+            elf_binaries.insert(src);
+        }
+    }
 
     if !parsed.directories.is_empty() {
         let libraries = info.profile.libraries.get_or_insert_default();
@@ -569,17 +568,19 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         });
     }
 
-    timer!("::symlinks", {
-        parsed.symlinks.into_par_iter().for_each(|(link, dest)| {
-            if !elf_binaries.contains(&dest) {
-                info.handle.args_i(["--ro-bind", &dest, &dest]);
-                elf_binaries.insert(dest.clone());
-            }
-            if !in_lib(&link) {
-                info.handle.args_i(["--symlink", &dest, &link]);
-            }
-        });
-    });
+    for (link, dest) in parsed.symlinks {
+        if let Some((package, false)) = info.package.as_mut() {
+            package.add_binary(&link, &dest)?;
+        }
+
+        if !elf_binaries.contains(&dest) {
+            info.handle.args_i(["--ro-bind", &dest, &dest]);
+            elf_binaries.insert(dest.clone());
+        }
+        if !in_lib(&link) {
+            info.handle.args_i(["--symlink", &dest, &link]);
+        }
+    }
 
     if let Some(home) = &info.profile.home {
         timer!("::home_binaries", {

@@ -1,6 +1,11 @@
 //! Note the bulk of SECCOMP logic is in shared. This just attaches the Filter to a process.
 
-use crate::shared::{Set, env::DATA_HOME, profile::seccomp::SeccompPolicy, syscalls, utility};
+use crate::shared::{
+    Set,
+    env::{DATA_HOME, SESSION_BUS},
+    profile::seccomp::SeccompPolicy,
+    syscalls, utility,
+};
 use anyhow::Result;
 use caps::Capability;
 use log::debug;
@@ -49,7 +54,7 @@ pub fn install_filter(
                     &format!("{policy}").to_lowercase(),
                 ])
                 .env_or("XDG_DATA_HOME", DATA_HOME.to_string_lossy())?
-                .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                 .output(spawn::StreamMode::Log(log::Level::Info))
                 .new_privileges(true)
                 .cap(Capability::CAP_AUDIT_READ)

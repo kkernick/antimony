@@ -147,3 +147,8 @@ pub static EDITOR: LazyLock<String> = LazyLock::new(|| {
 
     editor.to_owned()
 });
+
+pub static SESSION_BUS: LazyLock<String> = LazyLock::new(|| {
+    env::var("DBUS_SESSION_BUS_ADDRESS")
+        .unwrap_or_else(|_| format!("unix:path=/run/user/{}/bus", user::USER.real))
+});

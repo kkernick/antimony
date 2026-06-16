@@ -6,17 +6,14 @@
 //! Note that due to performance considerations, the feature fabricator is called on
 //! `Profile::new()`, and is cached separately from the other fabricators as well.
 
-use crate::{
-    fab::resolve,
-    shared::{
-        Map, Set,
-        feature::{self, Feature},
-        profile::{Profile, files::FILE_MODES, seccomp::SeccompPolicy},
-    },
+use crate::shared::{
+    Map, Set,
+    feature::{self, Feature},
+    profile::{Profile, files::FILE_MODES, seccomp::SeccompPolicy},
 };
 use log::{debug, warn};
 use spawn::{Spawner, StreamMode};
-use std::{borrow::Cow, num::Saturating};
+use std::num::Saturating;
 use thiserror::Error;
 
 /// Errors related to feature integration
@@ -178,7 +175,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
     // something more complicated. It runs under the
     if let Some(condition) = feature.conditional.take() {
         let code = || -> anyhow::Result<i32> {
-            let code = Spawner::abs("/usr/bin/bash")
+            let code = Spawner::new("bash")?
                 .args(["-c", &condition])
                 .preserve_env(true)
                 .mode(user::Mode::Real)
@@ -232,11 +229,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         let p_sys = &mut p_files.platform;
         for mode in FILE_MODES {
             if let Some(sys_files) = system.remove(&mode) {
-                p_sys.entry(mode).or_default().extend(
-                    sys_files
-                        .into_iter()
-                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                );
+                p_sys.entry(mode).or_default().extend(sys_files);
             }
         }
 
@@ -244,11 +237,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         let p_sys = &mut p_files.resources;
         for mode in FILE_MODES {
             if let Some(sys_files) = system.remove(&mode) {
-                p_sys.entry(mode).or_default().extend(
-                    sys_files
-                        .into_iter()
-                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                );
+                p_sys.entry(mode).or_default().extend(sys_files);
             }
         }
 
@@ -256,11 +245,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         let p_user = &mut p_files.user;
         for mode in FILE_MODES {
             if let Some(user_files) = user.remove(&mode) {
-                p_user.entry(mode).or_default().extend(
-                    user_files
-                        .into_iter()
-                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                );
+                p_user.entry(mode).or_default().extend(user_files);
             }
         }
 
@@ -268,11 +253,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         let p_runtime = &mut p_files.runtime;
         for mode in FILE_MODES {
             if let Some(runtime_files) = runtime.remove(&mode) {
-                p_runtime.entry(mode).or_default().extend(
-                    runtime_files
-                        .into_iter()
-                        .map(|s| resolve(Cow::Owned(s)).into_owned()),
-                );
+                p_runtime.entry(mode).or_default().extend(runtime_files);
             }
         }
 
@@ -372,11 +353,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
     }
 
     if let Some(env) = feature.environment.take() {
-        for (key, value) in env {
-            profile
-                .environment
-                .insert(key, resolve(Cow::Owned(value)).into_owned());
-        }
+        profile.environment.extend(env);
     }
 
     if let Some(mut hooks) = feature.hooks.take() {

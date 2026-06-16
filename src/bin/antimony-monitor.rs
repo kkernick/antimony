@@ -3,7 +3,10 @@
 //! Database to be used for profile generation.
 
 use antimony::shared::{
-    self, Set, ThreadMap, env::DATA_HOME, profile::seccomp::SeccompPolicy, syscalls, utility,
+    self, Set, ThreadMap,
+    env::{DATA_HOME, SESSION_BUS},
+    profile::seccomp::SeccompPolicy,
+    syscalls, utility,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueHint};
@@ -329,7 +332,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     ])
     .mode(user::Mode::Real)
     .output(StreamMode::Pipe)
-    .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
     .spawn()?.output_all()?;
     Ok(String::from(out.strip_suffix('\n').unwrap_or(&out)))
 }
@@ -648,7 +651,7 @@ fn main() -> Result<()> {
                 let binary_exist = |path: &str| -> Result<bool> {
                     Ok(if path.starts_with("/home/antimony") {
                         let path = path.replace("/home/antimony", "*");
-                        !Spawner::abs("/usr/bin/find")
+                        !Spawner::new("find")?
                             .arg(DATA_HOME.join("antimony").to_string_lossy())
                             .args(["-wholename", &path])
                             .mode(user::Mode::Real)

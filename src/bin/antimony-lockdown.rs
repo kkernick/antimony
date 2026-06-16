@@ -60,7 +60,7 @@ fn main() -> Result<()> {
 
     // Digest the arguments and pass them to bubblewrap.
     let arguments: Vec<_> = env::args().collect();
-    let handle = Spawner::abs("/usr/bin/bwrap")
+    let handle = Spawner::new("bwrap")?
         .mode(user::Mode::Effective)
         .args(&arguments[1..]);
 

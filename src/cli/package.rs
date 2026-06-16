@@ -1,0 +1,139 @@
+//! Export user-profiles
+
+use crate::{
+    cli::{run, run_vec},
+    fab::{get_libraries, lib::ROOTS},
+    setup::setup,
+    shared::{
+        Map,
+        env::PWD,
+        package::{PACKAGE_MARKER, Package},
+        profile::Profile,
+        store,
+    },
+};
+use anyhow::Result;
+use bilrost::Message;
+use clap::ValueHint;
+use log::info;
+use std::{
+    borrow::Cow,
+    env,
+    fs::File,
+    io::{Read, Seek, SeekFrom, Write},
+    path::PathBuf,
+};
+use user::as_real;
+
+#[derive(clap::Args)]
+pub struct Args {
+    /// The name of the profile/feature to export. If absent, export all user-profiles/features.
+    #[arg(value_hint = ValueHint::CommandName)]
+    profile: String,
+
+    /// Where to export to. Defaults to current directory
+    #[arg(long, value_hint = ValueHint::DirPath)]
+    dest: Option<String>,
+
+    /// Run arguments
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub passthrough: Option<Vec<String>>,
+}
+impl super::Run for Args {
+    #[allow(clippy::unwrap_used)]
+    fn run(self) -> Result<()> {
+        store::CACHE.lock().replace(false);
+
+        let dest = self
+            .dest
+            .map_or_else(|| PWD.clone(), PathBuf::from)
+            .join(&self.profile)
+            .with_extension("sb");
+        let (profile, _) = Profile::new(&self.profile, None, None, false)?;
+        let exe_path = env::current_exe()?;
+        let mut binary_file = File::open(&exe_path)?;
+
+        let mut binary_content = Vec::new();
+        binary_file.read_to_end(&mut binary_content)?;
+
+        // 2. Prepare the data
+        let mut package = Package {
+            name: self.profile.clone(),
+            profile,
+            ..Default::default()
+        };
+
+        package.add_system("bwrap", "bwrap")?;
+        package.add_system("find", "find")?;
+        package.add_system("bash", "bash")?;
+        package.add_system("ldd", "ldd")?;
+        package.add_system("xdg-dbus-proxy", "xdg-dbus-proxy")?;
+
+        let mut args = self
+            .passthrough
+            .map_or_else(run::Args::default, |passthrough| {
+                run_vec(&self.profile, passthrough)
+            });
+        args.dry = true;
+        args.refresh = true;
+
+        let mut package = setup(
+            Cow::Owned(self.profile),
+            &mut args,
+            false,
+            Some((package, false)),
+        )?
+        .package
+        .unwrap()
+        .0;
+
+        let roots = &mut package.profile.libraries.get_or_insert_default().roots;
+        roots.extend(ROOTS.iter().map(|r| String::from(r.as_ref())));
+
+        let mut depend = Map::default();
+        let mut collect = |bin| -> Result<()> {
+            for library in get_libraries(which::which(bin)?)? {
+                if !package.system_libraries.contains_key(library.as_ref()) {
+                    let mut dest = library.as_ref();
+                    for root in ROOTS.iter() {
+                        dest = dest.strip_prefix(root.as_ref()).unwrap_or(dest);
+                    }
+                    dest = dest.strip_prefix('/').unwrap_or(dest);
+                    Package::add_path(&library, dest, &mut depend)?;
+                }
+            }
+            Ok(())
+        };
+
+        let antimony = env::current_exe()?.to_string_lossy().into_owned();
+        collect(&antimony)?;
+        for bin in package.system_binaries.keys() {
+            collect(bin)?;
+        }
+        package.system_libraries = depend;
+
+        info!("Packing...");
+        let bytes = zstd::encode_all(Package::encode_to_vec(&package).as_slice(), 3)?;
+
+        as_real!(Result<()>, {
+            // 3. Create the new self-contained file
+            let mut out_file = File::create(&dest)?;
+
+            // Write original binary
+            out_file.write_all(&binary_content)?;
+
+            // Write Header: Marker + Length
+            out_file.write_all(&PACKAGE_MARKER)?;
+
+            // Write Payload
+            out_file.write_all(&bytes)?;
+
+            out_file.seek(SeekFrom::Start(9))?; // Position at EI_PAD
+            out_file.write_all(&PACKAGE_MARKER)?; // 6 bytes marker
+
+            out_file.sync_all()?;
+            Ok(())
+        })??;
+        Ok(())
+    }
+}

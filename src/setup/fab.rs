@@ -42,19 +42,30 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         name: &args.name,
         instance: args.instance,
         sys_dir: &args.sys_dir,
+        package: &mut args.package,
     };
 
+    let package = info.package.as_ref().map_or_else(|| false, |(_, b)| *b);
+
     // Start caching.
-    args.handle.cache_start()?;
+    if !package {
+        args.handle.cache_start()?;
+    }
 
     // These can't be readily done in parallel, since
     // the heaviest ones (bin and lib) rely on each other.
-    timer!("::fab::files", fab::files::fabricate(&info))?;
-    timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
-    timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
+    timer!("::fab::files", fab::files::fabricate(&mut info))?;
+
+    if !package {
+        timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
+        timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
+    }
+
     timer!("::fab::ns", fab::ns::fabricate(&mut info))?;
     timer!("::fab::dev", fab::dev::fabricate(&info))?;
 
-    timer!("::fab::cache_write", args.handle.cache_write(&cmd_cache))?;
+    if !package {
+        timer!("::fab::cache_write", args.handle.cache_write(&cmd_cache))?;
+    }
     Ok(())
 }

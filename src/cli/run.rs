@@ -6,7 +6,7 @@ use crate::{
     setup::{self, setup},
     shared::{
         config::CONFIG_FILE,
-        env::RUNTIME_DIR,
+        env::{RUNTIME_DIR, SESSION_BUS},
         profile::{
             files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace, seccomp::SeccompPolicy,
         },
@@ -205,7 +205,7 @@ impl cli::Run for Args {
         let result = || -> Result<()> {
             let info = timer!(
                 "::setup",
-                setup(Cow::Owned(self.profile.clone()), &mut self, false)
+                setup(Cow::Owned(self.profile.clone()), &mut self, false, None)
             )?;
             timer!("::run", run(info, &mut self))?;
             Ok(())
@@ -227,7 +227,7 @@ impl Args {
         let result = || -> Result<()> {
             let info = timer!(
                 "::setup",
-                setup(Cow::Owned(self.profile.clone()), &mut self, true)
+                setup(Cow::Owned(self.profile.clone()), &mut self, true, None)
             )?;
             timer!("::run", run(info, &mut self))?;
             Ok(())
@@ -369,7 +369,9 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
 
         log::trace!("Spawning");
         let handle = info.handle.spawn()?;
-        mem::flush();
+        if !info.package.map_or_else(|| false, |(_, b)| b) {
+            mem::flush();
+        }
 
         // Drop to real while waiting so user processes/parent can signal us.
         let code = as_real!(handle.wait())??;
@@ -377,7 +379,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         if code != 0 {
             if CONFIG_FILE.auto_refresh() && !args.refresh {
                 Spawner::abs(utility("notify"))
-                    .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                     .mode(user::Mode::Real)
                     .output(StreamMode::Pipe)
                     .args([
@@ -402,7 +404,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             // Alert the user.
             let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
             Spawner::abs(utility("notify")).mode(user::Mode::Real)
-                .pass_env("DBUS_SESSION_BUS_ADDRESS")?
+                .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                 .output(StreamMode::Pipe)
                 .args([
                 "--title",

@@ -34,6 +34,9 @@ _antimony() {
             antimony,integrate)
                 cmd="antimony__subcmd__integrate"
                 ;;
+            antimony,package)
+                cmd="antimony__subcmd__package"
+                ;;
             antimony,refresh)
                 cmd="antimony__subcmd__refresh"
                 ;;
@@ -64,6 +67,9 @@ _antimony() {
             antimony__subcmd__help,integrate)
                 cmd="antimony__subcmd__help__subcmd__integrate"
                 ;;
+            antimony__subcmd__help,package)
+                cmd="antimony__subcmd__help__subcmd__package"
+                ;;
             antimony__subcmd__help,refresh)
                 cmd="antimony__subcmd__help__subcmd__refresh"
                 ;;
@@ -83,7 +89,7 @@ _antimony() {
 
     case "${cmd}" in
         antimony)
-            opts="-h -V --help --version run edit refresh integrate remove seccomp export import info help"
+            opts="-h -V --help --version run edit refresh integrate remove seccomp export import info package help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -136,7 +142,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__help)
-            opts="run edit refresh integrate remove seccomp export import info help"
+            opts="run edit refresh integrate remove seccomp export import info package help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -220,6 +226,20 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__help__subcmd__integrate)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        antimony__subcmd__help__subcmd__package)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -318,7 +338,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__integrate)
-            opts="-r -s -c -h --remove --shadow --config-mode --create-desktop --help <PROFILE>"
+            opts="-r -s -a -e -c -h --remove --shadow --autostart --enable --config-mode --create-desktop --help <PROFILE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -330,6 +350,27 @@ _antimony() {
                     ;;
                 -c)
                     COMPREPLY=($(compgen -W "action file" -- "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        antimony__subcmd__package)
+            opts="-h --dest --help <PROFILE> [PASSTHROUGH]..."
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --dest)
+                    COMPREPLY=()
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o plusdirs
+                    fi
                     return 0
                     ;;
                 *)

@@ -2,13 +2,23 @@
 //! The main Antimony executable.
 use antimony::{
     cli::{self, Run, run::as_symlink},
-    shared::{self, config::CONFIG_FILE},
+    shared::{
+        self,
+        config::CONFIG_FILE,
+        package::{PACKAGE_MARKER, execute_package},
+    },
     timer,
 };
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-use std::{env, thread::available_parallelism};
+#[cfg(debug_assertions)]
+use std::{
+    env,
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+    thread::available_parallelism,
+};
 
 fn main() -> Result<()> {
     // Somehow, using half the available parallel drastically improves performance.
@@ -43,39 +53,55 @@ fn main() -> Result<()> {
     // This is not a security consideration, just a practical one.
     timer!("::set", user::set(user::Mode::Effective))?;
 
-    let ret = if as_symlink().is_err() {
-        let cli = timer!("::cli", cli::Cli::parse());
-        timer!("::command", cli.command.run())
-    } else {
-        Ok(())
-    };
+    // We modify a reserved section of the ELF header, as it's a predictable location that is unused.
+    // The MARKER starts and ends with `\0`, and it doesn't trip any systems I've tested on, but this
+    // is a hack.
+    let current = env::current_exe()?;
+    let mut file = File::open(&current)?;
+    file.seek(SeekFrom::Start(0x09))?;
+    let mut marker = [0u8; 7];
+    file.read_exact(&mut marker)?;
 
-    #[cfg(debug_assertions)]
-    #[allow(clippy::absolute_paths)]
+    // If we have a package, read the message.
+    if marker == PACKAGE_MARKER
+        && let Some(name) = current.file_name()
     {
-        let mut total = std::num::Saturating(0u128);
-        let mut sorted = shared::TIME_MAP
-            .iter()
-            .map(|r| {
-                total += *r.value();
-                (r.key().to_owned(), *r.value())
-            })
-            .collect::<Vec<_>>();
-        sorted.sort_by_key(|a| a.1);
-        sorted.reverse();
-        for (k, v) in sorted {
-            use std::ops::Div;
+        execute_package(&current, file, name)
+    } else {
+        let ret = if as_symlink().is_err() {
+            let cli = timer!("::cli", cli::Cli::parse());
+            timer!("::command", cli.command.run())
+        } else {
+            Ok(())
+        };
 
-            #[allow(clippy::cast_precision_loss)]
-            let weight = (v * std::num::Saturating(100)).div(total);
-            if weight < std::num::Saturating(1) {
-                continue;
+        #[cfg(debug_assertions)]
+        #[allow(clippy::absolute_paths)]
+        {
+            let mut total = std::num::Saturating(0u128);
+            let mut sorted = shared::TIME_MAP
+                .iter()
+                .map(|r| {
+                    total += *r.value();
+                    (r.key().to_owned(), *r.value())
+                })
+                .collect::<Vec<_>>();
+            sorted.sort_by_key(|a| a.1);
+            sorted.reverse();
+            for (k, v) in sorted {
+                use std::ops::Div;
+
+                #[allow(clippy::cast_precision_loss)]
+                let weight = (v * std::num::Saturating(100)).div(total);
+                if weight < std::num::Saturating(1) {
+                    continue;
+                }
+                log::info!("{k} => {v} ({weight}%)");
             }
-            log::info!("{k} => {v} ({weight}%)");
+
+            log::info!("TOTAL => {total}");
         }
 
-        log::info!("TOTAL => {total}");
+        ret
     }
-
-    ret
 }
