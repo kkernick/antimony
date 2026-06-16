@@ -45,10 +45,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         package: &mut args.package,
     };
 
-    let package = info.package.as_ref().map_or_else(|| false, |(_, b)| *b);
+    let package = info
+        .package
+        .as_ref()
+        .map_or_else(|| None, |(_, b)| Some(*b));
 
     // Start caching.
-    if !package {
+    if package.is_none() {
         args.handle.cache_start()?;
     }
 
@@ -56,7 +59,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     // the heaviest ones (bin and lib) rely on each other.
     timer!("::fab::files", fab::files::fabricate(&mut info))?;
 
-    if !package {
+    if package.as_ref().is_none_or(|b| !b) {
         timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
         timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
     }
@@ -64,7 +67,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     timer!("::fab::ns", fab::ns::fabricate(&mut info))?;
     timer!("::fab::dev", fab::dev::fabricate(&info))?;
 
-    if !package {
+    if package.is_none() {
         timer!("::fab::cache_write", args.handle.cache_write(&cmd_cache))?;
     }
     Ok(())

@@ -1,5 +1,6 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
+use crate::shared::env::CONFIG_HOME;
 use crate::{cli::run, setup::setup};
 use crate::{
     fab::lib::ROOTS,
@@ -212,6 +213,10 @@ impl Package {
     }
 }
 
+#[allow(
+    clippy::useless_let_if_seq,
+    reason = "It's not useless. Searching the binary may fail."
+)]
 pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<()> {
     let root_path = Path::new("/pkg");
     if root_path.exists() {
@@ -237,79 +242,84 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
     } else {
         debug!("Package marker found");
         let path = CACHE_DIR.join("packages").join(name);
-        file.rewind()?;
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
 
-        // We might hit multiple marker (At least one, as it's used in the ELF header), but
-        // the data shouldn't have it, so it should be the last one.
-        debug!("Searching for payload...");
-        let mut package = None;
-        for (position, window) in bytes.windows(PACKAGE_MARKER.len()).enumerate() {
-            if window == PACKAGE_MARKER
-                && let Some(index) = position.checked_add(PACKAGE_MARKER.len())
-                && let Ok(pkg) = zstd::decode_all(&bytes[index..])
-                && let Ok(pkg) = Package::decode(pkg.as_slice())
-            {
-                package = Some(pkg);
-                break;
+        if !path.exists() {
+            let mut package = None;
+            file.rewind()?;
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+
+            // We might hit multiple marker (At least one, as it's used in the ELF header), but
+            // the data shouldn't have it, so it should be the last one.
+            debug!("Searching for payload...");
+
+            for (position, window) in bytes.windows(PACKAGE_MARKER.len()).enumerate() {
+                if window == PACKAGE_MARKER
+                    && let Some(index) = position.checked_add(PACKAGE_MARKER.len())
+                    && let Ok(bytes) = zstd::decode_all(&bytes[index..])
+                    && let Ok(pkg) = Package::decode(bytes.as_slice())
+                {
+                    package = Some(pkg);
+                    break;
+                }
+            }
+
+            if let Some(package) = package {
+                package.unpack(&path)?;
+            } else {
+                return Err(anyhow!("Data Header Missing! Corrupted Package!"));
             }
         }
-        if let Some(package) = package {
-            package.unpack(&path)?;
-            let home = CACHE_DIR.to_string_lossy();
 
+        let home = CACHE_DIR.to_string_lossy();
+
+        #[rustfmt::skip]
+        let handle = Spawner::new("bwrap")?.mode(Mode::Real).preserve_env(true).args([
+            "--new-session", "--die-with-parent",
+            "--proc", "/proc",
+
+            "--dev", "/dev",
+            "--dev-bind", "/dev/dri", "/dev/dri",
+
+            "--bind", "/tmp", "/tmp",
+            "--bind", "/sys", "/sys",
+            "--bind", "/run", "/run",
+            "--bind", "/etc", "/etc",
+            "--bind", "/var", "/var",
+            "--bind", "/usr/share", "/usr/share",
+            "--bind", "/home", "/home",
+
+            "--bind", &path.to_string_lossy(), "/pkg",
+            "--bind", &home, "/usr/share/antimony",
+        ]);
+
+        let bin = path.join("system").join("bin");
+        if bin.exists() {
             #[rustfmt::skip]
-                let handle = Spawner::new("bwrap")?.mode(Mode::Real).preserve_env(true).args([
-                    "--new-session", "--die-with-parent",
-                    "--proc", "/proc",
-
-                    "--dev", "/dev",
-                    "--dev-bind", "/dev/dri", "/dev/dri",
-
-                    "--bind", "/tmp", "/tmp",
-                    "--bind", "/sys", "/sys",
-                    "--bind", "/run", "/run",
-                    "--bind", "/etc", "/etc",
-                    "--bind", "/var", "/var",
-                    "--bind", "/usr/share", "/usr/share",
-
-                    "--bind", &path.to_string_lossy(), "/pkg",
-                    "--bind", &home, "/usr/share/antimony",
-                    "--setenv", "HOME", "/home/antimony",
-                    "--dir", "/home/antimony",
-                ]);
-
-            let bin = path.join("system").join("bin");
-            if bin.exists() {
-                #[rustfmt::skip]
-                    handle.args_i([
-                        "--bind", &bin.to_string_lossy(), "/usr/bin",
-                        "--symlink", "/usr/bin", "/bin",
-                        "--symlink", "/usr/bin", "/sbin",
-                        "--symlink", "/usr/bin", "/usr/sbin"
-                    ]);
-            }
-            let lib = path.join("system").join("lib");
-            if lib.exists() {
-                #[rustfmt::skip]
-                    handle.args_i([
-                        "--bind", &lib.to_string_lossy(), "/usr/lib",
-                        "--symlink", "/usr/lib", "/lib",
-                        "--symlink", "/usr/lib", "/lib64",
-                        "--symlink", "/usr/lib", "/usr/lib64"
-                    ]);
-            }
-
-            let current_str = current.to_string_lossy();
-            #[rustfmt::skip]
-                handle.args([
-                    "--ro-bind", &current_str, "/pkg.sb",
-                    "--", "/pkg.sb"
-                ]).spawn()?.wait()?;
-            Ok(())
-        } else {
-            Err(anyhow!("Data Header Missing! Corrupted Package!"))
+            handle.args_i([
+                "--bind", &bin.to_string_lossy(), "/usr/bin",
+                "--symlink", "/usr/bin", "/bin",
+                "--symlink", "/usr/bin", "/sbin",
+                "--symlink", "/usr/bin", "/usr/sbin"
+            ]);
         }
+        let lib = path.join("system").join("lib");
+        if lib.exists() {
+            #[rustfmt::skip]
+            handle.args_i([
+                "--bind", &lib.to_string_lossy(), "/usr/lib",
+                "--symlink", "/usr/lib", "/lib",
+                "--symlink", "/usr/lib", "/lib64",
+                "--symlink", "/usr/lib", "/usr/lib64"
+            ]);
+        }
+
+        let current_str = current.to_string_lossy();
+        #[rustfmt::skip]
+        handle.args([
+            "--ro-bind", &current_str, "/pkg.sb",
+            "--", "/pkg.sb"
+        ]).spawn()?.wait()?;
+        Ok(())
     }
 }

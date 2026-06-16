@@ -19,8 +19,9 @@ use log::info;
 use std::{
     borrow::Cow,
     env,
-    fs::File,
+    fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
 };
 use user::as_real;
@@ -132,8 +133,13 @@ impl super::Run for Args {
             out_file.write_all(&PACKAGE_MARKER)?; // 6 bytes marker
 
             out_file.sync_all()?;
+            let metadata = fs::metadata(&dest)?;
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(dest, perms)?;
             Ok(())
         })??;
+
         Ok(())
     }
 }

@@ -527,33 +527,37 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     // ELF files need to be processed by the library fabricator,
     // to use LDD on depends.
     for elf in parsed.elf {
-        info.handle.args_i(["--ro-bind", &elf, &elf]);
         if let Some((package, false)) = info.package.as_mut() {
             package.add_binary(&elf, &elf)?;
+        } else {
+            info.handle.args_i(["--ro-bind", &elf, &elf]);
         }
         elf_binaries.insert(elf);
     }
 
     // Scripts are consumed here, and are only bound to the sandbox.
     for script in parsed.scripts {
-        info.handle.args_i(["--ro-bind", &script, &script]);
         if let Some((package, false)) = info.package.as_mut() {
             package.add_binary(&script, &script)?;
+        } else {
+            info.handle.args_i(["--ro-bind", &script, &script]);
         }
     }
 
     for file in parsed.files {
-        info.handle.args_i(["--ro-bind", &file, &file]);
         if let Some((package, false)) = info.package.as_mut() {
             package.add_binary(&file, &file)?;
+        } else {
+            info.handle.args_i(["--ro-bind", &file, &file]);
         }
     }
 
     for (src, dst) in parsed.localized {
-        info.handle.args_i(["--ro-bind", &src, &dst]);
         if as_real!(elf_filter(&src))?? {
             if let Some((package, false)) = info.package.as_mut() {
                 package.add_binary(&src, &dst)?;
+            } else {
+                info.handle.args_i(["--ro-bind", &src, &dst]);
             }
             elf_binaries.insert(src);
         }
@@ -571,14 +575,14 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     for (link, dest) in parsed.symlinks {
         if let Some((package, false)) = info.package.as_mut() {
             package.add_binary(&link, &dest)?;
-        }
-
-        if !elf_binaries.contains(&dest) {
-            info.handle.args_i(["--ro-bind", &dest, &dest]);
-            elf_binaries.insert(dest.clone());
-        }
-        if !in_lib(&link) {
-            info.handle.args_i(["--symlink", &dest, &link]);
+        } else {
+            if !elf_binaries.contains(&dest) {
+                info.handle.args_i(["--ro-bind", &dest, &dest]);
+                elf_binaries.insert(dest.clone());
+            }
+            if !in_lib(&link) {
+                info.handle.args_i(["--symlink", &dest, &link]);
+            }
         }
     }
 

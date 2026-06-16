@@ -1,7 +1,6 @@
 //! Antimony uses xdg-dbus-proxy to proxy the user bus. It does this by spawning an associated process
 //! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
 
-#[cfg(debug_assertions)]
 use crate::shared::env::SESSION_BUS;
 use crate::{
     fab::{

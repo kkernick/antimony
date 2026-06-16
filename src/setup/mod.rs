@@ -346,7 +346,7 @@ pub fn setup<'a>(
     // soon as possible--as then we don't waste time waiting for the writing
     // to finish. We can't rely on the user interacting with the application
     // to conceal the flush, so we have to do it early.
-    if !flush_defer && a.run.dry {
+    if !flush_defer && a.run.dry && a.package.is_none() {
         timer!("::flush", mem::flush());
     }
 

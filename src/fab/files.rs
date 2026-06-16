@@ -26,8 +26,9 @@ pub fn localize(
         (Some(source), dest) => {
             if let Some((package, false)) = package.as_mut() {
                 package.add(&source, &dest)?;
+            } else {
+                handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)]);
             }
-            handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)]);
         }
         (None, dest) => {
             let resolved = if home && !file.starts_with("/home") {
@@ -50,9 +51,10 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         }
 
         for (src, dst) in &files.links {
-            info.handle.args_i(["--symlink", src, dst]);
             if let Some((package, false)) = info.package.as_mut() {
                 package.add(src, dst)?;
+            } else {
+                info.handle.args_i(["--symlink", src, dst]);
             }
         }
 

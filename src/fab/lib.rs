@@ -389,11 +389,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 let local = localize_home(dir.as_ref());
                 let home = dir.starts_with("/home/");
 
-                info.handle
-                    .args_i([if home { "--bind" } else { "--ro-bind" }, &dir, &local]);
-
                 if !home && let Some((package, false)) = info.package.as_mut() {
                     package.add_library(&dir, &local)?;
+                } else {
+                    info.handle
+                        .args_i([if home { "--bind" } else { "--ro-bind" }, &dir, &local]);
                 }
             }
         });
