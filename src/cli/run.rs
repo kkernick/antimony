@@ -182,6 +182,9 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
 
+    #[arg(long)]
+    pub preserve_env: Option<bool>,
+
     /// Arguments to pass to bubblewrap/wrapper
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub sandbox_args: Option<Vec<String>>,

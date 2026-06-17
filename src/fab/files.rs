@@ -85,11 +85,13 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             }
         }
 
-        let system = &files.resources;
-        for mode in FILE_MODES {
-            if let Some(files) = system.get(&mode) {
-                for file in files {
-                    localize(mode, file, false, info.handle, false, info.package)?;
+        if info.package.as_ref().map_or_else(|| true, |(_, b)| !b) {
+            let system = &files.resources;
+            for mode in FILE_MODES {
+                if let Some(files) = system.get(&mode) {
+                    for file in files {
+                        localize(mode, file, false, info.handle, false, info.package)?;
+                    }
                 }
             }
         }

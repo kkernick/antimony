@@ -214,6 +214,11 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         debug!("Adding feature: {}", feature.name);
     }
 
+    profile.preserve_env = match profile.preserve_env {
+        Some(false) | None => feature.preserve_env,
+        Some(true) => Some(true),
+    };
+
     if let Some(files) = feature.files.take() {
         let p_files = profile.files.get_or_insert_default();
 

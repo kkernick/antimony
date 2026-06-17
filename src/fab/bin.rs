@@ -469,7 +469,8 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
 pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     {
         let binaries = &info.profile.binaries;
-        let skip = binaries.contains("/usr/bin");
+        let skip = binaries.contains("/usr/bin")
+            && info.package.as_ref().map_or_else(|| true, |(_, b)| *b);
         if skip {
             info.profile
                 .binaries

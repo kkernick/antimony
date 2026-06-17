@@ -1,0 +1,16 @@
+features = ["bin", "lib", "network"]
+conflicts = ["hardened_malloc"]
+seccomp = "Disabled"
+devices = ["/dev"]
+namespaces = ["All"]
+preserve_env = true
+
+[ipc]
+system_bus = true
+user_bus = true
+
+[files.platform]
+rw = ["/home", "/usr/share", "/var", "/etc", "/run", "/tmp"]
+
+[files.resources]
+rw = ["/usr/share/antimony"]

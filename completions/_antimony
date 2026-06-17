@@ -75,6 +75,7 @@ net\:"Use the network feature instead"
 uts\:"Enable the UTS namespace"
 c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
+'--preserve-env=[]:PRESERVE_ENV:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
 '-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \

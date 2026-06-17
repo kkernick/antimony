@@ -72,6 +72,9 @@ pub struct Feature {
     /// Environment variables to be set. Variables are resolved using standard bash $ENV syntax.
     pub environment: Option<Map<String, String>>,
 
+    /// Preserve the system environment.
+    pub preserve_env: Option<bool>,
+
     /// Required libraries
     pub libraries: Option<Libraries>,
 

@@ -182,6 +182,9 @@ pub struct Profile {
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub environment: Map<String, String>,
 
+    /// Preserve the system environment.
+    pub preserve_env: Option<bool>,
+
     /// Arguments to pass to the sandboxed application directly.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<String>,
@@ -214,6 +217,7 @@ impl Profile {
             dir: args.dir.take(),
             lockdown: args.lockdown.take(),
             seccomp: args.seccomp.take(),
+            preserve_env: args.preserve_env.take(),
             ..Default::default()
         };
 
@@ -443,6 +447,9 @@ impl Profile {
 
         if self.seccomp.is_none() {
             self.seccomp = profile.seccomp;
+        }
+        if self.preserve_env.is_none() {
+            self.preserve_env = profile.preserve_env;
         }
 
         if let Some(home) = profile.home {

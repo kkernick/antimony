@@ -115,20 +115,32 @@ pub fn setup<'a>(
         }
 
         let bin = path.join("bin");
-        if bin.exists() {
-            #[rustfmt::skip]
-            profile_args.extend([
-                "--ro-bind", &bin.to_string_lossy(), "/usr/bin",
-                "--symlink", "/usr/bin", "/bin",
-                "--symlink", "/usr/bin", "/sbin",
-                "--symlink", "/usr/bin", "/usr/sbin",
-            ].map(String::from));
-        }
+        let bin_str = bin.to_string_lossy();
+        #[rustfmt::skip]
+        profile_args.extend([
+            "--ro-bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
+            "--symlink", "/usr/bin", "/bin",
+            "--symlink", "/usr/bin", "/sbin",
+            "--symlink", "/usr/bin", "/usr/sbin",
+        ].map(String::from));
 
         let lib = path.join("lib");
+        let lib_str = lib.to_string_lossy();
         if lib.exists() {
-            profile_args
-                .extend(["--ro-bind", &lib.to_string_lossy(), "/usr/lib"].map(String::from));
+            profile_args.extend(
+                [
+                    "--ro-bind",
+                    if let Some(libraries) = &profile.libraries
+                        && libraries.no_sof.unwrap_or(false)
+                    {
+                        "/usr/lib"
+                    } else {
+                        &lib_str
+                    },
+                    "/usr/lib",
+                ]
+                .map(String::from),
+            );
             if let Some(libraries) = &profile.libraries {
                 for root in &libraries.roots {
                     if root != "/usr/lib" {
@@ -145,6 +157,7 @@ pub fn setup<'a>(
             }
         }
 
+        profile = profile.base(Profile::from_args(args)?)?;
         package = Some((Package::default(), true));
         (profile, hash, profile_args)
     } else {
@@ -294,22 +307,31 @@ pub fn setup<'a>(
             }
         )
         .name(&args.profile)
+        .mode(user::Mode::Real)
         .args(profile_args)
         .args([
-            "--new-session", "--die-with-parent", "--clearenv",
+            "--new-session", "--die-with-parent",
             "--proc", "/proc",
             "--dev", "/dev",
             "--tmpfs", "/tmp",
             "--dir", runtime,
             "--chmod", "0700", runtime,
-            "--setenv", "HOME", "/home/antimony",
-            "--dir", "/home/antimony",
             "--setenv", "PATH", "/usr/bin",
-            "--setenv", "USER", "antimony",
-            "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
-            "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
-        ])
-        .mode(user::Mode::Real);
+        ]);
+
+        if profile.preserve_env.unwrap_or(false) {
+            handle.preserve_env_i(true);
+        } else {
+            #[rustfmt::skip]
+            handle.args_i([
+                "--clearenv",
+                "--dir", "/home/antimony",
+                "--setenv", "USER", "antimony",
+                "--setenv", "HOME", "/home/antimony",
+                "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
+                "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
+            ]);
+        }
 
         if let Some(dir) = &profile.dir {
             handle.args_i(["--chdir", dir]);

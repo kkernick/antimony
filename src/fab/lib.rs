@@ -245,7 +245,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         }
     });
 
-    if no_sof {
+    if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
         log::info!("Mounting system libraries.");
         return mount_roots("", info.handle);
     }

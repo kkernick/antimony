@@ -100,6 +100,8 @@ net\t'Use the network feature instead'
 uts\t'Enable the UTS namespace'
 c-group\t'Allow the sandbox to be managed/manage the system C-Groups'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add environment variables in KEY=VALUE syntax' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l preserve-env -r -f -a "true\t''
+false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'

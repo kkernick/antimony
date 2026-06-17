@@ -1,23 +1,25 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
-use crate::shared::env::CONFIG_HOME;
+#[cfg(debug_assertions)]
 use crate::{cli::run, setup::setup};
 use crate::{
+    cli::{Cli, run_vec},
     fab::lib::ROOTS,
     shared::{Map, env::CACHE_DIR, profile::Profile},
     timer,
 };
-use anyhow::Result;
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use bilrost::{Message, OwnedMessage};
 use bstr::{BStr, BString};
+use clap::Parser;
 use log::{debug, error, info};
 use path_clean::clean;
 use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
-use std::ffi::OsStr;
 use std::{
     borrow::Cow,
+    env,
+    ffi::OsStr,
     fs::{self, File},
     io::{Read, Seek},
     os::unix::fs::PermissionsExt,
@@ -194,19 +196,16 @@ impl Package {
                 unpack(&root, path, content.as_ref(), true)?;
             }
         }
-        if !self.system_binaries.is_empty() {
-            let root = package_dir.join("system").join("bin");
-            fs::create_dir_all(&root)?;
-            for (path, content) in &self.system_binaries {
-                unpack(&root, path, content.as_ref(), true)?;
-            }
+        let root = package_dir.join("system").join("bin");
+        fs::create_dir_all(&root)?;
+        for (path, content) in &self.system_binaries {
+            unpack(&root, path, content.as_ref(), true)?;
         }
-        if !self.system_libraries.is_empty() {
-            let root = package_dir.join("system").join("lib");
-            fs::create_dir_all(&root)?;
-            for (path, content) in &self.system_libraries {
-                unpack(&root, path, content.as_ref(), true)?;
-            }
+
+        let root = package_dir.join("system").join("lib");
+        fs::create_dir_all(&root)?;
+        for (path, content) in &self.system_libraries {
+            unpack(&root, path, content.as_ref(), true)?;
         }
 
         Ok(())
@@ -217,31 +216,49 @@ impl Package {
     clippy::useless_let_if_seq,
     reason = "It's not useless. Searching the binary may fail."
 )]
+#[allow(clippy::too_many_lines)]
 pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<()> {
     let root_path = Path::new("/pkg");
+    let command_line: Vec<_> = env::args().skip(1).collect();
+
     if root_path.exists() {
         info!("In package namespace. Executing packaging...");
-        let result = || -> Result<()> {
-            let info = timer!(
-                "::setup",
-                setup(
-                    root_path.to_string_lossy(),
-                    &mut run::Args::default(),
-                    false,
-                    Some((Package::default(), true))
-                )
-            )?;
-            timer!("::run", run::run(info, &mut run::Args::default()))?;
+        if let Some(first) = command_line.first()
+            && (first == "-V" || first == "--version")
+        {
+            Cli::parse();
             Ok(())
-        }();
+        } else {
+            let mut args = run_vec(&root_path.to_string_lossy(), command_line);
+            let result = || -> Result<()> {
+                let info = timer!(
+                    "::setup",
+                    setup(
+                        root_path.to_string_lossy(),
+                        &mut args,
+                        false,
+                        Some((Package::default(), true))
+                    )
+                )?;
+                timer!("::run", run::run(info, &mut args))?;
+                Ok(())
+            }();
 
-        if let Err(e) = &result {
-            error!("{e}");
+            if let Err(e) = &result {
+                error!("{e}");
+            }
+            result
         }
-        result
     } else {
         debug!("Package marker found");
         let path = CACHE_DIR.join("packages").join(name);
+
+        if let Some(arg) = command_line.first()
+            && (arg == "--refresh" || arg == "-r")
+            && path.exists()
+        {
+            fs::remove_dir_all(&path)?;
+        }
 
         if !path.exists() {
             let mut package = None;
@@ -290,36 +307,52 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             "--bind", "/home", "/home",
 
             "--bind", &path.to_string_lossy(), "/pkg",
-            "--bind", &home, "/usr/share/antimony",
         ]);
 
+        // Yes, we unfortunately need a special check for antimony being run under itself.
+        // If you are wondering why we would ever want to be running Antimony recursively,
+        // it's because:
+        //   1. We can. Antimony has a profile (antimony run antimony) ;)
+        //   2. Packages are an attractive install option. You don't need to download a deb,
+        //      Or configure anything. It's more limited, sure, but it's accessible.
+        if !path
+            .join("root")
+            .join("usr")
+            .join("share")
+            .join("antimony")
+            .exists()
+        {
+            handle.args_i(["--bind", &home, "/usr/share/antimony"]);
+        }
+
         let bin = path.join("system").join("bin");
-        if bin.exists() {
-            #[rustfmt::skip]
-            handle.args_i([
-                "--bind", &bin.to_string_lossy(), "/usr/bin",
-                "--symlink", "/usr/bin", "/bin",
-                "--symlink", "/usr/bin", "/sbin",
-                "--symlink", "/usr/bin", "/usr/sbin"
-            ]);
-        }
+        #[rustfmt::skip]
+        handle.args_i([
+            "--overlay-src", "/usr/bin",
+            "--overlay-src", &bin.to_string_lossy(),
+            "--ro-overlay", "/usr/bin",
+            "--symlink", "/usr/bin", "/bin",
+            "--symlink", "/usr/bin", "/sbin",
+            "--symlink", "/usr/bin", "/usr/sbin"
+        ]);
+
         let lib = path.join("system").join("lib");
-        if lib.exists() {
-            #[rustfmt::skip]
-            handle.args_i([
-                "--bind", &lib.to_string_lossy(), "/usr/lib",
-                "--symlink", "/usr/lib", "/lib",
-                "--symlink", "/usr/lib", "/lib64",
-                "--symlink", "/usr/lib", "/usr/lib64"
-            ]);
-        }
+        #[rustfmt::skip]
+        handle.args_i([
+            "--overlay-src", "/usr/lib",
+            "--overlay-src", &lib.to_string_lossy(),
+            "--ro-overlay", "/usr/lib",
+            "--symlink", "/usr/lib", "/lib",
+            "--symlink", "/usr/lib", "/lib64",
+            "--symlink", "/usr/lib", "/usr/lib64"
+        ]);
 
         let current_str = current.to_string_lossy();
         #[rustfmt::skip]
         handle.args([
             "--ro-bind", &current_str, "/pkg.sb",
             "--", "/pkg.sb"
-        ]).spawn()?.wait()?;
+        ]).args(env::args().skip(1)).spawn()?.wait()?;
         Ok(())
     }
 }
