@@ -40,8 +40,8 @@ use which::which;
 #[derive(Debug, Error)]
 pub enum Error {
     /// When a profile doesn't exist.
-    #[error("No such profile {0}: {1}")]
-    NotFound(String, Cow<'static, str>),
+    #[error("No such profile: {0}")]
+    NotFound(&'static str),
 
     /// When the profile cannot be Deserialized.
     #[error("Failed to deserialize profile: {0}")]
@@ -94,6 +94,11 @@ fn empty_inherits(inherits: &Set<String>) -> bool {
 pub struct Profile {
     /// The path to the application
     pub path: Option<String>,
+
+    /// Persistent info about a profile. This isn't used anywhere, and simply exists to persist a description about
+    /// a profile, particularly any useful information or required setup. Treat it like a documentation block at the
+    /// top of the file.
+    pub notes: Option<String>,
 
     /// The path to start within inside the sandbox.
     pub dir: Option<String>,
@@ -353,10 +358,7 @@ impl Profile {
                 Ok(path) => profile.path = Some(path.to_owned()),
                 Err(_) => {
                     if !foreign {
-                        return Err(Error::NotFound(
-                            name.to_owned(),
-                            Cow::Borrowed("Profile binary does not exist on system"),
-                        ));
+                        return Err(Error::NotFound("Profile binary does not exist on system"));
                     }
                 }
             }
@@ -370,10 +372,7 @@ impl Profile {
         if let Some(config) = config {
             debug!("Loading configuration");
             if profile.configuration.is_empty() {
-                return Err(Error::NotFound(
-                    name.to_owned(),
-                    Cow::Borrowed("Profile does not have any configurations"),
-                ));
+                return Err(Error::NotFound("Profile does not have any configurations"));
             }
             match profile.configuration.remove(&config) {
                 Some(conf) => {
@@ -386,10 +385,7 @@ impl Profile {
                     }
                 }
                 None => {
-                    return Err(Error::NotFound(
-                        name.to_owned(),
-                        Cow::Owned(format!("Configuration {config} does not exist")),
-                    ));
+                    return Err(Error::NotFound("Configuration does not exist"));
                 }
             }
         }

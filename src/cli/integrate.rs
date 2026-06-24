@@ -248,6 +248,13 @@ fn manage_configurations(
     Ok(())
 }
 
+/// Make a shadow for a desktop file. By adding `NoDisplay`, we hide it from desktop environments.
+/// This is used it two ways:
+/// 1. For DEs that use the ID to source file icons (i.e GNOME), we need to create an `antimony.desktop`
+///    file for applications without an rDNS name. This could create two identical entries, so we hide
+///    the original one.
+/// 2. XDG autostart files (In /etc/xdg/autostart) treat `NoDisplay` as "don't run". We use this so we can
+///    use systemd as the autostart mechanism instead.
 fn make_shadow(desktop_file: &Path) -> Result<Vec<String>> {
     Ok(fs::read_to_string(desktop_file)
         .with_context(|| "Failed to read desktop file")?
@@ -362,6 +369,7 @@ fn format_desktop(
 ///
 /// ## Errors
 /// If antimony is improperly setup, or if it has inadequate permission to create the files.
+#[allow(clippy::too_many_lines)]
 pub fn integrate(profile: &Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
 

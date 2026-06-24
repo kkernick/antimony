@@ -1,3 +1,8 @@
+notes = """
+You can run antimony inside antimony, if you'd like. Note that simply stacking more of the same security measure
+does not constitute defense-in-depth; this is used solely for packaging.
+"""
+
 features = ["bin", "lib", "network"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"

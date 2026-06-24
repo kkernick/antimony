@@ -1,3 +1,9 @@
+notes =  """
+pkexec doesn't actually do anything here. It has nothing to talk to,
+and you can't elevate privilege in a user-sandbox. It just prevents It just prevents
+bustle from crashing when you try and capture from the system bus.
+"""
+
 id = "org.freedesktop.Bustle"
 features = ["libadwaita"]
 binaries = ["dbus-monitor", "pkexec"]

@@ -1,1 +1,2 @@
+notes = "You'll likely want to add to this profile, as it only includes a few binaries."
 binaries = ["id", "vim", "cat", "ls"]

@@ -152,6 +152,13 @@ description = ""
 # rw = []
 # rx = []
 #
+# Runtime Files are files that have unstable paths (i.e environment variable), that cannot be cached.
+# Because these files are evaluated for every instance, adding too many can impose performance penalties.
+# [files.runtime]
+# ro = []
+# rw = []
+# rx = []
+#
 # Direct files are constructed with the sandbox, creating the file with the path specified with the key,
 # and the contents as the value. They are mounted ro.
 # [files.direct]
@@ -163,10 +170,21 @@ description = ""
 #
 # [files.direct.rx]
 # "/my/file.txt.exe" = "#!/bin/bash"
+#
+# Link are symlinks in the sandbox. You'll need to ensure the source already exists (i.e through one of the
+# above sections or through the sandbox home).
+# [files.link]
+# "/path/to/src" = "/path/to/dest"
 
 # Keypair environment variables to pass to the sandbox.
 # [environment]
 # KEY = "VAL"
+
+# You can also skip environment hardening altogether and pass the existing system environment. This means the
+# sandbox will use your real username, and have access to values you may not have wanted. Use this sparingly.
+# Note that you can combine this flag with the above section; new values will be added, existing values will
+# be replaced.
+# preserve_env = false
 
 # Hooks are external commands that are run before/during/after the sandbox. They can be
 # used to run dependencies, setup the environment, and perform additional cleanup.

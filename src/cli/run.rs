@@ -215,8 +215,9 @@ impl cli::Run for Args {
         }();
 
         if let Err(e) = result {
-            error!("{e}");
-            return Err(e);
+            let fail = format!("Failed to run {}: {e}", self.profile);
+            error!("{fail}");
+            return Err(anyhow!(fail));
         }
         Ok(())
     }
@@ -237,8 +238,9 @@ impl Args {
         }();
 
         if let Err(e) = result {
-            error!("{e}");
-            return Err(e);
+            let fail = format!("Failed to refresh {}: {e}", self.profile);
+            error!("{fail}");
+            return Err(anyhow!(fail));
         }
         Ok(())
     }

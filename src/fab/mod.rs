@@ -31,7 +31,7 @@ use std::{
     borrow::Cow,
     env,
     fmt::Debug,
-    fs::File,
+    fs::{File, canonicalize},
     io::{self, Read},
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -315,7 +315,6 @@ pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
 ///     std::env::set_var("PID", "1");
 ///     std::env::set_var("FD", "2");
 /// }
-///
 /// std::fs::File::create("test.txt");
 /// let current_dir = std::env::current_dir().unwrap();
 ///
@@ -376,7 +375,14 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
         let _ = as_real!({
             let path = Path::new(resolved.as_ref());
             if !path.is_absolute() || !path.exists() {
-                resolved = Cow::Owned(clean(path).to_string_lossy().into_owned());
+                let mut path = clean(path);
+                if (!path.is_absolute() || !path.exists())
+                    && let Ok(canon) = canonicalize(&path)
+                {
+                    path = canon;
+                }
+
+                resolved = Cow::Owned(path.to_string_lossy().into_owned());
             }
         });
 
