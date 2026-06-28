@@ -31,7 +31,7 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
 
             if as_real!(Path::new(&abs_arg).exists())? || abs_arg.starts_with("file://") {
                 let file = arg.strip_prefix("file://").unwrap_or(&abs_arg);
-                let dest = file.replace(HOME.as_str(), "/home/antimony");
+                let dest = file.replacen(HOME.as_str(), "/home/antimony", 1);
                 match operation {
                     FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest]),
                     FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest]),

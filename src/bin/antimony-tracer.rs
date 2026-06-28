@@ -1,10 +1,11 @@
 #![allow(unused_crate_dependencies)]
 
 use antimony::{
-    fab::{get_libraries, get_wildcards, lib::WildcardFilter, resolve},
+    fab::{get_libraries, resolve},
     shared::{
         Set, ThreadMap,
         feature::Feature,
+        find::{WildcardFilter, get_wildcards},
         profile::files::FileMode,
         store::{Object, SYSTEM_STORE, USER_STORE},
         utility,
@@ -105,7 +106,7 @@ fn main() -> anyhow::Result<()> {
                     let found = if file.is_empty() {
                         false
                     } else if d_name.contains('*') {
-                        get_wildcards(&d_name, true, WildcardFilter::Files)
+                        get_wildcards(d_name.as_ref(), true, WildcardFilter::Files)
                             .unwrap_or_default()
                             .contains(file.as_str())
                     } else {

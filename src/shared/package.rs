@@ -1,6 +1,5 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
-#[cfg(debug_assertions)]
 use crate::{cli::run, setup::setup};
 use crate::{
     cli::{Cli, run_vec},

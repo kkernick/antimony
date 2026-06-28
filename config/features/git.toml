@@ -1,0 +1,10 @@
+name = "git"
+description = "Add git binaries and libraries"
+binaries = ["git-*", "git"]
+
+[libraries]
+files = ["libgit*"]
+directories = ["git-core"]
+
+[files.resources]
+ro = ["/usr/share/git-core", "/usr/share/git"]

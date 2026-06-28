@@ -4,6 +4,7 @@ pub mod config;
 pub mod edit;
 pub mod env;
 pub mod feature;
+pub mod find;
 pub mod package;
 pub mod profile;
 pub mod store;

@@ -2,12 +2,9 @@
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
 //! it underneath a specialized SECCOMP Notifier.
 
+use crate::shared::find::{WildcardFilter, get_wildcards};
 use crate::{
-    fab::{
-        ELF_MAGIC, FabInfo, elf_filter, get_cache, get_wildcards, in_lib,
-        lib::{self, WildcardFilter},
-        localize_path, write_cache,
-    },
+    fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
     shared::{
         Map, Set, ThreadSet, direct_path,
         profile::{Profile, files::FileMode},

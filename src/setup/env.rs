@@ -13,7 +13,7 @@ use std::env;
 pub fn setup(args: &mut super::Args) -> Result<()> {
     debug!("Setting up environment");
     args.profile.environment.par_iter().for_each(|(key, val)| {
-        let mut val = val.replace(HOME.as_str(), "/home/antimony");
+        let mut val = val.replacen(HOME.as_str(), "/home/antimony", 1);
         // If we're passed an actual environment variable, resolve it.
         if val.starts_with('$') {
             val = env::var(&val[1..]).unwrap_or(val);

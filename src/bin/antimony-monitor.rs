@@ -650,7 +650,7 @@ fn main() -> Result<()> {
                 // exists.
                 let binary_exist = |path: &str| -> Result<bool> {
                     Ok(if path.starts_with("/home/antimony") {
-                        let path = path.replace("/home/antimony", "*");
+                        let path = path.replacen("/home/antimony", "*", 1);
                         !Spawner::new("find")?
                             .arg(DATA_HOME.join("antimony").to_string_lossy())
                             .args(["-wholename", &path])

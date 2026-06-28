@@ -9,10 +9,11 @@ pub mod lib;
 pub mod ns;
 
 use crate::{
-    fab::lib::{ROOTS, WildcardFilter},
+    fab::lib::ROOTS,
     shared::{
         Set,
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
+        find::{DirType, recursive_crawl},
         package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
@@ -23,6 +24,7 @@ use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
+use log::trace;
 use log::{debug, warn};
 use path_clean::clean;
 use rayon::prelude::*;
@@ -31,9 +33,9 @@ use std::{
     borrow::Cow,
     env,
     fmt::Debug,
-    fs::{File, canonicalize},
+    fs::{self, File},
     io::{self, Read},
-    path::{Path, PathBuf},
+    path::Path,
     sync::LazyLock,
 };
 use temp::Temp;
@@ -54,14 +56,14 @@ pub struct FabInfo<'a> {
 
 /// `bilrost` compatible struct for saving cached data
 #[derive(Message, Debug)]
-struct Cache {
+pub struct Cache {
     /// The data
-    cache: Set<Cow<'static, str>>,
+    pub cache: Set<Cow<'static, str>>,
 }
 
 /// Get cached definitions.
 #[inline]
-fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
+pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
     timer!("::get_cache", {
         if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace('/', "-"), object) {
             let content = T::decode(bytes.as_slice())?;
@@ -74,7 +76,7 @@ fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Opti
 
 /// Write the cache file.
 #[inline]
-fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
+pub fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
     timer!("::write_cache", {
         let bytes = content.encode_to_bytes();
         CACHE_STORE
@@ -104,11 +106,11 @@ fn elf_filter(path: &str) -> io::Result<bool> {
 }
 
 /// Cache LDD calls ephemerally.
-static CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default);
+static _LDD_CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default);
 
 /// The underlying cache, storing path -> resolved path lookups.
 static LDD: LazyLock<cache::Cache<String, Set<String>>> =
-    LazyLock::new(|| cache::Cache::new(&CACHE));
+    LazyLock::new(|| cache::Cache::new(&_LDD_CACHE));
 
 /// LDD an executable to get its library dependencies.
 ///
@@ -120,6 +122,8 @@ static LDD: LazyLock<cache::Cache<String, Set<String>>> =
 pub fn ldd(path: &str) -> Result<&'static Set<String>> {
     if let Some(depends) = LDD.get(path) {
         Ok(depends)
+    } else if fs::read_link(path).is_ok() {
+        Ok(LDD.insert(path.to_owned(), Set::default()))
     } else {
         let depends = if elf_filter(path)? {
             Spawner::new("ldd")?
@@ -155,14 +159,6 @@ pub fn ldd(path: &str) -> Result<&'static Set<String>> {
                         e
                     }
                 })
-                .map(|e| {
-                    let formatted = format!("/usr{e}");
-                    if Path::new(&formatted).exists() {
-                        formatted
-                    } else {
-                        e
-                    }
-                })
                 .collect()
         } else {
             if !path.contains('.') {
@@ -186,93 +182,16 @@ pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
         if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
             return Ok(libraries.cache.into_iter().collect());
         }
-
-        let libraries: Set<Cow<'static, str>> = Spawner::new("find")?
-            .args([dir, "-type", "f"])
-            .output(StreamMode::Pipe)
-            .mode(user::Mode::Real)
-            .spawn()?
-            .output_all()?
-            .lines()
-            .par_bridge()
-            .filter_map(|lib| ldd(lib).ok())
+        let crawled = recursive_crawl(dir, None)?
+            .remove(&DirType::File)
+            .unwrap_or_default()
+            .into_par_iter()
+            .filter_map(|lib| ldd(&lib).ok())
             .flatten()
             .map(|s| Cow::Borrowed(s.as_str()))
             .collect();
-
-        Ok(write_cache(dir, Cache { cache: libraries }, Object::Directories)?.cache)
-    })
-}
-
-/// Find all matches in a directory. We only match the top level for performance considerations.
-///
-/// ## Examples
-///
-/// ```rust
-/// use antimony::fab::{get_wildcards,lib::WildcardFilter};
-/// get_wildcards("glib*", true, WildcardFilter::Files).expect("Failed to find Glib");
-/// ```
-#[allow(
-    clippy::unwrap_used,
-    clippy::missing_panics_doc,
-    reason = "Both unwraps are done with explicit knowledge that they cannot fail."
-)]
-pub fn get_wildcards(
-    pattern: &str,
-    lib: bool,
-    filter: WildcardFilter,
-) -> Result<Set<Cow<'static, str>>> {
-    timer!("::get_wildcards", {
-        let run = |dir: &str, base: &str| -> Result<Set<Cow<'static, str>>> {
-            let handle = Spawner::new("find")?.arg(dir);
-
-            if base.contains('/') {
-                let whole = PathBuf::from(format!("{dir}/{base}"));
-                if !whole.parent().unwrap().exists() {
-                    return Ok(Set::default());
-                }
-                let d = format!("{}", whole.components().count().saturating_sub(1));
-                handle.args_i(["-maxdepth", &d, "-wholename", &whole.display().to_string()]);
-            } else {
-                handle.args_i(["-maxdepth", "1", "-mindepth", "1", "-name", base]);
-            }
-
-            Ok(handle
-                .args(["-type", filter.find_filter()])
-                .output(StreamMode::Pipe)
-                .mode(user::Mode::Real)
-                .spawn()?
-                .output_all()?
-                .lines()
-                .map(|e| Cow::Owned(e.to_owned()))
-                .collect())
-        };
-
-        if let Some(libraries) = get_cache::<Cache>(pattern, Object::Wildcards)? {
-            return Ok(libraries.cache);
-        }
-
-        // If we have a direct path, call `find /path/to/parent -name file*`
-        let libraries = if pattern.starts_with('/') {
-            let i = pattern.rfind('/').unwrap();
-            run(&pattern[..i], &pattern[i.checked_add(1).unwrap_or(i)..])?
-
-        // If we're looking for libraries, check each library root.
-        } else if lib {
-            let mut libraries = Set::default();
-            for root in ROOTS.iter() {
-                if let Ok(lib) = run(&root, pattern) {
-                    libraries.extend(lib);
-                }
-            }
-
-            libraries
-        // Otherwise, we assume we're looking for binaries.
-        } else {
-            run("/usr/bin", pattern)?
-        };
-
-        Ok(write_cache(pattern, Cache { cache: libraries }, Object::Wildcards)?.cache)
+        trace!("{dir} => {crawled:?}");
+        Ok(write_cache(dir, Cache { cache: crawled }, Object::Directories)?.cache)
     })
 }
 
@@ -331,7 +250,7 @@ pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
 pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
     timer!("::resolve", {
         if string.starts_with('~') {
-            string = Cow::Owned(string.replace('~', "/home/antimony"));
+            string = Cow::Owned(string.replacen('~', "/home/antimony", 1));
         }
 
         let mut resolved = if string.contains('$') {
@@ -377,7 +296,7 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
             if !path.is_absolute() || !path.exists() {
                 let mut path = clean(path);
                 if (!path.is_absolute() || !path.exists())
-                    && let Ok(canon) = canonicalize(&path)
+                    && let Ok(canon) = fs::canonicalize(&path)
                 {
                     path = canon;
                 }
@@ -402,7 +321,7 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
 pub fn localize_home(path: &str) -> Cow<'_, str> {
     timer!("::localize_home", {
         if path.starts_with("/home") {
-            Cow::Owned(path.replace(HOME.as_str(), "/home/antimony"))
+            Cow::Owned(path.replacen(HOME.as_str(), "/home/antimony", 1))
         } else {
             Cow::Borrowed(path)
         }

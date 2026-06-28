@@ -343,7 +343,7 @@ impl Profile {
 
         if let Some(path) = &profile.path {
             if path.starts_with('~') {
-                profile.path = Some(path.replace('~', HOME.as_str()));
+                profile.path = Some(path.replacen('~', HOME.as_str(), 1));
             } else if path.starts_with("$AT_HOME")
                 && let Some(home) = &profile.home
             {

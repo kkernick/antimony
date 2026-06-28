@@ -1,6 +1,6 @@
 name = "dri"
 description = "DRI for accelerated video rendering"
-devices = ["/dev/dri"]
+devices = ["/dev/dri", "/dev/udmabuf"]
 
 [libraries]
 files = ["libMesa*", "libGL*", "libEGL*"]

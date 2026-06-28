@@ -99,13 +99,14 @@ pub enum Error {
 }
 
 /// Each Object, for iteration.
-pub static OBJECTS: [Object; 6] = [
+pub static OBJECTS: [Object; 7] = [
     Object::Profile,
     Object::Feature,
     Object::Directories,
     Object::Wildcards,
     Object::Libraries,
     Object::Binaries,
+    Object::Search,
 ];
 
 /// The kinds of things a backend can store.
@@ -117,6 +118,7 @@ pub enum Object {
     Wildcards,
     Libraries,
     Binaries,
+    Search,
 }
 impl Object {
     const fn name(self) -> &'static str {
@@ -127,6 +129,7 @@ impl Object {
             Self::Wildcards => "wildcards",
             Self::Libraries => "libraries",
             Self::Binaries => "binaries",
+            Self::Search => "search",
         }
     }
 }

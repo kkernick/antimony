@@ -9,11 +9,12 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{get_dir, get_libraries, get_wildcards, in_lib, localize_home},
+    fab::{get_dir, get_libraries, in_lib, localize_home},
     shared::{
         Set, StaticHash, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
+        find::{WildcardFilter, get_wildcards},
     },
     timer,
 };
@@ -136,21 +137,6 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     Ok(())
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub enum WildcardFilter {
-    Files,
-    Directories,
-}
-impl WildcardFilter {
-    #[must_use]
-    pub const fn find_filter(&self) -> &'static str {
-        match self {
-            Self::Files => "f,l",
-            Self::Directories => "d",
-        }
-    }
-}
-
 /// Resolve any wildcards in the given set.
 #[inline]
 fn resolve_wildcards(
@@ -169,7 +155,7 @@ fn resolve_wildcards(
             if e.starts_with('/') {
                 resolved.insert(Cow::Owned(e));
             } else if e.starts_with('~') {
-                resolved.insert(Cow::Owned(e.replace('~', HOME.as_str())));
+                resolved.insert(Cow::Owned(e.replacen('~', HOME.as_str(), 1)));
             } else {
                 for root in ROOTS.iter() {
                     let path = format!("{}/{e}", root.as_ref());

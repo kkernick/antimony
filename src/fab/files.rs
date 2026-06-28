@@ -65,7 +65,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                     for file in files {
                         localize(
                             mode,
-                            &file.replace('~', HOME.as_str()),
+                            &file.replacen('~', HOME.as_str(), 1),
                             true,
                             info.handle,
                             true,

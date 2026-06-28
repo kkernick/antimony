@@ -1,5 +1,6 @@
 #![allow(unused_crate_dependencies)]
 //! The main Antimony executable.
+
 use antimony::{
     cli::{self, Run, run::as_symlink},
     shared::{
@@ -12,7 +13,6 @@ use antimony::{
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-#[cfg(debug_assertions)]
 use std::{
     env,
     fs::File,
@@ -93,9 +93,6 @@ fn main() -> Result<()> {
 
                 #[allow(clippy::cast_precision_loss)]
                 let weight = (v * std::num::Saturating(100)).div(total);
-                if weight < std::num::Saturating(1) {
-                    continue;
-                }
                 log::info!("{k} => {v} ({weight}%)");
             }
 
