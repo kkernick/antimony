@@ -7,7 +7,7 @@
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
 
-use antimony::{cli::refresh::installed_profiles, shared};
+use antimony::shared::{self, env::HOME_PATH};
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueEnum, ValueHint};
 use nix::unistd::chdir;
@@ -15,8 +15,9 @@ use signal_hook::{consts, flag};
 use spawn::Spawner;
 use std::{
     borrow::Cow,
-    env,
-    path::Path,
+    env, fs,
+    os::unix::fs::symlink,
+    path::{Path, PathBuf},
     sync::{Arc, atomic::AtomicBool},
 };
 
@@ -44,7 +45,7 @@ pub enum Benchmark {
 pub struct Cli {
     /// The profiles to benchmark. Defaults to integrated profiles.
     #[arg(value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
-    pub profiles: Option<Vec<String>>,
+    pub profiles: Vec<String>,
 
     /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
     /// wherever `antimony` resolves to, and doesn't build.
@@ -109,10 +110,7 @@ fn main() -> Result<()> {
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 
-    let profiles = match cli.profiles {
-        Some(profiles) => profiles,
-        None => installed_profiles()?,
-    };
+    let profiles = &cli.profiles;
 
     let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])
@@ -175,6 +173,7 @@ fn main() -> Result<()> {
     let antimony = || -> Result<String> {
         let benchmarks = cli
             .bench
+            .clone()
             .unwrap_or_else(|| vec![Benchmark::Cold, Benchmark::Hot]);
 
         let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
@@ -274,9 +273,32 @@ fn main() -> Result<()> {
             "antimony".to_owned()
         };
 
+        if let Some(bench) = &cli.bench
+            && bench.contains(&Benchmark::Refresh)
+        {
+            let temp = PathBuf::from("/tmp/at_bench_tmp");
+            fs::create_dir_all(&temp)?;
+            for profile in profiles {
+                let p = temp.join(profile);
+                symlink("/usr/bin/antimony", p)?;
+            }
+
+            let local = HOME_PATH.join(".local").join("bin");
+            Spawner::abs("/usr/bin/sudo")
+                .args([
+                    "mount",
+                    "--bind",
+                    &temp.to_string_lossy(),
+                    &local.to_string_lossy(),
+                ])
+                .new_privileges(true)
+                .spawn()?
+                .wait()?;
+        }
+
         println!("Using: {antimony}");
 
-        for profile in &profiles {
+        for profile in profiles {
             if benchmarks.contains(&Benchmark::Cold) {
                 let mut command: Vec<String> = [&antimony, "refresh", profile, "--hard", "--"]
                     .into_iter()
@@ -379,6 +401,17 @@ fn main() -> Result<()> {
                 .spawn()?
                 .wait()?;
         }
+    }
+
+    let temp = PathBuf::from("/tmp/at_bench_tmp");
+    if temp.exists() {
+        let local = HOME_PATH.join(".local").join("bin");
+        Spawner::abs("/usr/bin/sudo")
+            .args(["umount", &local.to_string_lossy()])
+            .new_privileges(true)
+            .spawn()?
+            .wait()?;
+        fs::remove_dir_all(temp)?;
     }
 
     let antimony = antimony?;

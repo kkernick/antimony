@@ -130,6 +130,8 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 | 4.2.0                 | 33.6     | 27.9    | 28.5    | 16.4      | 16.0    |
 | 4.2.1                 | 33.1     | 27.2    | 29.0    | 15.6      | 15.9    |
 | 5.0.0                 | 31.0     | 23.5    | 28.5    | 13.7      | 13.3    |
+| 5.0.1                 |          |         |         |           |         |
+| 5.1.0                 |          |         |         |           |         |
 ^HistoryHot
 
 ```chart
@@ -155,6 +157,8 @@ spanGaps: true
 | 4.2.0                  | 291.1    | 102.8 | 1131.7 | 34.9      | 28.6    |
 | 4.2.1                  | 279.4    | 99.2  | 1326.1 | 32.8      | 26.8    |
 | 5.0.0                  | 213.2    | 76.8  | 364.5  | 24.2      | 21.5    |
+| 5.0.1                  |          |       |        |           |         |
+| 5.1.0                  |          |       |        |           |         |
 ^HistoryCold
 
 ```chart
@@ -196,6 +200,27 @@ id: HistoryCold
 tension: 0.5
 spanGaps: true
 ```
+
+#### Refresh
+
+| Version | Refresh |
+| ------- | ------- |
+| 2.4.1   |         |
+| 2.4.2   |         |
+| 2.4.3   |         |
+| 2.5.0   |         |
+| 2.6.0   |         |
+| 3.0.0   |         |
+| 4.0.0   |         |
+| 4.1.0   |         |
+| 4.1.1   |         |
+| 4.2.0   |         |
+| 4.2.1   |         |
+| 5.0.0   |         |
+| 5.0.1   |         |
+| 5.1.0   |         |
+
+
 ## Techniques
 
 Antimony needs to do a lot of things very quickly. Creating a sandbox, especially a secure one, takes time, but the primary objective of Antimony in terms of speed is being unnoticeable compared to running it natively. The most expensive tasks Antimony performs, in descending order, include:
