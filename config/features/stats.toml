@@ -1,6 +1,6 @@
 name = "stats"
 description = "Compute sandbox statistics"
-binaries = ["ls", "wc", "find"]
+binaries = ["ls", "wc", "find", "sh"]
 sandbox_args = ["#", "sh", "-c", """
   echo "/etc => $(find /etc -type f | wc -l)";
   for dir in $(ls /etc); do echo "   $dir => $(find /etc/$dir -type f | wc -l)"; done;

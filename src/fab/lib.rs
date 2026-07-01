@@ -262,40 +262,33 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     });
 
     if let Some(libraries) = info.profile.libraries.take() {
-        timer!("::lib::resolve", {
-            rayon::join(
-                move || {
-                    timer!(
-                        "::lib::directories",
-                        resolve_wildcards(libraries.directories, WildcardFilter::Directories)
-                            .par_bridge()
-                            .for_each(|e| {
-                                if let Ok(libraries) = find_dir(&e) {
-                                    libraries.into_par_iter().for_each(|lib| {
-                                        let _ = FILES.insert(lib);
-                                    });
-                                }
-                                DIRS.insert(e);
-                            })
-                    );
-                },
-                move || {
-                    timer!(
-                        "::lib::files",
-                        resolve_wildcards(libraries.files, WildcardFilter::Files)
-                            .par_bridge()
-                            .for_each(|file| {
-                                if let Ok(libraries) = get_libraries(&file) {
-                                    libraries.into_par_iter().for_each(|lib| {
-                                        let _ = FILES.insert(lib);
-                                    });
-                                }
-                                FILES.insert(file);
-                            })
-                    );
-                },
-            );
-        });
+        timer!(
+            "::lib::directories",
+            resolve_wildcards(libraries.directories, WildcardFilter::Directories)
+                .par_bridge()
+                .for_each(|e| {
+                    if let Ok(libraries) = find_dir(&e) {
+                        libraries.into_par_iter().for_each(|lib| {
+                            let _ = FILES.insert(lib);
+                        });
+                    }
+                    DIRS.insert(e);
+                })
+        );
+
+        timer!(
+            "::lib::files",
+            resolve_wildcards(libraries.files, WildcardFilter::Files)
+                .par_bridge()
+                .for_each(|file| {
+                    if let Ok(libraries) = get_libraries(&file) {
+                        libraries.into_par_iter().for_each(|lib| {
+                            let _ = FILES.insert(lib);
+                        });
+                    }
+                    FILES.insert(file);
+                })
+        );
     }
 
     let sof = sof_dir(info.sys_dir);

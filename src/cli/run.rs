@@ -164,7 +164,7 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub roots: Option<Vec<String>>,
 
-    /// Add libraries
+    /// Disable the SOF and mount the system libraries directly.
     #[arg(long, default_value_t = false)]
     pub no_sof: bool,
 
@@ -199,10 +199,7 @@ impl cli::Run for Args {
                 cache.replace(true);
             }
         }
-        rayon::spawn(|| {
-            let _ = CACHE_STORE.borrow();
-        });
-
+        let _ = CACHE_STORE.borrow();
         match setup(Cow::Owned(self.profile.clone()), &mut self, false, None) {
             Ok(info) => {
                 if let Err(e) = run(info, &mut self) {

@@ -27,18 +27,14 @@ fn main() -> Result<()> {
         .num_threads(available_parallelism()?.get() / 2)
         .build_global()?;
 
-    rayon::spawn(|| {
-        let _ = notify::init();
-        let _ = notify::set_notifier(Box::new(shared::logger));
-    });
+    notify::init()?;
+    notify::set_notifier(Box::new(shared::logger))?;
 
-    rayon::spawn(|| {
-        for (key, value) in CONFIG_FILE.environment() {
-            if env::var(key).is_err() {
-                unsafe { env::set_var(key, value) }
-            }
+    for (key, value) in CONFIG_FILE.environment() {
+        if env::var(key).is_err() {
+            unsafe { env::set_var(key, value) }
         }
-    });
+    }
 
     // Unfortunately, there is only a finite about of things that need
     // Effective Access (The Configuration Store, SOF), and only a handful

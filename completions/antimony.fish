@@ -108,7 +108,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'Provide the user bus. xdg-dbus-proxy is not run'
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Add libraries'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Disable the SOF and mount the system libraries directly'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
