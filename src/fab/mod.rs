@@ -11,9 +11,8 @@ pub mod ns;
 use crate::{
     fab::lib::ROOTS,
     shared::{
-        Set,
+        Set, ThreadMap,
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
-        find::{DirType, recursive_crawl},
         package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
@@ -24,8 +23,7 @@ use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
-use log::trace;
-use log::{debug, warn};
+use log::debug;
 use path_clean::clean;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
@@ -35,14 +33,15 @@ use std::{
     fmt::Debug,
     fs::{self, File},
     io::{self, Read},
+    os::unix::fs::PermissionsExt,
     path::Path,
     sync::LazyLock,
 };
 use temp::Temp;
-use user::as_real;
 
-/// The magic for an ELF file.
+/// ELF constants.
 pub static ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
+pub static E_TYPE_OFFSET: usize = 16;
 
 /// Each fabricator is passed this structure.
 pub struct FabInfo<'a> {
@@ -58,15 +57,29 @@ pub struct FabInfo<'a> {
 #[derive(Message, Debug)]
 pub struct Cache {
     /// The data
-    pub cache: Set<Cow<'static, str>>,
+    pub cache: Set<String>,
 }
+
+/// The L1 Cache caches the disk cache for repeated look-ups in memory.
+static _L1: CacheStatic<Object, ThreadMap<String, Vec<u8>>> = LazyLock::new(DashMap::default);
+
+/// The L1 Cache for get/write cache.
+static L1: LazyLock<cache::Cache<Object, ThreadMap<String, Vec<u8>>>> =
+    LazyLock::new(|| cache::Cache::new(&_L1));
 
 /// Get cached definitions.
 #[inline]
 pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
     timer!("::get_cache", {
-        if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace('/', "-"), object) {
+        if let Some(map) = L1.get(&object)
+            && let Some(bytes) = map.get(name)
+        {
             let content = T::decode(bytes.as_slice())?;
+            Ok(Some(content))
+        } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace('/', "-"), object) {
+            let content = T::decode(bytes.as_slice())?;
+            L1.insert(object, ThreadMap::default())
+                .insert(name.to_owned(), bytes);
             Ok(Some(content))
         } else {
             Ok(None)
@@ -95,22 +108,30 @@ pub fn in_lib(path: &str) -> bool {
 
 /// Filter non-elf files.
 #[inline]
+#[allow(
+    clippy::arithmetic_side_effects,
+    reason = "The index is static, and will always fall into the allocated buffer"
+)]
 fn elf_filter(path: &str) -> io::Result<bool> {
-    match File::open(path) {
-        Ok(mut file) => {
-            let mut magic = [0u8; 4];
-            file.read_exact(&mut magic).map(|()| magic == ELF_MAGIC)
-        }
-        Err(e) => Err(e),
+    let mut file = File::open(path)?;
+    let metadata = fs::metadata(path)?;
+
+    if metadata.permissions().mode() & 0o001u32 == 0 {
+        return Ok(false);
     }
+
+    let mut buf = [0u8; 18];
+    file.read_exact(&mut buf)?;
+
+    // Check magic number
+    if !buf.starts_with(&ELF_MAGIC) {
+        return Ok(false);
+    }
+
+    // Read e_type at offset 16 (little-endian ELF standard position)
+    let e_type = u16::from_le_bytes([buf[E_TYPE_OFFSET], buf[E_TYPE_OFFSET + 1]]);
+    Ok(e_type == 2 || e_type == 3)
 }
-
-/// Cache LDD calls ephemerally.
-static _LDD_CACHE: CacheStatic<String, Set<String>> = LazyLock::new(DashMap::default);
-
-/// The underlying cache, storing path -> resolved path lookups.
-static LDD: LazyLock<cache::Cache<String, Set<String>>> =
-    LazyLock::new(|| cache::Cache::new(&_LDD_CACHE));
 
 /// LDD an executable to get its library dependencies.
 ///
@@ -119,80 +140,52 @@ static LDD: LazyLock<cache::Cache<String, Set<String>>> =
 /// ```
 ///
 #[inline]
-pub fn ldd(path: &str) -> Result<&'static Set<String>> {
-    if let Some(depends) = LDD.get(path) {
-        Ok(depends)
-    } else if fs::read_link(path).is_ok() {
-        Ok(LDD.insert(path.to_owned(), Set::default()))
-    } else {
-        let depends = if elf_filter(path)? {
-            Spawner::new("ldd")?
-                .arg(path)
-                .output(StreamMode::Pipe)
-                .error(StreamMode::Discard)
-                .mode(user::Mode::Real)
-                .spawn()?
-                .output_all()?
-                .lines()
-                .filter_map(|e| {
-                    if let Some(start) = e.find('/')
-                        && let Some(end) = e[start..].find(' ')
-                    {
-                        Some(String::from(
-                            &e[start..start.checked_add(end).unwrap_or(end)],
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .map(|e| {
-                    let path = Path::new(&e);
-                    if let Some(parent) = path.parent()
-                        && let Some(name) = path.file_name()
-                    {
-                        let mut path = clean(parent).join(name);
-                        if !ROOTS.iter().any(|root| path.starts_with(root.as_ref())) {
-                            path = path.canonicalize().unwrap_or(path);
-                        }
-                        path.to_string_lossy().into_owned()
-                    } else {
-                        e
-                    }
-                })
-                .collect()
+pub fn ldd(path: &str) -> Result<Set<String>> {
+    timer!(
+        "::ldd",
+        if fs::read_link(path).is_ok() {
+            Ok(Set::default())
         } else {
-            if !path.contains('.') {
-                warn!("Not an ELF binary: {path}");
-            }
-            Set::default()
-        };
-        Ok(LDD.insert(path.to_owned(), depends))
-    }
-}
-
-/// Get all executable files in a directory. This is very expensive.
-///
-/// ## Examples
-///
-/// ```rust
-/// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
-/// ```
-pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
-    timer!("::get_dir", {
-        if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
-            return Ok(libraries.cache.into_iter().collect());
+            let depends = if elf_filter(path)? {
+                Spawner::abs("/usr/bin/ldd")
+                    .arg(path)
+                    .output(StreamMode::Pipe)
+                    .mode(user::Mode::Real)
+                    .spawn()?
+                    .output_all()?
+                    .lines()
+                    .filter_map(|e| {
+                        if let Some(start) = e.find('/')
+                            && let Some(end) = e[start..].find(' ')
+                        {
+                            Some(String::from(
+                                &e[start..start.checked_add(end).unwrap_or(end)],
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|e| {
+                        let path = Path::new(&e);
+                        if let Some(parent) = path.parent()
+                            && let Some(name) = path.file_name()
+                        {
+                            let mut path = clean(parent).join(name);
+                            if !ROOTS.par_iter().any(|root| path.starts_with(root.as_ref())) {
+                                path = path.canonicalize().unwrap_or(path);
+                            }
+                            path.to_string_lossy().into_owned()
+                        } else {
+                            e
+                        }
+                    })
+                    .collect()
+            } else {
+                Set::default()
+            };
+            Ok(depends)
         }
-        let crawled = recursive_crawl(dir, None)?
-            .remove(&DirType::File)
-            .unwrap_or_default()
-            .into_par_iter()
-            .filter_map(|lib| ldd(&lib).ok())
-            .flatten()
-            .map(|s| Cow::Borrowed(s.as_str()))
-            .collect();
-        trace!("{dir} => {crawled:?}");
-        Ok(write_cache(dir, Cache { cache: crawled }, Object::Directories)?.cache)
-    })
+    )
 }
 
 /// LDD a path.
@@ -205,16 +198,12 @@ pub fn get_dir(dir: &str) -> Result<Set<Cow<'static, str>>> {
 ///
 /// get_libraries("/proc/self/exe").expect("Failed to LDD self");
 /// ```
-pub fn get_libraries(path: &str) -> Result<Set<Cow<'static, str>>> {
+pub fn get_libraries(path: &str) -> Result<Set<String>> {
     timer!("::get_libraries", {
         let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
             libraries.cache
         } else {
-            let libraries: Set<Cow<'static, str>> = ldd(path)?
-                .iter()
-                .map(|s| Cow::Borrowed(s.as_str()))
-                .collect();
-            write_cache(path, Cache { cache: libraries }, Object::Libraries)?.cache
+            write_cache(path, Cache { cache: ldd(path)? }, Object::Libraries)?.cache
         };
         Ok(libraries)
     })
@@ -291,19 +280,17 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
             string
         };
 
-        let _ = as_real!({
-            let path = Path::new(resolved.as_ref());
-            if !path.is_absolute() || !path.exists() {
-                let mut path = clean(path);
-                if (!path.is_absolute() || !path.exists())
-                    && let Ok(canon) = fs::canonicalize(&path)
-                {
-                    path = canon;
-                }
-
-                resolved = Cow::Owned(path.to_string_lossy().into_owned());
+        let path = Path::new(resolved.as_ref());
+        if !path.is_absolute() || !path.exists() {
+            let mut path = clean(path);
+            if (!path.is_absolute() || !path.exists())
+                && let Ok(canon) = fs::canonicalize(&path)
+            {
+                path = canon;
             }
-        });
+
+            resolved = Cow::Owned(path.to_string_lossy().into_owned());
+        }
 
         resolved
     })
@@ -382,8 +369,7 @@ pub fn localize_path(
             let mut resolved = resolve(Cow::Borrowed(file));
             if home
                 && !resolved.starts_with("/home")
-                && (!resolved.starts_with('/')
-                    || !as_real!({ Path::new(resolved.as_ref()).exists() })?)
+                && (!resolved.starts_with('/') || !Path::new(resolved.as_ref()).exists())
             {
                 resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
             }
@@ -391,7 +377,7 @@ pub fn localize_path(
         };
         let dest = localize_home(&dest);
 
-        Ok(if as_real!({ Path::new(source.as_ref()).exists() })? {
+        Ok(if Path::new(source.as_ref()).exists() {
             debug!("{source} => {dest}");
             (Some(source), dest.into_owned())
         } else {

@@ -33,7 +33,6 @@ use log::debug;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io, path::Path};
 use thiserror::Error;
-use user::as_real;
 use which::which;
 
 /// An error for issues around Profiles.
@@ -353,7 +352,7 @@ impl Profile {
 
         let app_path = profile.app_path(name);
         let path = Path::new(app_path.as_ref());
-        if !as_real!(path.exists())? {
+        if !path.exists() {
             match which::which(app_path.as_ref()) {
                 Ok(path) => profile.path = Some(path.to_owned()),
                 Err(_) => {

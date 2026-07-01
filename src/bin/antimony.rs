@@ -40,18 +40,17 @@ fn main() -> Result<()> {
         }
     });
 
-    // In most SetUID applications, The effective user is the privileged
-    // one (Usually root), but in Antimony its the opposite. The user
-    // is considered privileged, as the antimony user has no permission
-    // besides its own folder.
+    // Unfortunately, there is only a finite about of things that need
+    // Effective Access (The Configuration Store, SOF), and only a handful
+    // actual need write-permission.
     //
-    // Though we don't drop privilege within the main antimony application,
-    // instead dropping when executing the sandbox/helpers, this codebase
-    // treats swapping to the user as a privileged operation, and operates
-    // by default under the assumption we are running under antimony.
-    //
-    // This is not a security consideration, just a practical one.
-    timer!("::set", user::set(user::Mode::Effective))?;
+    // In contrast, there are countably infinite things that the Real user
+    // needs access for. Their home, their runtime directory, temp, whatever
+    // mounts they may have installed, and whatever else they may have setup.
+    // We cannot account for it, and up until now the solution has been simply
+    // to choke hot-loops with our thread-safe `as_real` macros. Performance
+    // considerations require us to change how Antimony operates.
+    timer!("::set", user::set(user::Mode::Real))?;
 
     // We modify a reserved section of the ELF header, as it's a predictable location that is unused.
     // The MARKER starts and ends with `\0`, and it doesn't trip any systems I've tested on, but this

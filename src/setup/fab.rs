@@ -12,6 +12,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use user::as_effective;
 
 #[inline]
 pub fn cmd_cache(sys_dir: &Path) -> PathBuf {
@@ -32,7 +33,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
     {
-        fs::create_dir_all(parent)?;
+        as_effective!(fs::create_dir_all(parent))??;
     }
 
     debug!("Fabricating sandbox");
@@ -68,7 +69,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     timer!("::fab::dev", fab::dev::fabricate(&info))?;
 
     if package.is_none() {
-        timer!("::fab::cache_write", args.handle.cache_write(&cmd_cache))?;
+        as_effective!(args.handle.cache_write(&cmd_cache))??;
     }
     Ok(())
 }

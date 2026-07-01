@@ -26,7 +26,7 @@ use std::{
     os::unix::fs::MetadataExt,
     path::PathBuf,
 };
-use user::{USER, as_real};
+use user::{USER};
 
 #[derive(Default, Copy, Clone)]
 pub struct StaticHash;
@@ -54,22 +54,21 @@ pub fn privileged() -> anyhow::Result<bool> {
     {
         Ok(true)
     } else {
-        Ok(as_real!(anyhow::Result<i32>, {
-            Ok(Spawner::abs("/usr/bin/pkcheck")
-                .args([
-                    "--action-id",
-                    "org.freedesktop.policykit.exec",
-                    "--allow-user-interaction",
-                    "--process",
-                    &format!("{}", getpid().as_raw()),
-                ])
-                .mode(user::Mode::Real)
-                .preserve_env(true)
-                .error(spawn::StreamMode::Discard)
-                .output(spawn::StreamMode::Discard)
-                .spawn()?
-                .wait()?)
-        })?? == 0)
+        Ok(Spawner::abs("/usr/bin/pkcheck")
+            .args([
+                "--action-id",
+                "org.freedesktop.policykit.exec",
+                "--allow-user-interaction",
+                "--process",
+                &format!("{}", getpid().as_raw()),
+            ])
+            .mode(user::Mode::Real)
+            .preserve_env(true)
+            .error(spawn::StreamMode::Discard)
+            .output(spawn::StreamMode::Discard)
+            .spawn()?
+            .wait()?
+            == 0)
     }
 }
 

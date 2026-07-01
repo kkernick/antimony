@@ -9,12 +9,12 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{get_dir, get_libraries, in_lib, localize_home},
+    fab::{get_libraries, in_lib, localize_home},
     shared::{
         Set, StaticHash, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
-        find::{WildcardFilter, get_wildcards},
+        find::{WildcardFilter, find_dir, find_wildcards},
     },
     timer,
 };
@@ -29,13 +29,13 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
-use user::as_real;
+use user::as_effective;
 
 /// Library Files (i.e. .so files)
-static FILES: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 
 /// Library Directories (e.g. /usr/lib/qt6)
-pub static DIRS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(ThreadSet::default);
+pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 
 /// Roots to search for files and directories
 pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
@@ -139,11 +139,8 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
 
 /// Resolve any wildcards in the given set.
 #[inline]
-fn resolve_wildcards(
-    set: Set<String>,
-    filter: WildcardFilter,
-) -> OwningIter<Cow<'static, str>, StaticHash> {
-    let resolved = ThreadSet::<Cow<'static, str>>::default();
+fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<String, StaticHash> {
+    let resolved = ThreadSet::<String>::default();
 
     let (wildcards, flat): (Set<_>, Set<_>) = timer!(
         "::wildcard::partition",
@@ -153,14 +150,14 @@ fn resolve_wildcards(
     timer!("::wildcard::localize", {
         flat.into_par_iter().for_each(|e| {
             if e.starts_with('/') {
-                resolved.insert(Cow::Owned(e));
+                resolved.insert(e);
             } else if e.starts_with('~') {
-                resolved.insert(Cow::Owned(e.replacen('~', HOME.as_str(), 1)));
+                resolved.insert(e.replacen('~', HOME.as_str(), 1));
             } else {
                 for root in ROOTS.iter() {
                     let path = format!("{}/{e}", root.as_ref());
                     if Path::new(&path).exists() {
-                        resolved.insert(Cow::Owned(path));
+                        resolved.insert(path);
                         if filter == WildcardFilter::Files {
                             break;
                         }
@@ -172,7 +169,7 @@ fn resolve_wildcards(
 
     timer!("::wildcard::resolve", {
         wildcards.into_par_iter().for_each(|w| {
-            if let Ok(cards) = get_wildcards(&w, true, filter) {
+            if let Ok(cards) = find_wildcards(&w, true, filter) {
                 cards.into_par_iter().for_each(|card| {
                     resolved.insert(card);
                 });
@@ -236,92 +233,92 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         return mount_roots("", info.handle);
     }
 
-    as_real!({
-        ROOTS.iter().for_each(|lib_root| {
-            let name = format!("{}/{}", lib_root.as_ref(), info.name);
-            if Path::new(&name).exists() {
-                let _ = info
-                    .profile
-                    .libraries
-                    .get_or_insert_default()
-                    .directories
-                    .insert(name);
-            }
-        });
+    ROOTS.iter().for_each(|lib_root| {
+        let name = format!("{}/{}", lib_root.as_ref(), info.name);
+        if Path::new(&name).exists() {
+            let _ = info
+                .profile
+                .libraries
+                .get_or_insert_default()
+                .directories
+                .insert(name);
+        }
+    });
 
-        timer!("::binaries", {
-            info.profile
-                .binaries
-                .par_iter()
-                .for_each(|binary| match get_libraries(binary) {
-                    Ok(libraries) => {
-                        for lib in libraries {
-                            {
-                                let _ = FILES.insert(lib);
-                            }
+    timer!("::binaries", {
+        info.profile
+            .binaries
+            .par_iter()
+            .for_each(|binary| match get_libraries(binary) {
+                Ok(libraries) => {
+                    for lib in libraries {
+                        {
+                            let _ = FILES.insert(lib);
                         }
                     }
-                    Err(e) => warn!("Could not get libraries for {binary}: {e}"),
-                });
-        });
-
-        if let Some(libraries) = info.profile.libraries.take() {
-            timer!("::lib::resolve", {
-                rayon::join(
-                    move || {
-                        timer!(
-                            "::lib::directories",
-                            resolve_wildcards(libraries.directories, WildcardFilter::Directories)
-                                .par_bridge()
-                                .for_each(|e| {
-                                    if let Ok(libraries) = get_dir(&e) {
-                                        libraries.into_par_iter().for_each(|lib| {
-                                            let _ = FILES.insert(lib);
-                                        });
-                                    }
-                                    DIRS.insert(e);
-                                })
-                        );
-                    },
-                    move || {
-                        timer!(
-                            "::lib::files",
-                            resolve_wildcards(libraries.files, WildcardFilter::Files)
-                                .par_bridge()
-                                .for_each(|file| {
-                                    if let Ok(libraries) = get_libraries(&file) {
-                                        libraries.into_par_iter().for_each(|lib| {
-                                            let _ = FILES.insert(lib);
-                                        });
-                                    }
-                                    FILES.insert(file);
-                                })
-                        );
-                    },
-                );
+                }
+                Err(e) => warn!("Could not get libraries for {binary}: {e}"),
             });
-        }
-    })?;
+    });
+
+    if let Some(libraries) = info.profile.libraries.take() {
+        timer!("::lib::resolve", {
+            rayon::join(
+                move || {
+                    timer!(
+                        "::lib::directories",
+                        resolve_wildcards(libraries.directories, WildcardFilter::Directories)
+                            .par_bridge()
+                            .for_each(|e| {
+                                if let Ok(libraries) = find_dir(&e) {
+                                    libraries.into_par_iter().for_each(|lib| {
+                                        let _ = FILES.insert(lib);
+                                    });
+                                }
+                                DIRS.insert(e);
+                            })
+                    );
+                },
+                move || {
+                    timer!(
+                        "::lib::files",
+                        resolve_wildcards(libraries.files, WildcardFilter::Files)
+                            .par_bridge()
+                            .for_each(|file| {
+                                if let Ok(libraries) = get_libraries(&file) {
+                                    libraries.into_par_iter().for_each(|lib| {
+                                        let _ = FILES.insert(lib);
+                                    });
+                                }
+                                FILES.insert(file);
+                            })
+                    );
+                },
+            );
+        });
+    }
 
     let sof = sof_dir(info.sys_dir);
     let cache = timer!("::setup", {
-        let cache = cache_dir();
-        if !cache.exists() {
-            fs::create_dir_all(cache.as_path())?;
-        }
-        if !sof.exists() {
-            fs::create_dir(&sof)?;
-        }
-
-        // We do need the cache on disk in case we need to use a shared SOF source.
-        if !cache.starts_with(AT_HOME.as_path()) {
-            let shared = cache.join("shared");
-            if !shared.exists() {
-                debug!("Creating shared directory at {}", shared.display());
-                let _ = fs::create_dir(&shared);
+        as_effective!(Result<PathBuf>, {
+            let cache = cache_dir();
+            if !cache.exists() {
+                fs::create_dir_all(cache.as_path())?;
             }
-        }
-        cache
+            if !sof.exists() {
+                fs::create_dir(&sof)?;
+            }
+
+            // We do need the cache on disk in case we need to use a shared SOF source.
+            if !cache.starts_with(AT_HOME.as_path()) {
+                let shared = cache.join("shared");
+                if !shared.exists() {
+                    debug!("Creating shared directory at {}", shared.display());
+                    let _ = fs::create_dir(&shared);
+                }
+            }
+            Ok(cache)
+        })??
     });
 
     if !FILES.is_empty() {
@@ -332,30 +329,32 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                     package.add_library(&lib, &lib)?;
                 }
             } else {
-                FILES
-                    .par_iter()
-                    .filter(|library| {
-                        if in_lib(library) {
-                            true
-                        } else {
-                            info.handle.args_i([
-                                if library.starts_with("/home/") {
-                                    "--bind"
-                                } else {
-                                    "--ro-bind"
-                                },
-                                library,
-                                library,
-                            ]);
-                            false
-                        }
-                    })
-                    // Write the SOF version, as a hard link preferably.
-                    .for_each(|lib| {
-                        if let Err(e) = add_sof(&sof, &lib, &cache) {
-                            error!("Failed to add {} to SOF: {e}", lib.as_ref());
-                        }
-                    });
+                as_effective!(
+                    FILES
+                        .par_iter()
+                        .filter(|library| {
+                            if in_lib(library) {
+                                true
+                            } else {
+                                info.handle.args_i([
+                                    if library.starts_with("/home/") {
+                                        "--bind"
+                                    } else {
+                                        "--ro-bind"
+                                    },
+                                    library,
+                                    library,
+                                ]);
+                                false
+                            }
+                        })
+                        // Write the SOF version, as a hard link preferably.
+                        .for_each(|lib| {
+                            if let Err(e) = add_sof(&sof, &lib, &cache) {
+                                error!("Failed to add {} to SOF: {e}", lib.as_str());
+                            }
+                        })
+                )?;
             }
         );
 
@@ -369,7 +368,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 if in_lib(dir.as_ref()) {
                     let sof_path = sof.join(&dir[1..]);
                     if !sof_path.exists() {
-                        fs::create_dir_all(sof_path)?;
+                        as_effective!(fs::create_dir_all(sof_path))??;
                     }
                 }
                 let local = localize_home(dir.as_ref());

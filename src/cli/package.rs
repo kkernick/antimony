@@ -24,7 +24,6 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::PathBuf,
 };
-use user::as_real;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -94,8 +93,8 @@ impl super::Run for Args {
         let mut depend = Map::default();
         let mut collect = |bin| -> Result<()> {
             for library in get_libraries(which::which(bin)?)? {
-                if !package.system_libraries.contains_key(library.as_ref()) {
-                    let mut dest = library.as_ref();
+                if !package.system_libraries.contains_key(library.as_str()) {
+                    let mut dest = library.as_str();
                     for root in ROOTS.iter() {
                         dest = dest.strip_prefix(root.as_ref()).unwrap_or(dest);
                     }
@@ -116,29 +115,25 @@ impl super::Run for Args {
         info!("Packing...");
         let bytes = zstd::encode_all(Package::encode_to_vec(&package).as_slice(), 3)?;
 
-        as_real!(Result<()>, {
-            // 3. Create the new self-contained file
-            let mut out_file = File::create(&dest)?;
+        let mut out_file = File::create(&dest)?;
 
-            // Write original binary
-            out_file.write_all(&binary_content)?;
+        // Write original binary
+        out_file.write_all(&binary_content)?;
 
-            // Write Header: Marker + Length
-            out_file.write_all(&PACKAGE_MARKER)?;
+        // Write Header: Marker + Length
+        out_file.write_all(&PACKAGE_MARKER)?;
 
-            // Write Payload
-            out_file.write_all(&bytes)?;
+        // Write Payload
+        out_file.write_all(&bytes)?;
 
-            out_file.seek(SeekFrom::Start(9))?; // Position at EI_PAD
-            out_file.write_all(&PACKAGE_MARKER)?; // 6 bytes marker
+        out_file.seek(SeekFrom::Start(9))?;
+        out_file.write_all(&PACKAGE_MARKER)?;
 
-            out_file.sync_all()?;
-            let metadata = fs::metadata(&dest)?;
-            let mut perms = metadata.permissions();
-            perms.set_mode(0o755);
-            fs::set_permissions(dest, perms)?;
-            Ok(())
-        })??;
+        out_file.sync_all()?;
+        let metadata = fs::metadata(&dest)?;
+        let mut perms = metadata.permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(dest, perms)?;
 
         Ok(())
     }

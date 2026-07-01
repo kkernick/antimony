@@ -4,7 +4,11 @@ requires = ["passwd"]
 binaries = ["/usr/bin/sh"]
 
 [environment]
+
 TERM = "$TERM"
+
+[files.platform]
+ro = ["/etc/profile"]
 
 [files.resources]
 ro = ["/usr/share/terminfo"]

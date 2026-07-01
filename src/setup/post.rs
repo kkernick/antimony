@@ -1,11 +1,11 @@
+use std::{fs, path::Path};
+
 use crate::shared::{
     env::{HOME, PWD},
     profile::files::FileMode,
 };
 use anyhow::Result;
 use log::debug;
-use std::{fs, path::Path};
-use user::as_real;
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     debug!("Setting up post arguments");
@@ -23,20 +23,20 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
         };
 
         for arg in &mut post_args {
-            let abs_arg = if as_real!(PWD.join(&arg).exists())? {
+            let abs_arg = if PWD.join(&arg).exists() {
                 PWD.join(&arg).to_string_lossy().into_owned()
             } else {
                 arg.clone()
             };
 
-            if as_real!(Path::new(&abs_arg).exists())? || abs_arg.starts_with("file://") {
+            if Path::new(&abs_arg).exists() || abs_arg.starts_with("file://") {
                 let file = arg.strip_prefix("file://").unwrap_or(&abs_arg);
                 let dest = file.replacen(HOME.as_str(), "/home/antimony", 1);
                 match operation {
                     FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest]),
                     FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest]),
                     FileMode::Executable => {
-                        let contents = as_real!(fs::read_to_string(file))??;
+                        let contents = fs::read_to_string(file)?;
                         super::files::add_file(
                             &args.handle,
                             file,

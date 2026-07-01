@@ -14,7 +14,7 @@ use clap::ValueHint;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
 use std::{fs, time::Duration};
-use user::as_real;
+use user::as_effective;
 
 #[derive(clap::Args, Default)]
 pub struct Args {
@@ -38,14 +38,17 @@ pub struct Args {
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
         if self.hard {
-            for cache in fs::read_dir(CACHE_DIR.as_path())? {
-                let cache = cache?.path();
-                if cache.is_dir() {
-                    fs::remove_dir_all(cache)?;
-                } else {
-                    fs::remove_file(cache)?;
+            as_effective!(Result<()>, {
+                for cache in fs::read_dir(CACHE_DIR.as_path())? {
+                    let cache = cache?.path();
+                    if cache.is_dir() {
+                        fs::remove_dir_all(cache)?;
+                    } else {
+                        fs::remove_file(cache)?;
+                    }
                 }
-            }
+                Ok(())
+            })??;
         } else if self.profile.is_none() {
             for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(Result::ok) {
                 let saved: Set<String> = fs::read_dir(hash.path())?
@@ -53,17 +56,16 @@ impl cli::Run for Args {
                     .filter_map(|f| f.file_name().into_string().ok())
                     .collect();
 
-                let session: Set<String> =
-                    as_real!({ fs::read_dir(RUNTIME_DIR.join("antimony")) })??
-                        .filter_map(Result::ok)
-                        .filter_map(|f| f.file_name().into_string().ok())
-                        .collect();
+                let session: Set<String> = fs::read_dir(RUNTIME_DIR.join("antimony"))?
+                    .filter_map(Result::ok)
+                    .filter_map(|f| f.file_name().into_string().ok())
+                    .collect();
 
                 for stale in saved.difference(&session) {
                     let cache = CACHE_DIR.join("run").join(stale);
                     if cache.exists() {
                         info!("Removing stale SOF cache {stale}");
-                        fs::remove_dir_all(cache)?;
+                        as_effective!(fs::remove_dir_all(cache))??;
                     }
                 }
             }
@@ -140,25 +142,23 @@ impl cli::Run for Args {
 /// ## Errors
 /// If we cannot read the bin directory.
 pub fn installed_profiles() -> Result<Vec<String>> {
-    let profiles: Vec<String> = as_real!(Result<Vec<String>>, {
-        let bin = HOME_PATH.join(".local").join("bin");
-        debug!("Refreshing local binaries");
+    let bin = HOME_PATH.join(".local").join("bin");
+    debug!("Refreshing local binaries");
 
-        Ok(fs::read_dir(bin)?
-            .filter_map(|file| {
-                if let Ok(file) = file {
-                    let file = file.path();
-                    if let Ok(dest) = fs::read_link(&file)
-                        && dest.ends_with("antimony")
-                        && let Some(name) = file.file_name()
-                    {
-                        let name = name.to_string_lossy();
-                        return Some(name.into_owned());
-                    }
+    let profiles = fs::read_dir(bin)?
+        .filter_map(|file| {
+            if let Ok(file) = file {
+                let file = file.path();
+                if let Ok(dest) = fs::read_link(&file)
+                    && dest.ends_with("antimony")
+                    && let Some(name) = file.file_name()
+                {
+                    let name = name.to_string_lossy();
+                    return Some(name.into_owned());
                 }
-                None
-            })
-            .collect())
-    })??;
+            }
+            None
+        })
+        .collect();
     Ok(profiles)
 }

@@ -5,7 +5,7 @@ use antimony::{
     shared::{
         Set, ThreadMap,
         feature::Feature,
-        find::{WildcardFilter, get_wildcards},
+        find::{WildcardFilter, find_wildcards},
         profile::files::FileMode,
         store::{Object, SYSTEM_STORE, USER_STORE},
         utility,
@@ -106,7 +106,7 @@ fn main() -> anyhow::Result<()> {
                     let found = if file.is_empty() {
                         false
                     } else if d_name.contains('*') {
-                        get_wildcards(d_name.as_ref(), true, WildcardFilter::Files)
+                        find_wildcards(d_name.as_ref(), true, WildcardFilter::Files)
                             .unwrap_or_default()
                             .contains(file.as_str())
                     } else {

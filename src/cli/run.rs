@@ -13,16 +13,14 @@ use crate::{
         store::{self, CACHE_STORE, mem},
         utility,
     },
-    timer,
 };
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueHint};
 use heck::ToTitleCase;
 use log::{debug, error};
-use nix::errno::Errno;
-use spawn::{Spawner, StreamMode};
+use nix::{errno::Errno, sys::signal::Signal};
+use spawn::{HandleError, Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, thread, time::Duration};
-use user::as_real;
 
 #[derive(clap::Args, Default)]
 #[allow(clippy::struct_excessive_bools)]
@@ -205,19 +203,19 @@ impl cli::Run for Args {
             let _ = CACHE_STORE.borrow();
         });
 
-        let result = || -> Result<()> {
-            let info = timer!(
-                "::setup",
-                setup(Cow::Owned(self.profile.clone()), &mut self, false, None)
-            )?;
-            timer!("::run", run(info, &mut self))?;
-            Ok(())
-        }();
-
-        if let Err(e) = result {
-            let fail = format!("Failed to run {}: {e}", self.profile);
-            error!("{fail}");
-            return Err(anyhow!(fail));
+        match setup(Cow::Owned(self.profile.clone()), &mut self, false, None) {
+            Ok(info) => {
+                if let Err(e) = run(info, &mut self) {
+                    let fail = format!("Failed to run {}: {e}", self.profile);
+                    error!("{fail}");
+                    return Err(anyhow!(fail));
+                }
+            }
+            Err(e) => {
+                let fail = format!("Failed to run {}: {e}", self.profile);
+                error!("{fail}");
+                return Err(anyhow!(fail));
+            }
         }
         Ok(())
     }
@@ -228,19 +226,19 @@ impl Args {
     /// ## Errors
     /// If the profile cannot be run
     pub fn refresh(mut self) -> Result<()> {
-        let result = || -> Result<()> {
-            let info = timer!(
-                "::setup",
-                setup(Cow::Owned(self.profile.clone()), &mut self, true, None)
-            )?;
-            timer!("::run", run(info, &mut self))?;
-            Ok(())
-        }();
-
-        if let Err(e) = result {
-            let fail = format!("Failed to refresh {}: {e}", self.profile);
-            error!("{fail}");
-            return Err(anyhow!(fail));
+        match setup(Cow::Owned(self.profile.clone()), &mut self, true, None) {
+            Ok(info) => {
+                if let Err(e) = run(info, &mut self) {
+                    let fail = format!("Failed to run {}: {e}", self.profile);
+                    error!("{fail}");
+                    return Err(anyhow!(fail));
+                }
+            }
+            Err(e) => {
+                let fail = format!("Failed to run {}: {e}", self.profile);
+                error!("{fail}");
+                return Err(anyhow!(fail));
+            }
         }
         Ok(())
     }
@@ -321,7 +319,9 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     }
 
     // Run it
-    if !args.dry {
+    if args.dry {
+        Ok(())
+    } else {
         if let Some(ipc) = info.profile.ipc.take()
             && !ipc.disable.unwrap_or(false)
         {
@@ -376,42 +376,44 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         }
 
         log::trace!("Spawning");
-        let handle = info.handle.spawn()?;
+        let mut handle = info.handle.spawn()?;
         if !info.package.map_or_else(|| false, |(_, b)| b) {
             mem::flush();
         }
 
         // Drop to real while waiting so user processes/parent can signal us.
-        let code = as_real!(handle.wait())??;
+        let code = handle.wait_and();
 
-        if code != 0 {
-            if CONFIG_FILE.auto_refresh() && !args.refresh {
-                Spawner::abs(utility("notify"))
-                    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                    .mode(user::Mode::Real)
-                    .output(StreamMode::Pipe)
-                    .args([
-                        "--title",
-                        &format!("Sandbox Auto-Refreshing: {}", info.name.to_title_case()),
-                        "--body",
-                        "The sandbox encountered an error, and is automatically attempting
+        let ret: Result<()> = match code {
+            Ok(code) => {
+                if code != 0 {
+                    if CONFIG_FILE.auto_refresh() && !args.refresh {
+                        Spawner::abs(utility("notify"))
+                            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                            .mode(user::Mode::Real)
+                            .output(StreamMode::Pipe)
+                            .args([
+                                "--title",
+                                &format!("Sandbox Auto-Refreshing: {}", info.name.to_title_case()),
+                                "--body",
+                                "The sandbox encountered an error, and is automatically attempting
                         to refresh cached definitions.",
-                        "--timeout",
-                        "5000",
-                    ])
-                    .spawn()?
-                    .wait()?;
+                                "--timeout",
+                                "5000",
+                            ])
+                            .spawn()?
+                            .wait()?;
 
-                let cli = cli::Cli::parse();
-                if let cli::Command::Run(mut args) = cli.command {
-                    args.refresh = true;
-                    return args.run();
-                }
-            }
+                        let cli = cli::Cli::parse();
+                        if let cli::Command::Run(mut args) = cli.command {
+                            args.refresh = true;
+                            return args.run();
+                        }
+                    }
 
-            // Alert the user.
-            let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
-            Spawner::abs(utility("notify")).mode(user::Mode::Real)
+                    // Alert the user.
+                    let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
+                    Spawner::abs(utility("notify")).mode(user::Mode::Real)
                 .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                 .output(StreamMode::Pipe)
                 .args([
@@ -429,7 +431,23 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                 "--timeout", "5000",
                 "--urgency", "critical",
             ]).spawn()?.output_all()?;
-        }
+                }
+                Ok(())
+            }
+            // If the child already died, that isn't an error on our end.
+            Err(HandleError::Comm(_)) => {
+                log::info!("Child terminated");
+                Ok(())
+            }
+            // If our wait was interrupted, then we need to bail fast.
+            // SIGKILL the child so we can get to any post hooks.
+            Err(HandleError::Signal) => {
+                log::info!("Signal recieved, closing sandbox");
+                let _ = handle.signal(Signal::SIGILL);
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        };
 
         if let Some(mut hooks) = info.profile.hooks.take() {
             debug!("Executing post-hooks");
@@ -444,8 +462,8 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                 )?;
             }
         }
+        ret
     }
-    Ok(())
 }
 
 /// Use the symlink name as the profile name.

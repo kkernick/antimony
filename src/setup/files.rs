@@ -21,7 +21,7 @@ use std::{
     os::fd::{AsRawFd, OwnedFd},
     path::Path,
 };
-use user::{USER, as_real};
+use user::{USER, as_effective};
 
 /// Open a file and pass it as executable to the sandbox.
 #[inline]
@@ -43,7 +43,7 @@ fn lockdown_file(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner, ro: boo
         ));
     }
 
-    let fd = match as_real!({ File::open(src.as_ref()) })? {
+    let fd = match File::open(src.as_ref()) {
         Ok(file) => OwnedFd::from(file),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             warn!("No such file: {src}");
@@ -137,12 +137,17 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
         let direct = &mut files.direct;
         debug!("Creating direct files");
-        for mode in FILE_MODES {
-            if let Some(files) = direct.get(&mode) {
-                files.into_par_iter().try_for_each(|(file, contents)| {
-                    add_file(&args.handle, file, contents, mode)
-                })?;
-            }
+        if !direct.is_empty() {
+            as_effective!(Result<()>, {
+                for mode in FILE_MODES {
+                    if let Some(files) = direct.get(&mode) {
+                        files.into_par_iter().try_for_each(|(file, contents)| {
+                            add_file(&args.handle, file, contents, mode)
+                        })?;
+                    }
+                }
+                Ok(())
+            })??;
         }
     }
     Ok(())

@@ -16,7 +16,6 @@ use std::{
     io,
     path::{Path, PathBuf},
 };
-use user::as_real;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -76,7 +75,7 @@ impl super::Run for Args {
                             None => getcwd()?.join("syscalls.db"),
                         };
 
-                        as_real!({ io::copy(&mut File::open(db)?, &mut File::create(&dest)?) })??;
+                        io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
                         println!("Exported to {}", dest.display());
                     } else {
                         return Err(anyhow!("No database exists!"));

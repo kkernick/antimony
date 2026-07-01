@@ -8,7 +8,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use spawn::Spawner;
 use std::{fs, io};
 use thiserror::Error;
-use user::{Mode, as_real};
+use user::Mode;
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -49,18 +49,12 @@ pub enum Error {
 pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
     original: &str,
 ) -> Result<Option<String>, Error> {
-    // Pivot to real mode to edit the temporary.
-    // Editors, like vim, can run arbitrary commands, and we don't want
-    // to extend privilege.
-    let temp = as_real!(Result<_, Error>, {
-        let temp = temp::Builder::new()
-            .owner(Mode::Real)
-            .extension("toml")
-            .create::<temp::File>()?;
+    let temp = temp::Builder::new()
+        .owner(Mode::Real)
+        .extension("toml")
+        .create::<temp::File>()?;
 
-        fs::write(temp.full(), original)?;
-        Ok(temp)
-    })??;
+    fs::write(temp.full(), original)?;
 
     // Loop until the user either:
     //  1. Provides a valid edit.

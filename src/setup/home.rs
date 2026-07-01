@@ -9,7 +9,6 @@ use std::{
     io::ErrorKind,
     time::{Duration, Instant},
 };
-use user::as_real;
 
 pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
     if args.profile.lockdown.unwrap_or(false) {
@@ -29,7 +28,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             && home_dir.exists()
         {
             debug!("Unlocking home");
-            as_real!(File::open(&home_dir)?.unlock())??;
+            File::open(&home_dir)?.unlock()?;
         }
 
         if home.lock.unwrap_or(false)
@@ -37,12 +36,8 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             && home_dir.exists()
             && policy != HomePolicy::Overlay
         {
-            let (file, lock) = as_real!(Result<(File, Result<(), TryLockError>)>, {
-                let file = File::open(&home_dir)?;
-                let lock = file.try_lock();
-                Ok((file, lock))
-            })??;
-
+            let file = File::open(&home_dir)?;
+            let lock = file.try_lock();
             match lock {
                 Ok(()) => args.handle.fd_i(file),
                 Err(TryLockError::WouldBlock) => {
@@ -88,7 +83,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
 
         let home_str = home_dir.to_string_lossy();
         if !home_dir.exists() {
-            as_real!(fs::create_dir_all(&home_dir))??;
+            fs::create_dir_all(&home_dir)?;
         }
 
         let dest = home.path.as_ref().map_or("/home/antimony", |path| path);

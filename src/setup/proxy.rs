@@ -27,7 +27,7 @@ use std::{
     path::Path,
 };
 use temp::Temp;
-use user::as_real;
+use user::as_effective;
 
 /// Get the Spawner used to run Proxy.
 pub fn run(
@@ -44,15 +44,12 @@ pub fn run(
     let proxy = instance.full().join("proxy");
 
     timer!("::directory_setup", {
-        as_real!(Result<()>, {
-            if !proxy.exists() {
-                fs::create_dir_all(&proxy)?;
-            }
-            if !app_dir.exists() {
-                fs::create_dir_all(&app_dir)?;
-            }
-            Ok(())
-        })??;
+        if !proxy.exists() {
+            fs::create_dir_all(&proxy)?;
+        }
+        if !app_dir.exists() {
+            fs::create_dir_all(&app_dir)?;
+        }
     });
 
     // Create an SOF for the proxy.
@@ -63,13 +60,14 @@ pub fn run(
     // have the means to do this, so might as well. The real
     // paranoia is below.
     if !sof.exists() {
-        fs::create_dir_all(&sof)?;
-        timer!("::sof", {
+        as_effective!(Result<()>, {
+            fs::create_dir_all(&sof)?;
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
             libraries
                 .into_par_iter()
                 .try_for_each(|library| add_sof(&sof, &library, &cache))?;
-        });
+            Ok(())
+        })??;
     }
 
     let path = which::which("xdg-dbus-proxy")?;
@@ -161,7 +159,7 @@ pub fn run(
                     proxy.arg_i(format!("--call={portal}"));
                 }
             }
-            proxy.cache_write(&cache)?;
+            as_effective!(proxy.cache_write(&cache))??;
         });
     }
     Ok(proxy)
@@ -252,17 +250,14 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     info_contents.push("shared=network;".to_owned());
                 }
 
-                as_real!(Result<()>, {
-                    debug!("Creating flatpak info");
-                    if let Some(parent) = info.parent()
-                        && !parent.exists()
-                    {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let out = fs::File::create_new(&info)?;
-                    write!(&out, "{}", info_contents.join("\n"))?;
-                    Ok(())
-                })??;
+                debug!("Creating flatpak info");
+                if let Some(parent) = info.parent()
+                    && !parent.exists()
+                {
+                    fs::create_dir_all(parent)?;
+                }
+                let out = fs::File::create_new(&info)?;
+                write!(&out, "{}", info_contents.join("\n"))?;
 
                 #[rustfmt::skip]
                 args.handle.args_i([
@@ -278,13 +273,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 debug!("Creating flatpak directory");
                 let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(args.instance.name());
 
-                let file = as_real!(Result<File>, {
-                    if !flatpak_dir.exists() {
-                        fs::create_dir_all(&flatpak_dir)?;
-                    }
-                    let file = File::create(flatpak_dir.join("bwrapinfo.json"))?;
-                    Ok(file)
-                })??;
+                if !flatpak_dir.exists() {
+                    fs::create_dir_all(&flatpak_dir)?;
+                }
+                let file = File::create(flatpak_dir.join("bwrapinfo.json"))?;
 
                 args.handle
                     .args_i(["--json-status-fd", &format!("{}", file.as_raw_fd())]);
@@ -293,14 +285,11 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
             // Watch for the proxy to expose its bus to give to the sandbox.
             debug!("Creating proxy watch");
-            as_real!(Result<()>, {
-                args.watches.insert(
-                    args.inotify
-                        .watches()
-                        .add(instance_dir.join("proxy"), WatchMask::CREATE)?,
-                );
-                Ok(())
-            })??;
+            args.watches.insert(
+                args.inotify
+                    .watches()
+                    .add(instance_dir.join("proxy"), WatchMask::CREATE)?,
+            );
 
             args.handle.associate(proxy.spawn()?);
         }

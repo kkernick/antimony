@@ -31,7 +31,7 @@ use std::{
 };
 use temp::Temp;
 use thiserror::Error;
-use user::{as_effective, as_real};
+use user::as_effective;
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug, Error)]
@@ -190,7 +190,7 @@ impl seccomp::notify::Notifier for Notifier {
 
     /// Setup the `UnixStream`. We wait for the Monitor to setup the socket.
     fn prepare(&mut self) -> Result<(), String> {
-        match as_real!({
+        let res = {
             let mut notify = self.notify.take();
             let mut buffer = [0; 1024];
             while !self.path.exists() {
@@ -208,8 +208,9 @@ impl seccomp::notify::Notifier for Notifier {
                 }
                 Err(e) => Err(format!("Failed to connect to stream: {e}")),
             }
-        }) {
-            Ok(_) => Ok(()),
+        };
+        match res {
+            Ok(()) => Ok(()),
             Err(e) => Err(format!("Failed to switch user: {e}")),
         }
     }

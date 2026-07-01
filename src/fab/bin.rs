@@ -2,7 +2,7 @@
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
 //! it underneath a specialized SECCOMP Notifier.
 
-use crate::shared::find::{WildcardFilter, get_wildcards};
+use crate::shared::find::{WildcardFilter, find_wildcards};
 use crate::{
     fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
     shared::{
@@ -26,7 +26,6 @@ use std::{
     sync::Arc,
 };
 use temp::Temp;
-use user::as_real;
 use which::which;
 
 /// A `bilrost` struct for serializing.
@@ -106,12 +105,10 @@ impl ParseReturn {
 /// Resolve the path of a binary, canonicalized to /usr/bin.
 fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     let resolved: Cow<'_, str> = if path.contains("..") {
-        let path = as_real!(Result<String>, {
-            Ok(Path::new(path)
-                .canonicalize()?
-                .to_string_lossy()
-                .into_owned())
-        })??;
+        let path = Path::new(path)
+            .canonicalize()?
+            .to_string_lossy()
+            .into_owned();
         Cow::Owned(path)
     } else if path.starts_with('/') {
         Cow::Borrowed(path)
@@ -153,7 +150,7 @@ fn parse(
 
     let mut ret = ParseReturn::new();
 
-    let dest = as_real!(Result<String>, {
+    let dest = || -> Result<String> {
         let mut dest = fs::read_link(resolved.as_ref())?;
         if !dest.is_absolute()
             && let Some(parent) = Path::new(resolved.as_ref()).parent()
@@ -163,7 +160,7 @@ fn parse(
 
         let dest = dest.canonicalize()?;
         Ok(resolve_bin(&dest.to_string_lossy())?.into_owned())
-    })?;
+    }();
 
     // Ensure it's a valid binary.
     let t = {
@@ -192,7 +189,7 @@ fn parse(
             }
 
             // Open it.
-            let Ok(mut file) = as_real!({ File::open(resolved.as_ref()) })? else {
+            let Ok(mut file) = File::open(resolved.as_ref()) else {
                 return Ok(Cache::default());
             };
 
@@ -223,11 +220,9 @@ fn parse(
                 let mut binaries = Vec::new();
                 // Rewind.
 
-                let mut iter = as_real!(Result<_>, {
-                    file.seek(io::SeekFrom::Start(0))?;
-                    let reader = BufReader::new(file);
-                    Ok(reader.lines())
-                })??;
+                file.seek(io::SeekFrom::Start(0))?;
+                let reader = BufReader::new(file);
+                let mut iter = reader.lines();
 
                 // Grab the shebang
                 let header = match iter.next() {
@@ -359,8 +354,8 @@ fn handle_localize(
 )]
 pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseReturn> {
     let mut ret = ParseReturn::default();
-    let resolved = Arc::new(ThreadSet::<Cow<'static, str>>::default());
-    resolved.insert(Cow::Owned(profile.app_path(name).to_string()));
+    let resolved = Arc::new(ThreadSet::<String>::default());
+    resolved.insert(profile.app_path(name).to_string());
 
     // Scope so the lock falls out of scope.
     {
@@ -371,11 +366,11 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                 binaries.into_par_iter().partition(|e| e.contains('*'));
 
             flat.into_par_iter().for_each(|f| {
-                resolved.insert(Cow::Owned(f.clone()));
+                resolved.insert(f.clone());
             });
 
             wildcards.into_par_iter().for_each(|w| {
-                match get_wildcards(w, false, WildcardFilter::Files) {
+                match find_wildcards(w, false, WildcardFilter::Files) {
                     Ok(cards) => {
                         for card in cards {
                             resolved.insert(card);
@@ -490,7 +485,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 .binaries
                 .iter()
                 .map(|binary| {
-                    if let Ok(Ok(path)) = as_real!(Path::new(binary).canonicalize())
+                    if let Ok(path) = Path::new(binary).canonicalize()
                         && path.exists()
                     {
                         binary.clone()
@@ -551,7 +546,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     }
 
     for (src, dst) in parsed.localized {
-        if as_real!(elf_filter(&src))?? {
+        if elf_filter(&src)? {
             if let Some((package, false)) = info.package.as_mut() {
                 package.add_binary(&src, &dst)?;
             } else {
@@ -589,7 +584,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             let home_dir = home.path(info.name);
             if home_dir.exists() {
                 let home_str = home_dir.to_string_lossy();
-                lib::DIRS.insert(Cow::Owned(home_str.into_owned()));
+                lib::DIRS.insert(home_str.into_owned());
             }
         });
     }

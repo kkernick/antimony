@@ -38,7 +38,8 @@ use std::{
     time::Duration,
 };
 use temp::Temp;
-use user::as_real;
+use user::Mode;
+use user::as_effective;
 
 /// The information passed to the various setup functions.
 struct Args<'a> {
@@ -195,21 +196,25 @@ pub fn setup<'a>(
         let refresh_sof = CACHE_DIR.join("run").join(format!("{hash}r"));
 
         if refresh_sof.exists() {
-            if as_real!(!busy(&instances) && !busy(&refresh_dir))? {
+            if !busy(&instances) && !busy(&refresh_dir) {
                 debug!("Updating to refreshed definitions");
 
-                if refresh_dir.exists() {
-                    as_real!(fs::remove_dir_all(&refresh_dir))??;
-                }
-                if sys_dir.exists() {
-                    fs::remove_dir_all(&sys_dir)?;
-                }
+                as_effective!(Result<()>, {
+                    if refresh_dir.exists() {
+                        fs::remove_dir_all(&refresh_dir)?;
+                    }
+                    if sys_dir.exists() {
+                        fs::remove_dir_all(&sys_dir)?;
+                    }
 
-                fs::rename(&refresh_sof, &sys_dir)?;
+                    fs::rename(&refresh_sof, &sys_dir)?;
+                    Ok(())
+                })??;
 
                 debug!("Removing stale command caches.");
                 Spawner::new("find")?
                     .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])
+                    .mode(Mode::Effective)
                     .spawn()?
                     .wait()?;
             } else {
@@ -225,12 +230,12 @@ pub fn setup<'a>(
         // If we're told to refresh an existing cache
         if args.refresh && sys_dir.exists() {
             // If it's not busy, just remove the directory outright.
-            if !as_real!(busy(&instances))? {
+            if !busy(&instances) {
                 info!(
                     "No running instances in {}. Safe to refresh.",
                     instances.display()
                 );
-                fs::remove_dir_all(&sys_dir)?;
+                as_effective!(fs::remove_dir_all(&sys_dir))??;
             } else if sys_dir == refresh_sof {
                 return Err(anyhow!(
                     "Already refreshed! Please close all active instances to commit changes!"
@@ -253,7 +258,7 @@ pub fn setup<'a>(
     )?;
 
     if !sys_dir.exists() {
-        fs::create_dir_all(&sys_dir)?;
+        as_effective!(fs::create_dir_all(&sys_dir))??;
     }
     let runtime = RUNTIME_STR.as_str();
 
@@ -265,23 +270,19 @@ pub fn setup<'a>(
             && !ipc.disable.unwrap_or(false)
         {
             if !mounted(&format!("{runtime}/doc")) {
-                as_real!(Result<()>, {
-                    let connection = LocalConnection::new_session()?;
-                    let msg = Message::new_method_call(
-                        BusName::from("org.freedesktop.portal.Documents\0"),
-                        dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                        Interface::from("org.freedesktop.DBus.Peer\0"),
-                        Member::from("Ping\0"),
-                    );
+                let connection = LocalConnection::new_session()?;
+                let msg = Message::new_method_call(
+                    BusName::from("org.freedesktop.portal.Documents\0"),
+                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                    Interface::from("org.freedesktop.DBus.Peer\0"),
+                    Member::from("Ping\0"),
+                );
 
-                    if let Ok(msg) = msg {
-                        connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-                    } else {
-                        return Err(anyhow!("Failed to send ping to Document Portal"));
-                    }
-
-                    Ok(())
-                })??;
+                if let Ok(msg) = msg {
+                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+                } else {
+                    return Err(anyhow!("Failed to send ping to Document Portal"));
+                }
             }
 
             // Associate the flatpak dir with our instance so they're deleted together.
@@ -340,7 +341,7 @@ pub fn setup<'a>(
     });
 
     debug!("Initializing inotify handle");
-    let inotify = timer!("::inotify", as_real!(Inotify::init()))??;
+    let inotify = timer!("::inotify", Inotify::init())?;
     let watches = Set::default();
     let id = profile.id(&name);
 

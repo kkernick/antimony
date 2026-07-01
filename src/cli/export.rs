@@ -7,7 +7,6 @@ use crate::shared::{
 use anyhow::Result;
 use clap::ValueHint;
 use std::{fs, path::PathBuf};
-use user::as_real;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -41,14 +40,12 @@ impl super::Run for Args {
                 return Err(anyhow::anyhow!("No such {kind}: {name}"));
             };
 
-            as_real!(Result<()>, {
-                fs::write(dest.join(name).with_extension("toml"), content)?;
-                Ok(())
-            })?
+            fs::write(dest.join(name).with_extension("toml"), content)?;
+            Ok(())
         };
 
         if !dest.exists() {
-            as_real!(fs::create_dir_all(&dest))??;
+            fs::create_dir_all(&dest)?;
         }
 
         if let Some(object) = self.name {
