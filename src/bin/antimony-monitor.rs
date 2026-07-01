@@ -5,6 +5,7 @@
 use antimony::shared::{
     self, Set, ThreadMap,
     env::{DATA_HOME, SESSION_BUS},
+    find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
     syscalls, utility,
 };
@@ -650,15 +651,19 @@ fn main() -> Result<()> {
                 // exists.
                 let binary_exist = |path: &str| -> Result<bool> {
                     Ok(if path.starts_with("/home/antimony") {
-                        let path = path.replacen("/home/antimony", "*", 1);
-                        !Spawner::new("find")?
-                            .arg(DATA_HOME.join("antimony").to_string_lossy())
-                            .args(["-wholename", &path])
-                            .mode(user::Mode::Real)
-                            .output(StreamMode::Pipe)
-                            .spawn()?
-                            .output_all()?
-                            .is_empty()
+                        let name = if let Some(i) = path.rfind('/')
+                            && let Some(i) = i.checked_add(1)
+                        {
+                            &path[i..]
+                        } else {
+                            path
+                        };
+
+                        let mut crawled =
+                            recursive_crawl(&DATA_HOME.join("antimony").to_string_lossy(), None)?;
+                        crawled
+                            .remove(&DirType::File)
+                            .is_some_and(|files| files.contains(name))
                     } else if path.ends_with("flatpak-spawn") {
                         true
                     } else {

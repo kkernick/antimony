@@ -28,7 +28,6 @@ Releases provides packages for both distribution types, which can be installed w
 
 Antimony relies on the following runtime-dependencies:
 * `glibc`
-* `findutils`
 * `bubblewrap`
 * `xdg-dbus-proxy`
 * `sqlite3`

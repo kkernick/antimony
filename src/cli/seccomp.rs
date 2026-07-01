@@ -2,6 +2,7 @@
 
 use crate::shared::{
     env::{AT_HOME, DATA_HOME, PWD},
+    find::{DirType, recursive_crawl},
     privileged,
     store::{Object, SYSTEM_STORE, USER_STORE},
     syscalls,
@@ -10,12 +11,12 @@ use anyhow::{Result, anyhow};
 use clap::{ValueEnum, ValueHint};
 use nix::unistd::getcwd;
 use rusqlite::params;
-use spawn::{Spawner, StreamMode};
 use std::{
     fs::{self, File},
     io,
     path::{Path, PathBuf},
 };
+use user::as_effective;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -62,7 +63,7 @@ impl super::Run for Args {
                     Ok(())
                 }),
                 Operation::Remove => {
-                    fs::remove_dir_all(AT_HOME.join("seccomp"))?;
+                    as_effective!({ fs::remove_dir_all(AT_HOME.join("seccomp")) })??;
                     println!("Deleted");
 
                     Ok(())
@@ -171,16 +172,19 @@ impl super::Run for Args {
                         for binary in binaries {
                             let (id, path) = binary?;
                             let remove = if path.starts_with("/home/antimony") {
-                                // If any profile's home has the binary in it, we preserve.
-                                let wild = path.replacen("/home/antimony", "*", 1);
-                                Spawner::new("find")?
-                                    .arg(DATA_HOME.join("antimony").to_string_lossy())
-                                    .args(["-wholename", &wild])
-                                    .mode(user::Mode::Real)
-                                    .output(StreamMode::Pipe)
-                                    .spawn()?
-                                    .output_all()?
-                                    .is_empty()
+                                let name = if let Some(i) = path.rfind('/')
+                                    && let Some(i) = i.checked_add(1)
+                                {
+                                    &path[i..]
+                                } else {
+                                    &path
+                                };
+
+                                let mut crawled =
+                                    recursive_crawl(&DATA_HOME.join("antimony").to_string_lossy(), None)?;
+                                crawled
+                                    .remove(&DirType::File)
+                                    .is_some_and(|files| files.contains(name))
                             } else if path.ends_with("flatpak-spawn") {
                                 false
                             } else {

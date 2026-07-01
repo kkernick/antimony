@@ -1,5 +1,6 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
+use crate::shared::find::{DirType, recursive_crawl};
 use crate::{cli::run, setup::setup};
 use crate::{
     cli::{Cli, run_vec},
@@ -14,9 +15,8 @@ use clap::Parser;
 use log::{debug, error, info};
 use path_clean::clean;
 use serde::{Deserialize, Serialize};
-use spawn::{Spawner, StreamMode};
+use spawn::Spawner;
 use std::{
-    borrow::Cow,
     env,
     ffi::OsStr,
     fs::{self, File},
@@ -123,22 +123,15 @@ impl Package {
         if path.is_file() {
             add_file(path, dest)?;
         } else {
-            let files = Spawner::new("find")?
-                .args([&path.to_string_lossy(), "-type", "f"])
-                .mode(Mode::Real)
-                .output(StreamMode::Pipe)
-                .spawn()?
-                .output_all()?;
-
-            for file in files.lines() {
-                let dest = if let Some(i) = file.find(dest)
-                    && let Some(i) = i.checked_add(dest.len())
-                {
-                    Cow::Owned(format!("{dest}{}", &file[i..]))
-                } else {
-                    Cow::Borrowed(file)
-                };
-                add_file(Path::new(file), &dest)?;
+            let mut crawled = recursive_crawl(&path.to_string_lossy(), None)?;
+            if let Some(files) = crawled.remove(&DirType::File) {
+                for file in files {
+                    if let Some(stripped) = file.strip_prefix("/usr/lib/") {
+                        add_file(Path::new(&file), stripped)?;
+                    } else {
+                        add_file(Path::new(&file), dest)?;
+                    }
+                }
             }
         }
 

@@ -15,6 +15,7 @@ use crate::{
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
+        find::{DirType, recursive_crawl},
         package::Package,
         profile::{Profile, seccomp::SeccompPolicy},
         store::mem,
@@ -30,6 +31,7 @@ use dbus::{
 };
 use inotify::{Inotify, WatchDescriptor};
 use log::{debug, info, warn};
+use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
@@ -38,7 +40,6 @@ use std::{
     time::Duration,
 };
 use temp::Temp;
-use user::Mode;
 use user::as_effective;
 
 /// The information passed to the various setup functions.
@@ -144,7 +145,7 @@ pub fn setup<'a>(
             );
             if let Some(libraries) = &profile.libraries {
                 for root in &libraries.roots {
-                    if root != "/usr/lib" {
+                    if !root.starts_with("/usr/lib") {
                         profile_args.extend(["--symlink", "/usr/lib", root].map(String::from));
                     }
                 }
@@ -212,11 +213,15 @@ pub fn setup<'a>(
                 })??;
 
                 debug!("Removing stale command caches.");
-                Spawner::new("find")?
-                    .args([&sys_dir.to_string_lossy(), "-name", "cmd.cache", "-delete"])
-                    .mode(Mode::Effective)
-                    .spawn()?
-                    .wait()?;
+                let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(1))?;
+                if let Some(files) = crawled.remove(&DirType::File) {
+                    as_effective!(
+                        files
+                            .into_par_iter()
+                            .filter(|path| path.ends_with("cmd.cache"))
+                            .try_for_each(fs::remove_file)
+                    )??;
+                }
             } else {
                 debug!("Using refresh directory");
                 #[allow(clippy::assigning_clones)]

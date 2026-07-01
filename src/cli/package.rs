@@ -64,7 +64,6 @@ impl super::Run for Args {
         };
 
         package.add_system("bwrap", "bwrap")?;
-        package.add_system("find", "find")?;
         package.add_system("bash", "bash")?;
         package.add_system("ldd", "ldd")?;
         package.add_system("xdg-dbus-proxy", "xdg-dbus-proxy")?;
