@@ -271,7 +271,8 @@ pub fn setup<'a>(
     // first sandbox running, that introduces a significant lag on the wait() call,
     // so we ping it immediately.
     timer!("::document_wakeup", {
-        if let Some(ipc) = &profile.ipc
+        if !args.dry
+            && let Some(ipc) = &profile.ipc
             && !ipc.disable.unwrap_or(false)
         {
             if !mounted(&format!("{runtime}/doc")) {

@@ -180,6 +180,7 @@ _arguments "${_arguments_options[@]}" : \
 (package)
 _arguments "${_arguments_options[@]}" : \
 '--dest=[Where to export to. Defaults to current directory]:DEST:_files -/' \
+'--version=[An optional version string for the package]:VERSION:_files -/' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The name of the profile/feature to export. If absent, export all user-profiles/features:_command_names -e' \

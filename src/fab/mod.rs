@@ -34,7 +34,7 @@ use std::{
     fs::{self, File},
     io::{self, Read},
     os::unix::fs::PermissionsExt,
-    path::Path,
+    path::{Path, PathBuf},
     sync::LazyLock,
 };
 use temp::Temp;
@@ -172,7 +172,12 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
                         {
                             let mut path = clean(parent).join(name);
                             if !ROOTS.par_iter().any(|root| path.starts_with(root.as_ref())) {
-                                path = path.canonicalize().unwrap_or(path);
+                                let usr_path = format!("/usr{}", path.to_string_lossy());
+                                if Path::new(&usr_path).exists() && in_lib(&usr_path) {
+                                    path = PathBuf::from(usr_path);
+                                } else {
+                                    path = path.canonicalize().unwrap_or(path);
+                                }
                             }
                             path.to_string_lossy().into_owned()
                         } else {

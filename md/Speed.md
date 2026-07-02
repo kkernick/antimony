@@ -11,7 +11,7 @@ Antimony is *fast*. This document outlines the techniques used to optimize a ver
 
 The configuration of Antimony’s installation can have a profound effect on performance. These are divided into *Build Time* configuration, and *Run Time* configuration.
 
-1. *Build Time*: Choosing to compile Antimony yourself, and using `-Ctarget-cpu=native` in your `RUSTFLAGS` optimizing the resulting binary for your architecture, and can drastically improve performance. Antimony publishes binaries for each release, but these are tailored to work on all x86 machines. Additionally, further optimization can be squeezed out of the binary for your particular workflow and profiles using `pgo`.
+1. *Build Time*: Choosing to compile Antimony yourself, and using `-Ctarget-cpu=native` in your `RUSTFLAGS` optimizing the resulting binary for your architecture, can drastically improve performance. Antimony publishes binaries for each release, but these are tailored to work on all x86 machines. Additionally, further optimization can be squeezed out of the binary for your particular workflow and profiles using `pgo`.
 2. *Run Time*: The most important performance consideration is the privileges given to the `antimony` executable, and the location of `AT_HOME`. By default, Antimony creates hard-links for library files in a cache located within `AT_HOME`. If it cannot do this then it will create copies in `/tmp`. This has a drastic toll on performance.
 
 >[!warning]
@@ -111,160 +111,131 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 >[!note]
 >These values provide a general gauge of performance over time, but do not take into consideration new features or the fact that earlier bugs may have allowed files to be missed, which could be seen here as better performance.
 
->[!note] 
->Significant regressions have been prefixed with an `X.` to not skew the chart.
+>[!warning]
+> To try and normalize these benchmarks to have consistent and comparable metrics, often times newer benchmarks are normalized to an older benchmark. For example, when benching 5.0.0, 4.2.1 will be benched afterwards, and the former will be normalized based on the difference between the 4.2.1 numbers, and the numbers reported here. This means that benchmarks will periodically need to be redone, and risk becoming inaccurate, but the only other alternative is benching *every* version for each update.
+> 
+> This consideration does not mean the values here are inaccurate for the purposes of comparison, but they may not be accurate in isolation.
+
 
 #### Hot
 
-| Profile Hot / Release | Chromium | Zed     | Okular  | Syncthing | Sh      |
-| --------------------- | -------- | ------- | ------- | --------- | ------- |
-| 2.4.1                 | X.121.0  | X.121.3 | X.120.5 | X.113.1   | X.112.1 |
-| 2.4.2                 | X.121.4  | X.120.4 | X.120.7 | X112.5    | X.112.4 |
-| 2.4.3                 | X.120.6  | X.120.2 | X.121.1 | X.112.6   | X.112.0 |
-| 2.5.0                 | X.120.4  | X.122.0 | X.121.9 | X.112.6   | X.111.4 |
-| 2.6.0                 | 34.0     | 24.8    | 27.2    | 14.9      | 14.5    |
-| 3.0.0                 | 32.1     | 25.1    | 26.2    | 16.1      | 14.6    |
-| 4.0.0                 | 33.1     | 26.5    | 28.3    | 15.3      | 16.0    |
-| 4.1.0                 | 34.0     | 27.8    | 28.9    | 15.5      | 15.3    |
-| 4.1.1                 | 33.3     | 27.4    | 28.4    | 14.7      | 16.3    |
-| 4.2.0                 | 33.6     | 27.9    | 28.5    | 16.4      | 16.0    |
-| 4.2.1                 | 33.1     | 27.2    | 29.0    | 15.6      | 15.9    |
-| 5.0.0                 | 31.0     | 23.5    | 28.5    | 13.7      | 13.3    |
-| 5.0.1                 |          |         |         |           |         |
-| 5.1.0                 |          |         |         |           |         |
+`cargo bencher chromium zed okular syncthing sh --recipe release --system --bench hot --checkout tags/VERSION`
+
+|       | Chromium | Zed   | Okular | Syncthing | Sh    |
+| ----- | -------- | ----- | ------ | --------- | ----- |
+| 2.4.1 | 121.0    | 121.3 | 120.5  | 113.1     | 112.1 |
+| 2.4.2 | 121.4    | 120.4 | 120.7  | 112.5     | 112.4 |
+| 2.4.3 | 120.6    | 120.2 | 121.1  | 112.6     | 112.0 |
+| 2.5.0 | 120.4    | 122.0 | 121.9  | 112.6     | 111.4 |
+| 2.6.0 | 34.0     | 24.8  | 27.2   | 14.9      | 14.5  |
+| 3.0.0 | 32.1     | 25.1  | 26.2   | 16.1      | 14.6  |
+| 4.0.0 | 33.1     | 26.5  | 28.3   | 15.3      | 16.0  |
+| 4.1.0 | 34.0     | 27.8  | 28.9   | 15.5      | 15.3  |
+| 4.1.1 | 33.3     | 27.4  | 28.4   | 14.7      | 16.3  |
+| 4.2.0 | 33.6     | 27.9  | 28.5   | 16.4      | 16.0  |
+| 4.2.1 | 33.1     | 27.2  | 29.0   | 15.6      | 15.9  |
+| 5.0.0 | 31.0     | 23.5  | 28.5   | 13.7      | 13.3  |
+| 5.0.1 | 26.5     | 21.3  | 25.9   | 11.5      | 10.8  |
+| 5.1.0 | 28.4     | 21.0  | 25.5   | 11.9      | 11.3  |
 ^HistoryHot
+
+>[!info]
+>Versions prior to 2.6.0 had a busy loop that would sleep for 100ms. This is why these versions are significantly skewed. 
+
+|       | Chromium | Zed  | Okular | Syncthing | Sh   |
+| ----- | -------- | ---- | ------ | --------- | ---- |
+| 2.6.0 | 1.00     | 1.00 | 1.00   | 1.00      | 1.00 |
+| 3.0.0 | 0.94     | 1.01 | 0.96   | 1.08      | 1.01 |
+| 4.0.0 | 0.97     | 1.07 | 1.04   | 1.03      | 1.10 |
+| 4.1.0 | 1.00     | 1.12 | 1.06   | 1.04      | 1.06 |
+| 4.1.1 | 0.98     | 1.10 | 1.04   | 0.99      | 1.12 |
+| 4.2.0 | 0.99     | 1.13 | 1.05   | 1.10      | 1.10 |
+| 4.2.1 | 0.97     | 1.10 | 1.07   | 1.05      | 1.10 |
+| 5.0.0 | 0.91     | 0.95 | 1.05   | 0.92      | 0.92 |
+| 5.0.1 | 0.78     | 0.86 | 0.95   | 0.77      | 0.75 |
+| 5.1.0 | 0.84     | 0.85 | 0.94   | 0.80      | 0.80 |
+^HotNormalized
+
 
 ```chart
 type: line
-id: HistoryHot
+id: HotNormalized
 tension: 0.5
 spanGaps: true
 ```
 
 #### Cold
 
-| Profile Cold / Release | Chromium | Zed   | Okular | Syncthing | Sh      |
-| ---------------------- | -------- | ----- | ------ | --------- | ------- |
-| 2.4.1                  | 732.4    | 258.2 | 1291.6 | X.225.2   | X.205.3 |
-| 2.4.2                  | 726.0    | 255.3 | 1207.6 | X.224.6   | X.202.5 |
-| 2.4.3                  | 647.5    | 176.4 | 1188.5 | X.147.9   | X.128.4 |
-| 2.5.0                  | 645.4    | 177.9 | 1207.6 | X.148.6   | X.128.2 |
-| 2.6.0                  | 640.1    | 85.9  | 1223.7 | 50.5      | 30.0    |
-| 3.0.0                  | 500.1    | 109.1 | 2024.3 | 67.5      | 31.4    |
-| 4.0.0                  | 325.1    | 109.1 | 1571.2 | 36.2      | 30.1    |
-| 4.1.0                  | 514.7    | 171.6 | 2127.1 | 35.5      | 29.5    |
-| 4.1.1                  | 338.8    | 112.2 | 1603.6 | 35.7      | 29.8    |
-| 4.2.0                  | 291.1    | 102.8 | 1131.7 | 34.9      | 28.6    |
-| 4.2.1                  | 279.4    | 99.2  | 1326.1 | 32.8      | 26.8    |
-| 5.0.0                  | 213.2    | 76.8  | 364.5  | 24.2      | 21.5    |
-| 5.0.1                  |          |       |        |           |         |
-| 5.1.0                  |          |       |        |           |         |
+`cargo bencher chromium zed okular syncthing sh --recipe release --system --bench cold --checkout tags/VERSION`
+
+|       | Chromium | Zed   | Okular | Syncthing | Sh    |
+| ----- | -------- | ----- | ------ | --------- | ----- |
+| 2.4.1 | 732.4    | 258.2 | 1291.6 | 225.2     | 205.3 |
+| 2.4.2 | 726.0    | 255.3 | 1207.6 | 224.6     | 202.5 |
+| 2.4.3 | 647.5    | 176.4 | 1188.5 | 147.9     | 128.4 |
+| 2.5.0 | 645.4    | 177.9 | 1207.6 | 148.6     | 128.2 |
+| 2.6.0 | 640.1    | 85.9  | 1223.7 | 50.5      | 30.0  |
+| 3.0.0 | 500.1    | 109.1 | 2024.3 | 67.5      | 31.4  |
+| 4.0.0 | 325.1    | 109.1 | 1571.2 | 36.2      | 30.1  |
+| 4.1.0 | 514.7    | 171.6 | 2127.1 | 35.5      | 29.5  |
+| 4.1.1 | 338.8    | 112.2 | 1603.6 | 35.7      | 29.8  |
+| 4.2.0 | 291.1    | 102.8 | 1131.7 | 34.9      | 28.6  |
+| 4.2.1 | 279.4    | 99.2  | 1326.1 | 32.8      | 26.8  |
+| 5.0.0 | 213.2    | 76.8  | 364.5  | 24.2      | 21.5  |
+| 5.0.1 | 240.7    | 85.4  | 384.7  | 24.2      | 19.4  |
+| 5.1.0 | 193.6    | 69.7  | 345.4  | 19.1      | 17.5  |
 ^HistoryCold
 
-```chart
-type: line
-select: [Chromium]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
+|       | Chromium | Zed   | Okular | Syncthing | Sh   |
+| ----- | -------- | ----- | ------ | --------- | ---- |
+| 2.6.0 | 1.00     | 1.00  | 1.00   | 1.00      | 1.00 |
+| 3.0.0 | 0.78     | 1.27  | 1.65   | 1.34      | 1.05 |
+| 4.0.0 | 0.51     | 1.27  | 1.28   | 0.72      | 1.00 |
+| 4.1.0 | 0.80     | 2.00  | 1.74   | 0.70      | 0.98 |
+| 4.1.1 | 0.53     | 1.31  | 1.31   | 0.71      | 0.99 |
+| 4.2.0 | 0.45     | 1.20  | 0.92   | 0.69      | 0.95 |
+| 4.2.1 | 0.44     | 1..15 | 1.08   | 0.65      | 0.89 |
+| 5.0.0 | 0.33     | 0.89  | 0.30   | 0.48      | 0.72 |
+| 5.0.1 | 0.38     | 0.99  | 0.31   | 0.48      | 0.65 |
+| 5.1.0 | 0.30     | 0.81  | 0.28   | 0.38      | 0.58 |
+^ColdNormalized
 
 ```chart
 type: line
-select: [Zed]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-
-```chart
-type: line
-select: [Okular]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-
-```chart
-type: line
-select: [Syncthing]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-
-```chart
-type: line
-select: [Sh]
-id: HistoryCold
+id: ColdNormalized
 tension: 0.5
 spanGaps: true
 ```
 
 #### Refresh
 
-| Version | Refresh |
-| ------- | ------- |
-| 2.4.1   |         |
-| 2.4.2   |         |
-| 2.4.3   |         |
-| 2.5.0   |         |
-| 2.6.0   |         |
-| 3.0.0   |         |
-| 4.0.0   |         |
-| 4.1.0   |         |
-| 4.1.1   |         |
-| 4.2.0   |         |
-| 4.2.1   |         |
-| 5.0.0   |         |
-| 5.0.1   |         |
-| 5.1.0   |         |
+>[!info]
+>These benchmarks use an identical command to above, with the exception of excluding `sh`. It’s inclusion in the prior benchmarks was explicitly to test a non-profile application, and prior versions had a bug where integrated applications without profiles would cause `refresh` to error. 
 
+`cargo bencher chromium zed okular syncthing --recipe release --system --bench refresh --checkout tags/VERSION`
 
-## Techniques
+|       | Refresh |
+| ----- | ------- |
+| 2.4.1 | 1631.4  |
+| 2.4.2 | 1627.4  |
+| 2.4.3 | 1564.3  |
+| 2.5.0 | 1571.8  |
+| 2.6.0 | 1728.4  |
+| 3.0.0 | 2310.3  |
+| 4.0.0 | 1756.4  |
+| 4.1.0 | 2376.6  |
+| 4.1.1 | 1510.2  |
+| 4.2.0 | 1785.7  |
+| 4.2.1 | 1983.9  |
+| 5.0.0 | 426.3   |
+| 5.0.1 | 456.4   |
+| 5.1.0 | 433.2   |
+^Refresh
 
-Antimony needs to do a lot of things very quickly. Creating a sandbox, especially a secure one, takes time, but the primary objective of Antimony in terms of speed is being unnoticeable compared to running it natively. The most expensive tasks Antimony performs, in descending order, include:
+```chart
+type: line
+id: Refresh
+tension: 0.5
+spanGaps: true
+```
 
-1. SOF Library Resolution 
-2. Shell Script Parsing
-3. Proxy Setup
-4. SECCOMP Setup
-
-### Caching
-Caching has been a hallmark of every implementation; spawning a new process (Such as `ldd`, or `find`), is very expensive for the speed that we hope to achieve, and as such storing the output in a file that can be subsequently fetched (Including if the same command is run multiple times during a single instance), dramatically speeds up performance.
-
-Antimony’s departure from the Command Line and toward Profiles allows it to add an additional cache in feature/integration speedup. Whereas older versions had to parse the command line each time the program was run, Antimony can cache the end state of a Profile, after all the various operations have been performed. Profile’s are not only more versatile than the command line, but is faster.
-
-Antimony’s caching is so aggressive that hot-startup is nothing more than loading a handful of files from disk, then executing the the sandbox. 
-### Thread Pools
-The most significant performance boost was implemented between the Python and C++ implementation, where a Thread Pool was used aggressively for almost every operation. Antimony uses *rayon* for its thread pool implementation.
-
-### SOF
-The SOF is arguably the most unique, and most expensive feature of Antimony. Running an application natively gives it access to the entire file-system, but most importantly the system’s library directory. Being able to access every binary and library on the system greatly increases the attack surface of the application, as horizontal movement on the system is trivial, and with the amount of packages installed on an average system all but guaranteeing that a vulnerability is available for exploit.
-
-Flatpak’s Runtimes are for portability, not security, and they make no effort to reduce the attack surface outside of general, vast collections. It’s better than running it natively, but it could still be better.
-
-Antimony only includes the libraries necessary for the program to function. There is no list of such dependencies, and collecting this information requires recursive calls to `ldd`, alongside Features that include the various runtime libraries that aren’t linked on startup. Once a list is collected, those libraries still need to be provided to the sandbox.
-
-Generating the list has been optimized through the thread pool, and heavy cache usage. Antimony supports both wildcards and directories, and utilizes `find` to resolve all executable. These results are cached, and massive directories like `/usr/lib/qt6` can be directly mounted into the sandbox.
-
-The SOF is a directory on the host that is mounted on the sandbox at `/usr/lib`. It contains all the libraries the sandbox needs. The original implementation created copies of the system libraries, leading to dreadful performance. C++ improved this with *hard-links*. By placing the SOF on the same file-system as `/usr/lib` (In this case `/usr/share`), Antimony makes setting up the SOF a no-op; all that needs to be done is reference an existing `inode`. By utilizing the `CAP_FOWNER` capability, Antimony can make this more reliable while still able to fall back to hard-links (Such as when `AT_HOME` is not on the same filesystem). 
-
-### Shell Scripts
-Antimony strives to work with as little configuration as possible; ideally, Profiles would not even need to exist, and a sandbox could be created for any application and work without providing unnecessary resources.
-
-The most valuable source of information given to Antimony is the executable itself. While ELF binaries can be resolved with `ldd`, Shell Scripts cannot—yet they contain a trove of valuable information about needed binaries, paths, and libraries. Interpreting shell scripts is done by the shell, with a standardized syntax for the `sh` shell that most shells obey. To parse these, Antimony uses `bash`, specifically for resolving internal variables with their various esoteric, complicated syntax. 
-
-This parsing does execute portions of the shell script, but only those which defined a variable that is used elsewhere, such as `HOST=$(cat /etc/hostname)`. Running untrusted software in a sandbox is not safe, and Antimony presumes that you trust anything you run within it.
-
-Digesting a shell script in this manner can only be done linearly, with Antimony resolving and replacing variables to uncover paths and binaries. It generally does a good job, but it’s not a proper shell interpreter, and it’s not efficient. By using caching and threads, this process can be significantly speed up.
-
-### Proxy Setup
-If you use IPC, Antimony mediates a subset of the user’s bus via `xdg-dbus-proxy`. The sandbox cannot be created until the proxy has set itself up, and while it’s a fast process this is still the most expensive part of sandbox startup. Rather than naively looping until the proxy exposes its bus, Antimony leverages `inotify` to wait only for as long as necessary, while also launching the proxy as soon as possible in the startup process, letting it setup in the background as Antimony continues with other components.
-
-### SECCOMP Setup
-SB++ introduced support for SECCOMP Filters, leveraging `bubblewrap`’s ability to apply provided filters to the sandbox. Because Bubblewrap expected a filter in BPF format, caching was part of the requirement as  files needed to be created on disk. 
-
-Antimony’s SECCOMP support is [much better](SECCOMP.md) than SB++’s, leveraging a custom built interface for the Notify framework to ensure more reliable, permission-less capturing. Part of this required using SECCOMP directly, rather than passing it to Bubblewrap, which allowed Bubblewrap itself to be confined. 
-
-Antimony uses an SQLite database to store syscall information—far faster than the naive file-based solution in earlier implementations—and can produce Filters faster than SB++ could, despite not caching it to disk. This is on top of superior logging and generation, and a more reliable storage medium via a database.

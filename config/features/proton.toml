@@ -1,0 +1,32 @@
+notes = "See the Wine feature."
+name = "proton"
+description = "Wine for Steam"
+requires = [
+    "vulkan",
+    "bin",
+    "locale",
+    "dri",
+    "lib",
+    "wayland",
+    "fonts",
+    "ld",
+    "xorg",
+]
+conflicts = ["hardened_malloc"]
+seccomp = "Disabled"
+devices = ["/dev"]
+sandbox_args = ["/usr/share/steam/compatibilitytools.d/proton-cachyos/files/bin/wine"]
+
+[libraries]
+no_sof = true
+roots = ["/usr/lib32"]
+
+[files.platform]
+ro = [
+    "/var/lib/dbus/machine-id",
+    "/sys",
+    "/run/udev",
+]
+
+[files.resources]
+ro = ["/usr/share/steam/compatibilitytools.d"]

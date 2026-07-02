@@ -14,7 +14,7 @@ use crate::{
         Set, StaticHash, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
-        find::{WildcardFilter, find_dir, find_wildcards},
+        find::{self, WildcardFilter},
     },
     timer,
 };
@@ -42,7 +42,13 @@ pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
     CONFIG_FILE
         .library_roots()
         .par_iter()
-        .map(|root| Cow::Borrowed(root.as_str()))
+        .map(|root| {
+            if root.ends_with('/') {
+                Cow::Borrowed(root.as_str())
+            } else {
+                Cow::Owned(format!("{root}/"))
+            }
+        })
         .collect()
 });
 
@@ -127,7 +133,7 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
             .canonicalize()?;
 
             if let Some(str) = link.to_str()
-                && ROOTS.contains(str)
+                && !ROOTS.contains(str)
             {
                 handle.args_i(["--symlink", str, root]);
             }
@@ -169,7 +175,7 @@ fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<Str
 
     timer!("::wildcard::resolve", {
         wildcards.into_par_iter().for_each(|w| {
-            if let Ok(cards) = find_wildcards(&w, true, filter) {
+            if let Ok(cards) = find::wildcards(&w, true, filter) {
                 cards.into_par_iter().for_each(|card| {
                     resolved.insert(card);
                 });
@@ -267,7 +273,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             resolve_wildcards(libraries.directories, WildcardFilter::Directories)
                 .par_bridge()
                 .for_each(|e| {
-                    if let Ok(libraries) = find_dir(&e) {
+                    if let Ok(libraries) = find::dir(&e) {
                         libraries.into_par_iter().for_each(|lib| {
                             let _ = FILES.insert(lib);
                         });

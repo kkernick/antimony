@@ -1,0 +1,10 @@
+notes = "You'll need to download the copilot-cli and update the path accordingly."
+path = "~/.local/bin/copilot-native"
+features = ["bin", "lib", "network"]
+seccomp = "Disabled"
+
+[home]
+policy = "Enabled"
+
+[files.platform]
+ro = ["/usr/share"]

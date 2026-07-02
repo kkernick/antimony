@@ -38,6 +38,11 @@ pub struct Feature {
     /// A description of what the feature is for.
     pub description: String,
 
+    /// Persistent info about a feature. This isn't used anywhere, and simply exists to persist a description about
+    /// a feature, particularly any useful information or required setup. Treat it like a documentation block at the
+    /// top of the file.
+    pub notes: Option<String>,
+
     /// An optional shell-script that must return 0 for
     /// the feature to be included. If it fails, the feature
     /// is skipped. Useful to ensure a required resource

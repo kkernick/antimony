@@ -163,14 +163,8 @@ pub fn match_wildcard(wild: &str, name: &str) -> bool {
 }
 
 /// Get all executable files in a directory. This is very expensive.
-///
-/// ## Examples
-///
-/// ```rust
-/// antimony::fab::get_dir("/usr/lib").expect("Failed to search lib");
-/// ```
-pub fn find_dir(dir: &str) -> Result<Set<String>> {
-    timer!("::get_dir", {
+pub fn dir(dir: &str) -> Result<Set<String>> {
+    timer!("::find::dir", {
         if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
             return Ok(libraries.cache.into_iter().collect());
         }
@@ -186,20 +180,13 @@ pub fn find_dir(dir: &str) -> Result<Set<String>> {
 }
 
 /// Find all matches in a directory. We only match the top level for performance considerations.
-///
-/// ## Examples
-///
-/// ```rust
-/// use antimony::fab::{get_wildcards,lib::WildcardFilter};
-/// get_wildcards("glib*", true, WildcardFilter::Files).expect("Failed to find Glib");
-/// ```
 #[allow(
     clippy::unwrap_used,
     clippy::missing_panics_doc,
     reason = "Both unwraps are done with explicit knowledge that they cannot fail."
 )]
-pub fn find_wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
-    timer!("::get_wildcards", {
+pub fn wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
+    timer!("::find::wildcards", {
         let run = |mut dir: Cow<'_, str>, mut base: &str| -> Result<Set<String>> {
             if let Some(i) = base.rfind('/')
                 && let Some(i) = i.checked_add(1)

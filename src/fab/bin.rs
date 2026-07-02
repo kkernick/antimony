@@ -2,7 +2,7 @@
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
 //! it underneath a specialized SECCOMP Notifier.
 
-use crate::shared::find::{WildcardFilter, find_wildcards};
+use crate::shared::find::{self, WildcardFilter};
 use crate::{
     fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
     shared::{
@@ -370,7 +370,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
             });
 
             wildcards.into_par_iter().for_each(|w| {
-                match find_wildcards(w, false, WildcardFilter::Files) {
+                match find::wildcards(w, false, WildcardFilter::Files) {
                     Ok(cards) => {
                         for card in cards {
                             resolved.insert(card);

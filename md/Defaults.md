@@ -19,6 +19,10 @@ inherits = ["default", "zed"]
 ```
 
 `zed-preview` borrows everything from `zed` save the `path`, and `id` because they’re literally the same application—merely a different version. `zed-preview` will take the features, IPC, and all other attributes from `zed`, eliminating duplication. Only three values are not inherited, and they are the three fields defined in `zed-preview`: The path, the ID, and the inherits field itself. Inheritance is *not* recursive, there is at most a single level of inheritance.
+
+Note that there is dual behavior for inheritance depending on the kind of data:
+1. For collections of items (e.g libraries, binaries, environment variables), values are cooperatively folded together into a single list.
+2. For single-value items (e.g SECCOMP policy, Lockdown), values are first-come first-serve. This also includes the profile itself. If a profile defines SECCOMP, features cannot change that—only if the profile has not defined a value does a feature fill the gap.
 ## The Default Profile
 
 Each user can create a *Default* Profile that defines a set of common definitions that should be applied to all profiles run by the user.  It operates identically to an inherited profile, and indeed is even defined the same way. You can edit the Default profile by calling `antimony default`.

@@ -4,8 +4,6 @@
 --license Unlicense
 --url "https://github.com/kkernick/antimony"
 --description "Sandbox Applications"
-
---depends findutils
 --depends bubblewrap
 --depends xdg-dbus-proxy
 

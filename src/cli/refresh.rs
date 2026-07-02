@@ -9,7 +9,7 @@ use crate::{
         store::{self, Object, mem},
     },
 };
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::ValueHint;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, info};
@@ -102,29 +102,28 @@ impl cli::Run for Args {
             profiles.into_iter().try_for_each(|name| -> Result<()> {
                 pb.set_message(format!("Refreshing {name}"));
 
-                match store::load::<Profile, profile::Error>(&name, Object::Profile, true) {
-                    Ok(profile) => {
+                let args = run::Args {
+                    profile: name.clone(),
+                    dry: true,
+                    refresh: true,
+                    ..Default::default()
+                };
+                args.refresh()?;
+
+                if let Ok(profile) =
+                    store::load::<Profile, profile::Error>(&name, Object::Profile, true)
+                {
+                    for (conf, _) in profile.configuration {
                         let args = run::Args {
                             profile: name.clone(),
                             dry: true,
                             refresh: true,
+                            config: Some(conf),
                             ..Default::default()
                         };
                         args.refresh()?;
-
-                        for (conf, _) in profile.configuration {
-                            let args = run::Args {
-                                profile: name.clone(),
-                                dry: true,
-                                refresh: true,
-                                config: Some(conf),
-                                ..Default::default()
-                            };
-                            args.refresh()?;
-                        }
-                        pb.inc(1);
                     }
-                    Err(e) => return Err(anyhow!("Failed to load profile {name}: {e}")),
+                    pb.inc(1);
                 }
                 Ok(())
             })?;

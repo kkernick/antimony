@@ -33,6 +33,14 @@ sudo cp --remove-destination -v "$DIR/antimony-tracer" "/usr/share/antimony/util
 sudo cp --remove-destination -v "$DIR/antimony-lockdown" "/usr/share/antimony/utilities/antimony-lockdown"
 sudo cp --remove-destination -v "$DIR/antimony-notify" "/usr/share/antimony/utilities/antimony-notify"
 
+if [ ! $(cat /etc/passwd | grep "antimony:") ]; then
+    sudo useradd -r antimony
+fi
+
+if [ ! $(cat /etc/passwd | grep "antimony-lockdown:") ]; then
+    sudo useradd -r antimony-lockdown
+fi
+
 echo "Setting SetUID"
 exec="/usr/bin/antimony"
 sudo chown antimony:antimony $exec
@@ -51,6 +59,8 @@ echo "Setting up lockdown"
 if [[ ! -d /usr/share/antimony/lockdown ]]; then
   sudo mkdir /usr/share/antimony/lockdown
 fi
+
+
 
 sudo cp -vr $ROOT/config/features /usr/share/antimony/config
 sudo cp -vr $ROOT/config/profiles /usr/share/antimony/config

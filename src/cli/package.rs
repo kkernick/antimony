@@ -35,6 +35,10 @@ pub struct Args {
     #[arg(long, value_hint = ValueHint::DirPath)]
     dest: Option<String>,
 
+    /// An optional version string for the package
+    #[arg(long, value_hint = ValueHint::DirPath)]
+    version: Option<String>,
+
     /// Run arguments
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
@@ -43,12 +47,16 @@ impl super::Run for Args {
     #[allow(clippy::unwrap_used)]
     fn run(self) -> Result<()> {
         store::CACHE.lock().replace(false);
+        let name = if let Some(version) = self.version {
+            format!("{}-{}.sb", self.profile, version)
+        } else {
+            format!("{}.sb", self.profile)
+        };
 
         let dest = self
             .dest
             .map_or_else(|| PWD.clone(), PathBuf::from)
-            .join(&self.profile)
-            .with_extension("sb");
+            .join(name);
         let (profile, _) = Profile::new(&self.profile, None, None, false)?;
         let exe_path = env::current_exe()?;
         let mut binary_file = File::open(&exe_path)?;

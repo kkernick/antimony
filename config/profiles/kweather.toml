@@ -1,5 +1,5 @@
 id = "org.kde.kweather"
-features = ["kf6", "qt6-plugins", "locale", "qt6-qml", "network", "qt6"]
+features = ["kf6", "qt6", "locale", "qt6-qml", "network", "qt6-plugins"]
 
 [home]
 policy = "Enabled"

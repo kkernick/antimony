@@ -1,6 +1,6 @@
 name = "libclapper"
 description = "Clapper as a library"
-requires = ["pipewire", "gst", "vaapi"]
+requires = ["gst", "pipewire", "vaapi"]
 
 [libraries]
 files = ["libclapper*", "clapper*"]

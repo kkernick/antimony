@@ -2,7 +2,7 @@
 
 ## DO NOT SET -x, it will break the tests!
 
-DIR=$(cargo builder --recipe gdb)
+DIR=$(cargo builder --recipe dev)
 ROOT=$(git rev-parse --show-toplevel)
 OLD=$(pwd)
 

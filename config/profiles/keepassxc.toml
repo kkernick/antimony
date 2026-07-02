@@ -1,5 +1,5 @@
 id = "org.keepassxc.KeePassXC"
-features = ["kf6", "qt6"]
+features = ["qt6", "kf6"]
 
 [home]
 policy = "Enabled"

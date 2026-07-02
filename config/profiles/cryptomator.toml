@@ -1,5 +1,5 @@
-notes = "You cannot actually mount volumes though antimony, as that requires privilege."
 path = "/opt/cryptomator/bin/cryptomator"
+notes = "You cannot actually mount volumes though antimony, as that requires privilege."
 id = "org.cryptomator.Cryptomator"
 features = ["gtk3", "xorg"]
 binaries = ["sh"]

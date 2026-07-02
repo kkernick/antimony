@@ -1,6 +1,6 @@
 name = "dri"
 description = "DRI for accelerated video rendering"
-devices = ["/dev/dri", "/dev/udmabuf"]
+devices = ["/dev/udmabuf", "/dev/dri"]
 
 [libraries]
 files = ["libMesa*", "libGL*", "libEGL*"]
@@ -10,4 +10,4 @@ directories = ["dri", "gbm"]
 ro = ["/sys/dev/char", "/sys/devices/pci0000:00", "/etc/OpenCL/"]
 
 [files.resources]
-ro = ["/usr/share/libdrm", "/usr/share/drirc.d", "/usr/share/glvnd"]
+ro = ["/usr/share/glvnd", "/usr/share/drirc.d", "/usr/share/libdrm"]

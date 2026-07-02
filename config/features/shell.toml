@@ -4,7 +4,6 @@ requires = ["passwd"]
 binaries = ["/usr/bin/sh"]
 
 [environment]
-
 TERM = "$TERM"
 
 [files.platform]

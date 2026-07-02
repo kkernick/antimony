@@ -137,6 +137,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand info" -l feature -d 'T
 complete -c antimony -n "__fish_antimony_using_subcommand info" -l diff -d 'Display the difference between system and user profiles'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand package" -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand package" -l version -d 'An optional version string for the package' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand package" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import info package help" -f -a "run" -d 'Run a profile'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import info package help" -f -a "edit" -d 'Edit an existing profile'

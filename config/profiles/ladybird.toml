@@ -1,0 +1,10 @@
+path = "Ladybird"
+id = "org.ladybird.Ladybird"
+features = ["qt6-qml", "qt6", "network"]
+binaries = ["wasm", "js"]
+
+[home]
+policy = "Enabled"
+
+[files.resources]
+ro = ["/usr/share/Lagom"]

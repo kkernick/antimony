@@ -1,5 +1,5 @@
 id = "org.kde.gwenview"
-features = ["qt6-multimedia", "kf6"]
+features = ["kf6", "qt6-multimedia"]
 
 [home]
 policy = "Enabled"

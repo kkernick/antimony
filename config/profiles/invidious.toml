@@ -1,3 +1,4 @@
+path = "/usr/lib/invidious/invidious"
 notes = """
  This profile requires setup. Specifically:
  1. Download the `invidious_companion` from GitHub and place it in $XDG_DATA_HOME/antimony/invidious
@@ -7,8 +8,6 @@ notes = """
     the SEVER_SECRET_KEY using something like `openssl rand -hex 8`.
  4. Update the final Pre-Hook in case you changed the default ports for Companion/DB
 """
-
-path = "/usr/lib/invidious/invidious"
 dir = "/usr/lib/invidious"
 features = ["network", "locale"]
 binaries = ["sh"]

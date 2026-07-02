@@ -1,4 +1,4 @@
-features = ["network", "secrets", "xdg-open", "electron", "tray"]
+features = ["tray", "secrets", "xdg-open", "network", "electron"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]

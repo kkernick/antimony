@@ -17,7 +17,6 @@ notes = """
      etc. Then, you can pull in what files you need, and even listen on different
      ports so multiple configurations can be up simultaneously!
 """
-
 features = ["passwd", "network"]
 seccomp = "Disabled"
 binaries = ["sh"]
