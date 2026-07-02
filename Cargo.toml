@@ -37,7 +37,7 @@ thiserror = { version = "2.0.17", default-features = false, features = ["std"] }
 toml = { version = "1.1.2", default-features = false, features = ["display", "parse", "serde"] }
 similar = { version = "3.1.0", default-features = false, features = ["text", "unicode"] }
 signal-hook = { version = "0.4.4", default-features = false }
-zstd = { version = "0.13.3", default-features = false }
+zstd = { version = "0.13.3", default-features = false, features = ["fat-lto", "pkg-config"] }
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"
