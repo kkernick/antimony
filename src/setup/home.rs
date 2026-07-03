@@ -82,7 +82,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         }
 
         let home_str = home_dir.to_string_lossy();
-        if !home_dir.exists() {
+        if !home_dir.exists() && !args.run.dry {
             fs::create_dir_all(&home_dir)?;
         }
 

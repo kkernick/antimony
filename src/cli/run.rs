@@ -304,11 +304,11 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             && let path = home.path(&info.name)
             && path.exists()
         {
-            info.handle.arg_i(app_path.replacen(
+            info.handle.arg_i(localize_home(&app_path.replacen(
                 path.to_string_lossy().as_ref(),
                 "/home/antimony",
                 1,
-            ));
+            )));
         } else {
             info.handle.arg_i(localize_home(&app_path));
         }

@@ -33,7 +33,6 @@ use std::{
     fmt::Debug,
     fs::{self, File},
     io::{self, Read},
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     sync::LazyLock,
 };
@@ -114,12 +113,6 @@ pub fn in_lib(path: &str) -> bool {
 )]
 fn elf_filter(path: &str) -> io::Result<bool> {
     let mut file = File::open(path)?;
-    let metadata = fs::metadata(path)?;
-
-    if metadata.permissions().mode() & 0o001u32 == 0 {
-        return Ok(false);
-    }
-
     let mut buf = [0u8; 18];
     file.read_exact(&mut buf)?;
 
@@ -150,6 +143,7 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
                 Spawner::abs("/usr/bin/ldd")
                     .arg(path)
                     .output(StreamMode::Pipe)
+                    .error(StreamMode::Discard)
                     .mode(user::Mode::Real)
                     .spawn()?
                     .output_all()?

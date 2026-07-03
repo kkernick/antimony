@@ -20,6 +20,7 @@ use crate::{
 };
 use anyhow::Result;
 use dashmap::iter_set::OwningIter;
+use heck::ToTitleCase;
 use log::{debug, error, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -206,6 +207,27 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         .as_ref()
         .is_some_and(|libraries| libraries.no_sof.unwrap_or(false));
 
+    ROOTS.iter().for_each(|lib_root| {
+        for norm in [
+            Cow::Borrowed(info.name),
+            Cow::Owned(info.name.to_title_case()),
+            Cow::Owned(info.name.to_lowercase()),
+        ] {
+            let name = format!("{}/{}", lib_root.as_ref(), norm);
+            if Path::new(&name).exists() {
+                if no_sof {
+                    info.handle.args_i(["--ro-bind", &name, &name]);
+                } else {
+                    info.profile
+                        .libraries
+                        .get_or_insert_default()
+                        .directories
+                        .insert(name);
+                }
+            }
+        }
+    });
+
     // Each is sent to the library fabricator, in case they contain anything,
     // and are then mounted directly.
     [
@@ -214,13 +236,21 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         Path::new("/opt"),
     ]
     .into_iter()
-    .filter_map(|path| {
-        let path = path.join(info.name);
-        if path.exists() {
-            Some(path.to_string_lossy().into_owned())
-        } else {
-            None
-        }
+    .flat_map(|path| {
+        [
+            Cow::Borrowed(info.name),
+            Cow::Owned(info.name.to_title_case()),
+            Cow::Owned(info.name.to_lowercase()),
+        ]
+        .into_iter()
+        .filter_map(|name| {
+            let path = path.join(name.as_ref());
+            if path.exists() {
+                Some(path.to_string_lossy().into_owned())
+            } else {
+                None
+            }
+        })
     })
     .for_each(|path| {
         if no_sof {
@@ -238,18 +268,6 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         log::info!("Mounting system libraries.");
         return mount_roots("", info.handle);
     }
-
-    ROOTS.iter().for_each(|lib_root| {
-        let name = format!("{}/{}", lib_root.as_ref(), info.name);
-        if Path::new(&name).exists() {
-            let _ = info
-                .profile
-                .libraries
-                .get_or_insert_default()
-                .directories
-                .insert(name);
-        }
-    });
 
     timer!("::binaries", {
         info.profile

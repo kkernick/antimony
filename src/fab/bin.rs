@@ -2,6 +2,7 @@
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
 //! it underneath a specialized SECCOMP Notifier.
 
+use crate::fab::localize_home;
 use crate::shared::find::{self, WildcardFilter};
 use crate::{
     fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
@@ -488,6 +489,9 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     if let Ok(path) = Path::new(binary).canonicalize()
                         && path.exists()
                     {
+                        let path_str = path.to_string_lossy();
+                        info.handle
+                            .args_i(["--ro-bind", &path_str, &localize_home(&path_str)]);
                         binary.clone()
                     } else {
                         let resolved = match localize_path(binary, false) {
