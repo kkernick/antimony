@@ -88,7 +88,7 @@ fn empty_inherits(inherits: &Set<String>) -> bool {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -402,14 +402,9 @@ impl Profile {
     /// This function effectively inverts the logic of `merge`:
     /// The values in the source take precedent, either appending or
     /// overwriting the caller.
-    ///
-    /// The difference is that values unaffected by `merge` persist in
-    /// the caller.
     #[allow(clippy::assigning_clones)]
-    pub fn base(mut self, mut source: Self) -> Result<Self, Error> {
-        source.id = self.id.take();
-        source.inherits = self.inherits.clone();
-
+    pub fn base(self, mut source: Self) -> Result<Self, Error> {
+        source.inherits.extend(self.inherits.clone());
         source.merge(self)?;
         Ok(source)
     }
@@ -422,14 +417,12 @@ impl Profile {
     ///         taken if the caller has no value defined, or
     ///         the caller's list is appended with the contents
     ///         of the argument.
-    /// This function fails if inherit is defined, but its
-    /// contents cannot be inherited.
-    ///
-    /// Cache status is not inherited, neither is path, name,
-    /// or desktop.
     pub fn merge(&mut self, mut profile: Self) -> Result<(), Error> {
         if self.path.is_none() {
             self.path = profile.path;
+        }
+        if self.id.is_none() {
+            self.id = profile.id;
         }
 
         if self.dir.is_none() {

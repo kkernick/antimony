@@ -8,7 +8,11 @@ use crate::{
         config::CONFIG_FILE,
         env::{RUNTIME_DIR, SESSION_BUS},
         profile::{
-            files::FileMode, home::HomePolicy, ipc::Portal, ns::Namespace, seccomp::SeccompPolicy,
+            files::FileMode,
+            home::{HomeLockPolicy, HomePolicy},
+            ipc::Portal,
+            ns::Namespace,
+            seccomp::SeccompPolicy,
         },
         store::{self, CACHE_STORE, mem},
         utility,
@@ -91,6 +95,10 @@ pub struct Args {
     /// Override the home lock
     #[arg(long)]
     pub home_lock: Option<bool>,
+
+    /// Override the home lock policy
+    #[arg(long)]
+    pub home_lock_policy: Option<HomeLockPolicy>,
 
     /// Override the seccomp policy
     #[arg(long)]

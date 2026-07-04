@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
 /// for persistent configurations and caches.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Eq, Message)]
+#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Eq, Message, Clone)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
@@ -20,6 +20,9 @@ pub struct Home {
 
     /// Whether to lock the home to a single instance
     pub lock: Option<bool>,
+
+    /// What to do if the home is locked
+    pub lock_policy: Option<HomeLockPolicy>,
 }
 impl Home {
     pub fn merge(&mut self, home: Self) {
@@ -35,6 +38,9 @@ impl Home {
         if self.lock.is_none() {
             self.lock = home.lock;
         }
+        if self.lock_policy.is_none() {
+            self.lock_policy = home.lock_policy;
+        }
     }
 
     pub const fn from_args(args: &mut cli::run::Args) -> Self {
@@ -43,6 +49,7 @@ impl Home {
             policy: args.home_policy.take(),
             path: args.home_path.take(),
             lock: args.home_lock.take(),
+            lock_policy: args.home_lock_policy.take(),
         }
     }
 
@@ -76,4 +83,22 @@ pub enum HomePolicy {
     /// it can be shared by multiple instances, even if that application doesn't typically
     /// support multiple instances (Zed, Chromium, etc).
     Overlay = 3,
+}
+
+/// What to do when the profile is locked.
+#[derive(
+    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug, Enumeration,
+)]
+#[serde(deny_unknown_fields)]
+pub enum HomeLockPolicy {
+    /// Ask the user while waiting for the home to be unlocked.
+    #[default]
+    Notify = 0,
+
+    /// Immediately error out.
+    Abort = 1,
+
+    /// Mount the new instance as an Overlay--the original instance will continue making writes,
+    /// and the new instance will not be able to make changes.
+    Overlay = 2,
 }

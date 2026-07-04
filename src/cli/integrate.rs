@@ -13,7 +13,6 @@ use heck::ToTitleCase;
 use log::{debug, info};
 use spawn::Spawner;
 use std::{
-    borrow::Cow,
     fmt::Write as FormatWrite,
     fs::{self, File},
     io::Write as IoWrite,
@@ -86,7 +85,7 @@ pub enum ConfigMode {
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
         if self.remove {
-            let profile = match Profile::new(&self.profile, None, None, true) {
+            let mut profile = match Profile::new(&self.profile, None, None, true) {
                 Ok(profile) => profile.0,
                 Err(_) => Profile {
                     path: Some(self.profile.clone()),
@@ -95,9 +94,12 @@ impl cli::Run for Args {
             };
 
             // Load directly, since we can remove profiles that don't exist
-            remove(&profile, &self)
+            remove(&mut profile, &self)
         } else {
-            integrate(&Profile::new(&self.profile, None, None, false)?.0, &self)
+            integrate(
+                &mut Profile::new(&self.profile, None, None, false)?.0,
+                &self,
+            )
         }
     }
 }
@@ -105,7 +107,7 @@ impl cli::Run for Args {
 /// Undo integration.
 /// ## Errors
 /// If antimony is improperly setup, or if it has inadequate permission to remove the files.
-pub fn remove(profile: &Profile, cmd: &Args) -> Result<()> {
+pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
     let name = &cmd.profile;
 
@@ -133,19 +135,25 @@ pub fn remove(profile: &Profile, cmd: &Args) -> Result<()> {
     }
 
     let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
-        Cow::Owned(profile.id(name))
+        profile.id(name)
     } else {
-        profile.desktop(name)
+        profile.desktop(name).into_owned()
     };
 
-    for config in profile.configuration.keys() {
-        let config_desktop = DATA_HOME
-            .join("applications")
-            .join(format!("{name}-{config}.desktop"));
-        if config_desktop.exists() {
-            match fs::remove_file(&config_desktop) {
-                Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
-                Ok(()) => println!("Removed configuration integration"),
+    let configurations: Vec<_> = profile.configuration.drain().collect();
+    for (config, mut info) in configurations {
+        if info.id.is_some() {
+            info.merge(profile.clone())?;
+            remove(&mut info, cmd)?;
+        } else {
+            let config_desktop = DATA_HOME
+                .join("applications")
+                .join(format!("{name}-{config}.desktop"));
+            if config_desktop.exists() {
+                match fs::remove_file(&config_desktop) {
+                    Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
+                    Ok(()) => println!("Removed configuration integration"),
+                }
             }
         }
     }
@@ -200,7 +208,7 @@ fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cm
 fn manage_configurations(
     contents: &mut Vec<String>,
     cmd: &Args,
-    profile: &Profile,
+    profile: &mut Profile,
     name: &str,
     local: &str,
 ) -> Result<()> {
@@ -221,26 +229,31 @@ fn manage_configurations(
 
         // Provide each configuration as a desktop file.
         ConfigMode::File => {
-            for config in profile.configuration.keys() {
-                let config_desktop = DATA_HOME
-                    .join("applications")
-                    .join(format!("{name}-{config}.desktop"));
+            let configurations: Vec<_> = profile.configuration.drain().collect();
+            for (config, mut info) in configurations {
+                if info.id.is_some() {
+                    info.merge(profile.clone())?;
+                    integrate(&mut info, cmd)?;
+                } else {
+                    let config_desktop = DATA_HOME
+                        .join("applications")
+                        .join(format!("{name}-{config}.desktop"));
 
-                let mut contents = contents.clone();
-                for line in &mut contents {
-                    // Point to the symlink
-                    if line.starts_with("Exec=") {
-                        fix_exec("Exec", local, line, Some(config.as_str()), cmd);
+                    let mut contents = contents.clone();
+                    for line in &mut contents {
+                        // Point to the symlink
+                        if line.starts_with("Exec=") {
+                            fix_exec("Exec", local, line, Some(config.as_str()), cmd);
+                        }
+                        if line.starts_with("TryExec=") {
+                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
+                        }
+                        if line.starts_with("Name=") {
+                            let _ = write!(line, " ({})", config.to_title_case());
+                        }
                     }
-                    if line.starts_with("TryExec=") {
-                        fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
-                    }
-                    if line.starts_with("Name=") {
-                        let _ = write!(line, " ({})", config.to_title_case());
-                    }
+                    write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
                 }
-
-                write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
             }
         }
     }
@@ -271,7 +284,7 @@ fn make_shadow(desktop_file: &Path) -> Result<Vec<String>> {
 /// Format a desktop file to point to Antimony
 fn format_desktop(
     cmd: &Args,
-    profile: &Profile,
+    profile: &mut Profile,
     name: &str,
     desktop_file: &Path,
     local: &str,
@@ -292,9 +305,9 @@ fn format_desktop(
 
         debug!("Writing shadow");
         write!(File::create(shadow)?, "{}", local_desktop.join("\n"))?;
-        Cow::Owned(profile.id(name))
+        profile.id(name)
     } else {
-        profile.desktop(name)
+        profile.desktop(name).into_owned()
     };
 
     let desktop =
@@ -370,7 +383,7 @@ fn format_desktop(
 /// ## Errors
 /// If antimony is improperly setup, or if it has inadequate permission to create the files.
 #[allow(clippy::too_many_lines)]
-pub fn integrate(profile: &Profile, cmd: &Args) -> Result<()> {
+pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
 
     // Collect environment.

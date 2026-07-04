@@ -46,6 +46,9 @@ overlay\:"Once an application has been configured, Overlay effectively freezes i
 '--home-name=[Override the home name]:HOME_NAME:_default' \
 '--home-path=[Override the home mount]:HOME_PATH:_files -/' \
 '--home-lock=[Override the home lock]:HOME_LOCK:(true false)' \
+'--home-lock-policy=[Override the home lock policy]:HOME_LOCK_POLICY:((notify\:"Ask the user while waiting for the home to be unlocked"
+abort\:"Immediately error out"
+overlay\:"Mount the new instance as an Overlay--the original instance will continue making writes, and the new instance will not be able to make changes"))' \
 '--seccomp=[Override the seccomp policy]:SECCOMP:((disabled\:"Disable SECCOMP"
 permissive\:"Syscalls are logged to construct a policy for the profile"
 enforcing\:"The policy is enforced\: unrecognized syscalls return with EPERM"

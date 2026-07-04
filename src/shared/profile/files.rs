@@ -80,7 +80,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough

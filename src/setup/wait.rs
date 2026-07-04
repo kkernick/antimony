@@ -22,7 +22,7 @@ pub fn setup(
     // Wait for the bus to be available.
     timer!("::inotify", {
         if !watches.is_empty() && !dry {
-            debug!("Waiting for inotify");
+            debug!("Waiting for inotify: {watches:?}");
             let mut buffer = [0; 1024];
             while !watches.is_empty() {
                 let events = inotify.read_events_blocking(&mut buffer)?;

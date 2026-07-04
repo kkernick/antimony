@@ -1,0 +1,30 @@
+id = "libreoffice-startcenter"
+features = ["locale", "gtk4", "passwd", "qt6"]
+binaries = ["dirname", "basename", "sed", "ls", "grep", "uname"]
+
+[home]
+policy = "Enabled"
+
+[configuration.math]
+id = "libreoffice-math"
+arguments = ["--math"]
+
+[configuration.draw]
+id = "libreoffice-draw"
+arguments = ["--draw"]
+
+[configuration.writer]
+id = "libreoffice-writer"
+arguments = ["--writer"]
+
+[configuration.calc]
+id = "libreoffice-calc"
+arguments = ["--calc"]
+
+[configuration.impress]
+id = "libreoffice-impress"
+arguments = ["--impress"]
+
+[configuration.base]
+id = "libreoffice-base"
+arguments = ["--base"]

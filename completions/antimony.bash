@@ -416,7 +416,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__run)
-            opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
+            opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -489,6 +489,10 @@ _antimony() {
                     ;;
                 --home-lock)
                     COMPREPLY=($(compgen -W "true false" -- "${cur}"))
+                    return 0
+                    ;;
+                --home-lock-policy)
+                    COMPREPLY=($(compgen -W "notify abort overlay" -- "${cur}"))
                     return 0
                     ;;
                 --seccomp)

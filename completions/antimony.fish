@@ -53,6 +53,9 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-name -d '
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-path -d 'Override the home mount' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-lock -d 'Override the home lock' -r -f -a "true\t''
 false\t''"
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l home-lock-policy -d 'Override the home lock policy' -r -f -a "notify\t'Ask the user while waiting for the home to be unlocked'
+abort\t'Immediately error out'
+overlay\t'Mount the new instance as an Overlay--the original instance will continue making writes, and the new instance will not be able to make changes'"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l seccomp -d 'Override the seccomp policy' -r -f -a "disabled\t'Disable SECCOMP'
 permissive\t'Syscalls are logged to construct a policy for the profile'
 enforcing\t'The policy is enforced: unrecognized syscalls return with EPERM'
