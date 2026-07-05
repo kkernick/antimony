@@ -64,12 +64,12 @@ executable\:"Executable files need to be created as copies, so that chmod will w
 '*--ro=[Add read-only files]:RO:_files' \
 '*--rw=[Add read-write files]:RW:_files' \
 '*--link=[Add symlinks in SRC=DST syntax]:LINK:_default' \
-'*--temp=[Add temporary directories]:TEMP:_files' \
+'*--temp=[Add temporary directories]:TEMP:_default' \
 '*--binaries=[Add binaries]:BINARIES:_command_names -e' \
-'*--libraries=[Add libraries]:LIBRARIES:_files' \
+'*--libraries=[Add libraries]:LIBRARIES:_default' \
 '*--directories=[Add library directories]:DIRECTORIES:_files -/' \
 '*--roots=[Add library roots]:ROOTS:_files -/' \
-'*--devices=[Add devices]:DEVICES:_files -/' \
+'*--devices=[Add devices]:DEVICES:_default' \
 '*--namespaces=[Add namespaces]:NAMESPACES:((all\:"Enable all namespaces"
 user\:"The user namespace is needed to create additional sandboxes (Such as chromium)"
 ipc\:"Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy"
@@ -80,9 +80,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
 '--preserve-env=[]:PRESERVE_ENV:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
-'-d[Generate the profile, but do not run the executable]' \
 '--dry[Generate the profile, but do not run the executable]' \
-'-r[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--refresh[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
 '--system-bus[Provide the system bus]' \
@@ -96,7 +94,10 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 ;;
 (edit)
 _arguments "${_arguments_options[@]}" : \
+'-f[Target the feature set rather than the profile set]' \
 '--feature[Target the feature set rather than the profile set]' \
+'-s[Target the system set rather than the user set]' \
+'--system[Target the system set rather than the user set]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name -- The object to edit:_command_names -e' \
@@ -115,8 +116,6 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (integrate)
 _arguments "${_arguments_options[@]}" : \
-'-c+[How to integrate configurations]:CONFIG_MODE:((action\:"Integrate each configuration as a separate desktop action within the main Desktop File"
-file\:"Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers"))' \
 '--config-mode=[How to integrate configurations]:CONFIG_MODE:((action\:"Integrate each configuration as a separate desktop action within the main Desktop File"
 file\:"Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers"))' \
 '-r[Undo integration for the profile]' \
@@ -135,7 +134,9 @@ file\:"Separate each configuration into its own Desktop File. This can be useful
 ;;
 (remove)
 _arguments "${_arguments_options[@]}" : \
+'-f[Target a feature, rather than a profile]' \
 '--feature[Target a feature, rather than a profile]' \
+'-y[Do not ask for confirmation]' \
 '--yes[Do not ask for confirmation]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -156,34 +157,45 @@ clean\:"Remove binaries that no longer exist from the database"))' \
 ;;
 (export)
 _arguments "${_arguments_options[@]}" : \
+'-n+[The name of the profile/feature to export. If absent, export all user-profiles/features]:NAME:_command_names -e' \
 '--name=[The name of the profile/feature to export. If absent, export all user-profiles/features]:NAME:_command_names -e' \
+'-d+[Where to export to. Defaults to current directory]:DEST:_files -/' \
 '--dest=[Where to export to. Defaults to current directory]:DEST:_files -/' \
+'-f[Target the feature set rather than the profile set]' \
 '--feature[Target the feature set rather than the profile set]' \
+'-s[Target the system set rather than the user set]' \
+'--system[Target the system set rather than the user set]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
 ;;
 (import)
 _arguments "${_arguments_options[@]}" : \
+'-f[Target the feature set rather than the profile set]' \
 '--feature[Target the feature set rather than the profile set]' \
+'-s[Target the system set rather than the user set]' \
+'--system[Target the system set rather than the user set]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':name -- The path of the object. Can also be a directory, which will import all files within:_command_names -e' \
+':name -- The path of the object. Can also be a directory, which will import all files within:_files' \
 && ret=0
 ;;
 (info)
 _arguments "${_arguments_options[@]}" : \
+'-f[Target the feature set rather than the profile set]' \
 '--feature[Target the feature set rather than the profile set]' \
 '--diff[Display the difference between system and user profiles]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name -- The object to edit:_command_names -e' \
+'::name -- The object to display information on. Default to everything:_command_names -e' \
 && ret=0
 ;;
 (package)
 _arguments "${_arguments_options[@]}" : \
+'-d+[Where to export to. Defaults to current directory]:DEST:_files -/' \
 '--dest=[Where to export to. Defaults to current directory]:DEST:_files -/' \
-'--version=[An optional version string for the package]:VERSION:_files -/' \
+'-v+[An optional version string for the package]:VERSION:_default' \
+'--version=[An optional version string for the package]:VERSION:_default' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':profile -- The name of the profile/feature to export. If absent, export all user-profiles/features:_command_names -e' \

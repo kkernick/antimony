@@ -2,6 +2,7 @@
 
 use crate::shared::{
     feature::{self, Feature},
+    privileged,
     profile::{self, Profile},
     store::{self, Object},
 };
@@ -13,12 +14,16 @@ use std::path::Path;
 #[derive(clap::Args)]
 pub struct Args {
     /// The path of the object. Can also be a directory, which will import all files within.
-    #[arg(value_hint = ValueHint::CommandName)]
+    #[arg(value_hint = ValueHint::FilePath)]
     name: String,
 
     /// Target the feature set rather than the profile set.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long)]
     feature: bool,
+
+    /// Target the system set rather than the user set.
+    #[arg(short, long)]
+    pub system: bool,
 }
 impl super::Run for Args {
     fn run(self) -> anyhow::Result<()> {
@@ -40,7 +45,15 @@ impl super::Run for Args {
                 && let Some(name) = src.file_name()
                 && let Some(str) = name.to_str()
             {
-                store::USER_STORE.borrow().store(str, table, &content)?;
+                if self.system {
+                    if privileged()? {
+                        store::SYSTEM_STORE.borrow().store(str, table, &content)?;
+                    } else {
+                        return Err(anyhow::anyhow!("Not allowed to modify system store"));
+                    }
+                } else {
+                    store::USER_STORE.borrow().store(str, table, &content)?;
+                }
             } else {
                 warn!("Invalid {kind}: {}", src.display());
             }

@@ -29,7 +29,7 @@ pub struct Args {
     pub profile: String,
 
     /// Undo integration for the profile.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     pub remove: bool,
 
     /// Some desktop environments, particularly Gnome, source
@@ -39,7 +39,7 @@ pub struct Args {
     /// incongruity between ID and desktop that requires a shadow that
     /// hides the original. If an integrated profile lacks an icon, you
     /// may need to use this option.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     pub shadow: bool,
 
     /// Setup a user systemd service to run the sandbox on startup.
@@ -53,19 +53,19 @@ pub struct Args {
     /// works, you need to explicitly opt-in to autostart, even if the
     /// program is set to autostart by the system. Antimony will stub
     /// the usual autostart mechanism and use a service.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     pub autostart: bool,
 
     /// If autostart, enable the service immediately.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     pub enable: bool,
 
     /// How to integrate configurations
-    #[arg(short, long)]
+    #[arg(long)]
     pub config_mode: Option<ConfigMode>,
 
     /// Create a desktop file if one does not exist
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub create_desktop: bool,
 }
 

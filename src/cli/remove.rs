@@ -22,11 +22,11 @@ pub struct Args {
     pub name: Option<String>,
 
     /// Target a feature, rather than a profile.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long)]
     pub feature: bool,
 
     /// Do not ask for confirmation.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long)]
     pub yes: bool,
 }
 impl cli::Run for Args {

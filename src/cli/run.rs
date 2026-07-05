@@ -43,11 +43,11 @@ pub struct Args {
     pub profile: String,
 
     /// Generate the profile, but do not run the executable.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long)]
     pub dry: bool,
 
     /// Refresh cache definitions. Analogous to `antimony refresh`
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long)]
     pub refresh: bool,
 
     /// The path to the binary
@@ -125,15 +125,15 @@ pub struct Args {
     pub calls: Option<Vec<String>>,
 
     /// Disable all IPC. This overrules all other IPC settings.
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub disable_ipc: bool,
 
     /// Provide the system bus.
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub system_bus: bool,
 
     /// Provide the user bus. xdg-dbus-proxy is not run.
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub user_bus: bool,
 
     /// Override the file passthrough mode.
@@ -153,7 +153,7 @@ pub struct Args {
     pub link: Option<Vec<String>>,
 
     /// Add temporary directories.
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub temp: Option<Vec<String>>,
 
     /// Add binaries
@@ -161,7 +161,7 @@ pub struct Args {
     pub binaries: Option<Vec<String>>,
 
     /// Add libraries
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::FilePath)]
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub libraries: Option<Vec<String>>,
 
     /// Add library directories
@@ -173,11 +173,11 @@ pub struct Args {
     pub roots: Option<Vec<String>>,
 
     /// Disable the SOF and mount the system libraries directly.
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub no_sof: bool,
 
     /// Add devices
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub devices: Option<Vec<String>>,
 
     /// Add namespaces

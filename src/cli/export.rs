@@ -11,16 +11,20 @@ use std::{fs, path::PathBuf};
 #[derive(clap::Args)]
 pub struct Args {
     /// The name of the profile/feature to export. If absent, export all user-profiles/features.
-    #[arg(long, value_hint = ValueHint::CommandName)]
+    #[arg(short, long, value_hint = ValueHint::CommandName)]
     name: Option<String>,
 
     /// Where to export to. Defaults to current directory
-    #[arg(long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
     dest: Option<String>,
 
     /// Target the feature set rather than the profile set.
-    #[arg(long, default_value_t = false)]
+    #[arg(short, long)]
     feature: bool,
+
+    /// Target the system set rather than the user set.
+    #[arg(short, long)]
+    pub system: bool,
 }
 impl super::Run for Args {
     fn run(self) -> Result<()> {
@@ -32,7 +36,9 @@ impl super::Run for Args {
         };
 
         let export = |name: &str| -> Result<()> {
-            let content = if let Ok(user) = USER_STORE.borrow().fetch(name, table) {
+            let content = if !self.system
+                && let Ok(user) = USER_STORE.borrow().fetch(name, table)
+            {
                 user
             } else if let Ok(system) = SYSTEM_STORE.borrow().fetch(name, table) {
                 system

@@ -89,12 +89,12 @@ executable\t'Executable files need to be created as copies, so that chmod will w
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l ro -d 'Add read-only files' -r -F
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l rw -d 'Add read-write files' -r -F
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l link -d 'Add symlinks in SRC=DST syntax' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l temp -d 'Add temporary directories' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l binaries -d 'Add binaries' -r -f -a "(__fish_complete_command)"
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r -F
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l libraries -d 'Add libraries' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l directories -d 'Add library directories' -r -f -a "(__fish_complete_directories)"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l roots -d 'Add library roots' -r -f -a "(__fish_complete_directories)"
-complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l devices -d 'Add devices' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l namespaces -d 'Add namespaces' -r -f -a "all\t'Enable all namespaces'
 user\t'The user namespace is needed to create additional sandboxes (Such as chromium)'
 ipc\t'Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy'
@@ -106,19 +106,20 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add en
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l preserve-env -r -f -a "true\t''
 false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
-complete -c antimony -n "__fish_antimony_using_subcommand run" -s d -l dry -d 'Generate the profile, but do not run the executable'
-complete -c antimony -n "__fish_antimony_using_subcommand run" -s r -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l dry -d 'Generate the profile, but do not run the executable'
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l system-bus -d 'Provide the system bus'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l user-bus -d 'Provide the user bus. xdg-dbus-proxy is not run'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l no-sof -d 'Disable the SOF and mount the system libraries directly'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand edit" -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand edit" -s f -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand edit" -s s -l system -d 'Target the system set rather than the user set'
 complete -c antimony -n "__fish_antimony_using_subcommand edit" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s d -l dry -d 'Just delete the cache, don\'t repopulate'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -l hard -d 'Delete the entire Cache directory. Will break any instance currently running!'
 complete -c antimony -n "__fish_antimony_using_subcommand refresh" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s c -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'
+complete -c antimony -n "__fish_antimony_using_subcommand integrate" -l config-mode -d 'How to integrate configurations' -r -f -a "action\t'Integrate each configuration as a separate desktop action within the main Desktop File'
 file\t'Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers'"
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s r -l remove -d 'Undo integration for the profile'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s s -l shadow -d 'Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don\'t. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option'
@@ -126,21 +127,23 @@ complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s a -l aut
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s e -l enable -d 'If autostart, enable the service immediately'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -l create-desktop -d 'Create a desktop file if one does not exist'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand remove" -l feature -d 'Target a feature, rather than a profile'
-complete -c antimony -n "__fish_antimony_using_subcommand remove" -l yes -d 'Do not ask for confirmation'
+complete -c antimony -n "__fish_antimony_using_subcommand remove" -s f -l feature -d 'Target a feature, rather than a profile'
+complete -c antimony -n "__fish_antimony_using_subcommand remove" -s y -l yes -d 'Do not ask for confirmation'
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand seccomp" -s h -l help -d 'Print help (see more with \'--help\')'
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l name -d 'The name of the profile/feature to export. If absent, export all user-profiles/features' -r -f -a "(__fish_complete_command)"
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
-complete -c antimony -n "__fish_antimony_using_subcommand export" -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand export" -s n -l name -d 'The name of the profile/feature to export. If absent, export all user-profiles/features' -r -f -a "(__fish_complete_command)"
+complete -c antimony -n "__fish_antimony_using_subcommand export" -s d -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand export" -s f -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand export" -s s -l system -d 'Target the system set rather than the user set'
 complete -c antimony -n "__fish_antimony_using_subcommand export" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand import" -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand import" -s f -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand import" -s s -l system -d 'Target the system set rather than the user set'
 complete -c antimony -n "__fish_antimony_using_subcommand import" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand info" -l feature -d 'Target the feature set rather than the profile set'
+complete -c antimony -n "__fish_antimony_using_subcommand info" -s f -l feature -d 'Target the feature set rather than the profile set'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -l diff -d 'Display the difference between system and user profiles'
 complete -c antimony -n "__fish_antimony_using_subcommand info" -s h -l help -d 'Print help'
-complete -c antimony -n "__fish_antimony_using_subcommand package" -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
-complete -c antimony -n "__fish_antimony_using_subcommand package" -l version -d 'An optional version string for the package' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand package" -s d -l dest -d 'Where to export to. Defaults to current directory' -r -f -a "(__fish_complete_directories)"
+complete -c antimony -n "__fish_antimony_using_subcommand package" -s v -l version -d 'An optional version string for the package' -r
 complete -c antimony -n "__fish_antimony_using_subcommand package" -s h -l help -d 'Print help'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import info package help" -f -a "run" -d 'Run a profile'
 complete -c antimony -n "__fish_antimony_using_subcommand help; and not __fish_seen_subcommand_from run edit refresh integrate remove seccomp export import info package help" -f -a "edit" -d 'Edit an existing profile'

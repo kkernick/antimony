@@ -24,11 +24,11 @@ pub struct Args {
     pub profile: Option<String>,
 
     /// Just delete the cache, don't repopulate.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long)]
     pub dry: bool,
 
     /// Delete the entire Cache directory. Will break any instance currently running!
-    #[arg(long, default_value_t = false)]
+    #[arg(long)]
     pub hard: bool,
 
     /// Run arguments

@@ -10,16 +10,16 @@ use similar::{Algorithm, TextDiff};
 
 #[derive(clap::Args, Default)]
 pub struct Args {
-    /// The object to edit.
+    /// The object to display information on. Default to everything.
     #[arg(value_hint = ValueHint::CommandName)]
     name: Option<String>,
 
     /// Target the feature set rather than the profile set.
-    #[arg(long)]
+    #[arg(short, long)]
     pub feature: bool,
 
     /// Display the difference between system and user profiles.
-    #[arg(long)]
+    #[arg(long, long)]
     pub diff: bool,
 }
 

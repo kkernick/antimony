@@ -32,11 +32,11 @@ pub struct Args {
     profile: String,
 
     /// Where to export to. Defaults to current directory
-    #[arg(long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long, value_hint = ValueHint::DirPath)]
     dest: Option<String>,
 
     /// An optional version string for the package
-    #[arg(long, value_hint = ValueHint::DirPath)]
+    #[arg(short, long)]
     version: Option<String>,
 
     /// Run arguments

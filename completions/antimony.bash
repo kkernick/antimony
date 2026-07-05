@@ -103,7 +103,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__edit)
-            opts="-h --feature --help <NAME>"
+            opts="-f -s -h --feature --system --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -117,7 +117,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__export)
-            opts="-h --name --dest --feature --help"
+            opts="-n -d -f -s -h --name --dest --feature --system --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -127,7 +127,18 @@ _antimony() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                -n)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --dest)
+                    COMPREPLY=()
+                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+                        compopt -o plusdirs
+                    fi
+                    return 0
+                    ;;
+                -d)
                     COMPREPLY=()
                     if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
                         compopt -o plusdirs
@@ -310,7 +321,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__import)
-            opts="-h --feature --help <NAME>"
+            opts="-f -s -h --feature --system --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -324,7 +335,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__info)
-            opts="-h --feature --diff --help [NAME]"
+            opts="-f -h --feature --diff --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -338,17 +349,13 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__integrate)
-            opts="-r -s -a -e -c -h --remove --shadow --autostart --enable --config-mode --create-desktop --help <PROFILE>"
+            opts="-r -s -a -e -h --remove --shadow --autostart --enable --config-mode --create-desktop --help <PROFILE>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --config-mode)
-                    COMPREPLY=($(compgen -W "action file" -- "${cur}"))
-                    return 0
-                    ;;
-                -c)
                     COMPREPLY=($(compgen -W "action file" -- "${cur}"))
                     return 0
                     ;;
@@ -360,7 +367,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__package)
-            opts="-h --dest --version --help <PROFILE> [PASSTHROUGH]..."
+            opts="-d -v -h --dest --version --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -373,11 +380,19 @@ _antimony() {
                     fi
                     return 0
                     ;;
-                --version)
+                -d)
                     COMPREPLY=()
                     if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
                         compopt -o plusdirs
                     fi
+                    return 0
+                    ;;
+                --version)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -v)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 *)
@@ -402,7 +417,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__remove)
-            opts="-h --feature --yes --help [NAME]"
+            opts="-f -y -h --feature --yes --help [NAME]"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -416,7 +431,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__run)
-            opts="-d -r -l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
+            opts="-l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -536,18 +551,7 @@ _antimony() {
                     return 0
                     ;;
                 --temp)
-                    local oldifs
-                    if [ -n "${IFS+x}" ]; then
-                        oldifs="$IFS"
-                    fi
-                    IFS=$'\n'
                     COMPREPLY=($(compgen -f "${cur}"))
-                    if [ -n "${oldifs+x}" ]; then
-                        IFS="$oldifs"
-                    fi
-                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
-                        compopt -o filenames
-                    fi
                     return 0
                     ;;
                 --binaries)
@@ -555,18 +559,7 @@ _antimony() {
                     return 0
                     ;;
                 --libraries)
-                    local oldifs
-                    if [ -n "${IFS+x}" ]; then
-                        oldifs="$IFS"
-                    fi
-                    IFS=$'\n'
                     COMPREPLY=($(compgen -f "${cur}"))
-                    if [ -n "${oldifs+x}" ]; then
-                        IFS="$oldifs"
-                    fi
-                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
-                        compopt -o filenames
-                    fi
                     return 0
                     ;;
                 --directories)
@@ -584,10 +577,7 @@ _antimony() {
                     return 0
                     ;;
                 --devices)
-                    COMPREPLY=()
-                    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
-                        compopt -o plusdirs
-                    fi
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --namespaces)
