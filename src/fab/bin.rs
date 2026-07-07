@@ -490,13 +490,17 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                         && path.exists()
                     {
                         let path_str = path.to_string_lossy();
-                        info.handle
-                            .args_i(["--ro-bind", &path_str, &localize_home(&path_str)]);
+                        if !path.starts_with("/usr/bin/") {
+                            info.handle
+                                .args_i(["--ro-bind", &path_str, &localize_home(&path_str)]);
+                        }
                         binary.clone()
                     } else {
                         let resolved = match localize_path(binary, false) {
                             Ok((Some(src), dest)) => {
-                                info.handle.args_i(["--ro-bind", &src, &dest]);
+                                if !dest.starts_with("/usr/bin/") {
+                                    info.handle.args_i(["--ro-bind", &src, &dest]);
+                                }
                                 dest
                             }
                             Ok((None, dst)) => dst,

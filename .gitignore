@@ -8,3 +8,4 @@ cache
 vendor
 .cargo
 *.sb
+.harper-dictionary.txt

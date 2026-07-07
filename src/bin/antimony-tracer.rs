@@ -88,7 +88,7 @@ fn main() -> anyhow::Result<()> {
             let database = Arc::clone(&arc);
             let mut features = Set::default();
 
-            // For each file, try and see if any part of the file path
+            // For each file, try and see if any part of the filepath
             // is provided:
             //
             // For example, /usr/lib/mylib would check:

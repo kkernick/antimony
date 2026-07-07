@@ -1,7 +1,8 @@
-features = ["vulkan", "bin", "passwd", "network", "ld", "wayland", "pipewire", "xorg", "electron", "tray"]
+features = ["vulkan", "bin", "passwd", "network", "wayland", "ld", "pipewire", "xorg", "tray"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]
+namespaces  = ["User"]
 
 [home]
 policy = "Enabled"
@@ -11,6 +12,9 @@ user_bus = true
 
 [files.platform]
 ro = ["/etc/machine-id", "/sys", "/run/udev"]
+
+[files.user]
+rw = ["/steam"]
 
 [libraries]
 no_sof = true

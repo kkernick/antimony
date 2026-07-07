@@ -10,7 +10,7 @@ use bilrost::{Enumeration, Message};
 use rayon::prelude::*;
 use std::{borrow::Cow, fs, path::Path};
 
-/// Each directory is indexed based on file type, and a list of those files.
+/// Each directory is indexed based on filetype, and a list of those files.
 pub type DirMap = Map<DirType, Set<String>>;
 
 /// A Bilrost-compatible parcel for serializing a `DirMap`.
@@ -20,7 +20,7 @@ struct DirMessage {
     map: DirMap,
 }
 
-/// The kind of enty in a `DirMap`.
+/// The kind of entry in a `DirMap`.
 #[derive(PartialEq, Eq, Hash, Debug, Enumeration)]
 pub enum DirType {
     /// Files

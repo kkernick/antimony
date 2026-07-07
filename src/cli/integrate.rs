@@ -106,7 +106,7 @@ impl cli::Run for Args {
 
 /// Undo integration.
 /// ## Errors
-/// If antimony is improperly setup, or if it has inadequate permission to remove the files.
+/// If antimony is improperly set up, or if it has inadequate permission to remove the files.
 pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;
     let name = &cmd.profile;
@@ -381,7 +381,7 @@ fn format_desktop(
 /// Integrate a profile so it can be launched in place of the original in Desktop Environments.
 ///
 /// ## Errors
-/// If antimony is improperly setup, or if it has inadequate permission to create the files.
+/// If antimony is improperly set up, or if it has inadequate permission to create the files.
 #[allow(clippy::too_many_lines)]
 pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
     user::set(user::Mode::Real)?;

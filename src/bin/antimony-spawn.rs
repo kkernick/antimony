@@ -7,7 +7,7 @@
 //! running in --sandbox, the requested command is run in a new Antimony
 //! sandbox, constructed from the command line arguments. Because the
 //! environment antimony-spawn runs in (Antimony itself) does not have
-//! an Antimony installation, we have no features or profiles; therefore,
+//! an Antimony installation, we have no features or profiles. Therefore,
 //! we pass the sandbox's lib folder directly--which has already been
 //! reduced to only needing what the main application and its dependencies
 //! require.
@@ -86,7 +86,7 @@ pub struct Cli {
     #[arg(long, value_hint = ValueHint::DirPath)]
     pub directory: Option<String>,
 
-    /// Passthrough args.
+    /// Passthrough arguments.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }

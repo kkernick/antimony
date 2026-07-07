@@ -1,5 +1,5 @@
 #![allow(unused_crate_dependencies)]
-//! A SECCOMP Notify application that stores syscall information in a sqlite.
+//! A SECCOMP Notify application that stores syscall information in a `SQLite`.
 //! Database to be used for profile generation.
 
 use antimony::shared::{
@@ -150,7 +150,7 @@ fn update_profile<'a, T: Iterator<Item = &'a str>>(
     Ok(())
 }
 
-/// Commit the new data immediately, or defer to process teardown.
+/// Commit the new data immediately, or defer to process tear down.
 /// Note that if deferring, there is a chance that the process is
 /// killed before it can store the result.
 ///
@@ -174,7 +174,7 @@ fn commit_or_defer(profile: &str, path: &str, call: i32, mut entry: RefMut<'_, S
     }
 }
 
-/// Poll with a 100ms timeout.
+/// Poll with a 100 milliseconds time out.
 ///
 /// ## Errors
 /// If the poll call fails.
@@ -215,7 +215,7 @@ pub fn audit_reader(
 ) -> Result<()> {
     const BUFFER_SIZE: usize = 4096;
 
-    // Open netlink socket for audit
+    // Open Netlink socket for audit
     let sock_fd = socket(
         AddressFamily::Netlink,
         SockType::Datagram,
@@ -365,7 +365,7 @@ pub fn notify_reader(
     // Things the user has already denied, and which we shouldn't prompt again.
     let deny = Arc::new(ThreadMap::<String, Set<i32>>::default());
 
-    // Same for deny, but vice-versa.
+    // Same for deny, but vice versa.
     let allow = Arc::new(ThreadMap::<String, Set<i32>>::default());
 
     // Whether we should ask the user via Notify, or just save them via Permissive.
@@ -579,7 +579,7 @@ fn main() -> Result<()> {
         cli.profile, cli.mode
     );
 
-    // Setup the socket. We run this as the user.
+    // Set up the socket. We run this as the user.
 
     // Ensure that we can record syscall info after the attached process dies.
     let term = Arc::new(AtomicBool::new(false));
@@ -684,7 +684,7 @@ fn main() -> Result<()> {
                             }
 
                             if matches!(binary_exist(&binary), Ok(true)) {
-                                // Insert into DB using the transaction
+                                // Insert into db using the transaction
                                 if let Err(e) = update_binary(&tx, &binary, syscalls.iter()) {
                                     println!("DB insert failed for {binary}: {e}");
                                     return None;

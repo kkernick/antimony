@@ -1,5 +1,5 @@
 #![allow(clippy::missing_docs_in_private_items)]
-//! Setup the fabricators.
+//! Set up the fabricators.
 
 use crate::{
     fab::{self, FabInfo},

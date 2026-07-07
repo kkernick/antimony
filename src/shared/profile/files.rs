@@ -115,7 +115,7 @@ pub struct Files {
     pub direct: Map<FileMode, Map<String, String>>,
 
     /// Symlinks within the sandbox. Note that the source/destination should be
-    /// normalized for the sandbox, not host (i.e /home/antimony), and you will
+    /// normalized for the sandbox, not host (i.e /home/antimony). You will
     /// need to ensure the source exists in the sandbox (Either through a standard
     /// file passthrough or by adding the file to the profile home)
     #[serde(skip_serializing_if = "Map::is_empty")]

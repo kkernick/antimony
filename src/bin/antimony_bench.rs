@@ -71,7 +71,7 @@ pub struct Cli {
     #[arg(long)]
     pub temp_sensor: Option<String>,
 
-    /// An optional temperature to wait for cooldown. Usually, this has a precision of a thousandth, so 65000 = 65.0
+    /// An optional temperature to wait for cool-down. Usually, this has a precision of a thousandth, so 65000 = 65.0
     #[arg(long)]
     pub temp: Option<u64>,
 

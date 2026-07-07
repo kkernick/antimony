@@ -2,7 +2,7 @@
 //! A SECCOMP Notify application that reads the paths to `execve` to determine
 //! binaries called by the application.
 //!
-//! The `attach` sub-command is used internally. You should call this like:
+//! The `attach` subcommand is used internally. You should call this like:
 //!
 //! ```bash
 //! antimony-dumper run my-program 12345
@@ -277,7 +277,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
     let mut inotify = Inotify::init()?;
     inotify.watches().add(temp.path(), WatchMask::CREATE)?;
 
-    // Setup the filter.
+    // Set up the filter.
     let mut filter = Filter::new(Action::Notify)?;
     filter.set_notifier(Notifier::new(socket, name.to_owned()));
     filter.set_attribute(Attribute::NoNewPrivileges(true))?;
