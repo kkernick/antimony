@@ -1,2 +1,8 @@
-
+# Every distribution stores things here, though the contents differ.
+#
+# For Distros that only support a single arch, this contains *both* shared libraries
+# (i.e libLLVM), and program folders (i.e /usr/lib/chromium)
+#
+# For Distros with multiple arches, this just contains the program folders, with arch-specific
+# sub-folders for loose (i.e Ubuntu).
 library_roots = ["/usr/lib"]

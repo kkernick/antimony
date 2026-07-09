@@ -213,7 +213,7 @@ pub fn setup<'a>(
                 })??;
 
                 debug!("Removing stale command caches.");
-                let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(1))?;
+                let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(2))?;
                 if let Some(files) = crawled.remove(&DirType::File) {
                     as_effective!(
                         files

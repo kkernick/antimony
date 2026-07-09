@@ -9,7 +9,7 @@
 
 --after-install hooks/after_install.sh
 --after-remove hooks/after_remove.sh
---after-upgrade hooks/after_upgrade.sh
+--after-upgrade hooks/after_install.sh
 
 ./target/x86_64-unknown-linux-gnu/release/antimony=/usr/bin/antimony
 ./target/x86_64-unknown-linux-gnu/release/antimony-monitor=/usr/share/antimony/utilities/antimony-monitor

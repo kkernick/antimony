@@ -164,16 +164,28 @@
 # By default, the name of the home folder will be the name of the profile. You can override
 # this, however, which can be useful for configurations.
 # name = "name"
-# 
-# Where the home should be mounted in the sandbox. 
+#
+# Where the home should be mounted in the sandbox.
 # path = ~/antimony
-# 
+#
 # Antimony can optionally lock the home folder with a cooperative futex. This means the folder doesn't
 # actually become inaccessible or restricted, but programs that look and respect this lock (i.e other
 # Antimony instances) can return an error. Some profiles, like Chromium, get upset if you try and run
-# multiple instances, so this lock can be an alternative to Overlay that will raise an error if an 
+# multiple instances, so this lock can be an alternative to Overlay that will raise an error if an
 # instance is already running
 # lock = false
+#
+# By default, Antimony will prompt the user should a running instance already have a lock on the home folder.
+# However, you can override this default should there be an obvious action to take.
+# lock_policy = Notify
+# 
+# With Overlay, the existing Home is simply mounted with a Temporary Overlay place on top. This prevents the two
+# instances from conflicting over the home, as the newer instances' writes will simply be discarded. However, the 
+# underlying, first instance, will still be able to make changes that successive instances may have issue with.
+# lock_policy = Overlay
+# 
+# Self-explanatory. If there should never be two running instances just abort. 
+# lock_policy = Abort
 
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.

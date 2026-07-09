@@ -1,4 +1,4 @@
 #!/bin/sh
 
-userdel antimony
-userdel antimony-lockdown
+userdel antimony 2>/dev/null
+userdel antimony-lockdown 2>/dev/null

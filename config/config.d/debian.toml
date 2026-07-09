@@ -1,4 +1,6 @@
-
+# Debian separates lib64, rather than just symlinking, and we only really support
+# x86. libexec is not strictly a library root, but it contains data we should search, such
+# as KF6 binaries/libraries.
 library_roots = [
   "/usr/lib64",
   "/usr/libexec",

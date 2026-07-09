@@ -103,7 +103,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__edit)
-            opts="-f -s -h --feature --system --help <NAME>"
+            opts="-f -s -h --feature --system --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -321,7 +321,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__import)
-            opts="-f -s -h --feature --system --help <NAME>"
+            opts="-f -s -h --feature --system --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -335,7 +335,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__info)
-            opts="-f -h --feature --diff --help [NAME]"
+            opts="-f -h --feature --diff --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -349,7 +349,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__integrate)
-            opts="-r -s -a -e -h --remove --shadow --autostart --enable --config-mode --create-desktop --help <PROFILE>"
+            opts="-r -s -a -e -h --remove --shadow --autostart --enable --config-mode --create-desktop --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -367,7 +367,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__package)
-            opts="-d -v -h --dest --version --help <PROFILE> [PASSTHROUGH]..."
+            opts="-d -v -h --dest --version --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -403,7 +403,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__refresh)
-            opts="-d -h --dry --hard --help [PROFILE] [PASSTHROUGH]..."
+            opts="-d -h --dry --hard --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -417,7 +417,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__remove)
-            opts="-f -y -h --feature --yes --help [NAME]"
+            opts="-f -y -h --feature --yes --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -431,7 +431,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__run)
-            opts="-l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help <PROFILE> [PASSTHROUGH]..."
+            opts="-l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -604,7 +604,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__seccomp)
-            opts="-h --help optimize remove export merge clean [PATH]"
+            opts="-h --help optimize remove export merge clean"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
