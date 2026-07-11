@@ -16,7 +16,7 @@ use crate::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         find::{DirType, recursive_crawl},
-        package::Package,
+        package::{IS_PACKAGE, Package},
         profile::{Profile, seccomp::SeccompPolicy},
         store::mem,
         utility,
@@ -121,21 +121,43 @@ pub fn setup<'a>(
 
         let lib = path.join("lib");
         let lib_str = lib.to_string_lossy();
+
+        // The package uses a single library root, and has no idea what the
+        // host system's layout is. We therefore can't try to mount the host
+        // libraries in the same way we can do binaries.
+        //
+        // Instead, the outer namespace simply overlays a bunch of hard-coded
+        // roots to /usr/lib, which we then overlay below the package libraries.
+        //
+        // Antimony will itself enable system libraries if it's running as a package (
+        // So you can run external applications. It still performs SOF, but needs you
+        // system libraries to do it).
+        if IS_PACKAGE.is_some()
+            || profile
+                .libraries
+                .as_ref()
+                .map_or_else(|| false, |libraries| libraries.no_sof.unwrap_or_default())
+        {
+            #[rustfmt::skip]
+            profile_args.extend([
+                "--overlay-src", "/usr/lib",
+                "--overlay-src", &lib_str,
+                "--ro-overlay", "/usr/lib"].map(String::from));
+        } else {
+            profile_args.extend(["--ro-bind", &lib_str, "/usr/lib"].map(String::from));
+        }
+
         #[rustfmt::skip]
         profile_args.extend([
             "--ro-bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
             "--symlink", "/usr/bin", "/bin",
             "--symlink", "/usr/bin", "/sbin",
             "--symlink", "/usr/bin", "/usr/sbin",
-            "--ro-bind", &lib_str, "/usr/lib",
             "--symlink", "/usr/lib", "/lib",
             "--symlink", "/usr/lib", "/usr/lib64",
             "--symlink", "/usr/lib64", "/lib64"
 
         ].map(String::from));
-
-        ROOTS.clear();
-        ROOTS.insert(Cow::Owned(lib_str.to_string()));
 
         profile = profile.base(Profile::from_args(args)?)?;
         package = Some((Package::default(), true));

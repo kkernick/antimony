@@ -6,19 +6,14 @@ use antimony::{
     shared::{
         self,
         config::CONFIG_FILE,
-        package::{PACKAGE_MARKER, execute_package},
+        package::{IS_PACKAGE, execute_package},
     },
     timer,
 };
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-use std::{
-    env,
-    fs::File,
-    io::{Read, Seek, SeekFrom},
-    thread::available_parallelism,
-};
+use std::{env, fs::File, thread::available_parallelism};
 
 fn main() -> Result<()> {
     // Somehow, using half the available parallel drastically improves performance.
@@ -48,20 +43,11 @@ fn main() -> Result<()> {
     // considerations require us to change how Antimony operates.
     timer!("::set", user::set(user::Mode::Real))?;
 
-    // We modify a reserved section of the ELF header, as it's a predictable location that is unused.
-    // The MARKER starts and ends with `\0`, and it doesn't trip any systems I've tested on, but this
-    // is a hack.
-    let current = env::current_exe()?;
-    let mut file = File::open(&current)?;
-    file.seek(SeekFrom::Start(0x09))?;
-    let mut marker = [0u8; 7];
-    file.read_exact(&mut marker)?;
-
     // If we have a package, read the message.
-    if marker == PACKAGE_MARKER
+    if let Some(current) = IS_PACKAGE.as_ref()
         && let Some(name) = current.file_name()
     {
-        execute_package(&current, file, name)
+        execute_package(current, File::open(current)?, name)
     } else {
         let ret = if as_symlink().is_err() {
             let cli = timer!("::cli", cli::Cli::parse());

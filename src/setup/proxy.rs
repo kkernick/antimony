@@ -63,18 +63,8 @@ pub fn run(
     // access the proxy's sandbox through the user bus. Still, we
     // have the means to do this, so might as well. The real
     // paranoia is below.
-    let package_root = if let Some((_, true)) = package {
-        Some(
-            ROOTS
-                .iter()
-                .next()
-                .map_or_else(String::default, |r| r.to_string()),
-        )
-    } else {
-        None
-    };
-
-    if package_root.is_none() && !sof.exists() {
+    let is_package = package.as_ref().map_or_else(|| false, |(_, b)| *b);
+    if !is_package && !sof.exists() {
         as_effective!(Result<()>, {
             fs::create_dir_all(&sof)?;
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
@@ -107,7 +97,12 @@ pub fn run(
             "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
         ]);
 
-        if let Some(root) = package_root {
+        if is_package {
+            let root = ROOTS
+                .iter()
+                .next()
+                .map_or_else(String::default, |r| r.to_string());
+
             #[rustfmt::skip]
             proxy.args_i([
                 "--ro-bind", &root, "/usr/lib",

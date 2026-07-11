@@ -122,22 +122,17 @@ pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
         Ok(())
     })?;
 
-    for root in ["/lib", "/lib64", "/usr/lib64"] {
-        if let Ok(link) = fs::read_link(root) {
-            let link = if link.is_absolute() {
-                link
-            } else if let Some(parent) = Path::new(root).parent() {
-                parent.join(link)
-            } else {
-                PathBuf::from(root)
-            }
-            .canonicalize()?;
-
-            if let Some(str) = link.to_str()
-                && !ROOTS.contains(str)
-            {
-                handle.args_i(["--symlink", str, root]);
-            }
+    for root in [
+        ("/usr/lib64/", "/usr/lib"),
+        ("/lib/", "/usr/lib"),
+        ("/lib64/", "/usr/lib64"),
+    ] {
+        if !ROOTS.contains(root.0) {
+            handle.args_i([
+                "--symlink",
+                root.1,
+                root.0.strip_suffix('/').unwrap_or(root.0),
+            ]);
         }
     }
 

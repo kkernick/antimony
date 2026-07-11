@@ -99,7 +99,10 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                     let choice = prompt.output_all()?;
                                     match choice.as_str() {
                                         "Ignore\n" => cont = true,
-                                        "Unlock\n" => File::open(&home_dir)?.unlock()?,
+                                        "Unlock\n" => {
+                                            File::open(&home_dir)?.unlock()?;
+                                            cont = true;
+                                        }
                                         "Skip\n" => return Ok(None),
                                         "Overlay\n" => {
                                             policy = HomePolicy::Overlay;

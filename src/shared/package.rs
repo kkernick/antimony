@@ -16,6 +16,9 @@ use log::{debug, error, info};
 use path_clean::clean;
 use serde::{Deserialize, Serialize};
 use spawn::Spawner;
+use std::io::SeekFrom;
+use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::{
     env,
     ffi::OsStr,
@@ -25,6 +28,23 @@ use std::{
     path::Path,
 };
 use user::Mode;
+
+pub static IS_PACKAGE: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
+    // We modify a reserved section of the ELF header, as it's a predictable location that is unused.
+    // The MARKER starts and ends with `\0`, and it doesn't trip any systems I've tested on, but this
+    // is a hack.
+    if let Ok(current) = env::current_exe()
+        && let Ok(mut file) = File::open(&current)
+        && file.seek(SeekFrom::Start(0x09)).is_ok()
+    {
+        let mut marker = [0u8; 7];
+        let _ = file.read_exact(&mut marker);
+        if marker == PACKAGE_MARKER {
+            return Some(current);
+        }
+    }
+    None
+});
 
 // Package marker
 pub static PACKAGE_MARKER: [u8; 7] = *b"\0PKG\0\0\0";
@@ -328,10 +348,18 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             "--symlink", "/usr/bin", "/usr/sbin"
         ]);
 
+        for root in ["/usr/lib", "/usr/lib64", "/usr/lib32"] {
+            let path = Path::new(&root);
+            if path.exists() && !path.is_symlink() {
+                handle.args_i(["--overlay-src", root]);
+            }
+        }
+
         let lib = path.join("system").join("lib");
         #[rustfmt::skip]
         handle.args_i([
-            "--ro-bind", &lib.to_string_lossy(), "/usr/lib",
+            "--overlay-src", &lib.to_string_lossy(),
+            "--ro-overlay", "/usr/lib",
             "--symlink", "/usr/lib", "/lib",
             "--symlink", "/usr/lib", "/lib64",
             "--symlink", "/usr/lib", "/usr/lib64"
