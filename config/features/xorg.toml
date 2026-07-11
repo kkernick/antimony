@@ -9,11 +9,11 @@ XDG_CURRENT_DESKTOP = "$XDG_CURRENT_DESKTOP"
 XAUTHORITY = "$XAUTHORITY"
 DISPLAY = "$DISPLAY"
 
-[files.resources]
-ro = ["/usr/share/X11"]
-
 [files.platform]
 ro = ["/tmp/.X11-unix/"]
+
+[files.resources]
+ro = ["/usr/share/X11"]
 
 [files.runtime]
 ro = ["$XAUTHORITY"]

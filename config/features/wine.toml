@@ -1,3 +1,5 @@
+name = "wine"
+description = "Run Windows applications under Wine"
 notes = """
 This feature, on its own, simply runs whatever you pass under wine. However, the usual
 setup for Windows applications usually requires running an installer (Under wine), then
@@ -8,20 +10,8 @@ Therefore, the procedure for running something like Battle.Net (battle.toml), is
 2. Run the installer via wine in the sandbox (i.e `wine ~/Downloads/battle.net.exe`)
 3. Exit out of the sandbox, then run the profile normally.
 """
-name = "wine"
-description = "Run Windows applications under Wine"
 caveat = "This feature requires vast permissions"
-requires = [
-    "vulkan",
-    "bin",
-    "locale",
-    "dri",
-    "lib",
-    "wayland",
-    "fonts",
-    "ld",
-    "xorg",
-]
+requires = ["vulkan", "bin", "locale", "dri", "lib", "wayland", "fonts", "ld", "xorg"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]
@@ -31,11 +21,7 @@ sandbox_args = ["wine"]
 roots = ["/usr/lib32"]
 
 [files.platform]
-ro = [
-    "/var/lib/dbus/machine-id",
-    "/sys",
-    "/run/udev",
-]
+ro = ["/var/lib/dbus/machine-id", "/sys", "/run/udev"]
 
 [files.resources]
 ro = ["/usr/share/wine"]

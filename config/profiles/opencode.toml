@@ -1,5 +1,5 @@
-notes = "You'll need to download the copilot-cli and update the path accordingly."
 path = "~/.local/bin/opencode-native"
+notes = "You'll need to download the copilot-cli and update the path accordingly."
 features = ["bin", "lib", "network"]
 seccomp = "Disabled"
 

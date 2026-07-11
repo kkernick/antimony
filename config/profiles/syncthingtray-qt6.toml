@@ -1,4 +1,4 @@
-features = ["kf6", "electron", "tray"]
+features = ["tray", "electron", "kf6"]
 namespaces = ["Net"]
 
 [home]

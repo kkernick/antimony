@@ -7,7 +7,4 @@ files = ["libMesa*", "libGL*", "libEGL*"]
 directories = ["dri", "gbm"]
 
 [files.platform]
-ro = [
-    "/sys/dev/char", "/sys/devices/pci0000:00", "/etc/OpenCL/",
-    "/usr/share/glvnd", "/usr/share/drirc.d", "/usr/share/libdrm"
-]
+ro = ["/sys/devices/pci0000:00", "/etc/OpenCL/", "/sys/dev/char", "/usr/share/drirc.d", "/usr/share/libdrm", "/usr/share/glvnd"]

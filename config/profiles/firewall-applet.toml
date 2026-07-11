@@ -1,4 +1,4 @@
-features = ["python", "gir", "kf6", "gdk-pixbuf", "tray"]
+features = ["python", "gir", "tray", "gdk-pixbuf", "kf6"]
 
 [ipc]
 system_bus = true

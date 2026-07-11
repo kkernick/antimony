@@ -1,5 +1,5 @@
-notes = "You'll need to drop into a Debug Shell to run the installer. See the Wine feature."
 path = "$AT_HOME/.wine/drive_c/Program Files (x86)/Battle.net/Battle.net.exe"
+notes = "You'll need to drop into a Debug Shell to run the installer. See the Wine feature."
 features = ["pipewire", "locale", "wine", "network"]
 seccomp = "Disabled"
 

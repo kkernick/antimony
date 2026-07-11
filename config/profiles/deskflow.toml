@@ -1,5 +1,5 @@
 id = "org.deskflow.deskflow"
-features = ["qt6", "qt6-plugins", "qt6-qml", "network", "tray"]
+features = ["network", "tray", "qt6-qml", "qt6", "qt6-plugins"]
 binaries = ["deskflow-core"]
 
 [home]
