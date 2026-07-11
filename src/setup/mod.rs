@@ -118,46 +118,24 @@ pub fn setup<'a>(
 
         let bin = path.join("bin");
         let bin_str = bin.to_string_lossy();
+
+        let lib = path.join("lib");
+        let lib_str = lib.to_string_lossy();
         #[rustfmt::skip]
         profile_args.extend([
             "--ro-bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
             "--symlink", "/usr/bin", "/bin",
             "--symlink", "/usr/bin", "/sbin",
             "--symlink", "/usr/bin", "/usr/sbin",
+            "--ro-bind", &lib_str, "/usr/lib",
+            "--symlink", "/usr/lib", "/lib",
+            "--symlink", "/usr/lib", "/usr/lib64",
+            "--symlink", "/usr/lib64", "/lib64"
+
         ].map(String::from));
 
-        let lib = path.join("lib");
-        let lib_str = lib.to_string_lossy();
-        if lib.exists() {
-            profile_args.extend(
-                [
-                    "--ro-bind",
-                    if let Some(libraries) = &profile.libraries
-                        && libraries.no_sof.unwrap_or(false)
-                    {
-                        "/usr/lib"
-                    } else {
-                        &lib_str
-                    },
-                    "/usr/lib",
-                ]
-                .map(String::from),
-            );
-            if let Some(libraries) = &profile.libraries {
-                for root in &libraries.roots {
-                    if !root.starts_with("/usr/lib") {
-                        profile_args.extend(["--symlink", "/usr/lib", root].map(String::from));
-                    }
-                }
-                if !libraries.roots.contains("/usr/lib64") {
-                    #[rustfmt::skip]
-                    profile_args.extend([
-                        "--symlink", "/usr/lib", "/usr/lib64",
-                        "--symlink", "/usr/lib64", "/lib64"
-                    ].map(String::from));
-                }
-            }
-        }
+        ROOTS.clear();
+        ROOTS.insert(Cow::Owned(lib_str.to_string()));
 
         profile = profile.base(Profile::from_args(args)?)?;
         package = Some((Package::default(), true));

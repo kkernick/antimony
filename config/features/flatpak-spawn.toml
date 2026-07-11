@@ -6,5 +6,5 @@ namespaces = ["User"]
 [files.platform]
 ro = ["/etc/antimony.toml", "/etc/antimony.d"]
 
-[files.resources]
+[files.platform]
 ro = ["/usr/share/antimony/db/antimony.db"]

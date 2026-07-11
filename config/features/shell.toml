@@ -9,5 +9,5 @@ TERM = "$TERM"
 [files.platform]
 ro = ["/etc/profile"]
 
-[files.resources]
+[files.platform]
 ro = ["/usr/share/terminfo"]

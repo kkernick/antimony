@@ -1,7 +1,9 @@
 //! Antimony uses xdg-dbus-proxy to proxy the user bus. It does this by spawning an associated process
 //! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
 
+use crate::fab::lib::ROOTS;
 use crate::shared::env::SESSION_BUS;
+use crate::shared::package::Package;
 use crate::{
     fab::{
         get_libraries,
@@ -30,12 +32,14 @@ use temp::Temp;
 use user::as_effective;
 
 /// Get the Spawner used to run Proxy.
+#[allow(clippy::ref_option)]
 pub fn run(
     sys_dir: &Path,
     profile: &Profile,
     instance: &Temp,
     info: &Path,
     id: &str,
+    package: &Option<(Package, bool)>,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let cache = CACHE_DIR.join(".proxy");
@@ -59,7 +63,18 @@ pub fn run(
     // access the proxy's sandbox through the user bus. Still, we
     // have the means to do this, so might as well. The real
     // paranoia is below.
-    if !sof.exists() {
+    let package_root = if let Some((_, true)) = package {
+        Some(
+            ROOTS
+                .iter()
+                .next()
+                .map_or_else(String::default, |r| r.to_string()),
+        )
+    } else {
+        None
+    };
+
+    if package_root.is_none() && !sof.exists() {
         as_effective!(Result<()>, {
             fs::create_dir_all(&sof)?;
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
@@ -92,8 +107,18 @@ pub fn run(
             "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
         ]);
 
-        let sof_str = sof.to_string_lossy();
-        mount_roots(&sof_str, &proxy)?;
+        if let Some(root) = package_root {
+            #[rustfmt::skip]
+            proxy.args_i([
+                "--ro-bind", &root, "/usr/lib",
+                "--symlink", "/usr/lib", "/lib",
+                "--symlink", "/usr/lib", "/usr/lib64",
+                "--symlink", "/usr/lib64", "/lib64"
+            ]);
+        } else {
+            let sof_str = sof.to_string_lossy();
+            mount_roots(&sof_str, &proxy)?;
+        }
         proxy
     });
 
@@ -210,7 +235,14 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     } else {
         let proxy = timer!(
             "::run",
-            run(&args.sys_dir, &args.profile, args.instance, &info, id)
+            run(
+                &args.sys_dir,
+                &args.profile,
+                args.instance,
+                &info,
+                id,
+                &args.package
+            )
         )?;
 
         if !args.run.dry {

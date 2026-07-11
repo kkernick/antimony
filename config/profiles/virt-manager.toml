@@ -10,7 +10,7 @@ owns = ["org.virt-manager.virt-manager"]
 [files.platform]
 ro = ["/sys", "/var/run/libvirt"]
 
-[files.resources]
+[files.platform]
 ro = ["/usr/share/osinfo", "/usr/share/misc", "/usr/share/hwdata"]
 
 [libraries]

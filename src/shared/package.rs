@@ -129,7 +129,7 @@ impl Package {
                     if let Some(stripped) = file.strip_prefix("/usr/lib/") {
                         add_file(Path::new(&file), stripped)?;
                     } else {
-                        add_file(Path::new(&file), dest)?;
+                        add_file(Path::new(&file), &file)?;
                     }
                 }
             }
@@ -331,9 +331,7 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
         let lib = path.join("system").join("lib");
         #[rustfmt::skip]
         handle.args_i([
-            "--overlay-src", "/usr/lib",
-            "--overlay-src", &lib.to_string_lossy(),
-            "--ro-overlay", "/usr/lib",
+            "--ro-bind", &lib.to_string_lossy(), "/usr/lib",
             "--symlink", "/usr/lib", "/lib",
             "--symlink", "/usr/lib", "/lib64",
             "--symlink", "/usr/lib", "/usr/lib64"

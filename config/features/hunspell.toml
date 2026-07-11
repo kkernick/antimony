@@ -4,5 +4,5 @@ description = "Spell Checking Library"
 [libraries]
 files = ["libhunspell*"]
 
-[files.resources]
+[files.platform]
 ro = ["/usr/share/hunspell/"]

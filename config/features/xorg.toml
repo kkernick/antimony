@@ -10,7 +10,10 @@ XAUTHORITY = "$XAUTHORITY"
 DISPLAY = "$DISPLAY"
 
 [files.resources]
-ro = ["/usr/share/X11", "/tmp/.X11-unix/"]
+ro = ["/usr/share/X11"]
+
+[files.platform]
+ro = ["/tmp/.X11-unix/"]
 
 [files.runtime]
 ro = ["$XAUTHORITY"]

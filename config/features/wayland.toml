@@ -13,5 +13,5 @@ files = ["libwayland*"]
 [files.user]
 ro = ["$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"]
 
-[files.resources]
-ro = ["/usr/share/X11/xkb"]
+[files.platform]
+ro = ["/usr/share/X11/xkb", "/usr/share/xkeyboard-config-2"]
