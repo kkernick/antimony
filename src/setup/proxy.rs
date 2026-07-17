@@ -227,8 +227,13 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             &format!("{}/bus", RUNTIME_STR.as_str()),
         ]);
 
-    // Or mediate via the proxy.
-    } else {
+    // Or mediate via the proxy if the proxy is actually needed.
+    } else if !ipc.portals.is_empty()
+        || !ipc.owns.is_empty()
+        || !ipc.talks.is_empty()
+        || !ipc.sees.is_empty()
+        || !ipc.calls.is_empty()
+    {
         let proxy = timer!(
             "::run",
             run(
