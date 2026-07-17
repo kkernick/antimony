@@ -80,6 +80,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '*--env=[Add environment variables in KEY=VALUE syntax]:ENV:_default' \
 '--preserve-env=[]:PRESERVE_ENV:(true false)' \
 '*--sandbox-args=[Arguments to pass to bubblewrap/wrapper]:SANDBOX_ARGS:_default' \
+'*--ignored-exit-codes=[Exit codes that should not prompt a notification]:IGNORED_EXIT_CODES:_default' \
 '--dry[Generate the profile, but do not run the executable]' \
 '--refresh[Refresh cache definitions. Analogous to \`antimony refresh\`]' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \

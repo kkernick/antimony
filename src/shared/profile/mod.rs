@@ -205,6 +205,13 @@ pub struct Profile {
     /// or a wrapper for the sandbox.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sandbox_args: Vec<String>,
+
+    /// Some profiles can return error codes that don't actually indicate errors.
+    /// For example, Antimony will return error code 2 on --help, and keepassxc will
+    /// return error codes on devel builds. Antimony can optionally ignore such
+    /// codes, rather than notifying.
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub ignored_exit_codes: Set<i32>,
 }
 impl Profile {
     /// Construct a profile from the command line.
@@ -281,6 +288,9 @@ impl Profile {
         }
         if let Some(policy) = args.home_policy.take() {
             profile.home.get_or_insert_default().policy = Some(policy);
+        }
+        if let Some(ignored) = args.ignored_exit_codes.take() {
+            profile.ignored_exit_codes.extend(ignored);
         }
 
         Ok(profile)
@@ -495,6 +505,8 @@ impl Profile {
         self.conflicts.extend(profile.conflicts);
         self.arguments.append(&mut profile.arguments);
         self.sandbox_args.append(&mut profile.sandbox_args);
+        self.ignored_exit_codes
+            .extend(&mut profile.ignored_exit_codes.into_iter());
         Ok(())
     }
 

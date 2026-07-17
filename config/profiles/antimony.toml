@@ -9,13 +9,14 @@ binaries = ["xdg-dbus-proxy", "ldd", "bwrap"]
 devices = ["/dev"]
 namespaces = ["All"]
 preserve_env = true
+ignored_exit_codes = [2]
 
 [ipc]
 system_bus = true
 user_bus = true
 
 [files.platform]
-rw = ["/home", "/usr/share", "/tmp", "/sys", "/etc", "/run", "/var"]
+rw = ["/home", "/usr/share", "/run", "/var", "/sys", "/etc", "/tmp"]
 
 [files.resources]
 rw = ["/usr/share/antimony"]

@@ -431,7 +431,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__run)
-            opts="-l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --help"
+            opts="-l -c -h --dry --refresh --path --dir --lockdown --config --features --conflicts --inherits --home-policy --home-name --home-path --home-lock --home-lock-policy --seccomp --portals --sees --talks --owns --calls --disable-ipc --system-bus --user-bus --file-passthrough --ro --rw --link --temp --binaries --libraries --directories --roots --no-sof --devices --namespaces --env --preserve-env --sandbox-args --ignored-exit-codes --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -593,6 +593,10 @@ _antimony() {
                     return 0
                     ;;
                 --sandbox-args)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ignored-exit-codes)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

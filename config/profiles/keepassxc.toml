@@ -1,5 +1,6 @@
 id = "org.keepassxc.KeePassXC"
-features = ["qt6", "kf6"]
+features = ["gocryptfs", "qt6", "kf6"]
+ignored_exit_codes = [139]
 
 [home]
 policy = "Enabled"

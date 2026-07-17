@@ -195,6 +195,10 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub sandbox_args: Option<Vec<String>>,
 
+    /// Exit codes that should not prompt a notification.
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub ignored_exit_codes: Option<Vec<i32>>,
+
     /// Arguments to pass to the profile application.
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
@@ -391,7 +395,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
 
         let ret: Result<()> = match code {
             Ok(code) => {
-                if code != 0 {
+                if code != 0 && !info.profile.ignored_exit_codes.contains(&code) {
                     if CONFIG_FILE.auto_refresh() && !args.refresh {
                         Spawner::abs(utility("notify"))
                             .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())

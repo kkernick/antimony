@@ -178,13 +178,13 @@
 # By default, Antimony will prompt the user should a running instance already have a lock on the home folder.
 # However, you can override this default should there be an obvious action to take.
 # lock_policy = Notify
-# 
+#
 # With Overlay, the existing Home is simply mounted with a Temporary Overlay place on top. This prevents the two
-# instances from conflicting over the home, as the newer instances' writes will simply be discarded. However, the 
+# instances from conflicting over the home, as the newer instances' writes will simply be discarded. However, the
 # underlying, first instance, will still be able to make changes that successive instances may have issue with.
 # lock_policy = Overlay
-# 
-# Self-explanatory. If there should never be two running instances just abort. 
+#
+# Self-explanatory. If there should never be two running instances just abort.
 # lock_policy = Abort
 
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
@@ -305,6 +305,12 @@
 # Note that you can combine this flag with the above section; new values will be added, existing values will
 # be replaced.
 # preserve_env = false
+
+# When running without a terminal, Antimony will create notifications should the sandbox return an error code (!= 0)
+# Usually, this is desirable, as otherwise real sandbox issues would silently fail without any indication as to what
+# had happened. However, some programs also use exit codes to relay information, such as Antimony itself returning 2
+# when calling `--help`. It can be benefical to suppress exit codes that don't indicate errors.
+# ignored_exit_codes = []
 
 # Configurations specify specialized modes of running the profile. Each config is a fully fledged
 # profile that overrides the settings defined above (Opposite to how inheritance functions)

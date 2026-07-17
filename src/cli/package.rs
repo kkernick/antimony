@@ -23,7 +23,7 @@ use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 #[derive(clap::Args)]

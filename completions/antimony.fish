@@ -106,6 +106,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand run" -l env -d 'Add en
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l preserve-env -r -f -a "true\t''
 false\t''"
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l sandbox-args -d 'Arguments to pass to bubblewrap/wrapper' -r
+complete -c antimony -n "__fish_antimony_using_subcommand run" -l ignored-exit-codes -d 'Exit codes that should not prompt a notification' -r
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l dry -d 'Generate the profile, but do not run the executable'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l refresh -d 'Refresh cache definitions. Analogous to `antimony refresh`'
 complete -c antimony -n "__fish_antimony_using_subcommand run" -l disable-ipc -d 'Disable all IPC. This overrules all other IPC settings'
