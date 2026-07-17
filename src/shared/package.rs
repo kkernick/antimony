@@ -1,9 +1,12 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
+use crate::cli::integrate::{self, integrate_vec};
+use crate::shared::Set;
+use crate::shared::env::DATA_HOME;
 use crate::shared::find::{DirType, recursive_crawl};
 use crate::{cli::run, setup::setup};
 use crate::{
-    cli::{Cli, run_vec},
+    cli::run_vec,
     fab::lib::ROOTS,
     shared::{Map, env::CACHE_DIR, profile::Profile},
     timer,
@@ -17,6 +20,7 @@ use path_clean::clean;
 use serde::{Deserialize, Serialize};
 use spawn::Spawner;
 use std::io::SeekFrom;
+use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::{
@@ -49,6 +53,38 @@ pub static IS_PACKAGE: LazyLock<Option<PathBuf>> = LazyLock::new(|| {
 // Package marker
 pub static PACKAGE_MARKER: [u8; 7] = *b"\0PKG\0\0\0";
 
+/// Command line arguments specifically for when running as a package
+#[derive(clap::Parser, Default)]
+#[command(name = "Antimony (Packaged)")]
+#[command(version)]
+#[command(about = "Sandbox Applications (Self-Contained Package)")]
+#[command(before_help = r#"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⠟⠹⣧⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⣷⣦⣄⣠⣿⠃⢠⣄⠈⢻⣆⣠⣴⡞⡆⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⢀⣀⣀⣿⠀⠈⢻⣇⢀⣾⢟⡄⣸⡿⠋⠀⡇⣇⣀⣀⠀⠀⠀⠀⠀
+⠀⣤⣤⣤⣀⣱⢻⠚⠻⣧⣀⠀⢹⡿⠃⠈⢻⣟⠀⢀⣤⠧⠓⣹⣟⣀⣤⣤⣤⡀
+⠀⠈⠻⣧⠉⠛⣽⠀⠀⠀⠙⣷⡿⠁⠀⠀⠀⢻⣶⠛⠁⠀⠀⡟⠟⠉⣵⡟⠁⠀
+⠀⠀⠀⠹⣧⡀⠏⡇⠀⠀⠀⣿⠁⠀⠀⠀⠀⠀⣿⡄⠀⠀⢠⢷⠀⣼⡟⠀⠀⠀
+⠀⠀⠀⠀⠙⣟⢼⡹⡄⠀⠀⣿⡄⠀⠀⠀⠀⢀⣿⡇⠀⢀⣞⣦⢾⠟⠀⠀⠀⠀
+⠀⠠⢶⣿⣛⠛⢒⣭⢻⣶⣤⣹⣿⣤⣀⣀⣠⣾⣟⣠⣔⡛⢫⣐⠛⢛⣻⣶⠆⠀
+⠀⠀⠀⠉⣻⡽⠛⠉⠁⠀⠉⢙⣿⠖⠒⠛⠻⣿⡋⠉⠁⠈⠉⠙⢿⣿⠉⠀⠀⠀
+⠀⠀⠀⠸⠿⠷⠒⣦⣤⣴⣶⢿⣿⡀⠀⠀⠀⣽⡿⢷⣦⠤⢤⡖⠶⠿⠧⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠛⢿⣦⣴⡾⠟⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀"#)]
+pub struct Args {
+    /// Ignore existing unpacked directory and unpack again.
+    #[arg(long)]
+    refresh: bool,
+
+    /// Integrate the package into the system environment.
+    #[arg(long)]
+    integrate: bool,
+
+    /// Run arguments
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub passthrough: Option<Vec<String>>,
+}
+
 #[derive(Deserialize, Serialize, Default, Debug, Message)]
 pub struct Package {
     pub name: String,
@@ -65,18 +101,20 @@ pub struct Package {
     /// Binaries are dumped to /usr/bin, and symlinked to bin, sbin, and /usr/sbin
     pub binaries: Map<String, BString>,
 
+    /// Symlinks constructed by the package SRC -> DEST. DEST must be provided.
+    pub symlinks: Map<String, String>,
+
     /// System binaries are binaries used by antimony (i.e find, proxy). They are
     /// added to `PATH`
     pub system_binaries: Map<String, BString>,
 
     /// Libraries needed by the system binaries. Added to `LD_LIBRARY_PATH`.
     pub system_libraries: Map<String, BString>,
+
+    /// Misc system files, like desktop files and icons.
+    pub system_files: Map<String, BString>,
 }
 impl Package {
-    /// Adds a binary to the package.
-    ///
-    /// ## Errors
-    /// If the binary could not be found, or it could not be read.
     pub fn add(&mut self, name: &str, dest: &str) -> Result<()> {
         Self::add_path(name, dest, &mut self.files)
     }
@@ -119,6 +157,14 @@ impl Package {
         }
         dest = dest.strip_prefix('/').unwrap_or(dest);
         Self::add_path(name, dest, &mut self.libraries)
+    }
+
+    pub fn add_misc(&mut self, name: &str, dest: &str) -> Result<()> {
+        Self::add_path(name, dest, &mut self.system_files)
+    }
+
+    pub fn add_symlink(&mut self, name: &str, dest: &str) {
+        self.symlinks.insert(name.to_owned(), dest.to_owned());
     }
 
     /// Add a binary to the package and the specified path.
@@ -208,6 +254,14 @@ impl Package {
                 unpack(&root, path, content.as_ref(), true)?;
             }
         }
+        if !self.symlinks.is_empty() {
+            let root = package_dir.join("links");
+            fs::create_dir(&root)?;
+            for (src, dest) in &self.symlinks {
+                symlink(dest, root.join(src.replace('/', "-")))?;
+            }
+        }
+
         let root = package_dir.join("system").join("bin");
         fs::create_dir_all(&root)?;
         for (path, content) in &self.system_binaries {
@@ -220,8 +274,35 @@ impl Package {
             unpack(&root, path, content.as_ref(), true)?;
         }
 
+        let root = package_dir.join("system").join("misc");
+        fs::create_dir_all(&root)?;
+        for (path, content) in &self.system_files {
+            unpack(&root, path, content.as_ref(), false)?;
+        }
+
         Ok(())
     }
+}
+
+pub fn get_profile(path: &Path) -> Result<(Profile, PathBuf)> {
+    let mut profile_path = None;
+
+    for file in path.read_dir()?.filter_map(Result::ok) {
+        if let Some(extension) = file.path().extension()
+            && extension == "toml"
+        {
+            profile_path = Some(file.path());
+            break;
+        }
+    }
+
+    let Some(profile_path) = profile_path else {
+        return Err(anyhow!("Could not find package profile"));
+    };
+    Ok((
+        toml::from_str(&fs::read_to_string(&profile_path)?)?,
+        profile_path,
+    ))
 }
 
 #[allow(
@@ -231,44 +312,38 @@ impl Package {
 #[allow(clippy::too_many_lines)]
 pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<()> {
     let root_path = Path::new("/pkg");
-    let command_line: Vec<_> = env::args().skip(1).collect();
+    let cli = Args::parse();
 
     if root_path.exists() {
         info!("In package namespace. Executing packaging...");
-        if let Some(first) = command_line.first()
-            && (first == "-V" || first == "--version")
-        {
-            Cli::parse();
-            Ok(())
-        } else {
-            let mut args = run_vec(&root_path.to_string_lossy(), command_line);
-            let result = || -> Result<()> {
-                let info = timer!(
-                    "::setup",
-                    setup(
-                        root_path.to_string_lossy(),
-                        &mut args,
-                        false,
-                        Some((Package::default(), true))
-                    )
-                )?;
-                timer!("::run", run::run(info, &mut args))?;
-                Ok(())
-            }();
+        let mut args = cli
+            .passthrough
+            .map_or_else(run::Args::default, |passthrough| {
+                run_vec(&root_path.to_string_lossy(), passthrough)
+            });
 
-            if let Err(e) = &result {
-                error!("{e}");
-            }
-            result
+        let result = || -> Result<()> {
+            let info = timer!(
+                "::setup",
+                setup(
+                    root_path.to_string_lossy(),
+                    &mut args,
+                    false,
+                    Some((Package::default(), true))
+                )
+            )?;
+            timer!("::run", run::run(info, &mut args))?;
+            Ok(())
+        }();
+
+        if let Err(e) = &result {
+            error!("{e}");
         }
+        result
     } else {
         debug!("Package marker found");
         let path = CACHE_DIR.join("packages").join(name);
-
-        if let Some(arg) = command_line.first()
-            && (arg == "--refresh" || arg == "-r")
-            && path.exists()
-        {
+        if cli.refresh && path.exists() {
             fs::remove_dir_all(&path)?;
         }
 
@@ -300,16 +375,120 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             }
         }
 
+        if cli.integrate {
+            let desktop: Set<_> = path
+                .join("system/misc/usr/share/applications")
+                .read_dir()
+                .map_or_else(
+                    |_| Set::default(),
+                    |dir| dir.filter_map(Result::ok).map(|p| p.path()).collect(),
+                );
+
+            if desktop.is_empty() {
+                return Err(anyhow!("This package has no desktop files to integrate"));
+            }
+
+            let pkg_path = DATA_HOME.join("antimony").join("packages");
+            if !pkg_path.exists() {
+                fs::create_dir_all(&pkg_path)?;
+            }
+            let (mut profile, _) = get_profile(&path)?;
+            let cmd = cli
+                .passthrough
+                .map_or_else(integrate::Args::default, |passthrough| {
+                    integrate_vec(&root_path.to_string_lossy(), passthrough)
+                });
+
+            // This is all guaranteed.
+            if let Some(current) = IS_PACKAGE.as_ref()
+                && let Some(filename) = current.file_name()
+            {
+                let path = pkg_path.join(filename);
+                if cmd.remove && path.exists() {
+                    fs::remove_file(&path)?;
+                } else {
+                    fs::copy(current, &path)?;
+                }
+
+                for file in desktop {
+                    if cmd.remove
+                        && let Some(name) = file.file_name()
+                    {
+                        let path = DATA_HOME.join("applications").join(name);
+                        if path.exists() {
+                            fs::remove_file(path)?;
+                        }
+                    } else if let Some(stem) = file.file_stem() {
+                        integrate::format_desktop(
+                            &cmd,
+                            &mut profile,
+                            &stem.to_string_lossy(),
+                            &file,
+                            &path.to_string_lossy(),
+                            &DATA_HOME.join("applications"),
+                            true,
+                        )?;
+                    }
+                }
+            }
+
+            let prefix = format!("{}/system/misc/usr/share", path.display());
+            let package_icons = format!("{prefix}/icons");
+            if Path::new(&package_icons).exists() {
+                recursive_crawl(&package_icons, None)?
+                    .remove(&DirType::File)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .try_for_each(|path| -> Result<()> {
+                        let out = path.replacen(&prefix, &DATA_HOME.to_string_lossy(), 1);
+                        if cmd.remove {
+                            let path = Path::new(&out);
+                            if path.exists() {
+                                // Remove the icon
+                                fs::remove_file(path)?;
+                                let mut parent = path.parent();
+
+                                // While we have a parent
+                                while let Some(dir) = parent
+
+                                // And we haven't reached the icon root
+                                && dir != DATA_HOME.join("icons")
+
+                                // And there are files
+                                && let Ok(iter) = fs::read_dir(dir)
+                                && let contents = iter.collect::<Vec<_>>()
+
+                                // And the only entry is either the previous directory (== 1)
+                                // Or the original parent (== 0)
+                                && contents.len() <= 1
+                                {
+                                    // Remove that as well, and bubble up.
+                                    fs::remove_dir_all(dir)?;
+                                    parent = dir.parent();
+                                }
+                            }
+                        } else {
+                            if let Some(parent) = Path::new(&out).parent()
+                                && !parent.exists()
+                            {
+                                fs::create_dir_all(parent)?;
+                            }
+                            fs::copy(path, out)?;
+                        }
+                        Ok(())
+                    })?;
+            }
+
+            return Ok(());
+        }
+
         let home = CACHE_DIR.to_string_lossy();
 
         #[rustfmt::skip]
         let handle = Spawner::new("bwrap")?.mode(Mode::Real).preserve_env(true).args([
             "--new-session", "--die-with-parent",
             "--proc", "/proc",
-
             "--dev", "/dev",
-            "--dev-bind", "/dev/dri", "/dev/dri",
-
             "--bind", "/tmp", "/tmp",
             "--bind", "/sys", "/sys",
             "--bind", "/run", "/run",
@@ -317,25 +496,9 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             "--bind", "/var", "/var",
             "--bind", "/usr/share", "/usr/share",
             "--bind", "/home", "/home",
-
+            "--bind", &home, &home,
             "--bind", &path.to_string_lossy(), "/pkg",
         ]);
-
-        // Yes, we unfortunately need a special check for antimony being run under itself.
-        // If you are wondering why we would ever want to be running Antimony recursively,
-        // it's because:
-        //   1. We can. Antimony has a profile (antimony run antimony) ;)
-        //   2. Packages are an attractive install option. You don't need to download a deb,
-        //      Or configure anything. It's more limited, sure, but it's accessible.
-        if !path
-            .join("root")
-            .join("usr")
-            .join("share")
-            .join("antimony")
-            .exists()
-        {
-            handle.args_i(["--bind", &home, "/usr/share/antimony"]);
-        }
 
         let bin = path.join("system").join("bin");
         #[rustfmt::skip]
@@ -348,6 +511,7 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             "--symlink", "/usr/bin", "/usr/sbin"
         ]);
 
+        let lib = path.join("system").join("lib");
         for root in ["/usr/lib", "/usr/lib64", "/usr/lib32"] {
             let path = Path::new(&root);
             if path.exists() && !path.is_symlink() {
@@ -355,7 +519,6 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
             }
         }
 
-        let lib = path.join("system").join("lib");
         #[rustfmt::skip]
         handle.args_i([
             "--overlay-src", &lib.to_string_lossy(),

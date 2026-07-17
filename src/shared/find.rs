@@ -42,8 +42,8 @@ pub enum WildcardFilter {
 pub fn crawl_dir(dir: &str) -> Result<DirMap> {
     timer!(
         "::crawl_dir",
-        if let Some(dir) = get_cache::<DirMessage>(dir, Object::Search)? {
-            Ok(dir.map)
+        if let Some(cached) = get_cache::<DirMessage>(dir, Object::Search)? {
+            Ok(cached.map)
         } else {
             let mut crawled: DirMap = Map::default();
             let entries = fs::read_dir(dir)?

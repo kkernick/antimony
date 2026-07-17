@@ -7,6 +7,7 @@ use crate::{
     shared::{
         Map,
         env::PWD,
+        find::{DirType, recursive_crawl},
         package::{PACKAGE_MARKER, Package},
         profile::Profile,
         store,
@@ -22,7 +23,7 @@ use std::{
     fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
     os::unix::fs::PermissionsExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 #[derive(clap::Args)]
@@ -45,6 +46,7 @@ pub struct Args {
 }
 impl super::Run for Args {
     #[allow(clippy::unwrap_used)]
+    #[allow(clippy::too_many_lines)]
     fn run(self) -> Result<()> {
         store::CACHE.lock().replace(false);
         let name = if let Some(version) = self.version {
@@ -75,6 +77,39 @@ impl super::Run for Args {
         package.add_system("bash", "bash")?;
         package.add_system("ldd", "ldd")?;
         package.add_system("xdg-dbus-proxy", "xdg-dbus-proxy")?;
+
+        let integration_bundle = |id: &str, package: &mut Package| -> Result<()> {
+            recursive_crawl("/usr/share/applications", None)?
+                .remove(&DirType::File)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|p| p.contains(id))
+                .try_for_each(|p| package.add_misc(&p, &p))?;
+
+            recursive_crawl("/usr/share/icons", None)?
+                .remove(&DirType::File)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|p| p.contains(id))
+                .try_for_each(|p| package.add_misc(&p, &p))?;
+            Ok(())
+        };
+
+        let id = package
+            .profile
+            .id
+            .as_ref()
+            .map_or_else(|| self.profile.clone(), Clone::clone);
+        integration_bundle(&id, &mut package)?;
+        for (name, config) in package.profile.configuration.clone() {
+            let c_id = config
+                .id
+                .as_ref()
+                .map_or_else(|| self.profile.clone(), Clone::clone);
+            if config.id(&name) != id {
+                integration_bundle(&c_id, &mut package)?;
+            }
+        }
 
         let mut args = self
             .passthrough

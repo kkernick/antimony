@@ -11,12 +11,12 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
-    fab::lib::ROOTS,
+    fab::{find_folders, lib::ROOTS},
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         find::{DirType, recursive_crawl},
-        package::{IS_PACKAGE, Package},
+        package::{Package, get_profile},
         profile::{Profile, seccomp::SeccompPolicy},
         store::mem,
         utility,
@@ -80,26 +80,12 @@ pub fn setup<'a>(
 ) -> Result<Info> {
     let (mut profile, hash, profile_args) = if let Some((_, true)) = package {
         let path = PathBuf::from(name.into_owned());
-        let mut profile_path = None;
-
-        for file in path.read_dir()?.filter_map(Result::ok) {
-            if let Some(extension) = file.path().extension()
-                && extension == "toml"
-            {
-                profile_path = Some(file.path());
-                break;
-            }
-        }
-
-        let Some(profile_path) = profile_path else {
-            return Err(anyhow!("Could not find package profile"));
-        };
+        let (mut profile, profile_path) = get_profile(&path)?;
         name = Cow::Owned(profile_path.file_stem().map_or_else(
             || profile_path.to_string_lossy().into_owned(),
             |stem| stem.to_string_lossy().into_owned(),
         ));
 
-        let mut profile: Profile = toml::from_str(&fs::read_to_string(profile_path)?)?;
         let hash = profile.hash_str(&None);
 
         // These do not work without a system installation.
@@ -112,7 +98,7 @@ pub fn setup<'a>(
             #[rustfmt::skip]
             profile_args.extend([
                 "--overlay-src", &root.to_string_lossy(),
-                "--tmp-overlay", "/"
+                "--tmp-overlay", "/",
             ].map(String::from));
         }
 
@@ -132,32 +118,66 @@ pub fn setup<'a>(
         // Antimony will itself enable system libraries if it's running as a package (
         // So you can run external applications. It still performs SOF, but needs you
         // system libraries to do it).
-        if IS_PACKAGE.is_some()
-            || profile
-                .libraries
-                .as_ref()
-                .map_or_else(|| false, |libraries| libraries.no_sof.unwrap_or_default())
+
+        let root_libs = root.join("usr").join("lib");
+        let mut lib_roots = vec![lib_str];
+        let no_sof = profile
+            .libraries
+            .as_ref()
+            .map_or_else(|| false, |libraries| libraries.no_sof.unwrap_or_default());
+
+        if root_libs.exists() {
+            let root_str = root_libs.to_string_lossy();
+            lib_roots.push(root_str);
+        }
+
+        if no_sof {
+            lib_roots.insert(0, Cow::Borrowed("/usr/lib"));
+        }
+
+        if lib_roots.len() == 1
+            && let Some(root) = lib_roots.first()
         {
-            #[rustfmt::skip]
-            profile_args.extend([
-                "--overlay-src", "/usr/lib",
-                "--overlay-src", &lib_str,
-                "--ro-overlay", "/usr/lib"].map(String::from));
+            profile_args.extend(["--ro-bind", root, "/usr/lib"].map(String::from));
         } else {
-            profile_args.extend(["--ro-bind", &lib_str, "/usr/lib"].map(String::from));
+            for lib in lib_roots {
+                profile_args.extend(["--overlay-src", &lib].map(String::from));
+            }
+            profile_args.extend(["--ro-overlay", "/usr/lib"].map(String::from));
         }
 
         #[rustfmt::skip]
         profile_args.extend([
-            "--ro-bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
+            "--bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
             "--symlink", "/usr/bin", "/bin",
             "--symlink", "/usr/bin", "/sbin",
             "--symlink", "/usr/bin", "/usr/sbin",
             "--symlink", "/usr/lib", "/lib",
             "--symlink", "/usr/lib", "/usr/lib64",
             "--symlink", "/usr/lib64", "/lib64"
-
         ].map(String::from));
+
+        let links = path.join("links");
+        if links.exists() {
+            links.read_dir()?.filter_map(Result::ok).for_each(|dest| {
+                if let Ok(src) = dest.path().read_link() {
+                    profile_args.extend(
+                        [
+                            "--symlink",
+                            &src.to_string_lossy(),
+                            &dest.file_name().to_string_lossy().replace('-', "/"),
+                        ]
+                        .map(String::from),
+                    );
+                }
+            });
+        }
+
+        if no_sof {
+            for path in find_folders(&name) {
+                profile_args.extend(["--ro-bind", &path, &path].map(String::from));
+            }
+        }
 
         profile = profile.base(Profile::from_args(args)?)?;
         package = Some((Package::default(), true));
@@ -369,7 +389,10 @@ pub fn setup<'a>(
     timer!("::env", env::setup(&mut a))?;
     timer!("::fab", fab::setup(&mut a))?;
     timer!("::file", files::setup(&mut a))?;
-    timer!("::syscalls", syscalls::setup(&a))?;
+
+    if a.package.is_none() {
+        timer!("::syscalls", syscalls::setup(&a))?;
+    }
 
     // If we're dry-running, and are running under a single profile, flush as
     // soon as possible--as then we don't waste time waiting for the writing

@@ -349,7 +349,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__integrate)
-            opts="-r -s -a -e -h --remove --shadow --autostart --enable --config-mode --create-desktop --help"
+            opts="-r -s -a -e -o -h --remove --shadow --autostart --enable --config-mode --create-desktop --overwrite --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

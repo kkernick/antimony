@@ -575,7 +575,8 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
     for (link, dest) in parsed.symlinks {
         if let Some((package, false)) = info.package.as_mut() {
-            package.add_binary(&link, &dest)?;
+            package.add_binary(&dest, &dest)?;
+            package.add_symlink(&link, &dest);
         } else {
             if !elf_binaries.contains(&dest) {
                 info.handle.args_i(["--ro-bind", &dest, &dest]);

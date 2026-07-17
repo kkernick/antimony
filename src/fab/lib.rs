@@ -9,7 +9,7 @@
 //! even more aggressively parallelized.
 
 use crate::{
-    fab::{get_libraries, in_lib, localize_home},
+    fab::{find_folders, get_libraries, in_lib, localize_home},
     shared::{
         Set, StaticHash, ThreadSet,
         config::CONFIG_FILE,
@@ -225,29 +225,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
     // Each is sent to the library fabricator, in case they contain anything,
     // and are then mounted directly.
-    [
-        Path::new("/etc"),
-        Path::new("/usr/share"),
-        Path::new("/opt"),
-    ]
-    .into_iter()
-    .flat_map(|path| {
-        [
-            Cow::Borrowed(info.name),
-            Cow::Owned(info.name.to_title_case()),
-            Cow::Owned(info.name.to_lowercase()),
-        ]
-        .into_iter()
-        .filter_map(|name| {
-            let path = path.join(name.as_ref());
-            if path.exists() {
-                Some(path.to_string_lossy().into_owned())
-            } else {
-                None
-            }
-        })
-    })
-    .for_each(|path| {
+    for path in find_folders(info.name) {
         if no_sof {
             info.handle.args_i(["--ro-bind", &path, &path]);
         } else {
@@ -257,7 +235,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 .directories
                 .insert(path);
         }
-    });
+    }
 
     if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
         log::info!("Mounting system libraries.");

@@ -1,7 +1,6 @@
 //! Antimony uses xdg-dbus-proxy to proxy the user bus. It does this by spawning an associated process
 //! that hooks onto the sandbox's user bus socket, and mediating the calls that come in.
 
-use crate::fab::lib::ROOTS;
 use crate::shared::env::SESSION_BUS;
 use crate::shared::package::Package;
 use crate::{
@@ -97,15 +96,11 @@ pub fn run(
             "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
         ]);
 
+        // If we are running a package, just mount its system libraries.
         if is_package {
-            let root = ROOTS
-                .iter()
-                .next()
-                .map_or_else(String::default, |r| r.to_string());
-
             #[rustfmt::skip]
             proxy.args_i([
-                "--ro-bind", &root, "/usr/lib",
+                "--ro-bind", "/pkg/lib", "/usr/lib",
                 "--symlink", "/usr/lib", "/lib",
                 "--symlink", "/usr/lib", "/usr/lib64",
                 "--symlink", "/usr/lib64", "/lib64"
@@ -243,7 +238,9 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         if !args.run.dry {
             // This is *very* paranoid, but the proxy gets confined by its
             // own policy when SECCOMP is enabled.
-            if let Some(policy) = args.profile.seccomp {
+            if args.package.is_none()
+                && let Some(policy) = args.profile.seccomp
+            {
                 timer!("::seccomp", {
                     syscalls::install_filter(
                         "xdg-dbus-proxy",

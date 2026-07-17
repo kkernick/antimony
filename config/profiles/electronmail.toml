@@ -1,9 +1,5 @@
-features = ["xdg-open", "secrets", "electron", "network", "tray"]
+features = ["electron", "network", "secrets", "tray", "xdg-open"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]
 policy = "Enabled"
-lock = true
-
-[libraries]
-directories = ["/opt/ElectronMail"]

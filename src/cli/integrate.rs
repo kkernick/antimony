@@ -1,14 +1,14 @@
 //! Integrate a profile into the DE.
 
 use crate::{
-    cli,
+    cli::{self, Cli, Command},
     shared::{
         env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
         profile::Profile,
     },
 };
-use anyhow::{Context, Result};
-use clap::{ValueEnum, ValueHint};
+use anyhow::{Context, Result, anyhow};
+use clap::{Parser, ValueEnum, ValueHint};
 use heck::ToTitleCase;
 use log::{debug, info};
 use spawn::Spawner;
@@ -20,6 +20,22 @@ use std::{
     path::Path,
 };
 use user::{Mode, USER};
+
+/// Create integrate arguments from subcommand passthrough.
+#[allow(clippy::unreachable)]
+pub fn integrate_vec(profile: &str, mut passthrough: Vec<String>) -> self::Args {
+    let mut command: Vec<String> = vec!["antimony", "integrate", profile]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+    command.append(&mut passthrough);
+    let cli = Cli::parse_from(command);
+    match cli.command {
+        Command::Integrate(args) => args,
+        _ => unreachable!(),
+    }
+}
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(clap::Args, Default)]
@@ -67,6 +83,10 @@ pub struct Args {
     /// Create a desktop file if one does not exist
     #[arg(long)]
     pub create_desktop: bool,
+
+    /// Overwrite a desktop file if it already exists.
+    #[arg(short, long)]
+    pub overwrite: bool,
 }
 
 #[derive(Default, ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
@@ -99,6 +119,7 @@ impl cli::Run for Args {
             integrate(
                 &mut Profile::new(&self.profile, None, None, false)?.0,
                 &self,
+                false,
             )
         }
     }
@@ -184,22 +205,35 @@ pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
 }
 
 /// Fix the exec line to point to Antimony.
-fn fix_exec(name: &str, local: &str, line: &mut String, config: Option<&str>, cmd: &Args) {
+fn fix_exec(
+    name: &str,
+    local: &str,
+    line: &mut String,
+    config: Option<&str>,
+    cmd: &Args,
+    package: bool,
+) {
     let args = line
         .find(' ')
         .map_or(" ", |index| &line[index.checked_add(1).unwrap_or(index)..]);
 
     match config {
         Some(config) => {
-            *line = String::from(
-                format!(
-                    "{name}=antimony run {} --config {config} {args}",
-                    cmd.profile
+            *line = if package {
+                String::from(format!("{name}={local} --config {config} {args}").trim())
+            } else {
+                String::from(
+                    format!(
+                        "{name}=antimony run {} --config {config} {args}",
+                        cmd.profile
+                    )
+                    .trim(),
                 )
-                .trim(),
-            );
+            };
         }
-        None => *line = String::from(format!("{name}={local} {args}").trim()),
+        None => {
+            *line = String::from(format!("{name}={local} {args}").trim());
+        }
     }
 }
 
@@ -211,19 +245,29 @@ fn manage_configurations(
     profile: &mut Profile,
     name: &str,
     local: &str,
+    package: bool,
 ) -> Result<()> {
     match cmd.config_mode.unwrap_or_default() {
         // Integrate each into one desktop file with actions.
         ConfigMode::Action => {
             contents.push("\n".into());
             for config in profile.configuration.keys() {
-                contents.push(format!(
-                    "[Desktop Action {config}]\n\
+                if package {
+                    contents.push(format!(
+                        "[Desktop Action {config}]\n\
+                            Name=Antimony {} Configuration \n\
+                            Exec={local} --config {config} %U \n",
+                        config.to_title_case(),
+                    ));
+                } else {
+                    contents.push(format!(
+                        "[Desktop Action {config}]\n\
                         Name=Antimony {} Configuration \n\
-                        Exec=antimony run {} --config {config} %U \n",
-                    config.to_title_case(),
-                    cmd.profile
-                ));
+                        Exec=antimony run {} --config {config} -- %U \n",
+                        config.to_title_case(),
+                        cmd.profile
+                    ));
+                }
             }
         }
 
@@ -233,7 +277,7 @@ fn manage_configurations(
             for (config, mut info) in configurations {
                 if info.id.is_some() {
                     info.merge(profile.clone())?;
-                    integrate(&mut info, cmd)?;
+                    integrate(&mut info, cmd, package)?;
                 } else {
                     let config_desktop = DATA_HOME
                         .join("applications")
@@ -243,10 +287,10 @@ fn manage_configurations(
                     for line in &mut contents {
                         // Point to the symlink
                         if line.starts_with("Exec=") {
-                            fix_exec("Exec", local, line, Some(config.as_str()), cmd);
+                            fix_exec("Exec", local, line, Some(config.as_str()), cmd, package);
                         }
                         if line.starts_with("TryExec=") {
-                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd);
+                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd, package);
                         }
                         if line.starts_with("Name=") {
                             let _ = write!(line, " ({})", config.to_title_case());
@@ -282,15 +326,22 @@ fn make_shadow(desktop_file: &Path) -> Result<Vec<String>> {
 }
 
 /// Format a desktop file to point to Antimony
-fn format_desktop(
+///
+/// ## Errors
+///
+/// Permission errors creating the files.
+pub fn format_desktop(
     cmd: &Args,
     profile: &mut Profile,
     name: &str,
     desktop_file: &Path,
     local: &str,
     out_path: &Path,
+    package: bool,
 ) -> Result<()> {
-    let name = if profile.id(name) != profile.desktop(name) && cmd.shadow {
+    let name = if package {
+        name.to_owned()
+    } else if profile.id(name) != profile.desktop(name) && cmd.shadow {
         // Create a shadow copy to turn on NoDisplay
         let local_desktop = make_shadow(desktop_file)?;
 
@@ -310,11 +361,16 @@ fn format_desktop(
         profile.desktop(name).into_owned()
     };
 
+    let antimony_desktop = out_path.join(format!("{name}.desktop"));
+    if antimony_desktop.exists() && !cmd.overwrite {
+        return Err(anyhow!("Desktop file already exists!"));
+    }
+
     let desktop =
         fs::read_to_string(desktop_file).with_context(|| "Failed to read desktop file")?;
 
     // Make the new desktop file.
-    debug!("Creating desktop file");
+    info!("Creating desktop file from {}", desktop_file.display());
 
     let desktop_actions = desktop.contains("Actions=");
     let append_actions = |line: &mut String| {
@@ -329,7 +385,7 @@ fn format_desktop(
     for line in &mut contents {
         // Point to the symlink
         if line.starts_with("Exec=") {
-            fix_exec("Exec", local, line, None, cmd);
+            fix_exec("Exec", local, line, None, cmd, package);
             if !desktop_actions {
                 line.push_str("\nActions=");
                 append_actions(line);
@@ -353,21 +409,26 @@ fn format_desktop(
         }
     }
 
-    contents.push(format!(
-        "\n[Desktop Action native]\n\
+    if !package {
+        contents.push(format!(
+            "\n[Desktop Action native]\n\
             Name=Run {} Natively\n\
             Exec={}",
-        cmd.profile.to_title_case(),
-        profile.app_path(&cmd.profile)
-    ));
+            cmd.profile.to_title_case(),
+            profile.app_path(&cmd.profile)
+        ));
+    }
 
     // Add configurations.
-    manage_configurations(&mut contents, cmd, profile, &name, local)?;
+    manage_configurations(&mut contents, cmd, profile, &name, local, package)?;
 
-    let antimony_desktop = out_path.join(format!("{name}.desktop"));
-    if let Some(parent) = antimony_desktop.parent() {
+    if let Some(parent) = antimony_desktop.parent()
+        && !parent.exists()
+    {
         fs::create_dir_all(parent)?;
     }
+
+    info!("Writing to {}", antimony_desktop.display());
 
     write!(
         File::create(antimony_desktop).with_context(|| "Failed to create new desktop file")?,
@@ -383,7 +444,7 @@ fn format_desktop(
 /// ## Errors
 /// If antimony is improperly set up, or if it has inadequate permission to create the files.
 #[allow(clippy::too_many_lines)]
-pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
+pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()> {
     user::set(user::Mode::Real)?;
 
     // Collect environment.
@@ -412,7 +473,6 @@ pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
         .join("applications")
         .join(format!("{}.desktop", profile.desktop(name)));
     if desktop_file.exists() {
-        info!("Overriding Desktop File");
         format_desktop(
             cmd,
             profile,
@@ -420,6 +480,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
             &desktop_file,
             &local,
             &DATA_HOME.join("applications"),
+            package,
         )?;
     } else if cmd.create_desktop {
         let mut contents: Vec<String> = vec![
@@ -455,7 +516,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args) -> Result<()> {
         {
             fs::create_dir_all(parent)?;
         }
-        manage_configurations(&mut contents, cmd, profile, name, &local)?;
+        manage_configurations(&mut contents, cmd, profile, name, &local, package)?;
         fs::write(out, contents.join("\n"))?;
     }
 

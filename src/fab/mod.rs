@@ -23,6 +23,7 @@ use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
+use heck::ToTitleCase;
 use log::debug;
 use path_clean::clean;
 use rayon::prelude::*;
@@ -66,6 +67,42 @@ static _L1: CacheStatic<Object, ThreadMap<String, Vec<u8>>> = LazyLock::new(Dash
 static L1: LazyLock<cache::Cache<Object, ThreadMap<String, Vec<u8>>>> =
     LazyLock::new(|| cache::Cache::new(&_L1));
 
+/// Discover application folders across the filesystem.
+#[must_use]
+pub fn find_folders(name: &str) -> Set<String> {
+    // Each is sent to the library fabricator, in case they contain anything,
+    // and are then mounted directly.
+    [
+        Path::new("/etc"),
+        Path::new("/usr/share"),
+        Path::new("/opt"),
+    ]
+    .into_iter()
+    .flat_map(|path| {
+        [
+            Cow::Borrowed(name),
+            Cow::Owned(name.to_title_case()),
+            Cow::Owned(name.to_lowercase()),
+        ]
+        .into_iter()
+        .filter_map(|name| {
+            let path = path.join(name.as_ref());
+            if path.exists() {
+                Some(path.to_string_lossy().into_owned())
+            } else {
+                None
+            }
+        })
+    })
+    .collect()
+}
+
+#[inline]
+#[must_use]
+pub fn hash(i: &str) -> String {
+    format!("{}", ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(i))
+}
+
 /// Get cached definitions.
 #[inline]
 pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
@@ -75,7 +112,7 @@ pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<
         {
             let content = T::decode(bytes.as_slice())?;
             Ok(Some(content))
-        } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&name.replace('/', "-"), object) {
+        } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash(name), object) {
             let content = T::decode(bytes.as_slice())?;
             L1.insert(object, ThreadMap::default())
                 .insert(name.to_owned(), bytes);
@@ -91,9 +128,7 @@ pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<
 pub fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
     timer!("::write_cache", {
         let bytes = content.encode_to_bytes();
-        CACHE_STORE
-            .borrow()
-            .dump(&name.replace('/', "-"), object, &bytes)?;
+        CACHE_STORE.borrow().dump(&hash(name), object, &bytes)?;
         Ok(content)
     })
 }

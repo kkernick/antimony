@@ -5,6 +5,7 @@ does not constitute defense-in-depth; this is used solely for packaging.
 features = ["bin", "lib", "network"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
+binaries = ["xdg-dbus-proxy", "ldd", "bwrap"]
 devices = ["/dev"]
 namespaces = ["All"]
 preserve_env = true
@@ -14,7 +15,7 @@ system_bus = true
 user_bus = true
 
 [files.platform]
-rw = ["/home", "/usr/share", "/var", "/etc", "/run", "/tmp"]
+rw = ["/home", "/usr/share", "/tmp", "/sys", "/etc", "/run", "/var"]
 
 [files.resources]
 rw = ["/usr/share/antimony"]

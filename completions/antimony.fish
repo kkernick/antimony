@@ -126,6 +126,7 @@ complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s s -l sha
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s a -l autostart -d 'Setup a user systemd service to run the sandbox on startup. Antimony has a race condition with autostart because the session bus may not be available when it starts. This impacts setting a sandbox to autostart via your DE, or /etc/xdg/autostart configurations. Antimony fixes this by installing the sandbox as a user-level service that waits for the bus before launching'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s e -l enable -d 'If autostart, enable the service immediately'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -l create-desktop -d 'Create a desktop file if one does not exist'
+complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s o -l overwrite -d 'Overwrite a desktop file if it already exists'
 complete -c antimony -n "__fish_antimony_using_subcommand integrate" -s h -l help -d 'Print help (see more with \'--help\')'
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -s f -l feature -d 'Target a feature, rather than a profile'
 complete -c antimony -n "__fish_antimony_using_subcommand remove" -s y -l yes -d 'Do not ask for confirmation'
