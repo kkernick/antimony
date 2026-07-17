@@ -86,6 +86,7 @@ c-group\:"Allow the sandbox to be managed/manage the system C-Groups"))' \
 '--disable-ipc[Disable all IPC. This overrules all other IPC settings]' \
 '--system-bus[Provide the system bus]' \
 '--user-bus[Provide the user bus. xdg-dbus-proxy is not run]' \
+'--harden-ipc[Harden the proxy sandbox]' \
 '--no-sof[Disable the SOF and mount the system libraries directly]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

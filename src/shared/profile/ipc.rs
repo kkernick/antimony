@@ -18,6 +18,14 @@ pub struct Ipc {
     /// Provide the user bus directly. xdg-dbus-proxy is not run. Defaults to false.
     pub user_bus: Option<bool>,
 
+    /// Apply SOF and SECCOMP rules to the proxy sandbox. By default, the proxy
+    /// is exempt from such security measures as there is some implicit trust
+    /// on the `xdg-dbus-proxy` and separation between its sandbox and the profile.
+    ///
+    /// However, you can lock down the proxy's sandbox should your threat model deem
+    /// it necessary/beneficial.
+    pub harden: Option<bool>,
+
     /// Freedesktop portals.
     #[serde(skip_serializing_if = "Set::is_empty")]
     pub portals: Set<Portal>,
@@ -50,6 +58,9 @@ impl Ipc {
         }
         if self.user_bus.is_none() {
             self.user_bus = ipc.user_bus;
+        }
+        if self.harden.is_none() {
+            self.harden = ipc.harden;
         }
 
         self.portals.extend(ipc.portals);
@@ -87,6 +98,9 @@ impl Ipc {
         }
         if args.disable_ipc {
             ipc.get_or_insert_default().disable = Some(true);
+        }
+        if args.harden_ipc {
+            ipc.get_or_insert_default().harden = Some(true);
         }
 
         ipc

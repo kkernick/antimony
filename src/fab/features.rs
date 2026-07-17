@@ -323,6 +323,17 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
             Some(false) => Some(false),
             None => ipc.disable,
         };
+        p_ipc.harden = match p_ipc.harden {
+            Some(true) => {
+                if ipc.harden.is_some() {
+                    ipc.harden
+                } else {
+                    Some(true)
+                }
+            }
+            Some(false) => Some(false),
+            None => ipc.harden,
+        };
 
         let format_all = |ipc_list: Set<String>| -> Set<String> {
             ipc_list

@@ -45,6 +45,10 @@ pub fn run(
     let sof = cache.join("sof");
     let app_dir = RUNTIME_DIR.join("app").join(id);
     let proxy = instance.full().join("proxy");
+    let harden = profile
+        .ipc
+        .as_ref()
+        .map_or_else(|| false, |ipc| ipc.harden.unwrap_or_default());
 
     timer!("::directory_setup", {
         if !proxy.exists() {
@@ -63,7 +67,7 @@ pub fn run(
     // have the means to do this, so might as well. The real
     // paranoia is below.
     let is_package = package.as_ref().map_or_else(|| false, |(_, b)| *b);
-    if !is_package && !sof.exists() {
+    if harden && !is_package && !sof.exists() {
         as_effective!(Result<()>, {
             fs::create_dir_all(&sof)?;
             let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
@@ -105,9 +109,11 @@ pub fn run(
                 "--symlink", "/usr/lib", "/usr/lib64",
                 "--symlink", "/usr/lib64", "/lib64"
             ]);
-        } else {
+        } else if harden {
             let sof_str = sof.to_string_lossy();
             mount_roots(&sof_str, &proxy)?;
+        } else {
+            mount_roots("", &proxy)?;
         }
         proxy
     });
@@ -236,9 +242,8 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         )?;
 
         if !args.run.dry {
-            // This is *very* paranoid, but the proxy gets confined by its
-            // own policy when SECCOMP is enabled.
-            if args.package.is_none()
+            if ipc.harden.unwrap_or_default()
+                && args.package.is_none()
                 && let Some(policy) = args.profile.seccomp
             {
                 timer!("::seccomp", {

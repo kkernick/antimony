@@ -136,6 +136,10 @@ pub struct Args {
     #[arg(long)]
     pub user_bus: bool,
 
+    /// Harden the proxy sandbox.
+    #[arg(long)]
+    pub harden_ipc: bool,
+
     /// Override the file passthrough mode.
     #[arg(long)]
     pub file_passthrough: Option<FileMode>,
