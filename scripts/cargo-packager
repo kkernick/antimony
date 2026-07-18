@@ -16,3 +16,6 @@ fpm -t pacman --depends libseccomp --depends sqlite --depends dbus --version $VE
 fpm -t deb \
   --depends libseccomp2 --depends sqlite3 --depends libdbus-1-3 --version $VERSION \
   ./config/config.d/debian.toml=/etc/antimony.d/debian.toml
+
+fpm -t rpm --depends libseccomp --depends sqlite --depends dbus-devel --version $VERSION \
+  ./config/config.d/fedora.toml=/etc/antimony.d/fedora.toml

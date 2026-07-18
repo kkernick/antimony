@@ -56,6 +56,7 @@ If you want to install Antimony without the help of a package manager, just run 
 You’ll need the following dependencies to run the package script:
 * `fpm` (Recommended through `gem install fpm`)
 * `libarchive` (`libarchive-tools` for Debian)
+* `rpm-build`/`rpm` (To create `rpm` packages)
 
 If you want to install Antimony manually, there are some considerations you take into account:
 1. Antimony expects to be run as SetUID underneath its own dedicated system account. You can create one using `useradd -r antimony`. This account should only have access to `/usr/share/antimony`, alongside ownership of the `antimony` binary. You can set the correct permissions on the binary via:

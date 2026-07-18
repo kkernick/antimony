@@ -27,18 +27,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libseccomp-dev sqlite3 libsqlite3-dev ruby-dev libarchive-tools pkg-config libdbus-1-dev gcc bubblewrap xdg-dbus-proxy
           sudo gem install fpm
-
       - name: Extract version number
         id: extract_version
         run: |
           VERSION=$(echo $GITHUB_REF | sed 's|refs/tags/||')
           echo "Version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Run package script
         run: |
           ./scripts/cargo-packager ${{ steps.extract_version.outputs.version }}
-
       - name: Release
         uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
@@ -46,3 +43,4 @@ jobs:
           files: |
             antimony-sandbox-${{ steps.extract_version.outputs.version }}-1-x86_64.pkg.tar.zst
             antimony-sandbox_${{ steps.extract_version.outputs.version }}-1_amd64.deb
+            antimony-sandbox-${{ steps.extract_version.outputs.version }}-1.x86_64.rpm

@@ -114,11 +114,6 @@ pub fn setup<'a>(
         //
         // Instead, the outer namespace simply overlays a bunch of hard-coded
         // roots to /usr/lib, which we then overlay below the package libraries.
-        //
-        // Antimony will itself enable system libraries if it's running as a package (
-        // So you can run external applications. It still performs SOF, but needs you
-        // system libraries to do it).
-
         let root_libs = root.join("usr").join("lib");
         let mut lib_roots = vec![lib_str];
         let no_sof = profile
@@ -146,9 +141,19 @@ pub fn setup<'a>(
             profile_args.extend(["--ro-overlay", "/usr/lib"].map(String::from));
         }
 
+        if profile.binaries.contains("/usr/bin") {
+            #[rustfmt::skip]
+            profile_args.extend([
+                "--overlay-src", "/usr/bin",
+                "--overlay-src", &bin_str,
+                "--ro-overlay", "/usr/bin",
+            ].map(String::from));
+        } else {
+            profile_args.extend(["--ro-bind", &bin_str, "/usr/bin"].map(String::from));
+        }
+
         #[rustfmt::skip]
         profile_args.extend([
-            "--bind", if profile.binaries.contains("/usr/bin") {"/usr/bin"} else {&bin_str}, "/usr/bin",
             "--symlink", "/usr/bin", "/bin",
             "--symlink", "/usr/bin", "/sbin",
             "--symlink", "/usr/bin", "/usr/sbin",
