@@ -9,4 +9,3 @@ vendor
 .cargo
 *.sb
 .harper-dictionary.txt
-generated/*.gz

@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libseccomp-dev sqlite3 libsqlite3-dev ruby-dev libarchive-tools pkg-config libdbus-1-dev gcc bubblewrap xdg-dbus-proxy
+          sudo apt-get install -y libseccomp-dev sqlite3 libsqlite3-dev ruby-dev libarchive-tools pkg-config libdbus-1-dev gcc bubblewrap xdg-dbus-proxy gzip
           sudo gem install fpm
       - name: Extract version number
         id: extract_version
