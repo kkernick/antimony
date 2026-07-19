@@ -5,6 +5,7 @@ use crate::shared::{
     privileged,
     profile::{self, Profile},
     store::{self, Object},
+    syscalls,
 };
 use anyhow::anyhow;
 use clap::ValueHint;
@@ -24,9 +25,22 @@ pub struct Args {
     /// Target the system set rather than the user set.
     #[arg(short, long)]
     pub system: bool,
+
+    /// Import data into the SECCOMP database. Overrides --feature and --system.
+    #[arg(long)]
+    pub seccomp: bool,
 }
 impl super::Run for Args {
     fn run(self) -> anyhow::Result<()> {
+        if self.seccomp {
+            if privileged()? {
+                return syscalls::merge_database(Path::new(&self.name));
+            }
+            return Err(anyhow::anyhow!(
+                "Modifying the SECCOMP database is a privileged operation"
+            ));
+        }
+
         let (table, kind) = if self.feature {
             (Object::Feature, "feature")
         } else {

@@ -1,9 +1,8 @@
-#![allow(clippy::missing_errors_doc)]
 //! Shared functionality between the Fabricators. This contains the brunt of the library fabricator's logic.
+#![allow(clippy::missing_errors_doc)]
 
 pub mod bin;
 pub mod dev;
-pub mod features;
 pub mod files;
 pub mod lib;
 pub mod ns;

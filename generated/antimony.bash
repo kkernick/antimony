@@ -46,9 +46,6 @@ _antimony() {
             antimony,run)
                 cmd="antimony__subcmd__run"
                 ;;
-            antimony,seccomp)
-                cmd="antimony__subcmd__seccomp"
-                ;;
             antimony__subcmd__help,edit)
                 cmd="antimony__subcmd__help__subcmd__edit"
                 ;;
@@ -79,9 +76,6 @@ _antimony() {
             antimony__subcmd__help,run)
                 cmd="antimony__subcmd__help__subcmd__run"
                 ;;
-            antimony__subcmd__help,seccomp)
-                cmd="antimony__subcmd__help__subcmd__seccomp"
-                ;;
             *)
                 ;;
         esac
@@ -89,7 +83,7 @@ _antimony() {
 
     case "${cmd}" in
         antimony)
-            opts="-h -V --help --version run edit refresh integrate remove seccomp export import info package help"
+            opts="-h -V --help --version run edit refresh integrate remove export import info package help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -117,7 +111,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__export)
-            opts="-n -d -f -s -h --name --dest --feature --system --help"
+            opts="-n -d -f -s -h --name --dest --feature --system --seccomp --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -153,7 +147,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__help)
-            opts="run edit refresh integrate remove seccomp export import info package help"
+            opts="run edit refresh integrate remove export import info package help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -306,22 +300,8 @@ _antimony() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-        antimony__subcmd__help__subcmd__seccomp)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
         antimony__subcmd__import)
-            opts="-f -s -h --feature --system --help"
+            opts="-f -s -h --feature --system --seccomp --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -335,7 +315,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__info)
-            opts="-f -h --feature --diff --help"
+            opts="-f -s -h --feature --diff --system --seccomp --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -403,7 +383,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__refresh)
-            opts="-d -h --dry --hard --help"
+            opts="-d -s -h --dry --hard --seccomp --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -417,7 +397,7 @@ _antimony() {
             return 0
             ;;
         antimony__subcmd__remove)
-            opts="-f -y -h --feature --yes --help"
+            opts="-f -y -h --feature --yes --seccomp --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -600,20 +580,6 @@ _antimony() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        antimony__subcmd__seccomp)
-            opts="-h --help optimize remove export merge clean"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
                 *)
                     COMPREPLY=()
                     ;;

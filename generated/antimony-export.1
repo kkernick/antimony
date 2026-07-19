@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-export 1  "export " 
+.SH NAME
+antimony\-export \- Export user profiles
+.SH SYNOPSIS
+\fBantimony export\fR [\fB\-n\fR|\fB\-\-name\fR] [\fB\-d\fR|\fB\-\-dest\fR] [\fB\-f\fR|\fB\-\-feature\fR] [\fB\-s\fR|\fB\-\-system\fR] [\fB\-\-seccomp\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Export user profiles
+.SH OPTIONS
+.TP
+\fB\-n\fR, \fB\-\-name\fR \fI<NAME>\fR
+The name of the profile/feature to export. If absent, export all user\-profiles/features
+.TP
+\fB\-d\fR, \fB\-\-dest\fR \fI<DEST>\fR
+Where to export to. Defaults to current directory
+.TP
+\fB\-f\fR, \fB\-\-feature\fR
+Target the feature set rather than the profile set
+.TP
+\fB\-s\fR, \fB\-\-system\fR
+Target the system set rather than the user set
+.TP
+\fB\-\-seccomp\fR
+Export the SECCOMP database. Overrides \-\-feature and \-\-system
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

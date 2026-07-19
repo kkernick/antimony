@@ -26,7 +26,7 @@ use std::{
     os::unix::fs::MetadataExt,
     path::PathBuf,
 };
-use user::{USER};
+use user::USER;
 
 #[derive(Default, Copy, Clone)]
 pub struct StaticHash;

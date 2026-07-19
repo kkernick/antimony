@@ -9,7 +9,6 @@ pub mod package;
 pub mod refresh;
 pub mod remove;
 pub mod run;
-pub mod seccomp;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -32,7 +31,7 @@ pub fn run_vec(profile: &str, mut passthrough: Vec<String>) -> run::Args {
 }
 
 #[derive(Parser, Default)]
-#[command(name = "Antimony")]
+#[command(name = "antimony")]
 #[command(version)]
 #[command(about = "Sandbox Applications")]
 #[command(before_help = r#"⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -71,9 +70,6 @@ pub enum Command {
 
     /// Remove features/profiles, or reset user definitions to the default.
     Remove(remove::Args),
-
-    /// Perform operations on the SECCOMP Database.
-    Seccomp(seccomp::Args),
 
     /// Export user profiles.
     Export(export::Args),

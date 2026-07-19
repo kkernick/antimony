@@ -4,6 +4,7 @@ use crate::{
     cli,
     shared::{
         Set,
+        env::AT_HOME,
         feature::Feature,
         privileged,
         profile::Profile,
@@ -13,7 +14,9 @@ use crate::{
 use anyhow::Result;
 use clap::ValueHint;
 use dialoguer::Confirm;
-use log::debug;
+use log::{debug, info};
+use std::fs;
+use user::as_effective;
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -28,9 +31,25 @@ pub struct Args {
     /// Do not ask for confirmation.
     #[arg(short, long)]
     pub yes: bool,
+
+    /// Remove the SECCOMP Database. Overrides --feature
+    #[arg(long)]
+    pub seccomp: bool,
 }
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
+        if self.seccomp {
+            if privileged()? {
+                as_effective!({ fs::remove_dir_all(AT_HOME.join("seccomp")) })??;
+                info!("Deleted");
+                return Ok(());
+            }
+
+            return Err(anyhow::anyhow!(
+                "Modifying the SECCOMP database is a privileged operation"
+            ));
+        }
+
         let (table, kind) = if self.feature {
             (Object::Feature, "feature")
         } else {

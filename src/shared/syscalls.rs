@@ -2,7 +2,13 @@
 //! The bulk of the SECCOMP Logic.
 
 use crate::{
-    shared::{Set, ThreadMap, env::AT_HOME, profile::seccomp::SeccompPolicy},
+    shared::{
+        Set, ThreadMap,
+        env::{AT_HOME, DATA_HOME},
+        find::{DirType, recursive_crawl},
+        profile::seccomp::SeccompPolicy,
+        store::{Object, SYSTEM_STORE, USER_STORE},
+    },
     timer,
 };
 use inotify::{Inotify, WatchMask};
@@ -12,7 +18,7 @@ use nix::{
     sys::socket::{self, ControlMessage, MsgFlags},
 };
 use rayon::prelude::*;
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, Transaction, params};
 use seccomp::{self, action::Action, attribute::Attribute, filter::Filter, syscall::Syscall};
 use std::{
     borrow::Cow,
@@ -24,14 +30,14 @@ use std::{
         fd::{AsRawFd, IntoRawFd, OwnedFd},
         unix::net::UnixStream,
     },
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::LazyLock,
     thread::sleep,
     time::Duration,
 };
 use temp::Temp;
 use thiserror::Error;
-use user::as_effective;
+use user::{Mode, as_effective};
 
 /// Errors relating to SECCOMP policy generation.
 #[derive(Debug, Error)]
@@ -464,4 +470,130 @@ pub fn new(
         filter.add_rule(Action::Allow, Syscall::from_number(syscall))?;
     }
     Ok(Some((filter, fd, audit)))
+}
+
+pub fn clean_database() -> anyhow::Result<()> {
+    CONNECTION.with_borrow_mut(|conn| {
+    let tx = conn.transaction()?;
+
+    || -> anyhow::Result<()> {
+        let mut stmt = tx.prepare("SELECT id, name FROM profiles")?;
+        let profiles = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        for profile in profiles {
+            let (id, name) = profile?;
+            if name == "xdg-dbus-proxy" {
+                continue;
+            }
+
+            if !SYSTEM_STORE.borrow().exists(&name, Object::Profile) && !USER_STORE.borrow().exists(&name, Object::Profile)
+            {
+                println!("Removing missing profile: {name}");
+                tx.execute("DELETE FROM profiles WHERE id = ?", params![id])?;
+            }
+        }
+        Ok(())
+    }()?;
+
+    || -> anyhow::Result<()> {
+        tx.execute("DELETE FROM profile_binaries WHERE profile_id NOT IN (SELECT id FROM profiles);", [])?;
+        Ok(())
+    }()?;
+
+    // Remove missing binaries
+    || -> anyhow::Result<()> {
+        let mut stmt = tx.prepare("SELECT id, path FROM binaries")?;
+        let binaries = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        for binary in binaries {
+            let (id, path) = binary?;
+            let remove = if path.starts_with("/home/antimony") {
+                let name = if let Some(i) = path.rfind('/')
+                    && let Some(i) = i.checked_add(1)
+                {
+                    &path[i..]
+                } else {
+                    &path
+                };
+
+                let mut crawled =
+                    recursive_crawl(&DATA_HOME.join("antimony").to_string_lossy(), None)?;
+                crawled
+                    .remove(&DirType::File)
+                    .is_some_and(|files| files.contains(name))
+            } else if path.ends_with("flatpak-spawn") {
+                false
+            } else {
+                !Path::new(&path).exists()
+            };
+
+            if remove {
+                println!("Removing missing binary: {path}");
+                tx.execute("DELETE FROM binaries WHERE id = ?", params![id])?;
+            }
+        }
+        Ok(())
+    }()?;
+
+    // Remove Orphans
+    || -> anyhow::Result<()> {
+        tx.execute("DELETE FROM binaries WHERE id NOT IN (SELECT DISTINCT binary_id FROM profile_binaries);", [])?;
+        Ok(())
+    }()?;
+
+    tx.commit()?;
+    Ok(())
+    })
+}
+
+pub fn merge_database(db: &Path) -> anyhow::Result<()> {
+    as_effective!({
+        let temp = temp::Builder::new()
+            .within(AT_HOME.join("seccomp"))
+            .owner(Mode::Effective)
+            .create::<temp::File>()?;
+        fs::copy(db, temp.full())?;
+
+        CONNECTION.with_borrow_mut(|conn| {
+            let tx = conn.transaction()?;
+            tx.execute(
+                &format!("ATTACH DATABASE '{}' AS other", temp.full().display()),
+                [],
+            )?;
+            tx.execute_batch(
+                "
+        INSERT OR IGNORE INTO binaries (path)
+        SELECT path FROM other.binaries;
+
+        INSERT OR IGNORE INTO syscalls (name)
+        SELECT name FROM other.syscalls;
+
+        INSERT OR IGNORE INTO profiles (name)
+        SELECT name FROM other.profiles;
+
+        INSERT OR IGNORE INTO binary_syscalls (binary_id, syscall_id)
+        SELECT b1.id, s1.id
+        FROM other.binary_syscalls bs
+        JOIN other.binaries b2 ON bs.binary_id = b2.id
+        JOIN binaries b1 ON b1.path = b2.path
+        JOIN other.syscalls s2 ON bs.syscall_id = s2.id
+        JOIN syscalls s1 ON s1.name = s2.name;
+
+        INSERT OR IGNORE INTO profile_binaries (profile_id, binary_id)
+        SELECT p1.id, b1.id
+        FROM other.profile_binaries pb
+        JOIN other.profiles p2 ON pb.profile_id = p2.id
+        JOIN profiles p1 ON p1.name = p2.name
+        JOIN other.binaries b2 ON pb.binary_id = b2.id
+        JOIN binaries b1 ON b1.path = b2.path;
+        ",
+            )?;
+            tx.commit()?;
+            Ok(())
+        })
+    })?
 }

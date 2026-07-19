@@ -16,12 +16,13 @@ pub mod ns;
 pub mod seccomp;
 
 use crate::{
-    cli, fab,
+    cli,
     shared::{
         Map, Set,
         config::CONFIG_FILE,
         edit,
         env::HOME,
+        feature,
         profile::lib::Libraries,
         store::{self, CACHE_STORE, Object, USER_STORE},
     },
@@ -68,7 +69,7 @@ pub enum Error {
 
     /// Errors incorporating features.
     #[error("Feature error: {0}")]
-    Feature(#[from] crate::fab::features::Error),
+    Feature(#[from] feature::Error),
 
     #[error("Profile Store Error: {0}")]
     Store(#[from] store::Error),
@@ -400,7 +401,7 @@ impl Profile {
         }
 
         debug!("Fabricating features");
-        fab::features::fabricate(&mut profile, name)?;
+        feature::fabricate(&mut profile, name)?;
         CACHE_STORE
             .borrow()
             .dump(&hash, Object::Profile, &Self::encode_to_bytes(&profile))?;

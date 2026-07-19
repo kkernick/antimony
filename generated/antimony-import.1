@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-import 1  "import " 
+.SH NAME
+antimony\-import \- Import user profiles
+.SH SYNOPSIS
+\fBantimony import\fR [\fB\-f\fR|\fB\-\-feature\fR] [\fB\-s\fR|\fB\-\-system\fR] [\fB\-\-seccomp\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fINAME\fR> 
+.SH DESCRIPTION
+Import user profiles
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-feature\fR
+Target the feature set rather than the profile set
+.TP
+\fB\-s\fR, \fB\-\-system\fR
+Target the system set rather than the user set
+.TP
+\fB\-\-seccomp\fR
+Import data into the SECCOMP database. Overrides \-\-feature and \-\-system
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fINAME\fR>
+The path of the object. Can also be a directory, which will import all files within

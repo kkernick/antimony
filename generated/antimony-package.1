@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-package 1  "package " 
+.SH NAME
+antimony\-package \- Package a profile into a self\-contained executable
+.SH SYNOPSIS
+\fBantimony package\fR [\fB\-d\fR|\fB\-\-dest\fR] [\fB\-v\fR|\fB\-\-version\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPROFILE\fR> [\fIPASSTHROUGH\fR] 
+.SH DESCRIPTION
+Package a profile into a self\-contained executable
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-dest\fR \fI<DEST>\fR
+Where to export to. Defaults to current directory
+.TP
+\fB\-v\fR, \fB\-\-version\fR \fI<VERSION>\fR
+An optional version string for the package
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIPROFILE\fR>
+The name of the profile/feature to export. If absent, export all user\-profiles/features
+.TP
+[\fIPASSTHROUGH\fR]
+Run arguments

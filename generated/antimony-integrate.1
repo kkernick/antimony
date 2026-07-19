@@ -1,0 +1,49 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-integrate 1  "integrate " 
+.SH NAME
+antimony\-integrate \- Integrate a profile into the user environment
+.SH SYNOPSIS
+\fBantimony integrate\fR [\fB\-r\fR|\fB\-\-remove\fR] [\fB\-s\fR|\fB\-\-shadow\fR] [\fB\-a\fR|\fB\-\-autostart\fR] [\fB\-e\fR|\fB\-\-enable\fR] [\fB\-\-config\-mode\fR] [\fB\-\-create\-desktop\fR] [\fB\-o\fR|\fB\-\-overwrite\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPROFILE\fR> 
+.SH DESCRIPTION
+Integrate a profile into the user environment
+.SH OPTIONS
+.TP
+\fB\-r\fR, \fB\-\-remove\fR
+Undo integration for the profile
+.TP
+\fB\-s\fR, \fB\-\-shadow\fR
+Some desktop environments, particularly Gnome, source their icons via the Flatpak ID (The Profile ID) in this case. This value must be in reverse DNS format, and Antimony automatically prepends "antimony." on those that don\*(Aqt. This presents an incongruity between ID and desktop that requires a shadow that hides the original. If an integrated profile lacks an icon, you may need to use this option
+.TP
+\fB\-a\fR, \fB\-\-autostart\fR
+Setup a user systemd service to run the sandbox on startup. Antimony has a race condition with autostart because the session bus may not be available when it starts. This impacts setting a sandbox to autostart via your DE, or /etc/xdg/autostart configurations. Antimony fixes this by installing the sandbox as a user\-level service that waits for the bus before launching.
+
+Because this behavior differs from how /etc/xdg/autostart usually works, you need to explicitly opt\-in to autostart, even if the program is set to autostart by the system. Antimony will stub the usual autostart mechanism and use a service.
+.TP
+\fB\-e\fR, \fB\-\-enable\fR
+If autostart, enable the service immediately
+.TP
+\fB\-\-config\-mode\fR \fI<CONFIG_MODE>\fR
+How to integrate configurations
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+action: Integrate each configuration as a separate desktop action within the main Desktop File
+.IP \(bu 2
+file: Separate each configuration into its own Desktop File. This can be useful, say, for setting configurations as default application handlers
+.RE
+.TP
+\fB\-\-create\-desktop\fR
+Create a desktop file if one does not exist
+.TP
+\fB\-o\fR, \fB\-\-overwrite\fR
+Overwrite a desktop file if it already exists
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIPROFILE\fR>
+The name of the profile

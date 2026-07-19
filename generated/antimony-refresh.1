@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-refresh 1  "refresh " 
+.SH NAME
+antimony\-refresh \- Refresh caches
+.SH SYNOPSIS
+\fBantimony refresh\fR [\fB\-d\fR|\fB\-\-dry\fR] [\fB\-\-hard\fR] [\fB\-s\fR|\fB\-\-seccomp\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIPROFILE\fR] [\fIPASSTHROUGH\fR] 
+.SH DESCRIPTION
+Refresh caches
+.SH OPTIONS
+.TP
+\fB\-d\fR, \fB\-\-dry\fR
+Just delete the cache, don\*(Aqt repopulate
+.TP
+\fB\-\-hard\fR
+Delete the entire Cache directory. Will break any instance currently running!
+.TP
+\fB\-s\fR, \fB\-\-seccomp\fR
+Refresh the SECCOMP database by removing nonexistent binaries and optimizing. Overrides PROFILE, \-\-hard and \-\-dry
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIPROFILE\fR]
+Run a profile, but refresh its contents. If not defined, all profiles are refreshed, but nothing is run
+.TP
+[\fIPASSTHROUGH\fR]
+Run arguments

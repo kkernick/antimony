@@ -1,0 +1,28 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-info 1  "info " 
+.SH NAME
+antimony\-info \- Get information about profiles/features
+.SH SYNOPSIS
+\fBantimony info\fR [\fB\-f\fR|\fB\-\-feature\fR] [\fB\-\-diff\fR] [\fB\-s\fR|\fB\-\-system\fR] [\fB\-\-seccomp\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fINAME\fR] 
+.SH DESCRIPTION
+Get information about profiles/features
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-feature\fR
+Target the feature set rather than the profile set
+.TP
+\fB\-\-diff\fR
+Display the difference between system and user profiles
+.TP
+\fB\-s\fR, \fB\-\-system\fR
+Target the system set rather than the user set
+.TP
+\fB\-\-seccomp\fR
+Display SECCOMP data. Overrides \-\-feature, \-\-system, and \-\-diff
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fINAME\fR]
+The object to display information on. Default to everything

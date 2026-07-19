@@ -1,3 +1,5 @@
+//! Construct namespaces.
+
 use crate::shared::profile::ns::Namespace;
 use spawn::SpawnError;
 

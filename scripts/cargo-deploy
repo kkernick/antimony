@@ -88,10 +88,15 @@ sudo chmod 700 /usr/share/antimony/lockdown
 sudo chown antimony-lockdown:antimony-lockdown /usr/share/antimony/utilities/antimony-lockdown
 sudo chmod ug+s /usr/share/antimony/utilities/antimony-lockdown
 
-"${DIR}/antimony_completions"
-sudo cp $ROOT/completions/antimony.bash /usr/share/bash-completion/completions
-sudo cp $ROOT/completions/antimony.fish /usr/share/fish/vendor_completions.d
-sudo cp $ROOT/completions/_antimony /usr/share/zsh/site-functions
+"${DIR}/antimony_generator"
+sudo cp $ROOT/generated/antimony.bash /usr/share/bash-completion/completions
+sudo cp $ROOT/generated/antimony.fish /usr/share/fish/vendor_completions.d
+sudo cp $ROOT/generated/_antimony /usr/share/zsh/site-functions
+
+for MAN in $(ls $ROOT/generated/*.1); do
+    yes | gzip --keep --verbose --suffix=.gz $MAN
+    sudo cp --verbose $MAN.gz /usr/share/man/man1
+done
 
 sudo cp $ROOT/install/antimony /etc/apparmor.d/antimony
 sudo systemctl reload apparmor

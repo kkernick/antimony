@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-remove 1  "remove " 
+.SH NAME
+antimony\-remove \- Remove features/profiles, or reset user definitions to the default
+.SH SYNOPSIS
+\fBantimony remove\fR [\fB\-f\fR|\fB\-\-feature\fR] [\fB\-y\fR|\fB\-\-yes\fR] [\fB\-\-seccomp\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fINAME\fR] 
+.SH DESCRIPTION
+Remove features/profiles, or reset user definitions to the default
+.SH OPTIONS
+.TP
+\fB\-f\fR, \fB\-\-feature\fR
+Target a feature, rather than a profile
+.TP
+\fB\-y\fR, \fB\-\-yes\fR
+Do not ask for confirmation
+.TP
+\fB\-\-seccomp\fR
+Remove the SECCOMP Database. Overrides \-\-feature
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fINAME\fR]
+The name of the profile. If absent, resets profiles that are identical to the system

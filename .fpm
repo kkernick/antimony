@@ -28,8 +28,22 @@
 ./config/profile.toml=/usr/share/antimony/config/profile.toml
 ./config/config.d/base.toml=/etc/antimony.d/base.toml
 
-./completions/antimony.bash=/usr/share/bash-completion/completions/antimony
-./completions/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish
-./completions/_antimony=/usr/share/zsh/site-functions/_antimony
+./generated/antimony.bash=/usr/share/bash-completion/completions/antimony
+./generated/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish
+./generated/_antimony=/usr/share/zsh/site-functions/_antimony
+
+./generated/antimony.1.gz=/usr/share/man/man1/antimony.1.gz
+./generated/antimony-edit.1.gz=/usr/share/man/man1/antimony-edit.1.gz
+./generated/antimony-export.1.gz=/usr/share/man/man1/antimony-export.1.gz
+./generated/antimony-help.1.gz=/usr/share/man/man1/antimony-help.1.gz
+./generated/antimony-import.1.gz=/usr/share/man/man1/antimony-import.1.gz
+./generated/antimony-info.1.gz=/usr/share/man/man1/antimony-info.1.gz
+./generated/antimony-integrate.1.gz=/usr/share/man/man1/antimony-integrate.1.gz
+./generated/antimony-package.1.gz=/usr/share/man/man1/antimony-package.1.gz
+./generated/antimony-refresh.1.gz=/usr/share/man/man1/antimony-refresh.1.gz
+./generated/antimony-remove.1.gz=/usr/share/man/man1/antimony-remove.1.gz
+./generated/antimony-run.1.gz=/usr/share/man/man1/antimony-run.1.gz
+
+
 
 ./install/antimony=/etc/apparmor.d/antimony

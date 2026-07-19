@@ -1,13 +1,15 @@
-#![allow(clippy::missing_errors_doc)]
 //! The Binary Fabricator determines all executables that are used by the program by analyzing
 //! it underneath a specialized SECCOMP Notifier.
+#![allow(clippy::missing_errors_doc)]
 
-use crate::fab::localize_home;
-use crate::shared::find::{self, WildcardFilter};
 use crate::{
-    fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
+    fab::{
+        ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_home, localize_path,
+        write_cache,
+    },
     shared::{
         Map, Set, ThreadSet, direct_path,
+        find::{self, WildcardFilter},
         profile::{Profile, files::FileMode},
         store::Object,
         utility,
@@ -240,15 +242,13 @@ fn parse(
                         .map(|token| token.strip_prefix("#!").unwrap_or(token).to_owned()),
                 );
 
+                #[rustfmt::skip]
                 let out = Spawner::abs(utility("dumper"))
                     .args([
                         "run",
-                        "--path",
-                        &resolved,
-                        "--instance",
-                        &instance.full().to_string_lossy(),
-                        "--filter",
-                        "execve",
+                        "--path", &resolved,
+                        "--instance", &instance.full().to_string_lossy(),
+                        "--filter", "execve",
                     ])
                     .output(StreamMode::Pipe)
                     .error(StreamMode::Discard)
@@ -601,13 +601,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     info.handle.args_i(["--symlink", "/usr/bin", "/bin"]);
 
     if fs::read_link("/usr/sbin").is_ok() {
+        #[rustfmt::skip]
         info.handle.args_i([
-            "--symlink",
-            "/usr/bin",
-            "/usr/sbin",
-            "--symlink",
-            "/usr/bin",
-            "/sbin",
+            "--symlink", "/usr/bin", "/usr/sbin",
+            "--symlink", "/usr/bin", "/sbin",
         ]);
     }
 

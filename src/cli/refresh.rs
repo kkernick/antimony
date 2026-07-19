@@ -7,6 +7,7 @@ use crate::{
         env::{CACHE_DIR, HOME_PATH, RUNTIME_DIR},
         profile::{self, Profile},
         store::{self, Object, mem},
+        syscalls,
     },
 };
 use anyhow::Result;
@@ -34,9 +35,25 @@ pub struct Args {
     /// Run arguments
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
+
+    /// Refresh the SECCOMP database by removing nonexistent binaries and optimizing.
+    /// Overrides PROFILE, --hard and --dry
+    #[arg(short, long)]
+    pub seccomp: bool,
 }
 impl cli::Run for Args {
     fn run(self) -> Result<()> {
+        if self.seccomp {
+            syscalls::clean_database()?;
+            syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
+                conn.execute("VACUUM;", [])?;
+                conn.execute("ANALYZE;", [])?;
+                info!("Optimized!");
+                Ok(())
+            })?;
+            return Ok(());
+        }
+
         if self.hard {
             as_effective!(Result<()>, {
                 for cache in fs::read_dir(CACHE_DIR.as_path())? {

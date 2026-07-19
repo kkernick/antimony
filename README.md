@@ -17,7 +17,10 @@
 
 ***
 
-Antimony is a [fast](./md/Speed.md), [powerful](./md/Profiles.md), [customizable](./md/Configurations.md), and [secure](./md/SECCOMP.md) sandboxing application. Its dynamic dependency resolution and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
+Antimony is a [fast](./md/Speed.md), [powerful](./md/Profiles.md), [customizable](./md/Configurations.md), [easy-to-use](./md/Quickstart.md) and [secure](./md/SECCOMP.md) sandboxing application. Its dynamic dependency resolution and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
+
+> [!tip]
+> See the [Quickstart](./md/Quickstart.md) Guide for how to use Antimony!
 
 ## Installation
 Antimony is available for:
@@ -47,7 +50,7 @@ To compile Antimony, you will need:
 * `pkgconf` (`pkg-config` for Debian)
 * `libdbus` (`libdbus-1-dev` for Debian)
 
-To build, simply execute `cargo build --release` to generate the required binaries in `target/release`. If you want shell completions, execute `cargo build --release --workspace`, then run the `target/release/antimony_completions`. The completions files will be available in the `completions` folder.
+To build, simply execute `cargo build --release` to generate the required binaries in `target/release`. If you want shell completions, execute `cargo build --release --workspace`, then run the `target/release/antimony_generator`. The completions files will be available in the `completions` folder.
 
 ### Packaging
 

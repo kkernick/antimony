@@ -1,0 +1,287 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH antimony-run 1  "run " 
+.SH NAME
+antimony\-run \- Run a profile
+.SH SYNOPSIS
+\fBantimony run\fR [\fB\-\-dry\fR] [\fB\-\-refresh\fR] [\fB\-\-path\fR] [\fB\-\-dir\fR] [\fB\-l\fR|\fB\-\-lockdown\fR] [\fB\-c\fR|\fB\-\-config\fR] [\fB\-\-features\fR] [\fB\-\-conflicts\fR] [\fB\-\-inherits\fR] [\fB\-\-home\-policy\fR] [\fB\-\-home\-name\fR] [\fB\-\-home\-path\fR] [\fB\-\-home\-lock\fR] [\fB\-\-home\-lock\-policy\fR] [\fB\-\-seccomp\fR] [\fB\-\-portals\fR] [\fB\-\-sees\fR] [\fB\-\-talks\fR] [\fB\-\-owns\fR] [\fB\-\-calls\fR] [\fB\-\-disable\-ipc\fR] [\fB\-\-system\-bus\fR] [\fB\-\-user\-bus\fR] [\fB\-\-harden\-ipc\fR] [\fB\-\-file\-passthrough\fR] [\fB\-\-ro\fR] [\fB\-\-rw\fR] [\fB\-\-link\fR] [\fB\-\-temp\fR] [\fB\-\-binaries\fR] [\fB\-\-libraries\fR] [\fB\-\-directories\fR] [\fB\-\-roots\fR] [\fB\-\-no\-sof\fR] [\fB\-\-devices\fR] [\fB\-\-namespaces\fR] [\fB\-\-env\fR] [\fB\-\-preserve\-env\fR] [\fB\-\-sandbox\-args\fR] [\fB\-\-ignored\-exit\-codes\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIPROFILE\fR> [\fIPASSTHROUGH\fR] 
+.SH DESCRIPTION
+Run a profile
+.SH OPTIONS
+.TP
+\fB\-\-dry\fR
+Generate the profile, but do not run the executable
+.TP
+\fB\-\-refresh\fR
+Refresh cache definitions. Analogous to `antimony refresh`
+.TP
+\fB\-\-path\fR \fI<PATH>\fR
+The path to the binary
+.TP
+\fB\-\-dir\fR \fI<DIR>\fR
+The path to start in within the sandbox. Usually, this is not necessary unless your binary uses local paths that requires being within a specific directory
+.TP
+\fB\-l\fR, \fB\-\-lockdown\fR \fI<LOCKDOWN>\fR
+Run in lockdown mode
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+true
+.IP \(bu 2
+false
+.RE
+.TP
+\fB\-c\fR, \fB\-\-config\fR \fI<CONFIG>\fR
+Use a configuration within the profile
+.TP
+\fB\-\-features\fR \fI<FEATURES>...\fR
+Additional features
+.TP
+\fB\-\-conflicts\fR \fI<CONFLICTS>...\fR
+Conflicting features
+.TP
+\fB\-\-inherits\fR \fI<INHERITS>...\fR
+Additional inheritance
+.TP
+\fB\-\-home\-policy\fR \fI<HOME_POLICY>\fR
+Override the home policy
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+none: Do not use a home profile
+.IP \(bu 2
+enabled: The Home Folder is passed read/write. Applications that only permit a single instance, such as Chromium, will get upset if you launch multiple instances of the sandbox
+.IP \(bu 2
+read\-only: Mount the Home Folder as a Read\-Only overlay
+.IP \(bu 2
+overlay: Once an application has been configured, Overlay effectively freezes it in place by mounting it as a temporary overlay. Changes made in the sandbox are discarded, and it can be shared by multiple instances, even if that application doesn\*(Aqt typically support multiple instances (Zed, Chromium, etc)
+.RE
+.TP
+\fB\-\-home\-name\fR \fI<HOME_NAME>\fR
+Override the home name
+.TP
+\fB\-\-home\-path\fR \fI<HOME_PATH>\fR
+Override the home mount
+.TP
+\fB\-\-home\-lock\fR \fI<HOME_LOCK>\fR
+Override the home lock
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+true
+.IP \(bu 2
+false
+.RE
+.TP
+\fB\-\-home\-lock\-policy\fR \fI<HOME_LOCK_POLICY>\fR
+Override the home lock policy
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+notify: Ask the user while waiting for the home to be unlocked
+.IP \(bu 2
+abort: Immediately error out
+.IP \(bu 2
+overlay: Mount the new instance as an Overlay\-\-the original instance will continue making writes, and the new instance will not be able to make changes
+.RE
+.TP
+\fB\-\-seccomp\fR \fI<SECCOMP>\fR
+Override the seccomp policy
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+disabled: Disable SECCOMP
+.IP \(bu 2
+permissive: Syscalls are logged to construct a policy for the profile
+.IP \(bu 2
+enforcing: The policy is enforced: unrecognized syscalls return with EPERM
+.IP \(bu 2
+notifying: The policy is enforced: unrecognized syscalls are presented to the user for decision
+.RE
+.TP
+\fB\-\-portals\fR \fI<PORTALS>...\fR
+Add portals
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+background
+.IP \(bu 2
+camera
+.IP \(bu 2
+clipboard
+.IP \(bu 2
+documents
+.IP \(bu 2
+file\-chooser
+.IP \(bu 2
+global\-shortcuts
+.IP \(bu 2
+inhibit
+.IP \(bu 2
+location
+.IP \(bu 2
+notifications
+.IP \(bu 2
+open\-uri
+.IP \(bu 2
+proxy\-resolver
+.IP \(bu 2
+realtime
+.IP \(bu 2
+screen\-cast
+.IP \(bu 2
+screenshot
+.IP \(bu 2
+settings
+.IP \(bu 2
+secret
+.IP \(bu 2
+network\-monitor
+.IP \(bu 2
+remote\-desktop
+.IP \(bu 2
+input\-capture
+.RE
+.TP
+\fB\-\-sees\fR \fI<SEES>...\fR
+Add busses the sandbox can see
+.TP
+\fB\-\-talks\fR \fI<TALKS>...\fR
+Add busses the sandbox can talk to
+.TP
+\fB\-\-owns\fR \fI<OWNS>...\fR
+Add busses the sandbox owns
+.TP
+\fB\-\-calls\fR \fI<CALLS>...\fR
+Add busses the sandbox can call
+.TP
+\fB\-\-disable\-ipc\fR
+Disable all IPC. This overrules all other IPC settings
+.TP
+\fB\-\-system\-bus\fR
+Provide the system bus
+.TP
+\fB\-\-user\-bus\fR
+Provide the user bus. xdg\-dbus\-proxy is not run
+.TP
+\fB\-\-harden\-ipc\fR
+Harden the proxy sandbox
+.TP
+\fB\-\-file\-passthrough\fR \fI<FILE_PASSTHROUGH>\fR
+Override the file passthrough mode
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+read\-only: Only allow reads
+.IP \(bu 2
+read\-write: Allow writes
+.IP \(bu 2
+executable: Executable files need to be created as copies, so that chmod will work correctly
+.RE
+.TP
+\fB\-\-ro\fR \fI<RO>...\fR
+Add read\-only files
+.TP
+\fB\-\-rw\fR \fI<RW>...\fR
+Add read\-write files
+.TP
+\fB\-\-link\fR \fI<LINK>...\fR
+Add symlinks in SRC=DST syntax
+.TP
+\fB\-\-temp\fR \fI<TEMP>...\fR
+Add temporary directories
+.TP
+\fB\-\-binaries\fR \fI<BINARIES>...\fR
+Add binaries
+.TP
+\fB\-\-libraries\fR \fI<LIBRARIES>...\fR
+Add libraries
+.TP
+\fB\-\-directories\fR \fI<DIRECTORIES>...\fR
+Add library directories
+.TP
+\fB\-\-roots\fR \fI<ROOTS>...\fR
+Add library roots
+.TP
+\fB\-\-no\-sof\fR
+Disable the SOF and mount the system libraries directly
+.TP
+\fB\-\-devices\fR \fI<DEVICES>...\fR
+Add devices
+.TP
+\fB\-\-namespaces\fR \fI<NAMESPACES>...\fR
+Add namespaces
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+all: Enable all namespaces
+.IP \(bu 2
+user: The user namespace is needed to create additional sandboxes (Such as chromium)
+.IP \(bu 2
+ipc: Allow the sandbox to communicate to other processes outside the sandbox. This is not required for the Proxy
+.IP \(bu 2
+pid: Share the Pid namespace, so the process can see all running processes within the /proc directory
+.IP \(bu 2
+net: Use the network feature instead
+.IP \(bu 2
+uts: Enable the UTS namespace
+.IP \(bu 2
+c\-group: Allow the sandbox to be managed/manage the system C\-Groups
+.RE
+.TP
+\fB\-\-env\fR \fI<ENV>...\fR
+Add environment variables in KEY=VALUE syntax
+.TP
+\fB\-\-preserve\-env\fR \fI<PRESERVE_ENV>\fR
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+true
+.IP \(bu 2
+false
+.RE
+.TP
+\fB\-\-sandbox\-args\fR \fI<SANDBOX_ARGS>...\fR
+Arguments to pass to bubblewrap/wrapper
+.TP
+\fB\-\-ignored\-exit\-codes\fR \fI<IGNORED_EXIT_CODES>...\fR
+Exit codes that should not prompt a notification
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+<\fIPROFILE\fR>
+The name of the profile, or a command to sandbox.
+
+If no profile with the desired name exists, it will be assumed as an arbitrary binary that will be looked up in PATH. It will then be run sandboxed, to which all aspects of the profile can be configured via the command line.
+
+This allows you to run any application in Antimony, without needing to make a profile for it (Although it\*(Aqs strongly recommended to create a profile for integration and repeated use).
+.TP
+[\fIPASSTHROUGH\fR]
+Arguments to pass to the profile application
