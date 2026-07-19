@@ -26,6 +26,7 @@ Antimony is a [fast](./md/Speed.md), [powerful](./md/Profiles.md), [customizable
 Antimony is available for:
 * Debian-Based Distributions (Ubuntu)
 * Arch-Based Distributions
+* Fedora-Based Distributions
 
 Releases provides packages for both distribution types, which can be installed with your package manager of choice.
 
