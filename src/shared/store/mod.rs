@@ -15,10 +15,17 @@ use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
-use log::info;
 use parking_lot::Mutex;
 use serde::de::DeserializeOwned;
-use std::{any::Any, error, fmt, fs, io, path::PathBuf, string, sync::LazyLock};
+use std::{
+    any::Any,
+    error,
+    fmt::{self, Display},
+    fs, io,
+    path::PathBuf,
+    string,
+    sync::LazyLock,
+};
 use thiserror::Error;
 
 pub static CACHE: Mutex<Option<bool>> = Mutex::new(None);
@@ -47,8 +54,7 @@ impl Store {
 
                 let value = *CACHE.lock();
                 if let Some(read) = value {
-                    info!("{t:?} in Memory");
-                    let name = format!("{t:?}_cache");
+                    let name = format!("{t}_cache");
                     Box::new(mem::Store::new(&name, cache, read))
                 } else {
                     cache
@@ -69,11 +75,20 @@ pub static SYSTEM_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreTyp
 pub static USER_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::User));
 pub static CACHE_STORE: LazyLock<Store> = LazyLock::new(|| Store::init(StoreType::Cache));
 
-#[derive(PartialEq, Eq, Copy, Clone, Hash, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Hash)]
 pub enum StoreType {
     System,
     User,
     Cache,
+}
+impl Display for StoreType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::System => write!(f, "system"),
+            Self::User => write!(f, "user"),
+            Self::Cache => write!(f, "memory"),
+        }
+    }
 }
 
 /// Store errors
@@ -110,7 +125,7 @@ pub static OBJECTS: [Object; 7] = [
 ];
 
 /// The kinds of things a backend can store.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Object {
     Profile,
     Feature,
@@ -182,7 +197,7 @@ pub fn load<
     def: bool,
 ) -> Result<T, E> {
     if def && name == "default" && CONFIG_FILE.system_mode() {
-        log::trace!("Default not allowed");
+        log::warn!("Default not allowed");
         return Ok(T::default());
     }
 

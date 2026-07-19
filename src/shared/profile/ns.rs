@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Namespaces. By default, none are shared. You will likely not need to use these
 /// directly, as they are included in relevant features.
 #[derive(
-    Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Copy, Debug, Enumeration,
+    Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Copy, Enumeration,
 )]
 #[serde(deny_unknown_fields)]
 pub enum Namespace {

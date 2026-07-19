@@ -8,7 +8,6 @@ use crate::shared::{
 };
 use anyhow::Result;
 use caps::Capability;
-use log::debug;
 use spawn::Spawner;
 use temp::Temp;
 
@@ -42,7 +41,6 @@ pub fn install_filter(
                     "SECCOMP monitoring is disallowed in Lockdown. To use a SECCOMP policy, you must monitor without Lockdown, then use Enforcing."
                 ));
             }
-            debug!("Spawning SECCOMP Monitor");
             let handle = Spawner::abs(utility("monitor"))
                 .name("monitor")
                 .args([
@@ -74,7 +72,6 @@ pub fn install_filter(
 
 // Install the filter, if we need it.
 pub fn setup(args: &super::Args) -> Result<()> {
-    debug!("Setting up SECCOMP");
     // SECCOMP uses the elf binaries populated by the binary fabricator.
     let seccomp = args.profile.seccomp.unwrap_or_default();
     let lockdown = args.profile.lockdown.unwrap_or(false);

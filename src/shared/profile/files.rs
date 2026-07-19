@@ -9,7 +9,7 @@ use std::fmt;
 
 /// How a file should be exposed in the sandbox.
 #[derive(
-    Debug, Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum, Enumeration,
+    Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum, Enumeration,
 )]
 #[serde(deny_unknown_fields)]
 pub enum FileMode {
@@ -80,7 +80,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough

@@ -26,11 +26,10 @@ use crate::{
         profile::lib::Libraries,
         store::{self, CACHE_STORE, Object, USER_STORE},
     },
-    timer,
 };
 use ahash::RandomState;
 use bilrost::{Message, OwnedMessage};
-use log::debug;
+use log::info;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io, path::Path};
 use thiserror::Error;
@@ -89,7 +88,7 @@ fn empty_inherits(inherits: &Set<String>) -> bool {
 }
 
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Message, Clone)]
+#[derive(Deserialize, Serialize, Default, PartialEq, Message, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -305,25 +304,21 @@ impl Profile {
         args: Option<&mut cli::run::Args>,
         foreign: bool,
     ) -> Result<(Self, String), Error> {
-        debug!("Loading {name}");
-
-        let mut profile = timer!(
-            "::load",
-            match store::load::<Self, Error>(name, Object::Profile, true) {
-                Ok(profile) => profile,
-                Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
-                    if name == "default" {
-                        return Ok((Self::default(), "default".to_owned()));
-                    }
-                    debug!("No profile: {name}, assuming binary");
-                    Self {
-                        path: Some(which::which(name)?.to_owned()),
-                        ..Default::default()
-                    }
+        let mut profile = match store::load::<Self, Error>(name, Object::Profile, true) {
+            Ok(profile) => profile,
+            Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
+                if name == "default" {
+                    return Ok((Self::default(), "default".to_owned()));
                 }
-                Err(e) => return Err(e),
+                info!("No profile: {name}, assuming binary");
+                Self {
+                    path: Some(which::which(name)?.to_owned()),
+                    ..Default::default()
+                }
             }
-        );
+            Err(e) => return Err(e),
+        };
+
         if name == "default" {
             return Ok((profile, "default".to_owned()));
         }
@@ -343,11 +338,7 @@ impl Profile {
         }
 
         let hash = profile.hash_str(&config);
-        if let Ok(bytes) = timer!(
-            "::fetch_cache",
-            CACHE_STORE.borrow().bytes(&hash, Object::Profile)
-        ) {
-            debug!("Using cached profile");
+        if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash, Object::Profile) {
             return Ok((Self::decode(bytes.as_slice())?, hash));
         }
 
@@ -374,13 +365,11 @@ impl Profile {
             }
         }
 
-        debug!("No cache available");
         for inherit in profile.inherits.clone() {
             profile.merge(Self::new(&inherit, None, None, true)?.0)?;
         }
 
         if let Some(config) = config {
-            debug!("Loading configuration");
             if profile.configuration.is_empty() {
                 return Err(Error::NotFound("Profile does not have any configurations"));
             }
@@ -400,7 +389,6 @@ impl Profile {
             }
         }
 
-        debug!("Fabricating features");
         feature::fabricate(&mut profile, name)?;
         CACHE_STORE
             .borrow()

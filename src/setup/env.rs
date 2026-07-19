@@ -5,13 +5,11 @@ use crate::{
     shared::{env::HOME, profile::files::FILE_MODES},
 };
 use anyhow::Result;
-use log::debug;
 use rayon::prelude::*;
 use std::env;
 
 #[inline]
 pub fn setup(args: &mut super::Args) -> Result<()> {
-    debug!("Setting up environment");
     args.profile.environment.par_iter().for_each(|(key, val)| {
         let mut val = val.replacen(HOME.as_str(), "/home/antimony", 1);
         // If we're passed an actual environment variable, resolve it.

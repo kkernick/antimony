@@ -14,14 +14,14 @@ use std::{borrow::Cow, fs, path::Path};
 pub type DirMap = Map<DirType, Set<String>>;
 
 /// A Bilrost-compatible parcel for serializing a `DirMap`.
-#[derive(Default, Debug, Message)]
+#[derive(Default, Message)]
 struct DirMessage {
     /// The actual `DirMap`
     map: DirMap,
 }
 
 /// The kind of entry in a `DirMap`.
-#[derive(PartialEq, Eq, Hash, Debug, Enumeration)]
+#[derive(PartialEq, Eq, Hash, Enumeration)]
 pub enum DirType {
     /// Files
     File = 0,

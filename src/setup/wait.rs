@@ -1,9 +1,7 @@
+use crate::{shared::Set, timer};
 use anyhow::{Result, anyhow};
 use inotify::{Inotify, WatchDescriptor};
-use log::debug;
 use spawn::Spawner;
-
-use crate::{shared::Set, timer};
 
 /// Wait for everything to be ready.
 pub fn setup(
@@ -22,15 +20,11 @@ pub fn setup(
     // Wait for the bus to be available.
     timer!("::inotify", {
         if !watches.is_empty() && !dry {
-            debug!("Waiting for inotify: {watches:?}");
             let mut buffer = [0; 1024];
             while !watches.is_empty() {
                 let events = inotify.read_events_blocking(&mut buffer)?;
                 for event in events {
                     if watches.contains(&event.wd) {
-                        if let Some(path) = event.name {
-                            debug!("Finished Notify Event: {}", path.display());
-                        }
                         watches.remove(&event.wd);
                     }
                 }

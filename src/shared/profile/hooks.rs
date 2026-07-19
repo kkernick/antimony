@@ -41,7 +41,7 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default, Debug, Clone, PartialEq, Eq, Message)]
+#[derive(Deserialize, Serialize, Default, Clone, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
@@ -75,7 +75,7 @@ impl Hooks {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Enumeration)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Enumeration)]
 pub enum Type {
     Shell = 0,
     Program = 1,
@@ -89,7 +89,7 @@ pub enum Type {
 ///     `ANTIMONY_NAME`: The name of the current profile.
 ///     `ANTIMONY_HOME`: The path to the home folder, if it exists.
 ///     `ANTIMONY_CACHE`: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq, Message)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Message)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
     /// An optional name to identify the process.

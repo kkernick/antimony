@@ -8,7 +8,7 @@ use clap::Parser;
 use spawn::{Spawner, StreamMode};
 use std::{env, fs};
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default)]
 #[command(name = "Antimony-Build")]
 #[command(version)]
 #[command(about = "A Utility for Building Antimony")]

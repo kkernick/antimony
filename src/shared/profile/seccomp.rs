@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// The SECCOMP Policy for the Profile
 #[derive(
-    Hash, Debug, Deserialize, Serialize, PartialEq, Eq, Copy, Clone, ValueEnum, Default, Enumeration,
+    Hash, Deserialize, Serialize, PartialEq, Eq, Copy, Clone, ValueEnum, Default, Enumeration,
 )]
 #[serde(deny_unknown_fields)]
 pub enum SeccompPolicy {

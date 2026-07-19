@@ -8,7 +8,6 @@ use antimony::{
         config::CONFIG_FILE,
         package::{IS_PACKAGE, execute_package},
     },
-    timer,
 };
 use anyhow::Result;
 use clap::Parser;
@@ -50,8 +49,7 @@ fn main() -> Result<()> {
         execute_package(current, File::open(current)?, name)
     } else {
         let ret = if as_symlink().is_err() {
-            let cli = timer!("::cli", cli::Cli::parse());
-            timer!("::command", cli.command.run())
+            cli::Cli::parse().command.run()
         } else {
             Ok(())
         };

@@ -1,15 +1,12 @@
-#![allow(clippy::absolute_paths)]
 //! The bulk of the SECCOMP Logic.
+#![allow(clippy::absolute_paths)]
 
-use crate::{
-    shared::{
-        Set, ThreadMap,
-        env::{AT_HOME, DATA_HOME},
-        find::{DirType, recursive_crawl},
-        profile::seccomp::SeccompPolicy,
-        store::{Object, SYSTEM_STORE, USER_STORE},
-    },
-    timer,
+use crate::shared::{
+    Set, ThreadMap,
+    env::{AT_HOME, DATA_HOME},
+    find::{DirType, recursive_crawl},
+    profile::seccomp::SeccompPolicy,
+    store::{Object, SYSTEM_STORE, USER_STORE},
 };
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
@@ -405,7 +402,7 @@ pub fn new(
     binaries: &Set<String>,
     lockdown: bool,
 ) -> Result<Option<(Filter, Option<OwnedFd>, bool)>, Error> {
-    let (mut syscalls, bwrap) = timer!("::get_calls", get_calls(name, binaries));
+    let (mut syscalls, bwrap) = get_calls(name, binaries);
     let mut filter = if policy == SeccompPolicy::Permissive || policy == SeccompPolicy::Notifying {
         let mut filter = Filter::new(Action::Notify)?;
         filter.set_notifier(Notifier::new(
@@ -433,18 +430,15 @@ pub fn new(
     let audit = !syscalls.contains(&get_num("sendmsg").unwrap());
 
     let syscalls = syscalls.into_iter().collect::<Vec<_>>();
-    timer!("::add_rules", {
-        for syscall in &syscalls {
-            filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
-        }
-    });
+    for syscall in &syscalls {
+        filter.add_rule(Action::Allow, Syscall::from_number(*syscall))?;
+    }
 
     let fd = if policy == SeccompPolicy::Enforcing {
         let mut s = DefaultHasher::new();
         syscalls.hash(&mut s);
         let hash = format!("{}", s.finish());
 
-        debug!("Enforcing BPF");
         let bpf = AT_HOME
             .join("cache")
             .join(".seccomp")
@@ -459,7 +453,6 @@ pub fn new(
         Some(if bpf.exists() {
             File::open(&bpf)?.into()
         } else {
-            debug!("Writing filter...");
             filter.write(&bpf)?
         })
     } else {

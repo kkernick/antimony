@@ -30,7 +30,7 @@ use dbus::{
     strings::{BusName, Interface, Member},
 };
 use inotify::{Inotify, WatchDescriptor};
-use log::{debug, info, warn};
+use log::{info, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
@@ -207,85 +207,76 @@ pub fn setup<'a>(
     // instances will be redirected to, and which will replace the original once all instances
     // have been closed. If you run into the situation where you have two instances, each running
     // on a different SOF, and try and refresh *again*, Antimony will throw an error.
-    timer!("::cache", {
-        let busy = |path: &Path| -> bool {
-            match path.read_dir() {
-                Ok(mut iter) => iter.next().is_some(),
-                Err(e) => {
-                    warn!("Error reading instance directory {}: {e}", path.display());
-                    false
-                }
-            }
-        };
-
-        let refresh_dir = RUNTIME_DIR.join("antimony").join(format!("{hash}r"));
-        let refresh_sof = CACHE_DIR.join("run").join(format!("{hash}r"));
-
-        if refresh_sof.exists() {
-            if !busy(&instances) && !busy(&refresh_dir) {
-                debug!("Updating to refreshed definitions");
-
-                as_effective!(Result<()>, {
-                    if refresh_dir.exists() {
-                        fs::remove_dir_all(&refresh_dir)?;
-                    }
-                    if sys_dir.exists() {
-                        fs::remove_dir_all(&sys_dir)?;
-                    }
-
-                    fs::rename(&refresh_sof, &sys_dir)?;
-                    Ok(())
-                })??;
-
-                debug!("Removing stale command caches.");
-                let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(2))?;
-                if let Some(files) = crawled.remove(&DirType::File) {
-                    as_effective!(
-                        files
-                            .into_par_iter()
-                            .filter(|path| path.ends_with("cmd.cache"))
-                            .try_for_each(fs::remove_file)
-                    )??;
-                }
-            } else {
-                debug!("Using refresh directory");
-                #[allow(clippy::assigning_clones)]
-                {
-                    sys_dir = refresh_sof.clone();
-                    instances = refresh_dir.clone();
-                }
+    let busy = |path: &Path| -> bool {
+        match path.read_dir() {
+            Ok(mut iter) => iter.next().is_some(),
+            Err(e) => {
+                warn!("Error reading instance directory {}: {e}", path.display());
+                false
             }
         }
+    };
 
-        // If we're told to refresh an existing cache
-        if args.refresh && sys_dir.exists() {
-            // If it's not busy, just remove the directory outright.
-            if !busy(&instances) {
-                info!(
-                    "No running instances in {}. Safe to refresh.",
-                    instances.display()
-                );
-                as_effective!(fs::remove_dir_all(&sys_dir))??;
-            } else if sys_dir == refresh_sof {
-                return Err(anyhow!(
-                    "Already refreshed! Please close all active instances to commit changes!"
-                ));
-            } else {
-                info!("Instance is busy. Refreshing in a new location");
-                sys_dir = refresh_sof;
-                instances = refresh_dir;
+    let refresh_dir = RUNTIME_DIR.join("antimony").join(format!("{hash}r"));
+    let refresh_sof = CACHE_DIR.join("run").join(format!("{hash}r"));
+
+    if refresh_sof.exists() {
+        if !busy(&instances) && !busy(&refresh_dir) {
+            as_effective!(Result<()>, {
+                if refresh_dir.exists() {
+                    fs::remove_dir_all(&refresh_dir)?;
+                }
+                if sys_dir.exists() {
+                    fs::remove_dir_all(&sys_dir)?;
+                }
+
+                fs::rename(&refresh_sof, &sys_dir)?;
+                Ok(())
+            })??;
+
+            let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(2))?;
+            if let Some(files) = crawled.remove(&DirType::File) {
+                as_effective!(
+                    files
+                        .into_par_iter()
+                        .filter(|path| path.ends_with("cmd.cache"))
+                        .try_for_each(fs::remove_file)
+                )??;
+            }
+        } else {
+            #[allow(clippy::assigning_clones)]
+            {
+                sys_dir = refresh_sof.clone();
+                instances = refresh_dir.clone();
             }
         }
-    });
+    }
+
+    // If we're told to refresh an existing cache
+    if args.refresh && sys_dir.exists() {
+        // If it's not busy, just remove the directory outright.
+        if !busy(&instances) {
+            info!(
+                "No running instances in {}. Safe to refresh.",
+                instances.display()
+            );
+            as_effective!(fs::remove_dir_all(&sys_dir))??;
+        } else if sys_dir == refresh_sof {
+            return Err(anyhow!(
+                "Already refreshed! Please close all active instances to commit changes!"
+            ));
+        } else {
+            info!("Instance is busy. Refreshing in a new location");
+            sys_dir = refresh_sof;
+            instances = refresh_dir;
+        }
+    }
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let mut instance = timer!(
-        "::instance_dir",
-        temp::Builder::new()
-            .within(instances)
-            .owner(user::Mode::Real)
-            .create::<temp::Directory>()
-    )?;
+    let mut instance = temp::Builder::new()
+        .within(instances)
+        .owner(user::Mode::Real)
+        .create::<temp::Directory>()?;
 
     if !sys_dir.exists() {
         as_effective!(fs::create_dir_all(&sys_dir))??;
@@ -295,41 +286,38 @@ pub fn setup<'a>(
     // The Document Portal doesn't run until something pings it. If this is the
     // first sandbox running, that introduces a significant lag on the wait() call,
     // so we ping it immediately.
-    timer!("::document_wakeup", {
-        if !args.dry
-            && let Some(ipc) = &profile.ipc
-            && !ipc.disable.unwrap_or(false)
-        {
-            if !mounted(&format!("{runtime}/doc")) {
-                let connection = LocalConnection::new_session()?;
-                let msg = Message::new_method_call(
-                    BusName::from("org.freedesktop.portal.Documents\0"),
-                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                    Interface::from("org.freedesktop.DBus.Peer\0"),
-                    Member::from("Ping\0"),
-                );
-
-                if let Ok(msg) = msg {
-                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-                } else {
-                    return Err(anyhow!("Failed to send ping to Document Portal"));
-                }
-            }
-
-            // Associate the flatpak dir with our instance so they're deleted together.
-            instance.associate(
-                temp::Builder::new()
-                    .within(RUNTIME_DIR.join(".flatpak"))
-                    .name(instance.name())
-                    .owner(user::Mode::Real)
-                    .create::<temp::Directory>()?,
+    if !args.dry
+        && let Some(ipc) = &profile.ipc
+        && !ipc.disable.unwrap_or(false)
+    {
+        if !mounted(&format!("{runtime}/doc")) {
+            let connection = LocalConnection::new_session()?;
+            let msg = Message::new_method_call(
+                BusName::from("org.freedesktop.portal.Documents\0"),
+                dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                Interface::from("org.freedesktop.DBus.Peer\0"),
+                Member::from("Ping\0"),
             );
+
+            if let Ok(msg) = msg {
+                connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+            } else {
+                return Err(anyhow!("Failed to send ping to Document Portal"));
+            }
         }
-    });
+
+        // Associate the flatpak dir with our instance so they're deleted together.
+        instance.associate(
+            temp::Builder::new()
+                .within(RUNTIME_DIR.join(".flatpak"))
+                .name(instance.name())
+                .owner(user::Mode::Real)
+                .create::<temp::Directory>()?,
+        );
+    }
 
     // Start the command.
-    let handle = timer!("::spawn_handle", {
-        #[rustfmt::skip]
+    #[rustfmt::skip]
         let handle = Spawner::abs(
             if profile.lockdown.unwrap_or(false) {
                 utility("lockdown")
@@ -351,10 +339,10 @@ pub fn setup<'a>(
             "--setenv", "PATH", "/usr/bin",
         ]);
 
-        if profile.preserve_env.unwrap_or(false) {
-            handle.preserve_env_i(true);
-        } else {
-            #[rustfmt::skip]
+    if profile.preserve_env.unwrap_or(false) {
+        handle.preserve_env_i(true);
+    } else {
+        #[rustfmt::skip]
             handle.args_i([
                 "--clearenv",
                 "--dir", "/home/antimony",
@@ -363,16 +351,13 @@ pub fn setup<'a>(
                 "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
                 "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
             ]);
-        }
+    }
 
-        if let Some(dir) = &profile.dir {
-            handle.args_i(["--chdir", dir]);
-        }
-        handle
-    });
+    if let Some(dir) = &profile.dir {
+        handle.args_i(["--chdir", dir]);
+    }
 
-    debug!("Initializing inotify handle");
-    let inotify = timer!("::inotify", Inotify::init())?;
+    let inotify = Inotify::init()?;
     let watches = Set::default();
     let id = profile.id(&name);
 

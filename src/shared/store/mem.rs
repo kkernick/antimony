@@ -26,7 +26,6 @@ use crate::shared::{
 };
 use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
-use log::debug;
 use std::{any::Any, sync::LazyLock};
 
 /// A mapping of names to bytes
@@ -98,7 +97,6 @@ impl Store {
     /// ## Errors
     /// If any record could not be flushed to the underlying store.
     pub fn flush(&self) -> Result<(), super::Error> {
-        debug!("Flushing to disk...");
         OBJECTS
             .into_iter()
             .try_for_each(|object| -> Result<(), super::Error> {

@@ -14,7 +14,7 @@ use crate::{
 use anyhow::Result;
 use clap::ValueHint;
 use dialoguer::Confirm;
-use log::{debug, info};
+use log::info;
 use std::fs;
 use user::as_effective;
 
@@ -93,7 +93,6 @@ impl cli::Run for Args {
             let system: Set<_> = SYSTEM_STORE.borrow().get(table)?.into_iter().collect();
 
             for thing in user.intersection(&system) {
-                debug!("Custom User {kind} for: {thing}");
                 let user = USER_STORE.borrow().fetch(thing, table)?;
                 let system = SYSTEM_STORE.borrow().fetch(thing, table)?;
 

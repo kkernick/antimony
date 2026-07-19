@@ -21,7 +21,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
-#[derive(Hash, Debug, PartialEq, Eq, Copy, Clone, ValueEnum)]
+#[derive(Hash, PartialEq, Eq, Copy, Clone, ValueEnum)]
 pub enum Benchmark {
     /// Run the profile with no cache
     Cold,
@@ -38,7 +38,7 @@ pub enum Benchmark {
     Refresh,
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default)]
 #[command(name = "Antimony-Bench")]
 #[command(version)]
 #[command(about = "A Utility for Benchmarking Antimony, using Hyperfine")]

@@ -21,7 +21,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueHint};
 use heck::ToTitleCase;
-use log::{debug, error};
+use log::error;
 use nix::{errno::Errno, sys::signal::Signal};
 use spawn::{HandleError, Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, thread, time::Duration};
@@ -338,12 +338,11 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         if let Some(ipc) = info.profile.ipc.take()
             && !ipc.disable.unwrap_or(false)
         {
-            debug!("Waiting for document portal");
+            log::info!("Waiting for document portal");
             wait_for_doc();
         }
 
         if info.profile.lockdown.unwrap_or(false) {
-            log::trace!("Configuring lockdown");
             let fds: Vec<String> = info
                 .handle
                 .get_fds()
@@ -359,7 +358,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
 
         #[allow(clippy::unwrap_used)]
         if let Some(hooks) = &mut info.profile.hooks {
-            debug!("Processing pre-hooks");
+            log::info!("Processing pre-hooks");
             for hook in &mut hooks.pre {
                 info.handle = hook
                     .process(
@@ -388,7 +387,6 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             }
         }
 
-        log::trace!("Spawning");
         let mut handle = info.handle.spawn()?;
         if !info.package.map_or_else(|| false, |(_, b)| b) {
             mem::flush();
@@ -463,7 +461,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         };
 
         if let Some(mut hooks) = info.profile.hooks.take() {
-            debug!("Executing post-hooks");
+            log::info!("Executing post-hooks");
             for hook in &mut hooks.post {
                 hook.process(
                     None,

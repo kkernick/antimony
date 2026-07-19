@@ -6,7 +6,7 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug, Message)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Message)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.
@@ -111,7 +111,7 @@ impl Ipc {
 /// implemented for certain Desktop Environments.
 /// Not all applications use portals, even if they
 /// are provided to the sandbox.
-#[derive(Debug, Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Enumeration)]
+#[derive(Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Enumeration)]
 #[serde(deny_unknown_fields)]
 pub enum Portal {
     Background = 0,

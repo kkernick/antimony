@@ -87,7 +87,7 @@ impl From<errno::Errno> for Error {
     }
 }
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default)]
 #[command(name = "Antimony-Monitor")]
 #[command(version)]
 #[command(about = "A SECCOMP-Notify application")]

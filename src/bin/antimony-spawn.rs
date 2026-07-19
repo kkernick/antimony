@@ -32,7 +32,7 @@ use std::{
     path::Path,
 };
 
-#[derive(Parser, Debug, Default)]
+#[derive(Parser, Default)]
 #[command(name = "Antimony-Spawn")]
 #[command(version)]
 #[command(about = "An implementation of flatpak-spawn for Antimony")]

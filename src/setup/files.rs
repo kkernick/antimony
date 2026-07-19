@@ -11,7 +11,7 @@ use crate::{
     },
 };
 use anyhow::Result;
-use log::{debug, warn};
+use log::warn;
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
@@ -81,7 +81,6 @@ pub fn add_file(handle: &Spawner, file: &str, contents: &str, op: FileMode) -> R
 }
 
 pub fn setup(args: &mut super::Args) -> Result<()> {
-    debug!("Setting up files");
     // Add direct files.
 
     // Grab the lockdown value
@@ -136,7 +135,6 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         }
 
         let direct = &mut files.direct;
-        debug!("Creating direct files");
         if !direct.is_empty() {
             as_effective!(Result<()>, {
                 for mode in FILE_MODES {

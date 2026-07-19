@@ -47,7 +47,7 @@ use std::{
     time::Duration,
 };
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(name = "Antimony Dumper")]
 #[command(version)]
 #[command(about = "Dump information about binaries")]
@@ -57,7 +57,7 @@ pub struct Cli {
     pub command: Command,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand)]
 pub enum Command {
     /// Run the program under a dumper.
     Run(RunArgs),
@@ -66,7 +66,7 @@ pub enum Command {
     Attach(AttachArgs),
 }
 
-#[derive(clap::Args, Debug, Default, Clone)]
+#[derive(clap::Args, Default, Clone)]
 pub struct RunArgs {
     /// The path to the binary to monitor
     #[arg(long, value_hint = ValueHint::CommandName)]
@@ -85,7 +85,7 @@ pub struct RunArgs {
     filter: Option<Vec<String>>,
 }
 
-#[derive(clap::Args, Debug, Default, Clone)]
+#[derive(clap::Args, Default, Clone)]
 pub struct AttachArgs {
     /// The path to the socket established by `run`.
     socket: String,

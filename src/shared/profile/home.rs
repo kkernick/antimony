@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
 /// for persistent configurations and caches.
-#[derive(Deserialize, Serialize, Default, Debug, PartialEq, Eq, Message, Clone)]
+#[derive(Deserialize, Serialize, Default, PartialEq, Eq, Message, Clone)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
@@ -62,7 +62,7 @@ impl Home {
 
 /// The Home Policy being set creates a persistent home folder for the profile.
 #[derive(
-    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug, Enumeration,
+    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Enumeration,
 )]
 #[serde(deny_unknown_fields)]
 pub enum HomePolicy {
@@ -87,7 +87,7 @@ pub enum HomePolicy {
 
 /// What to do when the profile is locked.
 #[derive(
-    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug, Enumeration,
+    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Enumeration,
 )]
 #[serde(deny_unknown_fields)]
 pub enum HomeLockPolicy {

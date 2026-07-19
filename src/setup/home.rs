@@ -8,7 +8,6 @@ use crate::shared::{
 use anyhow::{Result, anyhow};
 use heck::ToTitleCase;
 use inotify::{Inotify, WatchMask};
-use log::debug;
 use nix::sys::signal::Signal::SIGKILL;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -27,8 +26,6 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         && policy != HomePolicy::None
     {
         let home_dir = home.path(&args.name);
-        debug!("Home directory at {}", home_dir.display());
-
         if home.lock.unwrap_or(false)
             && !args.run.dry
             && home_dir.exists()
@@ -50,7 +47,6 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 // Attach a notify watch on the directory to see if the running instance closes it.
                                 let mut inotify = Inotify::init()?;
                                 let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
-                                log::debug!("Added home watch: {wd:?}");
                                 let mut buffer = [0; 1024];
                                 let title = args.name.to_title_case();
                                 let mut prompt = Spawner::abs(utility("notify"))

@@ -30,7 +30,6 @@ use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
-    fmt::Debug,
     fs::{self, File},
     io::{self, Read},
     path::{Path, PathBuf},
@@ -53,7 +52,7 @@ pub struct FabInfo<'a> {
 }
 
 /// `bilrost` compatible struct for saving cached data
-#[derive(Message, Debug)]
+#[derive(Message)]
 pub struct Cache {
     /// The data
     pub cache: Set<String>,
@@ -104,39 +103,33 @@ pub fn hash(i: &str) -> String {
 
 /// Get cached definitions.
 #[inline]
-pub fn get_cache<T: OwnedMessage + Debug>(name: &str, object: Object) -> Result<Option<T>> {
-    timer!("::get_cache", {
-        if let Some(map) = L1.get(&object)
-            && let Some(bytes) = map.get(name)
-        {
-            let content = T::decode(bytes.as_slice())?;
-            Ok(Some(content))
-        } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash(name), object) {
-            let content = T::decode(bytes.as_slice())?;
-            L1.insert(object, ThreadMap::default())
-                .insert(name.to_owned(), bytes);
-            Ok(Some(content))
-        } else {
-            Ok(None)
-        }
-    })
+pub fn get_cache<T: OwnedMessage>(name: &str, object: Object) -> Result<Option<T>> {
+    if let Some(map) = L1.get(&object)
+        && let Some(bytes) = map.get(name)
+    {
+        let content = T::decode(bytes.as_slice())?;
+        Ok(Some(content))
+    } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash(name), object) {
+        let content = T::decode(bytes.as_slice())?;
+        L1.insert(object, ThreadMap::default())
+            .insert(name.to_owned(), bytes);
+        Ok(Some(content))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Write the cache file.
 #[inline]
-pub fn write_cache<T: Message + Debug>(name: &str, content: T, object: Object) -> Result<T> {
-    timer!("::write_cache", {
-        let bytes = content.encode_to_bytes();
-        CACHE_STORE.borrow().dump(&hash(name), object, &bytes)?;
-        Ok(content)
-    })
+pub fn write_cache<T: Message>(name: &str, content: T, object: Object) -> Result<T> {
+    let bytes = content.encode_to_bytes();
+    CACHE_STORE.borrow().dump(&hash(name), object, &bytes)?;
+    Ok(content)
 }
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    timer!("::in_lib", {
-        ROOTS.par_iter().any(|r| path.starts_with(r.as_ref()))
-    })
+    ROOTS.par_iter().any(|r| path.starts_with(r.as_ref()))
 }
 
 /// Filter non-elf files.

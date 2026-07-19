@@ -1,5 +1,5 @@
-#![allow(clippy::missing_docs_in_private_items)]
 //! Set up the fabricators.
+#![allow(clippy::missing_docs_in_private_items)]
 
 use crate::{
     fab::{self, FabInfo},
@@ -7,7 +7,6 @@ use crate::{
     timer,
 };
 use anyhow::Result;
-use log::debug;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -22,12 +21,8 @@ pub fn cmd_cache(sys_dir: &Path) -> PathBuf {
 pub fn setup(args: &mut super::Args) -> Result<()> {
     // The fabricators are cached, but on disk.
     let cmd_cache = cmd_cache(&args.sys_dir);
-    if cmd_cache.exists() {
-        debug!("Using cached fabricators");
-        if args.handle.cache_read(&cmd_cache).is_ok() {
-            return Ok(());
-        }
-        debug!("Corrupted cache. Rebuilding.");
+    if cmd_cache.exists() && args.handle.cache_read(&cmd_cache).is_ok() {
+        return Ok(());
     }
 
     if let Some(parent) = cmd_cache.parent()
@@ -36,7 +31,6 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         as_effective!(fs::create_dir_all(parent))??;
     }
 
-    debug!("Fabricating sandbox");
     let mut info = FabInfo {
         profile: &mut args.profile,
         handle: &args.handle,

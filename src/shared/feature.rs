@@ -13,7 +13,7 @@ use crate::shared::{
     },
     store::{self, Object},
 };
-use log::{debug, warn};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
 use std::io;
@@ -40,7 +40,7 @@ pub enum Error {
 }
 
 /// A Feature
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     /// The name of the feature, such as wayland or pipewire.
@@ -169,7 +169,7 @@ fn strike_feature(
 ) -> Result<(), Error> {
     // If we required this feature
     if features.contains_key(feature) {
-        debug!("Striking feature: {feature}");
+        info!("Striking feature: {feature}");
 
         // Remove the offending feature immediately.
         features.remove(feature);
@@ -288,11 +288,11 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         match code {
             Ok(code) => {
                 if code != 0 {
-                    debug!("Condition for feature {} not met", feature.name);
+                    warn!("Condition for feature {} not met", feature.name);
                 }
             }
             Err(e) => {
-                debug!(
+                error!(
                     "Failed to check condition for feature {}: {e}",
                     feature.name
                 );
@@ -309,8 +309,6 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
             "This profile uses a dangerous feature! {}: {}",
             feature.name, caveat
         );
-    } else {
-        debug!("Adding feature: {}", feature.name);
     }
 
     profile.preserve_env = match profile.preserve_env {

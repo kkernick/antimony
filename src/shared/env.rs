@@ -2,7 +2,7 @@
 
 use crate::shared::config::CONFIG_FILE;
 use anyhow::Result;
-use log::{debug, warn};
+use log::{info, warn};
 use nix::{
     libc::getpwuid,
     unistd::{AccessFlags, access},
@@ -47,7 +47,7 @@ pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
                 .is_err())
         || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err()).unwrap()
     {
-        debug!(
+        info!(
             "Cache dir ({}) not-writable. Pivoting to /tmp",
             cache_dir.display()
         );

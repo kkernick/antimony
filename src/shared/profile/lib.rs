@@ -2,7 +2,7 @@ use crate::{cli, shared::Set};
 use bilrost::Message;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
 #[serde(deny_unknown_fields, default)]
 pub struct Libraries {
     pub no_sof: Option<bool>,

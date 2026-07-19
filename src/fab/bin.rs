@@ -18,7 +18,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use bilrost::{Enumeration, Message};
-use log::{debug, warn};
+use log::warn;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -32,7 +32,7 @@ use temp::Temp;
 use which::which;
 
 /// A `bilrost` struct for serializing.
-#[derive(Message, Debug, Default)]
+#[derive(Message, Default)]
 struct Cache {
     /// What the binary was identified as.
     t: Type,
@@ -42,7 +42,7 @@ struct Cache {
 }
 
 /// The kind of thing we just analyzed.
-#[derive(Debug, Enumeration, Eq, PartialEq, Default)]
+#[derive(Enumeration, Eq, PartialEq, Default)]
 pub enum Type {
     Elf = 0,
     File = 1,
@@ -56,7 +56,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Default, Message, Debug)]
+#[derive(Default, Message)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: Set<String>,
@@ -143,7 +143,6 @@ fn parse(
     }
 
     if let Ok(Some(cache)) = get_cache::<Cache>(path, Object::Binaries) {
-        debug!("Using cache");
         return Ok(cache);
     }
 
@@ -589,13 +588,11 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     }
 
     if let Some(home) = &info.profile.home {
-        timer!("::home_binaries", {
-            let home_dir = home.path(info.name);
-            if home_dir.exists() {
-                let home_str = home_dir.to_string_lossy();
-                lib::DIRS.insert(home_str.into_owned());
-            }
-        });
+        let home_dir = home.path(info.name);
+        if home_dir.exists() {
+            let home_str = home_dir.to_string_lossy();
+            lib::DIRS.insert(home_str.into_owned());
+        }
     }
 
     info.handle.args_i(["--symlink", "/usr/bin", "/bin"]);

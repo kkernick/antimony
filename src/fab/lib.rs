@@ -1,4 +1,3 @@
-#![allow(clippy::missing_errors_doc)]
 //! The Library Fabricator is most important of all, as it assembles the SOF.
 //!
 //! It also touches almost every other fabricator, and is
@@ -7,6 +6,7 @@
 //! or /usr/share/application), and it needs to determine which files should be placed in the SOF, and what to do with their dependencies.
 //! It relies on LDD to determine ELF dependencies (i.e. .so files), and Find to scour directories. Everything is aggressively cached, and
 //! even more aggressively parallelized.
+#![allow(clippy::missing_errors_doc)]
 
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
@@ -21,7 +21,7 @@ use crate::{
 use anyhow::Result;
 use dashmap::iter_set::OwningIter;
 use heck::ToTitleCase;
-use log::{debug, error, warn};
+use log::{error, info, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
@@ -238,7 +238,6 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     }
 
     if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
-        log::info!("Mounting system libraries.");
         return mount_roots("", info.handle);
     }
 
@@ -303,7 +302,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             if !cache.starts_with(AT_HOME.as_path()) {
                 let shared = cache.join("shared");
                 if !shared.exists() {
-                    debug!("Creating shared directory at {}", shared.display());
+                    info!("Creating shared directory at {}", shared.display());
                     let _ = fs::create_dir(&shared);
                 }
             }

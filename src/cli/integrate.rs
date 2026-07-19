@@ -10,7 +10,7 @@ use crate::{
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueEnum, ValueHint};
 use heck::ToTitleCase;
-use log::{debug, info};
+use log::info;
 use spawn::Spawner;
 use std::{
     fmt::Write as FormatWrite,
@@ -89,7 +89,7 @@ pub struct Args {
     pub overwrite: bool,
 }
 
-#[derive(Default, ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, ValueEnum, Copy, Clone, PartialEq, Eq)]
 pub enum ConfigMode {
     ///Integrate each configuration as a separate desktop action
     /// within the main Desktop File.
@@ -354,7 +354,6 @@ pub fn format_desktop(
             fs::create_dir_all(parent)?;
         }
 
-        debug!("Writing shadow");
         write!(File::create(shadow)?, "{}", local_desktop.join("\n"))?;
         profile.id(name)
     } else {
@@ -428,8 +427,6 @@ pub fn format_desktop(
         fs::create_dir_all(parent)?;
     }
 
-    info!("Writing to {}", antimony_desktop.display());
-
     write!(
         File::create(antimony_desktop).with_context(|| "Failed to create new desktop file")?,
         "{}",
@@ -454,7 +451,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
     // If ~/.local/bin is in PATH, the symlink takes precedence over
     // and thus applications will run in the sandbox unless the absolute
     // path in /usr/bin is given.
-    debug!("Creating symlink in ~/.local/bin");
+    info!("Creating symlink in ~/.local/bin");
     let local = HOME_PATH.join(".local").join("bin");
     if !local.exists() {
         println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want

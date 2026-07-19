@@ -1,5 +1,5 @@
-#![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 //! Edit a file.
+#![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 
 use crate::shared::env::EDITOR;
 use dialoguer::Confirm;

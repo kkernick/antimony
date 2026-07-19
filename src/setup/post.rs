@@ -1,14 +1,11 @@
-use std::{fs, path::Path};
-
 use crate::shared::{
     env::{HOME, PWD},
     profile::files::FileMode,
 };
 use anyhow::Result;
-use log::debug;
+use std::{fs, path::Path};
 
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
-    debug!("Setting up post arguments");
     let mut post_args = Vec::new();
 
     post_args.append(&mut args.profile.arguments);

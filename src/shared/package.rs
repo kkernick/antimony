@@ -19,7 +19,7 @@ use anyhow::{Result, anyhow};
 use bilrost::{Message, OwnedMessage};
 use bstr::{BStr, BString};
 use clap::Parser;
-use log::{debug, error, info};
+use log::{error, info};
 use path_clean::clean;
 use serde::{Deserialize, Serialize};
 use spawn::Spawner;
@@ -86,7 +86,7 @@ pub struct Args {
     pub passthrough: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, Default, Debug, Message)]
+#[derive(Deserialize, Serialize, Default, Message)]
 pub struct Package {
     pub name: String,
     pub profile: Profile,
@@ -176,7 +176,7 @@ impl Package {
         }
 
         let mut add_file = |path: &Path, dest: &str| -> Result<()> {
-            debug!("Adding {} to package (at {dest})", path.display());
+            info!("Adding {} to package (at {dest})", path.display());
             let mut buffer = Vec::new();
             File::open(path)?.read_to_end(&mut buffer)?;
 
@@ -221,7 +221,7 @@ impl Package {
             {
                 fs::create_dir_all(parent)?;
             }
-            debug!("Unpacking {path} to {}...", pkg_path.display());
+            info!("Unpacking {path} to {}...", pkg_path.display());
             fs::write(&pkg_path, content)?;
             if executable {
                 let metadata = fs::metadata(&pkg_path)?;
@@ -341,7 +341,6 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
         }
         result
     } else {
-        debug!("Package marker found");
         let path = CACHE_DIR.join("packages").join(name);
         if cli.refresh && path.exists() {
             fs::remove_dir_all(&path)?;
@@ -355,8 +354,6 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
 
             // We might hit multiple marker (At least one, as it's used in the ELF header), but
             // the data shouldn't have it, so it should be the last one.
-            debug!("Searching for payload...");
-
             for (position, window) in bytes.windows(PACKAGE_MARKER.len()).enumerate() {
                 if window == PACKAGE_MARKER
                     && let Some(index) = position.checked_add(PACKAGE_MARKER.len())

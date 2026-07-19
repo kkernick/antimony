@@ -1,4 +1,4 @@
-//! Export user-profiles
+//! Package profiles into self-contained binaries
 
 use crate::{
     cli::{run, run_vec},

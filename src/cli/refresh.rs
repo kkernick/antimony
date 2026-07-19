@@ -13,7 +13,7 @@ use crate::{
 use anyhow::Result;
 use clap::ValueHint;
 use indicatif::{ProgressBar, ProgressStyle};
-use log::{debug, info};
+use log::info;
 use std::{fs, time::Duration};
 use user::as_effective;
 
@@ -81,7 +81,6 @@ impl cli::Run for Args {
                 for stale in saved.difference(&session) {
                     let cache = CACHE_DIR.join("run").join(stale);
                     if cache.exists() {
-                        info!("Removing stale SOF cache {stale}");
                         as_effective!(fs::remove_dir_all(cache))??;
                     }
                 }
@@ -159,8 +158,6 @@ impl cli::Run for Args {
 /// If we cannot read the bin directory.
 pub fn installed_profiles() -> Result<Vec<String>> {
     let bin = HOME_PATH.join(".local").join("bin");
-    debug!("Refreshing local binaries");
-
     let profiles = fs::read_dir(bin)?
         .filter_map(|file| {
             if let Ok(file) = file {
