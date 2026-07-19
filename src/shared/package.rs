@@ -1,14 +1,18 @@
 //! The Antimony Package is a self-contained profile that can run on any device.
 
-use crate::cli::integrate::{self, integrate_vec};
-use crate::shared::Set;
-use crate::shared::env::DATA_HOME;
-use crate::shared::find::{DirType, recursive_crawl};
-use crate::{cli::run, setup::setup};
 use crate::{
-    cli::run_vec,
+    cli::{
+        integrate::{self, integrate_vec},
+        run, run_vec,
+    },
     fab::lib::ROOTS,
-    shared::{Map, env::CACHE_DIR, profile::Profile},
+    setup::setup,
+    shared::{
+        Map, Set,
+        env::{CACHE_DIR, DATA_HOME},
+        find::{DirType, recursive_crawl},
+        profile::Profile,
+    },
     timer,
 };
 use anyhow::{Result, anyhow};
@@ -19,17 +23,14 @@ use log::{debug, error, info};
 use path_clean::clean;
 use serde::{Deserialize, Serialize};
 use spawn::Spawner;
-use std::io::SeekFrom;
-use std::os::unix::fs::symlink;
-use std::path::PathBuf;
-use std::sync::LazyLock;
 use std::{
     env,
     ffi::OsStr,
     fs::{self, File},
-    io::{Read, Seek},
-    os::unix::fs::PermissionsExt,
-    path::Path,
+    io::{Read, Seek, SeekFrom},
+    os::unix::fs::{PermissionsExt, symlink},
+    path::{Path, PathBuf},
+    sync::LazyLock,
 };
 use user::Mode;
 
@@ -167,10 +168,7 @@ impl Package {
         self.symlinks.insert(name.to_owned(), dest.to_owned());
     }
 
-    /// Add a binary to the package and the specified path.
-    ///
-    /// ## Errors
-    /// If the binary could not be found, or it could not be read
+    /// Add a file to a package field at the desired location.
     pub fn add_path(name: &str, dest: &str, to: &mut Map<String, BString>) -> Result<()> {
         let mut path = Path::new(name);
         if !path.exists() {
@@ -204,6 +202,7 @@ impl Package {
         Ok(())
     }
 
+    /// Unpack the package
     pub fn unpack(&self, package_dir: &Path) -> Result<()> {
         fs::create_dir_all(package_dir)?;
         fs::write(
@@ -284,6 +283,7 @@ impl Package {
     }
 }
 
+/// Grab the profile from a package directory.
 pub fn get_profile(path: &Path) -> Result<(Profile, PathBuf)> {
     let mut profile_path = None;
 

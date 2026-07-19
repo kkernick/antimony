@@ -1,4 +1,3 @@
-#![allow(unused_crate_dependencies)]
 //! A SECCOMP Notify application that reads the paths to `execve` to determine
 //! binaries called by the application.
 //!
@@ -9,6 +8,7 @@
 //! ```
 //!
 //! Or whatever instance value you have.
+#![allow(unused_crate_dependencies)]
 
 use antimony::shared::{
     self, ThreadMap,

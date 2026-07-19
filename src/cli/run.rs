@@ -456,7 +456,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             // SIGKILL the child so we can get to any post hooks.
             Err(HandleError::Signal) => {
                 log::info!("Signal recieved, closing sandbox");
-                let _ = handle.signal(Signal::SIGILL);
+                let _ = handle.signal(Signal::SIGTERM);
                 Ok(())
             }
             Err(e) => Err(e.into()),

@@ -1,6 +1,11 @@
-#![allow(unused_crate_dependencies)]
 //! This file compiles into an interface to the Notification Portal.
 //! Effectively, it's notify-send, but in Rust.
+//! 
+//! Why? Two-fold:
+//!  1. We already have the notify framework, so removing a dependency is nice.
+//!  2. Due to Antimony being a setuid application, we aren't allowed to communicate
+//!     with the user bus; we *have* to spawn a new real process.
+#![allow(unused_crate_dependencies)]
 
 use clap::Parser;
 use notify::Error;

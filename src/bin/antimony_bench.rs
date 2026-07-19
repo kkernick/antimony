@@ -1,4 +1,3 @@
-#![allow(unused_crate_dependencies)]
 //! For internal use only. Benchmark Antimony, with support for checking out
 //! earlier versions.
 //!
@@ -6,6 +5,7 @@
 //! and thus may fail when running in this benchmark, as it is only run
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
+#![allow(unused_crate_dependencies)]
 
 use antimony::shared::{self, env::HOME_PATH};
 use anyhow::{Result, anyhow};

@@ -1,9 +1,9 @@
-#![allow(unused_crate_dependencies)]
 //! This application serves as a setuid hand-off when Antimony is running in
 //! lock-down mode. In Lockdown, we run underneath a dedicated, isolated user,
 //! so Antimony needs to transition from $USER/antimony to lockdown/antimony.
 //! This is achieved by having a setuid owned by the lockdown that does nothing
 //! but ingest a bubblewrap command and execute.
+#![allow(unused_crate_dependencies)]
 
 use anyhow::{Result, anyhow};
 use spawn::Spawner;

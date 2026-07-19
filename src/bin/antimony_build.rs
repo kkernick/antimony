@@ -1,6 +1,6 @@
-#![allow(unused_crate_dependencies)]
 //! Build antimony.
 //! This is just a cargo wrapper that uses predefined values.
+#![allow(unused_crate_dependencies)]
 
 use antimony::shared::env::HOME_PATH;
 use anyhow::Result;

@@ -1,5 +1,5 @@
-#![allow(unused_crate_dependencies)]
 //! The main Antimony executable.
+#![allow(unused_crate_dependencies)]
 
 use antimony::{
     cli::{self, Run, run::as_symlink},
@@ -41,7 +41,7 @@ fn main() -> Result<()> {
     // We cannot account for it, and up until now the solution has been simply
     // to choke hot-loops with our thread-safe `as_real` macros. Performance
     // considerations require us to change how Antimony operates.
-    timer!("::set", user::set(user::Mode::Real))?;
+    user::set(user::Mode::Real)?;
 
     // If we have a package, read the message.
     if let Some(current) = IS_PACKAGE.as_ref()

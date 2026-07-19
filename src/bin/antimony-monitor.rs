@@ -1,6 +1,6 @@
-#![allow(unused_crate_dependencies)]
 //! A SECCOMP Notify application that stores syscall information in a `SQLite`.
 //! Database to be used for profile generation.
+#![allow(unused_crate_dependencies)]
 
 use antimony::shared::{
     self, Set, ThreadMap,

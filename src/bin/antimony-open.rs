@@ -1,5 +1,8 @@
 #![allow(unused_crate_dependencies)]
 //! A simple implementation of xdg-open, without requiring Bash.
+//! 
+//! Why? Because parsing xdg-open is a pain, and overwhelms our script parser.
+//! The previous solution was adding a simplified xdg-open through a direct file.
 
 use anyhow::{Result, anyhow};
 use dbus::{

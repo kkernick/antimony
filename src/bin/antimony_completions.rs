@@ -1,5 +1,5 @@
-#![allow(unused_crate_dependencies)]
 //! Generate shell completions for Antimony.
+#![allow(unused_crate_dependencies)]
 
 use antimony::cli;
 use clap::CommandFactory;

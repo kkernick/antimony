@@ -1,4 +1,3 @@
-#![allow(unused_crate_dependencies)]
 //! This application is an implementation of flatpak-spawn for Antimony.
 //! Some of its arguments are no-ops, and only exist for a compatible interface,
 //! but it's largely feature complete. There are two important distinctions:
@@ -19,6 +18,7 @@
 //!
 //! --watch-bus is a no-op: antimony-spawn will either exit if the child
 //! it runs does, or if it is hit with SIGTERM or SIGINT.
+#![allow(unused_crate_dependencies)]
 
 use antimony::{cli, setup};
 use anyhow::Result;

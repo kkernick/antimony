@@ -33,12 +33,14 @@ pub enum DirType {
     Link = 2,
 }
 
+/// What we're filter for;
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum WildcardFilter {
     Files,
     Directories,
 }
 
+/// Crawl a directory, collecting all files, directories, and symlinks
 pub fn crawl_dir(dir: &str) -> Result<DirMap> {
     timer!(
         "::crawl_dir",
@@ -180,11 +182,6 @@ pub fn dir(dir: &str) -> Result<Set<String>> {
 }
 
 /// Find all matches in a directory. We only match the top level for performance considerations.
-#[allow(
-    clippy::unwrap_used,
-    clippy::missing_panics_doc,
-    reason = "Both unwraps are done with explicit knowledge that they cannot fail."
-)]
 pub fn wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set<String>> {
     timer!("::find::wildcards", {
         let run = |mut dir: Cow<'_, str>, mut base: &str| -> Result<Set<String>> {
