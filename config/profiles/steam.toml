@@ -1,4 +1,4 @@
-features = ["vulkan", "bin", "passwd", "ld", "network", "wayland", "pipewire", "xorg", "tray"]
+features = ["vulkan", "bin", "passwd", "ld", "wayland", "network", "pipewire", "xorg", "tray"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]

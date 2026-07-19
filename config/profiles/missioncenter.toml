@@ -1,5 +1,5 @@
 id = "io.missioncenter.MissionCenter"
-features = ["libadwaita", "applications", "sys", "network", "passwd", "gio", "cgroup"]
+features = ["libadwaita", "network", "gio", "cgroup", "passwd", "sys", "applications"]
 binaries = ["/usr/share/antimony/utilities/antimony-spawn=/app/bin/missioncenter-spawner", "missioncenter-magpie", "sh"]
 devices = ["/dev/udmabuf"]
 namespaces = ["Pid"]

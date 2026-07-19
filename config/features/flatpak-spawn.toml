@@ -4,4 +4,4 @@ binaries = ["bwrap", "bash", "ldd", "$AT_HOME/utilities/antimony-spawn=/usr/bin/
 namespaces = ["User"]
 
 [files.platform]
-ro = ["/etc/antimony.toml", "/usr/share/antimony/db/antimony.db", "/etc/antimony.d"]
+ro = ["/etc/antimony.toml", "/etc/antimony.d", "/usr/share/antimony/db/antimony.db"]

@@ -4,4 +4,4 @@ caveat = "This provides access to /sys, allowing the sandbox to see all devices.
 binaries = ["dmidecode", "udevadm"]
 
 [files.platform]
-ro = ["/usr/share/hwdata", "/sys", "/etc/udev"]
+ro = ["/etc/udev", "/sys", "/usr/share/hwdata"]

@@ -14,7 +14,7 @@ directories = ["gtk-4.0", "tinysparql-3.0"]
 owns = ["{desktop}"]
 
 [files.user]
-ro = ["$HOME/.gtkrc-2.0", "$XDG_CONFIG_HOME/gtk-4.0", "$XDG_CONFIG_HOME/gtk-2.0", "$XDG_CONFIG_HOME/gtkrc-2.0", "$XDG_CONFIG_HOME/gtkrc"]
+ro = ["$HOME/.gtkrc-2.0", "$XDG_CONFIG_HOME/gtkrc", "$XDG_CONFIG_HOME/gtk-2.0", "$XDG_CONFIG_HOME/gtkrc-2.0", "$XDG_CONFIG_HOME/gtk-4.0"]
 
 [files.platform]
 ro = ["/etc/xdg/gtk-4.0/"]

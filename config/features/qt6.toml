@@ -7,7 +7,7 @@ QT_QPA_PLATFORM = "wayland"
 
 [libraries]
 roots = ["/usr/lib/qt6/plugins"]
-directories = ["qt6/plugins/kiconthemes6", "qt6/plugins/platform*", "qt6/plugins/styles", "qt6/plugins/imageformats", "qt6/plugins/iconengines", "qt6/plugins/wayland-*"]
+directories = ["qt6/plugins/kiconthemes6", "qt6/plugins/platform*", "qt6/plugins/wayland-*", "qt6/plugins/imageformats", "qt6/plugins/styles", "qt6/plugins/iconengines"]
 
 [files.user]
 ro = ["$XDG_CONFIG_HOME/kdedefaults", "$XDG_CONFIG_HOME/kdeglobals", "$XDG_CONFIG_HOME/breezerc", "$XDG_CONFIG_HOME/Trolltech.conf", "$XDG_CONFIG_HOME/kde.org"]

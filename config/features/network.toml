@@ -3,4 +3,4 @@ description = "Give applications network connectivity."
 namespaces = ["Net"]
 
 [files.platform]
-ro = ["/usr/share/ssl", "/etc/hosts", "/etc/pki", "/etc/resolv.conf", "/etc/nsswitch.conf", "/usr/share/pki", "/etc/gai.conf", "/usr/share/ca-certificates", "/etc/ca-certificates", "/etc/host.conf", "/etc/ssl"]
+ro = ["/etc/ssl", "/etc/hosts", "/etc/resolv.conf", "/usr/share/ssl", "/etc/nsswitch.conf", "/usr/share/pki", "/etc/gai.conf", "/etc/pki", "/usr/share/ca-certificates", "/etc/ca-certificates", "/etc/host.conf"]
