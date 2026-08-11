@@ -94,7 +94,7 @@ sudo cp $ROOT/generated/antimony.fish /usr/share/fish/vendor_completions.d
 sudo cp $ROOT/generated/_antimony /usr/share/zsh/site-functions
 
 for MAN in $(ls $ROOT/generated/*.1); do
-    yes | gzip --keep --verbose --suffix=.gz $MAN
+    yes | gzip --force --keep --verbose --suffix=.gz $MAN
     sudo cp --verbose $MAN.gz /usr/share/man/man1
 done
 

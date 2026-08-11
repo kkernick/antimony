@@ -74,7 +74,7 @@ pub struct Info {
 #[allow(clippy::too_many_lines)]
 pub fn setup<'a>(
     mut name: Cow<'a, str>,
-    mut args: &'a mut super::cli::run::Args,
+    args: &'a mut super::cli::run::Args,
     flush_defer: bool,
     mut package: Option<(Package, bool)>,
 ) -> Result<Info> {
@@ -188,7 +188,7 @@ pub fn setup<'a>(
         package = Some((Package::default(), true));
         (profile, hash, profile_args)
     } else {
-        let (profile, hash) = Profile::new(&name, args.config.take(), Some(&mut args), false)?;
+        let (profile, hash) = Profile::new(&name, args.config.take(), Some(args), false)?;
         (profile, hash, Vec::new())
     };
 

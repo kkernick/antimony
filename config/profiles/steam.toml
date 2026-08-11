@@ -10,9 +10,6 @@ policy = "Enabled"
 [ipc]
 user_bus = true
 
-[files.user]
-rw = ["/steam"]
-
 [files.platform]
 ro = ["/etc/machine-id", "/sys", "/run/udev"]
 
