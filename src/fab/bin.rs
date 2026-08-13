@@ -3,7 +3,11 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::{
-    fab::{ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib, lib, localize_path, write_cache},
+    fab::{
+        ELF_MAGIC, FabInfo, elf_filter, get_cache, in_lib,
+        lib::{self, ROOTS},
+        localize_path, write_cache,
+    },
     shared::{
         Map, Set, ThreadSet, direct_path,
         find::{self, DirType, WildcardFilter},
@@ -461,10 +465,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         let skip = binaries.contains("/usr/bin")
             && info.package.as_ref().map_or_else(|| true, |(_, b)| *b);
         if skip {
-            info.profile
-                .binaries
-                .insert(info.profile.app_path(info.name).into_owned());
-            info.profile.binaries.remove("/usr/bin");
+            info.profile.libraries.get_or_insert_default().no_sof = Some(true);
 
             #[rustfmt::skip]
             info.handle.args_i([
@@ -478,84 +479,72 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 "--symlink", "/usr/sbin", "/sbin",
             ]);
 
-            info.profile.binaries = info
-                .profile
-                .binaries
-                .iter()
-                .filter_map(|binary| {
-                    if let Ok(localized) = localize_path(binary, false) {
-                        match localized {
-                            (Some(src), dest) if !src.starts_with("/usr/bin") => {
-                                info.handle.args_i(["--ro-bind", &src, &dest]);
-                                Some(src.into())
-                            }
-                            (None, dest) => {
-                                if let Ok(resolved) = which(binary) {
-                                    if dest == binary.as_str() {
-                                        info.handle.args_i(["--ro-bind", resolved, resolved]);
-                                    } else {
-                                        info.handle.args_i(["--ro-bind", resolved, &dest]);
-                                    }
-                                    Some(resolved.into())
-                                } else {
-                                    None
+            info.profile.binaries.iter().for_each(|binary| {
+                if let Ok(localized) = localize_path(binary, false) {
+                    match localized {
+                        (Some(src), dest) if !src.starts_with("/usr/bin") => {
+                            info.handle.args_i(["--ro-bind", &src, &dest]);
+                        }
+                        (None, dest) => {
+                            if let Ok(resolved) = which(binary) {
+                                if dest == binary.as_str()
+                                    && !resolved.starts_with("/usr/bin/")
+                                    && !ROOTS.iter().any(|root| resolved.starts_with(root.as_ref()))
+                                {
+                                    info.handle.args_i(["--ro-bind", resolved, resolved]);
+                                } else if !dest.starts_with("/usr/bin/")
+                                    && Path::new(&dest).is_absolute()
+                                    && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
+                                {
+                                    info.handle.args_i(["--ro-bind", resolved, &dest]);
                                 }
                             }
-                            _ => None,
                         }
-                    } else {
-                        None
+                        _ => {}
                     }
-                })
-                .collect();
+                }
+            });
 
             // Crawl the binary folder to:
             // 1. Discover external directories that are linked to that need to be included.
             // 2. Discover ELF binaries to add to the SOF
-            if let Ok(mut binaries) = find::crawl_dir("/usr/bin") {
-                if let Some(links) = binaries.remove(&DirType::Link) {
-                    #[allow(
-                        clippy::option_if_let_else,
-                        reason = "dest is already being borrowed."
-                    )]
-                    links
-                        .into_iter()
-                        .filter_map(|link| {
-                            let target = fs::read_link(&link).ok()?;
-                            let link_parent = Path::new(&link).parent()?;
-                            let resolved = if target.is_absolute() {
-                                target
-                            } else {
-                                link_parent.join(target)
-                            };
-                            fs::canonicalize(&resolved).ok()
-                        })
-                        .filter(|dest| !dest.starts_with("/usr/bin/"))
-                        .map(|dest| {
-                            if let Some(parent) = dest.parent() {
-                                parent.to_path_buf()
-                            } else {
-                                dest
-                            }
-                        })
-                        .collect::<Set<_>>()
-                        .into_iter()
-                        .for_each(|dest| {
-                            debug!("Add external binary path: {}", dest.display());
-                            let str = dest.to_string_lossy();
-                            info.handle.args_i(["--ro-bind", &str, &str]);
-                            if dest.is_file() && elf_filter(&str).unwrap_or_default() {
-                                info.profile.binaries.insert(str.into_owned());
-                            }
-                        });
-                }
-                if let Some(files) = binaries.remove(&DirType::File) {
-                    info.profile.binaries.extend(
-                        files
-                            .into_iter()
-                            .filter(|path| elf_filter(path.as_str()).unwrap_or_default()),
-                    );
-                }
+            if let Ok(mut binaries) = find::crawl_dir("/usr/bin")
+                && let Some(links) = binaries.remove(&DirType::Link)
+            {
+                #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
+                links
+                    .into_iter()
+                    .filter_map(|link| {
+                        let target = fs::read_link(&link).ok()?;
+                        let link_parent = Path::new(&link).parent()?;
+                        let resolved = if target.is_absolute() {
+                            target
+                        } else {
+                            link_parent.join(target)
+                        };
+                        fs::canonicalize(&resolved).ok()
+                    })
+                    .filter(|dest| {
+                        !dest.starts_with("/usr/bin/")
+                            && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
+                    })
+                    .map(|dest| {
+                        if let Some(parent) = dest.parent() {
+                            parent.to_path_buf()
+                        } else {
+                            dest
+                        }
+                    })
+                    .collect::<Set<_>>()
+                    .into_iter()
+                    .for_each(|dest| {
+                        debug!("Add external binary path: {}", dest.display());
+                        let str = dest.to_string_lossy();
+                        info.handle.args_i(["--ro-bind", &str, &str]);
+                        if dest.is_file() && elf_filter(&str).unwrap_or_default() {
+                            info.profile.binaries.insert(str.into_owned());
+                        }
+                    });
             }
 
             return Ok(());

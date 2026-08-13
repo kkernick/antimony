@@ -212,11 +212,17 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             if Path::new(&name).exists() {
                 if no_sof {
                     info.handle.args_i(["--ro-bind", &name, &name]);
-                } else {
+                } else if Path::new(&name).is_dir() {
                     info.profile
                         .libraries
                         .get_or_insert_default()
                         .directories
+                        .insert(name);
+                } else {
+                    info.profile
+                        .libraries
+                        .get_or_insert_default()
+                        .files
                         .insert(name);
                 }
             }

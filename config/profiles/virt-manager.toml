@@ -12,3 +12,4 @@ ro = ["/usr/share/misc", "/var/run/libvirt", "/sys", "/usr/share/osinfo", "/usr/
 
 [libraries]
 files = ["libosinfo*", "libvirt*", "libspice-client*"]
+directories = ["libvirt"]

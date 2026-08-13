@@ -1,7 +1,7 @@
 name = "proton"
 description = "Wine for Steam"
 notes = "See the Wine feature."
-requires = ["vulkan", "bin", "locale", "dri", "lib", "wayland", "fonts", "ld", "xorg"]
+requires = ["vulkan", "bin", "locale", "dri", "wayland", "fonts", "ld", "xorg"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]

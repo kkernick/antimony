@@ -11,7 +11,7 @@ Therefore, the procedure for running something like Battle.Net (battle.toml), is
 3. Exit out of the sandbox, then run the profile normally.
 """
 caveat = "This feature requires vast permissions"
-requires = ["vulkan", "bin", "locale", "dri", "lib", "wayland", "fonts", "ld", "xorg"]
+requires = ["vulkan", "bin", "locale", "dri", "wayland", "fonts", "ld", "xorg"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]
