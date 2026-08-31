@@ -105,7 +105,7 @@ impl super::BackingStore for Store {
             }
             File::create(path)?.write_all(content)?;
             Ok(())
-        })?
+        })
     }
 
     #[inline]
@@ -115,7 +115,7 @@ impl super::BackingStore for Store {
 
     #[inline]
     fn remove(&self, name: &str, object: Object) -> Result<(), super::Error> {
-        as_effective!({ fs::remove_file(self.path(name, object)) })??;
+        as_effective!({ fs::remove_file(self.path(name, object)) })?;
         Ok(())
     }
 }

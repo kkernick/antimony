@@ -1,6 +1,6 @@
 #![allow(clippy::missing_docs_in_private_items, clippy::missing_errors_doc)]
 
-use crate::fab::resolve;
+use crate::{fab::resolve, shared::which::AntimonyWhich};
 use bilrost::{Enumeration, Message};
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
@@ -149,12 +149,13 @@ impl Hook {
             Type::Shell | Type::Program => {
                 let handle = match self.t {
                     Type::Shell => {
-                        Spawner::abs("/usr/bin/bash").args(["-c", self.content.as_str()])
+                        Spawner::which::<AntimonyWhich>("bash")?.args(["-c", self.content.as_str()])
                     }
-                    Type::Program => Spawner::new(resolve(Cow::Borrowed(&self.content)))?,
+                    Type::Program => {
+                        Spawner::which::<AntimonyWhich>(resolve(Cow::Borrowed(&self.content)))?
+                    }
                     Type::Profile => unreachable!(),
                 }
-                .mode(user::Mode::Real)
                 .preserve_env(self.env.unwrap_or(false))
                 .env("ANTIMONY_NAME", name)
                 .env("ANTIMONY_CACHE", cache)

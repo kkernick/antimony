@@ -51,7 +51,6 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 let title = args.name.to_title_case();
                                 let mut prompt = Spawner::abs(utility("notify"))
                             .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                            .mode(user::Mode::Real)
                             .output(StreamMode::Pipe)
                             .args([
                                 "--title",

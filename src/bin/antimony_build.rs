@@ -2,7 +2,7 @@
 //! This is just a cargo wrapper that uses predefined values.
 #![allow(unused_crate_dependencies)]
 
-use antimony::shared::env::HOME_PATH;
+use antimony::shared::{env::HOME_PATH, which::AntimonyWhich};
 use anyhow::Result;
 use clap::Parser;
 use spawn::{Spawner, StreamMode};
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
 
     let passthrough = cli.passthrough.unwrap_or_default();
 
-    let root = Spawner::new("git")?
+    let root = Spawner::which::<AntimonyWhich>("git")?
         .args(["rev-parse", "--show-toplevel"])
         .output(StreamMode::Pipe)
         .error(StreamMode::Discard)
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
     let target = "x86_64-unknown-linux-gnu";
     if cli.recipe == "pgo" {
         eprintln!("Compiling instrumented binary");
-        Spawner::new("cargo")?
+        Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
             .wait()?;
 
         eprintln!("Compiling Final Binary");
-        Spawner::new("cargo")?
+        Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
             .wait()?;
     } else {
         eprintln!("Compiling Binary");
-        Spawner::new("cargo")?
+        Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)

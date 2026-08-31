@@ -1,7 +1,7 @@
 //! Generate shell completions and man pages for Antimony.
 #![allow(unused_crate_dependencies)]
 
-use antimony::cli;
+use antimony::{cli, shared::which::AntimonyWhich};
 use clap::CommandFactory;
 use clap_complete::{generate, shells};
 use spawn::Spawner;
@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 fn main() -> anyhow::Result<()> {
     let mut cli = cli::Cli::command();
 
-    let root = Spawner::new("git")?
+    let root = Spawner::which::<AntimonyWhich>("git")?
         .args(["rev-parse", "--show-toplevel"])
         .output(spawn::StreamMode::Pipe)
         .spawn()?

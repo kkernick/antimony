@@ -28,7 +28,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(parent) = cmd_cache.parent()
         && !parent.exists()
     {
-        as_effective!(fs::create_dir_all(parent))??;
+        as_effective!(fs::create_dir_all(parent))?;
     }
 
     let mut info = FabInfo {
@@ -63,7 +63,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     timer!("::fab::dev", fab::dev::fabricate(&info))?;
 
     if package.is_none() {
-        as_effective!(args.handle.cache_write(&cmd_cache))??;
+        as_effective!(args.handle.cache_write(&cmd_cache))?;
     }
     Ok(())
 }

@@ -401,7 +401,6 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                     if CONFIG_FILE.auto_refresh() && !args.refresh {
                         Spawner::abs(utility("notify"))
                             .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                            .mode(user::Mode::Real)
                             .output(StreamMode::Pipe)
                             .args([
                                 "--title",

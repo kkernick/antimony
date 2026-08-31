@@ -40,7 +40,7 @@ impl cli::Run for Args {
     fn run(self) -> Result<()> {
         if self.seccomp {
             if privileged()? {
-                as_effective!({ fs::remove_dir_all(AT_HOME.join("seccomp")) })??;
+                as_effective!({ fs::remove_dir_all(AT_HOME.join("seccomp")) })?;
                 info!("Deleted");
                 return Ok(());
             }

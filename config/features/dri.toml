@@ -3,7 +3,7 @@ description = "DRI for accelerated video rendering"
 devices = ["/dev/udmabuf", "/dev/dri"]
 
 [libraries]
-files = ["libMesa*", "libGL*", "libEGL*"]
+files = ["libGL*", "libgallium*", "libMesa*", "libEGL*"]
 directories = ["dri", "gbm"]
 
 [files.platform]

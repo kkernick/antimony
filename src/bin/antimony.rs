@@ -15,6 +15,18 @@ use rayon::ThreadPoolBuilder;
 use std::{env, fs::File, thread::available_parallelism};
 
 fn main() -> Result<()> {
+    // Unfortunately, there is only a finite about of things that need
+    // Effective Access (The Configuration Store, SOF), and only a handful
+    // actual need write-permission.
+    //
+    // In contrast, there are countably infinite things that the Real user
+    // needs access for. Their home, their runtime directory, temp, whatever
+    // mounts they may have installed, and whatever else they may have setup.
+    // We cannot account for it, and up until now the solution has been simply
+    // to choke hot-loops with our thread-safe `as_real` macros. Performance
+    // considerations require us to change how Antimony operates.
+    user::set(user::Mode::Real)?;
+
     // Somehow, using half the available parallel drastically improves performance.
     // However, 3 causes a massive regression.
     ThreadPoolBuilder::new()
@@ -29,18 +41,6 @@ fn main() -> Result<()> {
             unsafe { env::set_var(key, value) }
         }
     }
-
-    // Unfortunately, there is only a finite about of things that need
-    // Effective Access (The Configuration Store, SOF), and only a handful
-    // actual need write-permission.
-    //
-    // In contrast, there are countably infinite things that the Real user
-    // needs access for. Their home, their runtime directory, temp, whatever
-    // mounts they may have installed, and whatever else they may have setup.
-    // We cannot account for it, and up until now the solution has been simply
-    // to choke hot-loops with our thread-safe `as_real` macros. Performance
-    // considerations require us to change how Antimony operates.
-    user::set(user::Mode::Real)?;
 
     // If we have a package, read the message.
     if let Some(current) = IS_PACKAGE.as_ref()

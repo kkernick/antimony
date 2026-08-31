@@ -1,7 +1,7 @@
 //! Edit a file.
 #![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 
-use crate::shared::env::EDITOR;
+use crate::shared::{env::EDITOR, which::AntimonyWhich};
 use dialoguer::Confirm;
 use log::error;
 use serde::{Serialize, de::DeserializeOwned};
@@ -61,10 +61,9 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
     //  2. Bails
     let buffer = loop {
         // Launch the editor.
-        Spawner::new(EDITOR.as_str())?
+        Spawner::which::<AntimonyWhich>(EDITOR.as_str())?
             .preserve_env(true)
             .arg(temp.full().to_string_lossy())
-            .mode(user::Mode::Real)
             .spawn()?
             .wait()?;
 

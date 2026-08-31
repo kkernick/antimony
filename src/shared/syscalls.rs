@@ -7,6 +7,7 @@ use crate::shared::{
     find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
     store::{Object, SYSTEM_STORE, USER_STORE},
+    which::which,
 };
 use inotify::{Inotify, WatchMask};
 use log::{debug, info, warn};
@@ -120,7 +121,6 @@ fn new_connection() -> Result<Connection, Error> {
         conn.pragma_update(None, "busy_timeout", "100")?;
         Ok(conn)
     })
-    .expect("Fatal user error")
 }
 
 thread_local! {
@@ -325,7 +325,7 @@ fn extend(tx: &Transaction, binary: &str, syscalls: &mut Set<i32>) -> Result<(),
         None => binary,
     };
 
-    let resolved = which::which(binary).map_or(Cow::Borrowed(binary), Cow::Borrowed);
+    let resolved = which(binary).map_or(Cow::Borrowed(binary), Cow::Borrowed);
 
     for syscall in get_binary_syscalls(tx, &resolved)? {
         syscalls.insert(syscall);
@@ -588,5 +588,5 @@ pub fn merge_database(db: &Path) -> anyhow::Result<()> {
             tx.commit()?;
             Ok(())
         })
-    })?
+    })
 }

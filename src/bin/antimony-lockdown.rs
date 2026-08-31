@@ -5,6 +5,7 @@
 //! but ingest a bubblewrap command and execute.
 #![allow(unused_crate_dependencies)]
 
+use antimony::shared::which::AntimonyWhich;
 use anyhow::{Result, anyhow};
 use spawn::Spawner;
 use std::{
@@ -54,13 +55,13 @@ fn main() -> Result<()> {
     if let Ok(home) = env::var("LOCKDOWN_HOME") {
         let path = PathBuf::from(format!("/usr/share/antimony/lockdown/{home}"));
         if !path.exists() {
-            as_effective!(fs::create_dir_all(path))??;
+            as_effective!(fs::create_dir_all(path))?;
         }
     }
 
     // Digest the arguments and pass them to bubblewrap.
     let arguments: Vec<_> = env::args().collect();
-    let handle = Spawner::new("bwrap")?
+    let handle = Spawner::which::<AntimonyWhich>("bwrap")?
         .mode(user::Mode::Effective)
         .args(&arguments[1..]);
 

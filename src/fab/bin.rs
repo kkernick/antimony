@@ -14,6 +14,7 @@ use crate::{
         profile::{Profile, files::FileMode},
         store::Object,
         utility,
+        which::which,
     },
     timer,
 };
@@ -30,7 +31,6 @@ use std::{
     sync::Arc,
 };
 use temp::Temp;
-use which::which;
 
 /// A `bilrost` struct for serializing.
 #[derive(Message, Default)]
@@ -313,7 +313,7 @@ fn handle_localize(
     done: Arc<ThreadSet<String>>,
 ) -> Result<ParseReturn> {
     let mut ret = ParseReturn::default();
-    let file = which::which(file).unwrap_or(file);
+    let file = which(file).unwrap_or(file);
     if let (Some(src), dst) = localize_path(file, home)? {
         if src == dst {
             if let Some(parsed) = parse(file, instance, done, include_self)?.parse {
@@ -466,6 +466,9 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             && info.package.as_ref().map_or_else(|| true, |(_, b)| *b);
         if skip {
             info.profile.libraries.get_or_insert_default().no_sof = Some(true);
+            info.profile
+                .binaries
+                .insert(info.profile.app_path(info.name).into_owned());
 
             #[rustfmt::skip]
             info.handle.args_i([
@@ -498,6 +501,8 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                                 {
                                     info.handle.args_i(["--ro-bind", resolved, &dest]);
                                 }
+                            } else {
+                                warn!("Could not resolve binary: {binary}");
                             }
                         }
                         _ => {}

@@ -1,16 +1,14 @@
 [package]
 name = "antimony"
-version = "5.2.1"
+version = "5.2.2"
 edition = "2024"
 
 [dependencies]
-common = { git = "https://github.com/kkernick/common", features = ["stream"] }
 notify = { git = "https://github.com/kkernick/notify" }
 seccomp = {  git = "https://github.com/kkernick/seccomp", features = ["notify"] }
-spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "elevate", "fd", "seccomp", "user"] }
+spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", "seccomp", "user"] }
 temp = { git = "https://github.com/kkernick/temp", features = ["user"]}
 user = { git = "https://github.com/kkernick/user" }
-which = {  git = "https://github.com/kkernick/which" }
 
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = { version = "1.0.98", features = ["std"], default-features = false }

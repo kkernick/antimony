@@ -5,6 +5,7 @@ use crate::{
     shared::{
         env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
         profile::Profile,
+        which::{AntimonyWhich, which},
     },
 };
 use anyhow::{Context, Result, anyhow};
@@ -19,7 +20,7 @@ use std::{
     os::unix::fs::symlink,
     path::Path,
 };
-use user::{Mode, USER};
+use user::{Mode, USER, UserScope};
 
 /// Create integrate arguments from subcommand passthrough.
 #[allow(clippy::unreachable)]
@@ -129,7 +130,7 @@ impl cli::Run for Args {
 /// ## Errors
 /// If antimony is improperly set up, or if it has inadequate permission to remove the files.
 pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
-    user::set(user::Mode::Real)?;
+    let _real_lock = UserScope::new(Mode::Real);
     let name = &cmd.profile;
 
     let binary = HOME_PATH.join(".local").join("bin").join(name);
@@ -442,10 +443,10 @@ pub fn format_desktop(
 /// If antimony is improperly set up, or if it has inadequate permission to create the files.
 #[allow(clippy::too_many_lines)]
 pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()> {
-    user::set(user::Mode::Real)?;
+    let _real_lock = UserScope::new(Mode::Real);
 
     // Collect environment.
-    let antimony = which::which("antimony")?;
+    let antimony = which("antimony")?;
     let name = &cmd.profile;
 
     // If ~/.local/bin is in PATH, the symlink takes precedence over
@@ -594,17 +595,15 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
         }
 
         if cmd.enable {
-            Spawner::abs("/usr/bin/systemctl")
+            Spawner::which::<AntimonyWhich>("systemctl")?
                 .args(["--user", "daemon-reload"])
-                .mode(Mode::Real)
                 .preserve_env(true)
                 .spawn()?
                 .wait()?;
 
             if profile.configuration.is_empty() {
-                Spawner::abs("/usr/bin/systemctl")
+                Spawner::which::<AntimonyWhich>("systemctl")?
                     .args(["--user", "enable", &format!("antimony-{name}.service")])
-                    .mode(Mode::Real)
                     .preserve_env(true)
                     .spawn()?
                     .wait()?;

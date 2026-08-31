@@ -65,7 +65,7 @@ impl cli::Run for Args {
                     }
                 }
                 Ok(())
-            })??;
+            })?;
         } else if self.profile.is_none() {
             for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(Result::ok) {
                 let saved: Set<String> = fs::read_dir(hash.path())?
@@ -81,7 +81,7 @@ impl cli::Run for Args {
                 for stale in saved.difference(&session) {
                     let cache = CACHE_DIR.join("run").join(stale);
                     if cache.exists() {
-                        as_effective!(fs::remove_dir_all(cache))??;
+                        as_effective!(fs::remove_dir_all(cache))?;
                     }
                 }
             }

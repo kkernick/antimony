@@ -12,6 +12,7 @@ use crate::shared::{
         seccomp::SeccompPolicy,
     },
     store::{self, Object},
+    which::AntimonyWhich,
 };
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -274,10 +275,9 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
     // something more complicated. It runs under the
     if let Some(condition) = feature.conditional.take() {
         let code = || -> anyhow::Result<i32> {
-            let code = Spawner::new("bash")?
+            let code = Spawner::which::<AntimonyWhich>("bash")?
                 .args(["-c", &condition])
                 .preserve_env(true)
-                .mode(user::Mode::Real)
                 .output(StreamMode::Discard)
                 .error(StreamMode::Discard)
                 .spawn()?

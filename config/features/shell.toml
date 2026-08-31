@@ -7,4 +7,4 @@ binaries = ["/usr/bin/sh"]
 TERM = "$TERM"
 
 [files.platform]
-ro = ["/usr/share/terminfo", "/etc/profile"]
+ro = ["/usr/share/terminfo", "/etc/profile", "/etc/profile.env", "/etc/profile.d", "/etc/bash"]

@@ -12,6 +12,7 @@ use crate::{
         env::{CACHE_DIR, DATA_HOME},
         find::{DirType, recursive_crawl},
         profile::Profile,
+        which::{AntimonyWhich, which},
     },
     timer,
 };
@@ -172,7 +173,7 @@ impl Package {
     pub fn add_path(name: &str, dest: &str, to: &mut Map<String, BString>) -> Result<()> {
         let mut path = Path::new(name);
         if !path.exists() {
-            path = Path::new(which::which(name)?);
+            path = Path::new(which(name)?);
         }
 
         let mut add_file = |path: &Path, dest: &str| -> Result<()> {
@@ -482,7 +483,7 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
         let home = CACHE_DIR.to_string_lossy();
 
         #[rustfmt::skip]
-        let handle = Spawner::new("bwrap")?.mode(Mode::Real).preserve_env(true).args([
+        let handle = Spawner::which::<AntimonyWhich>("bwrap")?.mode(Mode::Real).preserve_env(true).args([
             "--new-session", "--die-with-parent",
             "--proc", "/proc",
             "--dev", "/dev",

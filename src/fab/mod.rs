@@ -11,21 +11,21 @@ use crate::{
     fab::lib::ROOTS,
     shared::{
         Set, ThreadMap,
+        cache::{self, CacheStatic},
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
         package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
+        which::AntimonyWhich,
     },
     timer,
 };
 use anyhow::Result;
 use bilrost::{Message, OwnedMessage};
-use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use heck::ToTitleCase;
 use log::debug;
 use path_clean::clean;
-use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -129,7 +129,7 @@ pub fn write_cache<T: Message>(name: &str, content: T, object: Object) -> Result
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    ROOTS.par_iter().any(|r| path.starts_with(r.as_ref()))
+    ROOTS.iter().any(|r| path.starts_with(r.as_ref()))
 }
 
 /// Filter non-elf files.
@@ -167,11 +167,10 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
             Ok(Set::default())
         } else {
             let depends = if elf_filter(path)? {
-                Spawner::abs("/usr/bin/ldd")
+                Spawner::which::<AntimonyWhich>("ldd")?
                     .arg(path)
                     .output(StreamMode::Pipe)
                     .error(StreamMode::Discard)
-                    .mode(user::Mode::Real)
                     .spawn()?
                     .output_all()?
                     .lines()
@@ -192,7 +191,7 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
                             && let Some(name) = path.file_name()
                         {
                             let mut path = clean(parent).join(name);
-                            if !ROOTS.par_iter().any(|root| path.starts_with(root.as_ref())) {
+                            if !ROOTS.iter().any(|root| path.starts_with(root.as_ref())) {
                                 let usr_path = format!("/usr{}", path.to_string_lossy());
                                 if Path::new(&usr_path).exists() && in_lib(&usr_path) {
                                     path = PathBuf::from(usr_path);

@@ -145,7 +145,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     }
                 }
                 Ok(())
-            })??;
+            })?;
         }
     }
     Ok(())

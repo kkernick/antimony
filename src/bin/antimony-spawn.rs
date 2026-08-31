@@ -20,7 +20,7 @@
 //! it runs does, or if it is hit with SIGTERM or SIGINT.
 #![allow(unused_crate_dependencies)]
 
-use antimony::{cli, setup};
+use antimony::{cli, setup, shared::which::AntimonyWhich};
 use anyhow::Result;
 use clap::{Parser, ValueHint};
 use nix::unistd::chdir;
@@ -146,7 +146,7 @@ fn main() -> Result<()> {
         info.handle.spawn()?
     } else {
         // If --host, or no --sandbox, just spawn the command.
-        let handle = Spawner::new(cli.command)?;
+        let handle = Spawner::which::<AntimonyWhich>(cli.command)?;
         if let Some(passthrough) = cli.passthrough {
             handle.args_i(passthrough);
         }

@@ -232,7 +232,7 @@ pub fn setup<'a>(
 
                 fs::rename(&refresh_sof, &sys_dir)?;
                 Ok(())
-            })??;
+            })?;
 
             let mut crawled = recursive_crawl(&sys_dir.to_string_lossy(), Some(2))?;
             if let Some(files) = crawled.remove(&DirType::File) {
@@ -241,7 +241,7 @@ pub fn setup<'a>(
                         .into_par_iter()
                         .filter(|path| path.ends_with("cmd.cache"))
                         .try_for_each(fs::remove_file)
-                )??;
+                )?;
             }
         } else {
             #[allow(clippy::assigning_clones)]
@@ -260,7 +260,7 @@ pub fn setup<'a>(
                 "No running instances in {}. Safe to refresh.",
                 instances.display()
             );
-            as_effective!(fs::remove_dir_all(&sys_dir))??;
+            as_effective!(fs::remove_dir_all(&sys_dir))?;
         } else if sys_dir == refresh_sof {
             return Err(anyhow!(
                 "Already refreshed! Please close all active instances to commit changes!"
@@ -279,7 +279,7 @@ pub fn setup<'a>(
         .create::<temp::Directory>()?;
 
     if !sys_dir.exists() {
-        as_effective!(fs::create_dir_all(&sys_dir))??;
+        as_effective!(fs::create_dir_all(&sys_dir))?;
     }
     let runtime = RUNTIME_STR.as_str();
 

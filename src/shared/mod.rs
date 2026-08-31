@@ -1,5 +1,6 @@
 #![allow(clippy::missing_errors_doc)]
 
+pub mod cache;
 pub mod config;
 pub mod edit;
 pub mod env;
@@ -8,11 +9,13 @@ pub mod find;
 pub mod package;
 pub mod profile;
 pub mod store;
+pub mod stream;
 pub mod syscalls;
+pub mod which;
 
 use crate::shared::{
     config::CONFIG_FILE,
-    env::{AT_HOME, CACHE_DIR, SESSION_BUS},
+    env::{AT_HOME, CACHE_DIR, SESSION_BUS}, which::AntimonyWhich,
 };
 use dashmap::{DashMap, DashSet};
 use log::{Level, Record};
@@ -54,7 +57,7 @@ pub fn privileged() -> anyhow::Result<bool> {
     {
         Ok(true)
     } else {
-        Ok(Spawner::abs("/usr/bin/pkcheck")
+        Ok(Spawner::which::<AntimonyWhich>("pkcheck")?
             .args([
                 "--action-id",
                 "org.freedesktop.policykit.exec",

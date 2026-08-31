@@ -105,7 +105,7 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
 /// Mount the roots created in the SOF into the sandbox.
 #[inline]
 pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
-    ROOTS.par_iter().try_for_each(|root| -> Result<()> {
+    ROOTS.iter().try_for_each(|root| -> Result<()> {
         let path = PathBuf::from(format!("{sof}{}", root.as_ref()));
         if path.exists() {
             if sof.is_empty() {
@@ -313,7 +313,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 }
             }
             Ok(cache)
-        })??
+        })?
     });
 
     if !FILES.is_empty() {
@@ -349,7 +349,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                                 error!("Failed to add {} to SOF: {e}", lib.as_str());
                             }
                         })
-                )?;
+                );
             }
         );
 
@@ -363,7 +363,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 if in_lib(dir.as_ref()) {
                     let sof_path = sof.join(&dir[1..]);
                     if !sof_path.exists() {
-                        as_effective!(fs::create_dir_all(sof_path))??;
+                        as_effective!(fs::create_dir_all(sof_path))?;
                     }
                 }
                 let local = localize_home(dir.as_ref());

@@ -12,13 +12,14 @@
 
 use antimony::shared::{
     self, ThreadMap,
+    stream::receive_fd,
     syscalls::{self, Notifier, get_num},
     utility,
+    which::AntimonyWhich,
 };
 use anyhow::Result;
 use caps::Capability;
 use clap::{Parser, Subcommand, ValueHint};
-use common::stream::receive_fd;
 use inotify::{Inotify, WatchMask};
 use log::info;
 use nix::{
@@ -315,7 +316,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
     }
 
     // Spawn the program under our Notify policy.
-    let handle = Spawner::new(args.path)?
+    let handle = Spawner::which::<AntimonyWhich>(args.path)?
         .preserve_env(true)
         .output(spawn::StreamMode::Pipe)
         .error(spawn::StreamMode::Pipe)

@@ -12,6 +12,7 @@ use crate::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         package::Package,
         profile::{Profile, ipc::Portal, ns::Namespace},
+        which::{AntimonyWhich, which},
     },
     timer,
 };
@@ -71,29 +72,29 @@ pub fn run(
                 .into_par_iter()
                 .try_for_each(|library| add_sof(&sof, &library, &cache))?;
             Ok(())
-        })??;
+        })?;
     }
 
-    let path = which::which("xdg-dbus-proxy")?;
+    let path = which("xdg-dbus-proxy")?;
     #[rustfmt::skip]
-        let proxy = Spawner::new("bwrap")?
-        .name("proxy")
-        .error(StreamMode::Log(log::Level::Error))
-        .mode(user::Mode::Real).args([
-            "--new-session",
-            "--ro-bind", path, "/usr/bin/xdg-dbus-proxy",
-            "--clearenv",
-            "--disable-userns",
-            "--assert-userns-disabled",
-            "--unshare-all",
-            "--unshare-user",
-            "--die-with-parent",
-            "--dir", &runtime,
-            "--bind", &format!("{runtime}/bus"), &format!("{runtime}/bus"),
-            "--ro-bind", &info.to_string_lossy(), "/.flatpak-info",
-            "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-            "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
-        ]);
+    let proxy = Spawner::which::<AntimonyWhich>("bwrap")?
+    .name("proxy")
+    .error(StreamMode::Log(log::Level::Error))
+    .mode(user::Mode::Real).args([
+        "--new-session",
+        "--ro-bind", path, "/usr/bin/xdg-dbus-proxy",
+        "--clearenv",
+        "--disable-userns",
+        "--assert-userns-disabled",
+        "--unshare-all",
+        "--unshare-user",
+        "--die-with-parent",
+        "--dir", &runtime,
+        "--bind", &format!("{runtime}/bus"), &format!("{runtime}/bus"),
+        "--ro-bind", &info.to_string_lossy(), "/.flatpak-info",
+        "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
+        "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
+    ]);
 
     // If we are running a package, just mount its system libraries.
     if is_package {
@@ -170,7 +171,7 @@ pub fn run(
                 proxy.arg_i(format!("--call={portal}"));
             }
         }
-        as_effective!(proxy.cache_write(&cache))??;
+        as_effective!(proxy.cache_write(&cache))?;
     }
     Ok(proxy)
 }

@@ -3,3 +3,4 @@ description = "VA-API for Hardware Video Encoding/Decoding."
 
 [libraries]
 files = ["libva-drm*", "libavutil*", "libva.so*", "libavformat*", "libavcodec*", "libavdevice*", "libavfilter*", "libva-wayland*"]
+directories = ["va"]

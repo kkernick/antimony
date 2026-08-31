@@ -22,9 +22,9 @@
 
 use crate::shared::{
     Map, Set,
+    cache::{self, CacheStatic},
     store::{BackingStore, CACHE_STORE, OBJECTS, Object},
 };
-use common::cache::{self, CacheStatic};
 use dashmap::DashMap;
 use std::{any::Any, sync::LazyLock};
 

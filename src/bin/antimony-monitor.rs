@@ -7,11 +7,11 @@ use antimony::shared::{
     env::{DATA_HOME, SESSION_BUS},
     find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
+    stream::receive_fd,
     syscalls, utility,
 };
 use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueHint};
-use common::stream::receive_fd;
 use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
 use nix::{
@@ -559,6 +559,8 @@ pub fn notify_reader(
 /// Receive and Respond to Notify Requests.
 #[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
+    user::set(user::Mode::Real)?;
+
     let cli = Cli::parse();
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;

@@ -1,6 +1,6 @@
 //! Environment Variables Antimony needs defined.
 
-use crate::shared::config::CONFIG_FILE;
+use crate::shared::{config::CONFIG_FILE, which};
 use anyhow::Result;
 use log::{info, warn};
 use nix::{
@@ -41,26 +41,21 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
     if CONFIG_FILE.force_temp()
-        || (!cache_dir.exists()
-            && as_effective!(fs::create_dir_all(&cache_dir))
-                .unwrap()
-                .is_err())
-        || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err()).unwrap()
+        || (!cache_dir.exists() && as_effective!(fs::create_dir_all(&cache_dir)).is_err())
+        || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err())
     {
         info!(
             "Cache dir ({}) not-writable. Pivoting to /tmp",
             cache_dir.display()
         );
         cache_dir = temp_dir().join(format!("antimony-{}", USER.effective.as_raw()));
-        let result = || -> Result<()> {
-            as_effective!({
-                if !cache_dir.exists() {
-                    fs::create_dir_all(&cache_dir).unwrap();
-                }
-                fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o755))?;
-                Ok(())
-            })?
-        }();
+        let result: Result<()> = as_effective!({
+            if !cache_dir.exists() {
+                fs::create_dir_all(&cache_dir).unwrap();
+            }
+            fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o755))?;
+            Ok(())
+        });
 
         if result.is_err() {
             warn!("Cannot create the cache directory safely! This is a security hole!");

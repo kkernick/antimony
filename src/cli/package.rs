@@ -11,6 +11,7 @@ use crate::{
         package::{PACKAGE_MARKER, Package},
         profile::Profile,
         store,
+        which::which,
     },
 };
 use anyhow::Result;
@@ -134,7 +135,7 @@ impl super::Run for Args {
 
         let mut depend = Map::default();
         let mut collect = |bin| -> Result<()> {
-            for library in get_libraries(which::which(bin)?)? {
+            for library in get_libraries(which(bin)?)? {
                 if !package.system_libraries.contains_key(library.as_str()) {
                     let mut dest = library.as_str();
                     for root in ROOTS.iter() {

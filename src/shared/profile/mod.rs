@@ -25,6 +25,7 @@ use crate::{
         feature,
         profile::lib::Libraries,
         store::{self, CACHE_STORE, Object, USER_STORE},
+        which::which,
     },
 };
 use ahash::RandomState;
@@ -33,7 +34,6 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, io, path::Path};
 use thiserror::Error;
-use which::which;
 
 /// An error for issues around Profiles.
 #[derive(Debug, Error)]
@@ -64,7 +64,7 @@ pub enum Error {
 
     /// Errors resolving/creating paths.
     #[error("Path error: {0}")]
-    Path(#[from] which::Error),
+    Path(#[from] spawn::WhichError),
 
     /// Errors incorporating features.
     #[error("Feature error: {0}")]
@@ -312,7 +312,7 @@ impl Profile {
                 }
                 info!("No profile: {name}, assuming binary");
                 Self {
-                    path: Some(which::which(name)?.to_owned()),
+                    path: Some(which(name)?.to_owned()),
                     ..Default::default()
                 }
             }
@@ -333,7 +333,7 @@ impl Profile {
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
                 && profile.path.is_none()
             {
-                profile.path = Some(which::which(&profile.app_path(name))?.to_owned());
+                profile.path = Some(which(&profile.app_path(name))?.to_owned());
             }
         }
 
@@ -355,7 +355,7 @@ impl Profile {
         let app_path = profile.app_path(name);
         let path = Path::new(app_path.as_ref());
         if !path.exists() {
-            match which::which(app_path.as_ref()) {
+            match which(app_path.as_ref()) {
                 Ok(path) => profile.path = Some(path.to_owned()),
                 Err(_) => {
                     if !foreign {

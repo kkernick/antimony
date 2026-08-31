@@ -11,6 +11,10 @@ cargo build --bin antimony_build --bin antimony_generator
 ./target/debug/antimony_build --recipe release
 ./target/debug/antimony_generator
 
+for MAN in $(ls $ROOT/generated/*.1); do
+    yes | gzip --force --keep --verbose --suffix=.gz $MAN
+done
+
 fpm -t pacman --depends libseccomp --depends sqlite --depends dbus --version $VERSION
 
 fpm -t deb \

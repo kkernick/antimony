@@ -98,5 +98,10 @@ for MAN in $(ls $ROOT/generated/*.1); do
     sudo cp --verbose $MAN.gz /usr/share/man/man1
 done
 
-sudo cp $ROOT/install/antimony /etc/apparmor.d/antimony
-sudo systemctl reload apparmor
+if [[ -d /etc/apparmor.d ]]; then
+    sudo cp $ROOT/install/antimony /etc/apparmor.d/antimony
+
+    if [[ $(systemctl list-units | grep "apparmor" ) ]]; then
+        sudo systemctl reload apparmor
+    fi
+fi
