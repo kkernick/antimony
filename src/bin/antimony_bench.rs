@@ -185,10 +185,11 @@ fn main() -> Result<()> {
             .collect();
 
         let timeout = cli.sleep.unwrap_or(1);
+        #[rustfmt::skip]
         let sleep: Vec<String> = [
             &format!("--sandbox-args='# sleep {timeout} !'"),
-            "--binaries",
-            "sleep",
+            "--binaries", "sleep",
+            "--conflicts", "daemon"
         ]
         .into_iter()
         .map(String::from)
@@ -259,10 +260,10 @@ fn main() -> Result<()> {
                 }
 
                 if !Path::new("/usr/share/antimony/features").exists() {
+                    #[rustfmt::skip]
                     Spawner::which::<AntimonyWhich>("sudo")?
                         .args([
-                            "ln",
-                            "-s",
+                            "ln", "-s",
                             "/usr/share/antimony/config/features",
                             "/usr/share/antimony/features",
                         ])
@@ -287,10 +288,9 @@ fn main() -> Result<()> {
             }
 
             let local = HOME_PATH.join(".local").join("bin");
+            #[rustfmt::skip]
             Spawner::which::<AntimonyWhich>("sudo")?
-                .args([
-                    "mount",
-                    "--bind",
+                .args(["mount", "--bind",
                     &temp.to_string_lossy(),
                     &local.to_string_lossy(),
                 ])
@@ -313,12 +313,11 @@ fn main() -> Result<()> {
                     command.push("--".to_owned());
                     command.extend(add.clone());
                 }
+                #[rustfmt::skip]
                 Spawner::which::<AntimonyWhich>("hyperfine")?
                     .args([
-                        "--command-name",
-                        &format!("Cold {profile}"),
-                        "--warmup",
-                        "1",
+                        "--command-name", &format!("Cold {profile}"),
+                        "--warmup", "1",
                     ])
                     .args(args.clone())
                     .arg(command.join(" "))

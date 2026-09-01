@@ -44,6 +44,4 @@
 ./generated/antimony-remove.1.gz=/usr/share/man/man1/antimony-remove.1.gz
 ./generated/antimony-run.1.gz=/usr/share/man/man1/antimony-run.1.gz
 
-
-
 ./install/antimony=/etc/apparmor.d/antimony

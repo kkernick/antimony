@@ -31,7 +31,6 @@ Antimony is available for:
 Releases provides packages for both distribution types, which can be installed with your package manager of choice.
 
 Antimony relies on the following runtime-dependencies:
-* `glibc`
 * `bubblewrap`
 * `xdg-dbus-proxy`
 * `sqlite3`

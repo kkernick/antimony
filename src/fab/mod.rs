@@ -16,7 +16,6 @@ use crate::{
         package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
-        which::AntimonyWhich,
     },
     timer,
 };
@@ -153,6 +152,17 @@ fn elf_filter(path: &str) -> io::Result<bool> {
     Ok(e_type == 2 || e_type == 3)
 }
 
+/// The path to the Linux System Linker
+static LD: LazyLock<String> = LazyLock::new(|| {
+    for root in ROOTS.iter() {
+        let ld = format!("{}/ld-linux-x86-64.so.2", root.as_ref());
+        if Path::new(&ld).exists() {
+            return ld;
+        }
+    }
+    String::from("/lib64/ld-linux-x86-64.so.2")
+});
+
 /// LDD an executable to get its library dependencies.
 ///
 /// ```rust
@@ -167,10 +177,11 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
             Ok(Set::default())
         } else {
             let depends = if elf_filter(path)? {
-                Spawner::which::<AntimonyWhich>("ldd")?
+                Spawner::abs(LD.as_str())
                     .arg(path)
                     .output(StreamMode::Pipe)
                     .error(StreamMode::Discard)
+                    .env("LD_TRACE_LOADED_OBJECTS", "1")
                     .spawn()?
                     .output_all()?
                     .lines()
