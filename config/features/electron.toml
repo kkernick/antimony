@@ -6,3 +6,6 @@ namespaces = ["User"]
 
 [libraries]
 files = ["libsoftokn3*", "libsmime3*", "libfreeblpriv3*", "libnss*"]
+
+[files.permissions]
+"/dev/shm" = "rw"

@@ -39,6 +39,7 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
                             file,
                             &contents,
                             FileMode::Executable,
+                            &mut args.policy,
                         )?;
                     }
                 }

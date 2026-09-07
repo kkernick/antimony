@@ -16,6 +16,7 @@ use crate::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         find::{DirType, recursive_crawl},
+        landlock::{LandlockPolicy, RW, update_policy},
         package::{Package, get_profile},
         profile::{Profile, seccomp::SeccompPolicy},
         store::mem,
@@ -30,6 +31,7 @@ use dbus::{
     strings::{BusName, Interface, Member},
 };
 use inotify::{Inotify, WatchDescriptor};
+use landlock::ruleset::{Filesystem, Flag};
 use log::{info, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -56,6 +58,12 @@ struct Args<'a> {
     /// If the boolean is false, we are *creating* the package. If true, we are *using* the package.
     pub package: Option<(Package, bool)>,
     pub run: &'a mut super::cli::run::Args,
+
+    /// The policy can be None for two reasons:
+    ///
+    /// 1. Landlock isn't supported
+    /// 2. We are using a cached version.
+    pub policy: Option<LandlockPolicy>,
 }
 
 /// The information passed back to `run`.
@@ -68,6 +76,7 @@ pub struct Info {
     pub home: Option<String>,
     pub sys_dir: PathBuf,
     pub package: Option<(Package, bool)>,
+    pub policy: Option<LandlockPolicy>,
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
@@ -336,22 +345,64 @@ pub fn setup<'a>(
             "--tmpfs", "/tmp",
             "--dir", runtime,
             "--chmod", "0700", runtime,
-            "--setenv", "PATH", "/usr/bin",
         ]);
 
     if profile.preserve_env.unwrap_or(false) {
         handle.preserve_env_i(true);
     } else {
         #[rustfmt::skip]
-            handle.args_i([
-                "--clearenv",
-                "--dir", "/home/antimony",
-                "--setenv", "USER", "antimony",
-                "--setenv", "HOME", "/home/antimony",
-                "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
-                "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
-            ]);
+        handle.args_i([
+            "--clearenv",
+            "--dir", "/home/antimony",
+            "--setenv", "USER", "antimony",
+            "--setenv", "HOME", "/home/antimony",
+            "--setenv", "PATH", "/usr/bin",
+            "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
+            "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
+        ]);
     }
+
+    let (policy, cached) = if let Ok(abi) = landlock::abi()
+        && abi != 0
+        && profile.landlock.unwrap_or(true)
+    {
+        let out = sys_dir.join("ll.toml");
+        if out.exists() {
+            (None, true)
+        } else {
+            let mut policy = LandlockPolicy::default();
+            policy.flags.insert(Flag::TSync);
+
+            // This rule is necessary, but not as permissive as it seems, since most sandboxes are in a
+            // separate PID namespace.
+            update_policy("/proc", &mut policy, RW);
+
+            // We need to be able to traverse paths.
+            update_policy("/", &mut policy, [Filesystem::ReadDir]);
+
+            update_policy(
+                "/dev",
+                &mut policy,
+                [
+                    Filesystem::ReadDir,
+                    Filesystem::ReadFile,
+                    Filesystem::Ioctl,
+                    Filesystem::WriteFile,
+                ],
+            );
+            update_policy("/tmp", &mut policy, RW);
+
+            (Some(policy), false)
+        }
+
+    // If landlock is not supported
+    } else {
+        if profile.landlock.unwrap_or_default() {
+            return Err(anyhow!("Landlock not supported!"));
+        }
+        warn!("Landlock is not supported on this system. Security will suffer!");
+        (None, false)
+    };
 
     if let Some(dir) = &profile.dir {
         handle.args_i(["--chdir", dir]);
@@ -372,6 +423,7 @@ pub fn setup<'a>(
         instance: &instance,
         run: args,
         package,
+        policy,
     };
 
     timer!("::proxy", proxy::setup(&mut a))?;
@@ -404,6 +456,11 @@ pub fn setup<'a>(
         post,
         profile: a.profile,
         package: a.package,
+        policy: if cached {
+            Some(LandlockPolicy::default())
+        } else {
+            a.policy
+        },
         instance,
         home,
         sys_dir,

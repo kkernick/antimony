@@ -1,3 +1,4 @@
+landlock = false
 features = ["vulkan", "bin", "locale", "dri", "passwd", "ld", "network", "wayland", "pipewire", "fonts", "xorg", "themes", "tray"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"

@@ -1,5 +1,5 @@
 id = "org.kde.krdc"
-features = ["kf6", "freerdp", "network"]
+features = ["network", "freerdp", "kf6"]
 
 [home]
 policy = "Enabled"

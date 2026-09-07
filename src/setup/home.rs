@@ -1,7 +1,9 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 use crate::shared::{
+    Set,
     env::SESSION_BUS,
+    landlock::{RO, RW},
     profile::home::{HomeLockPolicy, HomePolicy},
     utility,
 };
@@ -138,30 +140,47 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
 
         let dest = home.path.as_ref().map_or("/home/antimony", |path| path);
 
+        let mut permissions = Set::default();
+
         match policy {
             HomePolicy::Enabled => {
                 args.handle.args_i(["--bind", &home_str, dest]);
-            }
-            _ => {
-                if policy == HomePolicy::Overlay {
-                    #[rustfmt::skip]
-                                args.handle.args_i([
-                                    "--overlay-src", &home_str,
-                                    "--tmp-overlay", dest,
-                                ]);
-                } else {
-                    let work = args.sys_dir.join("work");
-                    let work_str = work.to_string_lossy();
-                    fs::create_dir_all(&work)?;
-
-                    #[rustfmt::skip]
-                    args.handle.args_i([
-                        "--overlay-src", &work_str,
-                        "--overlay-src", &home_str,
-                        "--ro-overlay", dest,
-                    ]);
+                if args.policy.is_some() {
+                    permissions.extend(RW);
                 }
             }
+            HomePolicy::Overlay => {
+                #[rustfmt::skip]
+                args.handle.args_i([
+                    "--overlay-src", &home_str,
+                    "--tmp-overlay", dest,
+                ]);
+                if args.policy.is_some() {
+                    permissions.extend(RW);
+                }
+            }
+            HomePolicy::ReadOnly => {
+                let work = args.sys_dir.join("work");
+                let work_str = work.to_string_lossy();
+                fs::create_dir_all(&work)?;
+
+                #[rustfmt::skip]
+                args.handle.args_i([
+                    "--overlay-src", &work_str,
+                    "--overlay-src", &home_str,
+                    "--ro-overlay", dest,
+                ]);
+                if args.policy.is_some() {
+                    permissions.extend(RO);
+                }
+            }
+            HomePolicy::None => {}
+        }
+
+        if let Some(policy) = &mut args.policy {
+            policy
+                .paths
+                .insert("/home/antimony".to_owned(), permissions);
         }
         Ok(Some(home_str.into_owned()))
     } else {

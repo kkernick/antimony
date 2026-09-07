@@ -8,6 +8,8 @@
 //! even more aggressively parallelized.
 #![allow(clippy::missing_errors_doc)]
 
+#[cfg(debug_assertions)]
+use crate::shared::landlock::update_policy;
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
     shared::{
@@ -21,6 +23,7 @@ use crate::{
 use anyhow::Result;
 use dashmap::iter_set::OwningIter;
 use heck::ToTitleCase;
+use landlock::ruleset::Filesystem;
 use log::{error, info, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
@@ -243,140 +246,160 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         }
     }
 
-    if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
-        return mount_roots("", info.handle);
-    }
+    let allowed: Set<_> = [
+        Filesystem::ReadFile,
+        Filesystem::ReadDir,
+        Filesystem::Execute,
+    ]
+    .into_iter()
+    .collect();
 
-    timer!("::binaries", {
-        info.profile
-            .binaries
-            .par_iter()
-            .for_each(|binary| match get_libraries(binary) {
-                Ok(libraries) => {
-                    for lib in libraries {
-                        {
-                            let _ = FILES.insert(lib);
+    if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
+        mount_roots("", info.handle)?;
+    } else {
+        timer!("::binaries", {
+            info.profile
+                .binaries
+                .par_iter()
+                .for_each(|binary| match get_libraries(binary) {
+                    Ok(libraries) => {
+                        for lib in libraries {
+                            {
+                                let _ = FILES.insert(lib);
+                            }
                         }
                     }
-                }
-                Err(e) => warn!("Could not get libraries for {binary}: {e}"),
-            });
-    });
-
-    if let Some(libraries) = info.profile.libraries.take() {
-        timer!(
-            "::lib::directories",
-            resolve_wildcards(libraries.directories, WildcardFilter::Directories)
-                .par_bridge()
-                .for_each(|e| {
-                    if let Ok(libraries) = find::dir(&e) {
-                        libraries.into_par_iter().for_each(|lib| {
-                            let _ = FILES.insert(lib);
-                        });
-                    }
-                    DIRS.insert(e);
-                })
-        );
-
-        timer!(
-            "::lib::files",
-            resolve_wildcards(libraries.files, WildcardFilter::Files)
-                .par_bridge()
-                .for_each(|file| {
-                    if let Ok(libraries) = get_libraries(&file) {
-                        libraries.into_par_iter().for_each(|lib| {
-                            let _ = FILES.insert(lib);
-                        });
-                    }
-                    FILES.insert(file);
-                })
-        );
-    }
-
-    let sof = sof_dir(info.sys_dir);
-    let cache = timer!("::setup", {
-        as_effective!(Result<PathBuf>, {
-            let cache = cache_dir();
-            if !cache.exists() {
-                fs::create_dir_all(cache.as_path())?;
-            }
-            if !sof.exists() {
-                fs::create_dir(&sof)?;
-            }
-
-            // We do need the cache on disk in case we need to use a shared SOF source.
-            if !cache.starts_with(AT_HOME.as_path()) {
-                let shared = cache.join("shared");
-                if !shared.exists() {
-                    info!("Creating shared directory at {}", shared.display());
-                    let _ = fs::create_dir(&shared);
-                }
-            }
-            Ok(cache)
-        })?
-    });
-
-    if !FILES.is_empty() {
-        timer!(
-            "::write_files",
-            if let Some((package, false)) = info.package {
-                for lib in FILES.iter() {
-                    package.add_library(&lib, &lib)?;
-                }
-            } else {
-                as_effective!(
-                    FILES
-                        .par_iter()
-                        .filter(|library| {
-                            if in_lib(library) {
-                                true
-                            } else {
-                                info.handle.args_i([
-                                    if library.starts_with("/home/") {
-                                        "--bind"
-                                    } else {
-                                        "--ro-bind"
-                                    },
-                                    library,
-                                    library,
-                                ]);
-                                false
-                            }
-                        })
-                        // Write the SOF version, as a hard link preferably.
-                        .for_each(|lib| {
-                            if let Err(e) = add_sof(&sof, &lib, &cache) {
-                                error!("Failed to add {} to SOF: {e}", lib.as_str());
-                            }
-                        })
-                );
-            }
-        );
-
-        let sof_str = sof.to_string_lossy();
-        timer!("::mount_roots", mount_roots(&sof_str, info.handle))?;
-    }
-
-    if !DIRS.is_empty() {
-        timer!("::mount_directories", {
-            for dir in DIRS.iter() {
-                if in_lib(dir.as_ref()) {
-                    let sof_path = sof.join(&dir[1..]);
-                    if !sof_path.exists() {
-                        as_effective!(fs::create_dir_all(sof_path))?;
-                    }
-                }
-                let local = localize_home(dir.as_ref());
-                let home = dir.starts_with("/home/");
-
-                if !home && let Some((package, false)) = info.package.as_mut() {
-                    package.add_library(&dir, &local)?;
-                } else {
-                    info.handle
-                        .args_i([if home { "--bind" } else { "--ro-bind" }, &dir, &local]);
-                }
-            }
+                    Err(e) => warn!("Could not get libraries for {binary}: {e}"),
+                });
         });
+
+        if let Some(libraries) = info.profile.libraries.take() {
+            timer!(
+                "::lib::directories",
+                resolve_wildcards(libraries.directories, WildcardFilter::Directories)
+                    .par_bridge()
+                    .for_each(|e| {
+                        if let Ok(libraries) = find::dir(&e) {
+                            libraries.into_par_iter().for_each(|lib| {
+                                let _ = FILES.insert(lib);
+                            });
+                        }
+                        DIRS.insert(e);
+                    })
+            );
+
+            timer!(
+                "::lib::files",
+                resolve_wildcards(libraries.files, WildcardFilter::Files)
+                    .par_bridge()
+                    .for_each(|file| {
+                        if let Ok(libraries) = get_libraries(&file) {
+                            libraries.into_par_iter().for_each(|lib| {
+                                let _ = FILES.insert(lib);
+                            });
+                        }
+                        FILES.insert(file);
+                    })
+            );
+        }
+
+        let sof = sof_dir(info.sys_dir);
+        let cache = timer!("::setup", {
+            as_effective!(Result<PathBuf>, {
+                let cache = cache_dir();
+                if !cache.exists() {
+                    fs::create_dir_all(cache.as_path())?;
+                }
+                if !sof.exists() {
+                    fs::create_dir(&sof)?;
+                }
+
+                // We do need the cache on disk in case we need to use a shared SOF source.
+                if !cache.starts_with(AT_HOME.as_path()) {
+                    let shared = cache.join("shared");
+                    if !shared.exists() {
+                        info!("Creating shared directory at {}", shared.display());
+                        let _ = fs::create_dir(&shared);
+                    }
+                }
+                Ok(cache)
+            })?
+        });
+
+        if !FILES.is_empty() {
+            timer!(
+                "::write_files",
+                if let Some((package, false)) = info.package {
+                    for lib in FILES.iter() {
+                        package.add_library(&lib, &lib)?;
+                    }
+                } else {
+                    as_effective!(
+                        FILES
+                            .par_iter()
+                            .filter(|library| {
+                                if in_lib(library) {
+                                    true
+                                } else {
+                                    info.handle.args_i([
+                                        if library.starts_with("/home/") {
+                                            "--bind"
+                                        } else {
+                                            "--ro-bind"
+                                        },
+                                        library,
+                                        library,
+                                    ]);
+                                    false
+                                }
+                            })
+                            // Write the SOF version, as a hard link preferably.
+                            .for_each(|lib| {
+                                if let Err(e) = add_sof(&sof, &lib, &cache) {
+                                    error!("Failed to add {} to SOF: {e}", lib.as_str());
+                                }
+                            })
+                    );
+                }
+            );
+
+            let sof_str = sof.to_string_lossy();
+            timer!("::mount_roots", mount_roots(&sof_str, info.handle))?;
+        }
+
+        if !DIRS.is_empty() {
+            timer!("::mount_directories", {
+                for dir in DIRS.iter() {
+                    let local = localize_home(dir.as_ref());
+                    let home = dir.starts_with("/home/");
+
+                    if in_lib(dir.as_ref()) {
+                        let sof_path = sof.join(&dir[1..]);
+                        if !sof_path.exists() {
+                            as_effective!(fs::create_dir_all(sof_path))?;
+                        }
+                    } else if !home && let Some(policy) = info.policy {
+                        update_policy(dir.as_str(), policy, allowed.clone());
+                    }
+
+                    if !home && let Some((package, false)) = info.package.as_mut() {
+                        package.add_library(&dir, &local)?;
+                    } else {
+                        info.handle.args_i([
+                            if home { "--bind" } else { "--ro-bind" },
+                            &dir,
+                            &local,
+                        ]);
+                    }
+                }
+            });
+        }
     }
+    if let Some(policy) = info.policy {
+        for root in ROOTS.iter() {
+            update_policy(root.as_ref(), policy, allowed.clone());
+        }
+    }
+
     Ok(())
 }

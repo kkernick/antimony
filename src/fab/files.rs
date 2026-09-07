@@ -4,13 +4,15 @@ use crate::{
     fab::localize_path,
     shared::{
         env::HOME,
+        landlock::{LandlockPolicy, RO, RW, update_policy},
         package::Package,
         profile::files::{FILE_MODES, FileMode},
     },
 };
 use anyhow::Result;
+use landlock::ruleset::Filesystem;
 use spawn::Spawner;
-use std::borrow::Cow;
+use std::{borrow::Cow, path::Path};
 
 /// Localize and bind
 #[inline]
@@ -21,24 +23,44 @@ pub fn localize(
     handle: &Spawner,
     can_try: bool,
     package: &mut Option<(Package, bool)>,
+    policy: &mut Option<LandlockPolicy>,
 ) -> Result<()> {
-    match localize_path(file, home)? {
-        (Some(source), dest) => {
-            if let Some((package, false)) = package.as_mut() {
-                package.add(&source, &dest)?;
-            } else {
-                handle.args_i([Cow::Borrowed(mode.bind(can_try)), source, Cow::Owned(dest)]);
+    let (src, dest) = localize_path(file, home)?;
+    if let Some(source) = src {
+        if let Some((package, false)) = package.as_mut() {
+            package.add(&source, &dest)?;
+        } else {
+            handle.args_i([
+                Cow::Borrowed(mode.bind(can_try)),
+                source,
+                Cow::Borrowed(&dest),
+            ]);
+        }
+    } else {
+        let resolved = if home && !file.starts_with("/home") {
+            Cow::Owned(format!("{}/{file}", HOME.as_str()))
+        } else {
+            Cow::Borrowed(file)
+        };
+        handle.args_i([
+            Cow::Borrowed(mode.bind(true)),
+            resolved,
+            Cow::Borrowed(&dest),
+        ]);
+    }
+
+    if let Some(policy) = policy
+        && let Some(parent) = Path::new(&dest).parent()
+    {
+        match mode {
+            FileMode::ReadOnly => update_policy(parent, policy, RO),
+            FileMode::ReadWrite => update_policy(parent, policy, RW),
+            FileMode::Executable => {
+                update_policy(parent, policy, [Filesystem::ReadFile, Filesystem::Execute]);
             }
         }
-        (None, dest) => {
-            let resolved = if home && !file.starts_with("/home") {
-                Cow::Owned(format!("{}/{file}", HOME.as_str()))
-            } else {
-                Cow::Borrowed(file)
-            };
-            handle.args_i([Cow::Borrowed(mode.bind(true)), resolved, Cow::Owned(dest)]);
-        }
     }
+
     Ok(())
 }
 
@@ -47,7 +69,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
     if let Some(files) = &info.profile.files {
         for temp in &files.temp {
-            info.handle.args_i(["--tmpfs", temp]);
+            let (_, dest) = localize_path(temp, false)?;
+            info.handle.args_i(["--tmpfs", &dest]);
+            if let Some(policy) = info.policy {
+                update_policy(dest, policy, RW);
+            }
         }
 
         for (src, dst) in &files.links {
@@ -55,6 +81,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 package.add(src, dst)?;
             } else {
                 info.handle.args_i(["--symlink", src, dst]);
+                if let Some(policy) = info.policy
+                    && let Some(parent) = Path::new(dst).parent()
+                {
+                    update_policy(parent, policy, RO);
+                }
             }
         }
 
@@ -70,8 +101,28 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                             info.handle,
                             true,
                             &mut None,
+                            info.policy,
                         )?;
                     }
+                }
+            }
+        }
+
+        if let Some(policy) = info.policy {
+            for (path, mode) in &files.permissions {
+                let (_, dest) = localize_path(path, false)?;
+                match mode {
+                    FileMode::ReadOnly => update_policy(dest, policy, RO),
+                    FileMode::ReadWrite => update_policy(dest, policy, RW),
+                    FileMode::Executable => update_policy(
+                        dest,
+                        policy,
+                        [
+                            Filesystem::ReadDir,
+                            Filesystem::ReadFile,
+                            Filesystem::Execute,
+                        ],
+                    ),
                 }
             }
         }
@@ -80,7 +131,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         for mode in FILE_MODES {
             if let Some(files) = system.get(&mode) {
                 for file in files {
-                    localize(mode, file, false, info.handle, true, &mut None)?;
+                    localize(mode, file, false, info.handle, true, &mut None, info.policy)?;
                 }
             }
         }
@@ -90,7 +141,15 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             for mode in FILE_MODES {
                 if let Some(files) = system.get(&mode) {
                     for file in files {
-                        localize(mode, file, false, info.handle, false, info.package)?;
+                        localize(
+                            mode,
+                            file,
+                            false,
+                            info.handle,
+                            false,
+                            info.package,
+                            info.policy,
+                        )?;
                     }
                 }
             }

@@ -17,7 +17,7 @@
 
 ***
 
-Antimony is a [fast](./md/Speed.md), [powerful](./md/Profiles.md), [customizable](./md/Configurations.md), [easy-to-use](./md/Quickstart.md) and [secure](./md/SECCOMP.md) sandboxing application. Its dynamic dependency resolution and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
+Antimony is a [fast](./md/Speed.md), powerful (with [Profiles](./md/Profiles.md), [Features](./md/Features.md), [Packages](./md/Packages.md), [System Integration](./md/System.md), and [sandbox-restricted libraries](./md/SOF.md)), customizable (via [Configurations](./md/Configurations.md), [Defaults](./md/Hooks.md), and [Hooks](./md/Hooks.md)), and secure (via User Namespaces, [Landlock](./md/Landlock.md), [Lockdown](./md/Lockdown.md), and [SECCOMP](./md/SECCOMP.md)) sandboxing application. Its dynamic dependency resolution and extendable design makes it trivial to sandbox applications and seamlessly integrate in the shell and desktop environment.
 
 > [!tip]
 > See the [Quickstart](./md/Quickstart.md) Guide for how to use Antimony!
@@ -77,6 +77,6 @@ sudo chmod ug+s /usr/bin/antimony
 2.  Antimony creates hard-links from the system library folder (`/usr/lib` and `/usr/lib64`). Some distributions and hardened kernels enforce the `fs.protected_hardlinks` sysctl, which denies this. 
 
 >[!warning]
->If Antimony cannot create hard links, it will default to copies. This has a drastic toll on performance.
+>If Antimony cannot create hard links, it will default to copies.
 
 3. You should create a folder for Antimony to store configurations and caches. It defaults to `/usr/share/antimony`.

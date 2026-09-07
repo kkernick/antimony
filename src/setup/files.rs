@@ -3,7 +3,8 @@
 use crate::{
     fab::{localize_path, resolve},
     shared::{
-        direct_path,
+        Set, direct_path,
+        landlock::{LandlockPolicy, update_policy},
         profile::{
             files::{FILE_MODES, FileMode},
             home::HomePolicy,
@@ -11,8 +12,8 @@ use crate::{
     },
 };
 use anyhow::Result;
+use landlock::ruleset::Filesystem;
 use log::warn;
-use rayon::prelude::*;
 use spawn::Spawner;
 use std::{
     borrow::Cow,
@@ -25,17 +26,33 @@ use user::{USER, as_effective};
 
 /// Open a file and pass it as executable to the sandbox.
 #[inline]
-fn get_x(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner) -> Result<()> {
+fn get_x(
+    src: Option<Cow<'_, str>>,
+    dst: &str,
+    handle: &Spawner,
+    policy: &mut Option<LandlockPolicy>,
+) -> Result<()> {
     let src = src.unwrap_or(Cow::Borrowed(dst));
     let fd = OwnedFd::from(File::open(src.as_ref())?);
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst]);
     handle.fd_i(fd);
     handle.args_i(["--chmod", "555", dst]);
+    if let Some(policy) = policy
+        && let Some(parent) = Path::new(dst).parent()
+    {
+        update_policy(parent, policy, [Filesystem::Execute, Filesystem::ReadFile]);
+    }
     Ok(())
 }
 
 #[inline]
-fn lockdown_file(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner, ro: bool) -> Result<()> {
+fn lockdown_file(
+    src: Option<Cow<'_, str>>,
+    dst: &str,
+    handle: &Spawner,
+    ro: bool,
+    policy: &mut Option<LandlockPolicy>,
+) -> Result<()> {
     let src = src.unwrap_or(Cow::Borrowed(dst));
     if !Path::new(src.as_ref()).is_file() {
         return Err(anyhow::anyhow!(
@@ -59,11 +76,29 @@ fn lockdown_file(src: Option<Cow<'_, str>>, dst: &str, handle: &Spawner, ro: boo
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), dst]);
     handle.fd_i(fd);
     handle.args_i(["--chmod", if ro { "444" } else { "666" }, dst]);
+    if let Some(policy) = policy
+        && let Some(parent) = Path::new(dst).parent()
+    {
+        let mut allowed = Set::default();
+        allowed.insert(Filesystem::ReadFile);
+        if !ro {
+            allowed.extend([Filesystem::WriteFile, Filesystem::Truncate]);
+        }
+        policy
+            .paths
+            .insert(parent.to_string_lossy().into_owned(), allowed);
+    }
     Ok(())
 }
 
 /// Add a file to the sandbox.
-pub fn add_file(handle: &Spawner, file: &str, contents: &str, op: FileMode) -> Result<()> {
+pub fn add_file(
+    handle: &Spawner,
+    file: &str,
+    contents: &str,
+    op: FileMode,
+    policy: &mut Option<LandlockPolicy>,
+) -> Result<()> {
     let path = direct_path(file);
     if !path.exists()
         && let Some(parent) = path.parent()
@@ -77,6 +112,18 @@ pub fn add_file(handle: &Spawner, file: &str, contents: &str, op: FileMode) -> R
     handle.args_i(["--file", &format!("{}", fd.as_raw_fd()), file]);
     handle.fd_i(fd);
     handle.args_i(["--chmod", op.chmod(), file]);
+    if let Some(policy) = policy
+        && let Some(parent) = Path::new(file).parent()
+    {
+        let mut allowed = Set::default();
+        allowed.insert(Filesystem::ReadFile);
+        if op == FileMode::ReadWrite {
+            allowed.extend([Filesystem::WriteFile, Filesystem::Truncate]);
+        }
+        policy
+            .paths
+            .insert(parent.to_string_lossy().into_owned(), allowed);
+    }
     Ok(())
 }
 
@@ -100,38 +147,38 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(files) = &mut args.profile.files {
         let user = &mut files.user;
         if let Some(exe) = user.remove(&FileMode::Executable) {
-            exe.into_par_iter().try_for_each(|file| {
+            exe.into_iter().try_for_each(|file| {
                 let (src, dest) = localize_path(&file, true)?;
-                get_x(src, &dest, &args.handle)
+                get_x(src, &dest, &args.handle, &mut args.policy)
             })?;
         }
 
         // Lockdown takes all user files and passes them as FDs. Folders are not supported.
         if lockdown {
             if let Some(ro) = user.remove(&FileMode::ReadOnly) {
-                ro.into_par_iter().try_for_each(|file| {
+                ro.into_iter().try_for_each(|file| {
                     let (src, dest) = localize_path(&file, true)?;
-                    lockdown_file(src, &dest, &args.handle, true)
+                    lockdown_file(src, &dest, &args.handle, true, &mut args.policy)
                 })?;
             }
             if let Some(rw) = user.remove(&FileMode::ReadWrite) {
-                rw.into_par_iter().try_for_each(|file| {
+                rw.into_iter().try_for_each(|file| {
                     let (src, dest) = localize_path(&file, true)?;
-                    lockdown_file(src, &dest, &args.handle, false)
+                    lockdown_file(src, &dest, &args.handle, false, &mut args.policy)
                 })?;
             }
         }
 
         let system = &mut files.platform;
         if let Some(exe) = system.remove(&FileMode::Executable) {
-            exe.into_par_iter()
-                .try_for_each(|file| get_x(None, &file, &args.handle))?;
+            exe.into_iter()
+                .try_for_each(|file| get_x(None, &file, &args.handle, &mut args.policy))?;
         }
 
         let system = &mut files.resources;
         if let Some(exe) = system.remove(&FileMode::Executable) {
-            exe.into_par_iter()
-                .try_for_each(|file| get_x(None, &file, &args.handle))?;
+            exe.into_iter()
+                .try_for_each(|file| get_x(None, &file, &args.handle, &mut args.policy))?;
         }
 
         let direct = &mut files.direct;
@@ -139,8 +186,8 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             as_effective!(Result<()>, {
                 for mode in FILE_MODES {
                     if let Some(files) = direct.get(&mode) {
-                        files.into_par_iter().try_for_each(|(file, contents)| {
-                            add_file(&args.handle, file, contents, mode)
+                        files.iter().try_for_each(|(file, contents)| {
+                            add_file(&args.handle, file, contents, mode, &mut args.policy)
                         })?;
                     }
                 }

@@ -24,7 +24,8 @@ use heck::ToTitleCase;
 use log::error;
 use nix::{errno::Errno, sys::signal::Signal};
 use spawn::{HandleError, Spawner, StreamMode};
-use std::{borrow::Cow, env, fs, thread, time::Duration};
+use std::{borrow::Cow, env, fs, path::Path, thread, time::Duration};
+use user::as_effective;
 
 #[derive(clap::Args, Default)]
 #[allow(clippy::struct_excessive_bools)]
@@ -61,8 +62,12 @@ pub struct Args {
     pub dir: Option<String>,
 
     /// Run in lockdown mode
-    #[arg(short, long)]
+    #[arg(long)]
     pub lockdown: Option<bool>,
+
+    /// Run with landlock mode
+    #[arg(long)]
+    pub landlock: Option<bool>,
 
     /// Use a configuration within the profile.
     #[arg(short, long)]
@@ -123,6 +128,18 @@ pub struct Args {
     /// Add busses the sandbox can call.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub calls: Option<Vec<String>>,
+
+    /// Additional sockets the sandbox is allowed to connect to.
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub sockets: Option<Vec<String>>,
+
+    /// Ports the sandbox should be allowed to bind to
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub bind: Option<Vec<u16>>,
+
+    /// Ports the sandbox should be allowed to connect to
+    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    pub connect: Option<Vec<u16>>,
 
     /// Disable all IPC. This overrules all other IPC settings.
     #[arg(long)]
@@ -192,6 +209,7 @@ pub struct Args {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub env: Option<Vec<String>>,
 
+    /// Preserve the environment. Explicit --env will overwrite existing values
     #[arg(long)]
     pub preserve_env: Option<bool>,
 
@@ -281,6 +299,27 @@ pub fn wait_for_doc() {
 )]
 #[allow(clippy::too_many_lines)]
 pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
+    // Add landlock
+    if let Some(policy) = info.policy.take() {
+        let landlock_path = info.sys_dir.join("ll.toml");
+
+        if !landlock_path.exists() {
+            let policy_string = toml::to_string(&policy)?;
+            let landlock_path = info.sys_dir.join("ll.toml");
+            if !Path::new(&landlock_path).exists() {
+                as_effective!(fs::write(&landlock_path, policy_string))?;
+            }
+        }
+        let utility = utility("landlock");
+        #[rustfmt::skip]
+        info.handle.args_i([
+            "--ro-bind", &landlock_path.to_string_lossy(), "/landlock.toml",
+            "--setenv", "LANDLOCK_POLICY", "/landlock.toml",
+            "--ro-bind", &utility, &utility,
+            &utility
+        ]);
+    }
+
     let sandbox_args = &info.profile.sandbox_args;
     let add_regular = if sandbox_args.is_empty() {
         true

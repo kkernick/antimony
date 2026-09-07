@@ -12,6 +12,7 @@ pub mod store;
 pub mod stream;
 pub mod syscalls;
 pub mod which;
+pub mod landlock;
 
 use crate::shared::{
     config::CONFIG_FILE,

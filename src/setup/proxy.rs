@@ -10,6 +10,7 @@ use crate::{
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
+        landlock::{RW, update_policy},
         package::Package,
         profile::{Profile, ipc::Portal, ns::Namespace},
         which::{AntimonyWhich, which},
@@ -18,11 +19,13 @@ use crate::{
 };
 use anyhow::Result;
 use inotify::WatchMask;
+use landlock::ruleset::{Filesystem, Network, Scope};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
     fs::{self, File},
     io::Write,
+    iter,
     os::fd::AsRawFd,
     path::Path,
 };
@@ -181,17 +184,53 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     // Scope the lock
     let ipc = {
         if let Some(ipc) = &args.profile.ipc {
-            ipc.clone()
+            ipc
         } else {
+            if let Some(policy) = &mut args.policy {
+                // Prohibit communication outside the sandbox
+                policy.scopes.insert(Scope::NoSignals);
+                policy.scopes.insert(Scope::NoSockets);
+            }
             return Ok(());
         }
     };
 
+    if !ipc.sockets.is_empty()
+        && let Some(policy) = &mut args.policy
+    {
+        for sock in &ipc.sockets {
+            update_policy(sock, policy, [Filesystem::MakeSock, Filesystem::Unix]);
+        }
+    }
+
+    if let Some(ports) = &ipc.ports
+        && let Some(policy) = &mut args.policy
+    {
+        for port in &ports.bind {
+            policy.ports.insert(
+                u64::from(*port),
+                [Network::BindTCP, Network::BindUDP].into_iter().collect(),
+            );
+        }
+        for port in &ports.connect {
+            policy
+                .ports
+                .insert(u64::from(*port), iter::once(Network::ConnectTCP).collect());
+        }
+    }
+
     if ipc.disable.unwrap_or(false) {
+        if let Some(policy) = &mut args.policy {
+            // Prohibit communication outside the sandbox
+            policy.scopes.insert(Scope::NoSignals);
+            policy.scopes.insert(Scope::NoSockets);
+        }
         return Ok(());
     }
 
     let runtime = RUNTIME_STR.as_str();
+    let mut permissions: Set<_> = RW.into_iter().collect();
+    permissions.insert(Filesystem::Unix);
 
     // Add the system bus.
     if ipc.system_bus.unwrap_or(false) {
@@ -200,6 +239,9 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             "/var/run/dbus/system_bus_socket",
             "/var/run/dbus/system_bus_socket",
         ]);
+        if let Some(policy) = &mut args.policy {
+            update_policy("/var/run/dbus", policy, permissions.clone());
+        }
     }
 
     let id = &args.id;
@@ -214,6 +256,10 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             &format!("{}/bus", RUNTIME_STR.as_str()),
             &format!("{}/bus", RUNTIME_STR.as_str()),
         ]);
+
+        if let Some(policy) = &mut args.policy {
+            update_policy(RUNTIME_STR.as_str(), policy, permissions);
+        }
 
     // Or mediate via the proxy if the proxy is actually needed.
     } else if !ipc.portals.is_empty()
@@ -312,6 +358,18 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             &format!("{instance_dir_str}/proxy/bus"),
             &format!("{runtime}/bus"),
         ]);
+
+        if let Some(policy) = &mut args.policy {
+            update_policy(runtime, policy, permissions);
+        }
+
+    // If no user or system bus, block IPC
+    } else if !ipc.system_bus.unwrap_or(false)
+        && let Some(policy) = &mut args.policy
+    {
+        // Prohibit communication outside the sandbox
+        policy.scopes.insert(Scope::NoSignals);
+        policy.scopes.insert(Scope::NoSockets);
     }
 
     Ok(())

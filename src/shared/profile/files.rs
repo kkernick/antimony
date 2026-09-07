@@ -120,6 +120,10 @@ pub struct Files {
     /// file passthrough or by adding the file to the profile home)
     #[serde(skip_serializing_if = "Map::is_empty")]
     pub links: Map<String, String>,
+
+    /// A map of filesystem paths within the sandbox to Landlock permissions that are required.
+    #[serde(skip_serializing_if = "Map::is_empty")]
+    pub permissions: Map<String, FileMode>,
 }
 impl Files {
     /// Merge two file sets together.
@@ -171,6 +175,7 @@ impl Files {
 
         self.temp.append(&mut files.temp);
         self.links.extend(files.links);
+        self.permissions.extend(files.permissions);
     }
 
     /// Construct a file set from the command line.

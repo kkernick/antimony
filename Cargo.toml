@@ -4,9 +4,10 @@ version = "5.2.2"
 edition = "2024"
 
 [dependencies]
+landlock = { git = "https://github.com/kkernick/landlock", features = ["serde"]}
 notify = { git = "https://github.com/kkernick/notify" }
-seccomp = {  git = "https://github.com/kkernick/seccomp", features = ["notify"] }
-spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", "seccomp", "user"] }
+seccomp = { git = "https://github.com/kkernick/seccomp", features = ["notify"] }
+spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", "landlock", "seccomp", "user"] }
 temp = { git = "https://github.com/kkernick/temp", features = ["user"]}
 user = { git = "https://github.com/kkernick/user" }
 
@@ -15,7 +16,7 @@ anyhow = { version = "1.0.98", features = ["std"], default-features = false }
 bilrost = { version = "0.1014.2", default-features = false, features = ["auto-optimize", "bstr", "derive", "std"] }
 bstr = { version = "1.12.1", default-features = false, features = ["serde", "std", "unicode"] }
 caps = "0.5.6"
-clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions"], default-features = false }
+clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions", "env"], default-features = false }
 clap_complete = { version = "4.5.63", default-features = false }
 clap_mangen = "0.3.0"
 dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }

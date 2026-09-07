@@ -38,6 +38,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         instance: args.instance,
         sys_dir: &args.sys_dir,
         package: &mut args.package,
+        policy: &mut args.policy,
     };
 
     let package = info
@@ -60,7 +61,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     }
 
     timer!("::fab::ns", fab::ns::fabricate(&mut info))?;
-    timer!("::fab::dev", fab::dev::fabricate(&info))?;
+    timer!("::fab::dev", fab::dev::fabricate(&mut info))?;
 
     if package.is_none() {
         as_effective!(args.handle.cache_write(&cmd_cache))?;

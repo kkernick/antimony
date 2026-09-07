@@ -1,5 +1,5 @@
 id = "opensnitch_ui"
-features = ["python", "tray", "qt6-sql", "kf6"]
+features = ["python", "kf6", "qt6-sql", "tray"]
 namespaces = ["Pid"]
 
 [home]

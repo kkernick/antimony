@@ -19,45 +19,45 @@ The configuration of Antimony’s installation can have a profound effect on per
 
 The following table illustrates the relative performance of applying various configurations. Note that the new-features column applies to all subsequent columns (So after `--system` is first mentioned, it is implied in all further tests).
 
-| Profile (Hot)/ Configuration | Chromium | Zed | Okular | Syncthing | Sh  | New Feature        |
-| ---------------------------- | -------- | --- | ------ | --------- | --- | ------------------ |
-| Debug                        | 6.0      | 5.8 | 5.5    | 4.2       | 4.2 | `--recipe dev`     |
-| Debug (System)               | 6.1      | 5.8 | 5.5    | 4.3       | 4.4 | `--system`         |
-| Release                      | 4.3      | 4.2 | 3.9    | 2.9       | 3.3 | `--recipe release` |
-| PGO                          | 4.2      | 4.1 | 3.8    | 2.8       | 3.1 | `--recipe pgo`     |
+| Profile (Hot)/ Configuration | Chromium | Zed | Okular | Syncthing | Sh  |
+| ---------------------------- | -------- | --- | ------ | --------- | --- |
+| Debug                        | 6.0      | 5.8 | 5.5    | 4.2       | 4.2 |
+| Debug (System)               | 6.1      | 5.8 | 5.5    | 4.3       | 4.4 |
+| Release                      | 4.3      | 4.2 | 3.9    | 2.9       | 3.3 |
+| PGO                          | 4.2      | 4.1 | 3.8    | 2.8       | 3.1 |
 ^ConfigHot
 
 ```chart
 type: bar
-select: [Chromium, Zed, Okular, Syncthing, Sh]
+layout: rows
 id: ConfigHot
 ```
 
 
-| Profile (Real)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   | New Feature        |
-| ----------------------------- | -------- | ---- | ------ | --------- | ---- | ------------------ |
-| Debug                         | 23.3     | 19.8 | 20.7   | 11.3      | 11.1 | `--recipe dev`     |
-| Debug (System)                | 23.3     | 19.6 | 21.2   | 11.4      | 11.0 | `--system`         |
-| Release                       | 18.3     | 14.8 | 15.9   | 7.5       | 7.2  | `--recipe release` |
-| PGO                           | 17.8     | 14.7 | 15.6   | 7.4       | 7.6  | `--recipe pgo`     |
+| Profile (Real)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   |
+| ----------------------------- | -------- | ---- | ------ | --------- | ---- |
+| Debug                         | 23.3     | 19.8 | 20.7   | 11.3      | 11.1 |
+| Debug (System)                | 23.3     | 19.6 | 21.2   | 11.4      | 11.0 |
+| Release                       | 18.3     | 14.8 | 15.9   | 7.5       | 7.2  |
+| PGO                           | 17.8     | 14.7 | 15.6   | 7.4       | 7.6  |
 ^ConfigReal
 
 ```chart
 type: bar
-select: [Chromium, Zed, Okular, Syncthing, Sh]
+layout: rows
 id: ConfigReal
 ```
 
-| Profile (Cold)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   | New Feature        |
-| ----------------------------- | -------- | ---- | ------ | --------- | ---- | ------------------ |
-| Debug (System)                | 0.27     | 0.17 | 0.37   | 0.88      | 0.76 | `--system`         |
-| Release                       | 0.24     | 0.14 | 0.32   | 0.62      | 0.56 | `--recipe release` |
-| PGO                           | 0.23     | 0.14 | 0.31   | 0.59      | 0.54 | `--recipe pgo`     |
+| Profile (Cold)/ Configuration | Chromium | Zed  | Okular | Syncthing | Sh   |
+| ----------------------------- | -------- | ---- | ------ | --------- | ---- |
+| Debug (System)                | 0.27     | 0.17 | 0.37   | 0.88      | 0.76 |
+| Release                       | 0.24     | 0.14 | 0.32   | 0.62      | 0.56 |
+| PGO                           | 0.23     | 0.14 | 0.31   | 0.59      | 0.54 |
 ^ConfigCold
 
 ```chart
 type: bar
-select: [Chromium, Zed, Okular, Syncthing, Sh]
+layout: rows
 id: ConfigCold
 ```
 *Normalized to a Debug, Non-System Build*.
@@ -143,36 +143,6 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 | 5.2.2 | 25.5     | 22.0    | 11.0      | 9.2     |
 ^HistoryHot
 
-```chart
-type: line
-select: [Chromium]
-id: HistoryHot
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Okular]
-id: HistoryHot
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Syncthing]
-id: HistoryHot
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Sh]
-id: HistoryHot
-tension: 0.5
-spanGaps: true
-```
-
-
 >[!info]
 >Versions prior to 2.6.0 had a busy loop that would sleep for 100ms. This is why these versions are significantly skewed. 
 
@@ -198,10 +168,16 @@ spanGaps: true
 ```chart
 type: line
 id: HotNormalized
-tension: 0.5
+tension: 0
 spanGaps: true
 ```
 
+```chart
+type: bar
+id: HotNormalized
+layout: rows
+select: ["5.0.1", "5.1.0", "5.1.1", "5.2.0", "5.2.1", "5.2.2"]
+```
 #### Cold
 
 `cargo bencher chromium zed okular syncthing sh --recipe release --system --bench cold --checkout tags/VERSION`
@@ -228,36 +204,6 @@ spanGaps: true
 | 5.2.2 | 177.5    | 203.3  | 16.4      | 13.2  |
 ^HistoryCold
 
-```chart
-type: line
-select: [Chromium]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Okular]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Syncthing]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-```chart
-type: line
-select: [Sh]
-id: HistoryCold
-tension: 0.5
-spanGaps: true
-```
-
-
 |       | Chromium | Okular | Syncthing | Sh   |
 | ----- | -------- | ------ | --------- | ---- |
 | 2.6.0 | 1.00     | 1.00   | 1.00      | 1.00 |
@@ -279,8 +225,15 @@ spanGaps: true
 ```chart
 type: line
 id: ColdNormalized
-tension: 0.5
+tension: 0
 spanGaps: true
+```
+
+```chart
+type: bar
+id: ColdNormalized
+layout: rows
+select: ["5.0.1", "5.1.0", "5.1.1", "5.2.0", "5.2.1", "5.2.2"]
 ```
 
 #### Refresh
@@ -319,3 +272,11 @@ tension: 0.5
 spanGaps: true
 ```
 
+```chart
+type: bar
+id: Refresh
+layout: rows
+select: [5.0.0, 5.0.1, 5.1.0, 5.1.1, 5.2.0, 5.2.1, 5.2.2]
+tension: 0.5
+spanGaps: true
+```

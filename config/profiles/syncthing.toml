@@ -2,3 +2,6 @@ features = ["network"]
 
 [home]
 policy = "Enabled"
+
+[ipc.ports]
+bind = [22000, 8384]

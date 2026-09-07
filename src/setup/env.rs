@@ -24,7 +24,15 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         for mode in FILE_MODES {
             if let Some(files) = runtime.get(&mode) {
                 for file in files {
-                    localize(mode, file, false, &args.handle, true, &mut None)?;
+                    localize(
+                        mode,
+                        file,
+                        false,
+                        &args.handle,
+                        true,
+                        &mut None,
+                        &mut args.policy,
+                    )?;
                 }
             }
         }

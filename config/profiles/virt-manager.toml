@@ -6,9 +6,13 @@ policy = "Enabled"
 [ipc]
 system_bus = true
 owns = ["org.virt-manager.virt-manager"]
+sockets = ["/var/run/libvirt"]
 
 [files.platform]
 ro = ["/usr/share/misc", "/var/run/libvirt", "/sys", "/usr/share/osinfo", "/usr/share/hwdata"]
+
+[files.permissions]
+"/var/cache" = "rw"
 
 [libraries]
 files = ["libosinfo*", "libvirt*", "libspice-client*"]

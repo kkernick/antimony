@@ -4,13 +4,7 @@
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
     Map, Set, edit,
-    profile::{
-        self, Profile,
-        files::{FILE_MODES, Files},
-        hooks::Hooks,
-        lib::Libraries,
-        seccomp::SeccompPolicy,
-    },
+    profile::{self, Profile, files::Files, hooks::Hooks, lib::Libraries, seccomp::SeccompPolicy},
     store::{self, Object},
     which::AntimonyWhich,
 };
@@ -72,6 +66,9 @@ pub struct Feature {
 
     /// The SECCOMP policy dictates whether to use SECCOMP to constrain the sandbox.
     pub seccomp: Option<profile::seccomp::SeccompPolicy>,
+
+    /// Explicitly specify whether to use lockdown.
+    pub landlock: Option<bool>,
 
     /// Required binaries
     pub binaries: Option<Set<String>>,
@@ -318,49 +315,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
 
     if let Some(files) = feature.files.take() {
         let p_files = profile.files.get_or_insert_default();
-
-        let mut direct = files.direct;
-        let p_direct = &mut p_files.direct;
-        for mode in FILE_MODES {
-            if let Some(d_files) = direct.remove(&mode) {
-                p_direct.entry(mode).or_default().extend(d_files);
-            }
-        }
-
-        let mut system = files.platform;
-        let p_sys = &mut p_files.platform;
-        for mode in FILE_MODES {
-            if let Some(sys_files) = system.remove(&mode) {
-                p_sys.entry(mode).or_default().extend(sys_files);
-            }
-        }
-
-        let mut system = files.resources;
-        let p_sys = &mut p_files.resources;
-        for mode in FILE_MODES {
-            if let Some(sys_files) = system.remove(&mode) {
-                p_sys.entry(mode).or_default().extend(sys_files);
-            }
-        }
-
-        let mut user = files.user;
-        let p_user = &mut p_files.user;
-        for mode in FILE_MODES {
-            if let Some(user_files) = user.remove(&mode) {
-                p_user.entry(mode).or_default().extend(user_files);
-            }
-        }
-
-        let mut runtime = files.runtime;
-        let p_runtime = &mut p_files.runtime;
-        for mode in FILE_MODES {
-            if let Some(runtime_files) = runtime.remove(&mode) {
-                p_runtime.entry(mode).or_default().extend(runtime_files);
-            }
-        }
-
-        p_files.temp.extend(files.temp);
-        p_files.links.extend(files.links);
+        p_files.merge(files);
     }
 
     if let Some(binaries) = feature.binaries.take() {
@@ -463,6 +418,21 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         if !ipc.calls.is_empty() {
             p_ipc.calls.extend(ipc.calls);
         }
+        if !ipc.sockets.is_empty() {
+            p_ipc.sockets.extend(ipc.sockets);
+        }
+        if let Some(ports) = ipc.ports {
+            if !ports.bind.is_empty() {
+                p_ipc.ports.get_or_insert_default().bind.extend(ports.bind);
+            }
+            if !ports.connect.is_empty() {
+                p_ipc
+                    .ports
+                    .get_or_insert_default()
+                    .connect
+                    .extend(ports.connect);
+            }
+        }
     }
 
     if let Some(env) = feature.environment.take() {
@@ -486,6 +456,12 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
             || profile.seccomp.is_none())
     {
         profile.seccomp = Some(policy);
+    }
+
+    if let Some(landlock) = feature.landlock.take()
+        && profile.landlock.is_none()
+    {
+        profile.landlock = Some(landlock);
     }
 }
 

@@ -64,7 +64,7 @@ fn main() -> anyhow::Result<()> {
     let not_found: Set<String> = err
         .par_iter()
         .enumerate()
-        .filter(|(_, e)| e.contains("ENOENT"))
+        .filter(|(_, e)| e.contains("ENOENT") || e.contains("EACCES"))
         .filter_map(|(i, e)| {
             // Try and extract the path
             extract(e, '"', '"').map_or_else(

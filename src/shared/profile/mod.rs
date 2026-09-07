@@ -105,6 +105,13 @@ pub struct Profile {
     /// Run in lockdown mode.
     pub lockdown: Option<bool>,
 
+    /// Explicitly specify whether to use lockdown.
+    ///
+    /// Antimony opportunistically enables lockdown if it can. You should use this if:
+    ///     1. You need to disable landlock (i.e running bwrap internally)
+    ///     2. You want to assert landlock, fatally erroring if it could not be used.
+    pub landlock: Option<bool>,
+
     /// The ID of the application is a unique identifier that, when not defined,
     /// defaults to the name of the binary. It should be the name of the associated
     /// .desktop file installed in /usr/share/applications used to launch the
@@ -227,6 +234,7 @@ impl Profile {
             path: args.path.take(),
             dir: args.dir.take(),
             lockdown: args.lockdown.take(),
+            landlock: args.landlock.take(),
             seccomp: args.seccomp.take(),
             preserve_env: args.preserve_env.take(),
             ..Default::default()
@@ -430,6 +438,9 @@ impl Profile {
 
         if self.lockdown.is_none() {
             self.lockdown = profile.lockdown;
+        }
+        if self.landlock.is_none() {
+            self.landlock = profile.landlock;
         }
 
         if self.seccomp.is_none() {

@@ -10,3 +10,6 @@ portals = ["FileChooser", "Settings", "Documents"]
 
 [files]
 passthrough = "rw"
+
+[files.permissions]
+"~/.local/share/zed/extensions" = "rx"

@@ -5,6 +5,19 @@ use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
+/// Networking IPC mediated via Landlock.
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Message)]
+#[serde(deny_unknown_fields, default)]
+pub struct Ports {
+    /// Ports the sandbox should be allowed bind to.
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub bind: Set<u16>,
+
+    /// Ports the sandbox should be allowed to connect to.
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub connect: Set<u16>,
+}
+
 /// IPC mediated via xdg-dbus-proxy.
 #[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Message)]
 #[serde(deny_unknown_fields, default)]
@@ -45,6 +58,13 @@ pub struct Ipc {
     /// Call semantics.
     #[serde(skip_serializing_if = "Set::is_empty")]
     pub calls: Set<String>,
+
+    /// Sockets paths the sandbox should be allowed to connect to (Besides user/system/proxy)
+    #[serde(skip_serializing_if = "Set::is_empty")]
+    pub sockets: Set<String>,
+
+    /// Landlock mediated ports.
+    pub ports: Option<Ports>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
@@ -68,6 +88,19 @@ impl Ipc {
         self.talks.extend(ipc.talks);
         self.owns.extend(ipc.owns);
         self.calls.extend(ipc.calls);
+        self.sockets.extend(ipc.sockets);
+
+        if let Some(ports) = ipc.ports {
+            if !ports.bind.is_empty() {
+                self.ports.get_or_insert_default().bind.extend(ports.bind);
+            }
+            if !ports.connect.is_empty() {
+                self.ports
+                    .get_or_insert_default()
+                    .connect
+                    .extend(ports.connect);
+            }
+        }
     }
 
     /// Construct an IPC set from the command line.
@@ -88,6 +121,21 @@ impl Ipc {
         }
         if let Some(call) = args.calls.take() {
             ipc.get_or_insert_default().calls = call.into_iter().collect();
+        }
+        if let Some(sockets) = args.sockets.take() {
+            ipc.get_or_insert_default().sockets = sockets.into_iter().collect();
+        }
+        if let Some(bind) = args.bind.take() {
+            ipc.get_or_insert_default()
+                .ports
+                .get_or_insert_default()
+                .bind = bind.into_iter().collect();
+        }
+        if let Some(connect) = args.connect.take() {
+            ipc.get_or_insert_default()
+                .ports
+                .get_or_insert_default()
+                .connect = connect.into_iter().collect();
         }
 
         if args.user_bus {

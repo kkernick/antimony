@@ -13,6 +13,7 @@ use crate::{
         Set, ThreadMap,
         cache::{self, CacheStatic},
         env::{AT_HOME, CONFIG_HOME, DATA_HOME, HOME},
+        landlock::LandlockPolicy,
         package::Package,
         profile::Profile,
         store::{CACHE_STORE, Object},
@@ -48,6 +49,7 @@ pub struct FabInfo<'a> {
     pub instance: &'a Temp,
     pub sys_dir: &'a Path,
     pub package: &'a mut Option<(Package, bool)>,
+    pub policy: &'a mut Option<LandlockPolicy>,
 }
 
 /// `bilrost` compatible struct for saving cached data
