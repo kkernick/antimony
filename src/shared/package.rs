@@ -503,7 +503,7 @@ pub fn execute_package(current: &Path, mut file: File, name: &OsStr) -> Result<(
         handle.args_i([
             "--overlay-src", "/usr/bin",
             "--overlay-src", &bin.to_string_lossy(),
-            "--ro-overlay", "/usr/bin",
+            "--tmp-overlay", "/usr/bin",
             "--symlink", "/usr/bin", "/bin",
             "--symlink", "/usr/bin", "/sbin",
             "--symlink", "/usr/bin", "/usr/sbin"

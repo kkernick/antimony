@@ -8,7 +8,6 @@
 //! even more aggressively parallelized.
 #![allow(clippy::missing_errors_doc)]
 
-#[cfg(debug_assertions)]
 use crate::shared::landlock::update_policy;
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},

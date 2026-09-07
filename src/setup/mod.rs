@@ -158,7 +158,8 @@ pub fn setup<'a>(
                 "--ro-overlay", "/usr/bin",
             ].map(String::from));
         } else {
-            profile_args.extend(["--ro-bind", &bin_str, "/usr/bin"].map(String::from));
+            profile_args
+                .extend(["--overlay-src", &bin_str, "--tmp-overlay", "/usr/bin"].map(String::from));
         }
 
         #[rustfmt::skip]
@@ -365,6 +366,7 @@ pub fn setup<'a>(
     let (policy, cached) = if let Ok(abi) = landlock::abi()
         && abi != 0
         && profile.landlock.unwrap_or(true)
+        && package.is_none()
     {
         let out = sys_dir.join("ll.toml");
         if out.exists() {
