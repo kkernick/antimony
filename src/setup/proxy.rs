@@ -10,9 +10,10 @@ use crate::{
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
-        landlock::{RW, update_policy},
+        landlock::{LandlockPolicy, RW, update_policy},
         package::Package,
         profile::{Profile, ipc::Portal, ns::Namespace},
+        utility,
         which::{AntimonyWhich, which},
     },
     timer,
@@ -33,7 +34,7 @@ use temp::Temp;
 use user::as_effective;
 
 /// Get the Spawner used to run Proxy.
-#[allow(clippy::ref_option)]
+#[allow(clippy::ref_option, clippy::too_many_lines)]
 pub fn run(
     sys_dir: &Path,
     profile: &Profile,
@@ -51,6 +52,8 @@ pub fn run(
         .ipc
         .as_ref()
         .map_or_else(|| false, |ipc| ipc.harden.unwrap_or_default());
+    let landlock = harden && landlock::abi().is_ok();
+    let utility = utility("landlock");
 
     if !proxy.exists() {
         fs::create_dir_all(&proxy)?;
@@ -70,7 +73,10 @@ pub fn run(
     if harden && !is_package && !sof.exists() {
         as_effective!(Result<()>, {
             fs::create_dir_all(&sof)?;
-            let libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
+            let mut libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
+            if landlock {
+                libraries.extend(get_libraries(&utility)?);
+            }
             libraries
                 .into_par_iter()
                 .try_for_each(|library| add_sof(&sof, &library, &cache))?;
@@ -97,6 +103,9 @@ pub fn run(
         "--ro-bind", &info.to_string_lossy(), "/.flatpak-info",
         "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
         "--bind", &proxy.to_string_lossy(), &format!("{runtime}/app/{id}"),
+        "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
+        "--ro-bind-try", "/etc/ld.so.cache",  "/etc/ld.so.cache",
+        "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
     ]);
 
     // If we are running a package, just mount its system libraries.
@@ -115,9 +124,60 @@ pub fn run(
         mount_roots("", &proxy)?;
     }
 
+    if landlock {
+        let landlock_path = cache.join("ll.toml");
+        if !landlock_path.exists() {
+            let mut policy = LandlockPolicy::default();
+            update_policy(
+                "/",
+                &mut policy,
+                [Filesystem::ReadDir, Filesystem::ReadFile],
+            );
+
+            for lib in ["/usr/lib", "/usr/lib64", "/lib", "/lib64"] {
+                update_policy(
+                    lib,
+                    &mut policy,
+                    [
+                        Filesystem::ReadDir,
+                        Filesystem::ReadFile,
+                        Filesystem::Execute,
+                    ],
+                );
+            }
+
+            for bin in ["/usr/bin", "/usr/sbin", "/bin", "/sbin"] {
+                update_policy(
+                    bin,
+                    &mut policy,
+                    [Filesystem::ReadFile, Filesystem::Execute],
+                );
+            }
+
+            update_policy(
+                runtime.as_ref(),
+                &mut policy,
+                [Filesystem::ReadDir, Filesystem::ReadFile, Filesystem::Unix],
+            );
+
+            let policy_string = toml::to_string(&policy)?;
+            if !Path::new(&landlock_path).exists() {
+                as_effective!(fs::write(&landlock_path, policy_string))?;
+            }
+        }
+
+        #[rustfmt::skip]
+        proxy.args_i([
+            "--ro-bind", &landlock_path.to_string_lossy(), "/landlock.toml",
+            "--setenv", "LANDLOCK_POLICY", "/landlock.toml",
+            "--ro-bind", &utility, &utility,
+            &utility, "/usr/bin/xdg-dbus-proxy"
+        ]);
+    } else {
+        proxy.args_i(["--", "/usr/bin/xdg-dbus-proxy"]);
+    }
+
     proxy.args_i([
-        "--",
-        "/usr/bin/xdg-dbus-proxy",
         SESSION_BUS.as_str(),
         &app_dir.join("bus").to_string_lossy(),
         "--filter",
