@@ -56,24 +56,24 @@ pub struct Args {
     /// incongruity between ID and desktop that requires a shadow that
     /// hides the original. If an integrated profile lacks an icon, you
     /// may need to use this option.
-    #[arg(short, long)]
+    #[arg(long)]
     pub shadow: bool,
 
-    /// Setup a user systemd service to run the sandbox on startup.
-    /// Antimony has a race condition with autostart because the session bus
-    /// may not be available when it starts. This impacts setting a sandbox
-    /// to autostart via your DE, or /etc/xdg/autostart configurations.
-    /// Antimony fixes this by installing the sandbox as a user-level
-    /// service that waits for the bus before launching.
-    ///
-    /// Because this behavior differs from how /etc/xdg/autostart usually
-    /// works, you need to explicitly opt-in to autostart, even if the
-    /// program is set to autostart by the system. Antimony will stub
-    /// the usual autostart mechanism and use a service.
+    /// Install the program to autostart. If an autostart already exists
+    /// in /etc, this is done automatically.
     #[arg(short, long)]
     pub autostart: bool,
 
-    /// If autostart, enable the service immediately.
+    /// Use a systemd user service rather than an autostart .desktop.
+    ///
+    /// This permits more flexibility, particularly being able to
+    /// easily enable configurations via antimony-PROFILE@CONFIG
+    ///
+    /// This takes precedence over --autostart
+    #[arg(long)]
+    pub service: bool,
+
+    /// If service, enable it immediately.
     #[arg(short, long)]
     pub enable: bool,
 
@@ -470,6 +470,12 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
         .join("share")
         .join("applications")
         .join(format!("{}.desktop", profile.desktop(name)));
+
+    let out = DATA_HOME
+        .join("applications")
+        .join(profile.desktop(name).as_ref())
+        .with_extension("desktop");
+
     if desktop_file.exists() {
         format_desktop(
             cmd,
@@ -504,26 +510,22 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             format!("Name=Run {} Natively", name.to_title_case()),
             format!("Exec={}", profile.app_path(&cmd.profile)),
         ]);
-
-        let out = DATA_HOME
-            .join("applications")
-            .join(name)
-            .with_extension("desktop");
         if let Some(parent) = out.parent()
             && !parent.exists()
         {
             fs::create_dir_all(parent)?;
         }
         manage_configurations(&mut contents, cmd, profile, name, &local, package)?;
-        fs::write(out, contents.join("\n"))?;
+        fs::write(&out, contents.join("\n"))?;
     }
 
-    if cmd.autostart {
-        let autostart_name = format!("{}.desktop", profile.desktop(name));
-        let service_file = Path::new("/etc")
-            .join("xdg")
-            .join("autostart")
-            .join(&autostart_name);
+    let autostart_name = format!("{}.desktop", profile.desktop(name));
+    let service_file = Path::new("/etc")
+        .join("xdg")
+        .join("autostart")
+        .join(&autostart_name);
+
+    if cmd.service {
         if service_file.exists() {
             info!("Overriding XDG Service");
             let shadow = make_shadow(&service_file)?;
@@ -565,7 +567,6 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
                 "Restart=on-failure",
                 "RestartSec=1",
                 "StartLimitBurst=10",
-                "StartLimitIntervalSec=60",
                 &environment,
                 "Environment=NOTIFY=none",
                 &exec,
@@ -614,6 +615,35 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             }
         } else {
             println!("Service in place. Reload the daemon or reboot, and enable it!");
+        }
+    } else if service_file.exists() {
+        format_desktop(
+            cmd,
+            profile,
+            name,
+            &service_file,
+            &local,
+            &CONFIG_HOME.join("autostart"),
+            package,
+        )?;
+    } else if cmd.autostart {
+        let autostart_path = CONFIG_HOME
+            .join("autostart")
+            .join(profile.desktop(name).as_ref())
+            .with_extension("desktop");
+        if let Some(parent) = autostart_path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
+
+        if out.exists() {
+            fs::copy(out, autostart_path)?;
+        } else {
+            return Err(anyhow!(
+                "No desktop file to integrate in {}! You may need --create-desktop!",
+                out.display()
+            ));
         }
     }
 

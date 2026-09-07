@@ -1,14 +1,12 @@
 //! Landlock policy format
 
-use std::{io::ErrorKind, path::PathBuf};
-
 use crate::shared::{Map, Set};
 use landlock::{
     rule,
     ruleset::{self, Filesystem, Ruleset},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
+use std::{io::ErrorKind, path::PathBuf};
 
 pub static RW: [Filesystem; 10] = [
     Filesystem::ReadFile,
@@ -90,24 +88,14 @@ pub fn update_policy(
         Some(path.as_ref())
     };
 
-    debug!(
-        "Updating policy with {} (Localized to {dest:?}",
-        path.display()
-    );
-
     if let Some(parent) = dest {
         let dir = parent.to_string_lossy().into_owned();
         if let Some(existing) = policy.paths.get_mut(&dir) {
-            debug!("Extending permissions for {dir:?}: {existing:?}");
             existing.extend(permissions);
         } else {
             policy
                 .paths
                 .insert(dir.clone(), permissions.into_iter().collect());
         }
-        debug!(
-            "Extending permissions for {dir:?}: {:?}",
-            policy.paths.get(&dir)
-        );
     }
 }
