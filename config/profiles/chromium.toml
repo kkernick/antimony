@@ -1,4 +1,4 @@
-features = ["pipewire", "vaapi", "xdg-open", "electron", "network", "mpris"]
+features = ["pipewire", "vaapi", "xdg-open", "electron", "https", "mpris"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]

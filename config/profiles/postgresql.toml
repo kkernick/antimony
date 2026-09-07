@@ -1,6 +1,6 @@
 path = "postgres"
 features = ["network", "locale"]
-binaries = ["createdb", "initdb", "createuser"]
+binaries = ["createuser", "createdb", "initdb"]
 arguments = ["-D", "/home/antimony/db"]
 
 [home]

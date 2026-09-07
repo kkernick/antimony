@@ -1,6 +1,6 @@
 name = "gtk3"
 description = "For GTK3 applications"
-requires = ["fonts", "dri", "gdk-pixbuf", "mime", "accessibility", "themes", "wayland"]
+requires = ["fonts", "dri", "themes", "gdk-pixbuf", "mime", "accessibility", "wayland"]
 
 [environment]
 GTK_USE_PORTAL = "1"

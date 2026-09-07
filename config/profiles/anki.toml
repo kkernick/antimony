@@ -1,4 +1,4 @@
-features = ["python", "passwd", "electron", "qt6", "network"]
+features = ["python", "passwd", "electron", "qt6", "https"]
 
 [home]
 policy = "Enabled"

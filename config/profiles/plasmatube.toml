@@ -1,5 +1,5 @@
 id = "org.kde.plasmatube"
-features = ["sdl", "network", "kf6"]
+features = ["sdl", "https", "kf6"]
 
 [home]
 policy = "Enabled"

@@ -202,8 +202,9 @@ pub fn setup<'a>(
         (profile, hash, Vec::new())
     };
 
-    let mut sys_dir = CACHE_DIR.join("run").join(&hash);
-    let mut instances = RUNTIME_DIR.join("antimony").join(&hash);
+    let name_hash = format!("{name}-{hash}");
+    let mut sys_dir = CACHE_DIR.join("run").join(&name_hash);
+    let mut instances = RUNTIME_DIR.join("antimony").join(&name_hash);
     if let Some(libraries) = &mut profile.libraries {
         libraries.roots.drain().for_each(|root| {
             if Path::new(&root).exists() {
@@ -227,8 +228,8 @@ pub fn setup<'a>(
         }
     };
 
-    let refresh_dir = RUNTIME_DIR.join("antimony").join(format!("{hash}r"));
-    let refresh_sof = CACHE_DIR.join("run").join(format!("{hash}r"));
+    let refresh_dir = RUNTIME_DIR.join("antimony").join(format!("{name_hash}r"));
+    let refresh_sof = CACHE_DIR.join("run").join(format!("{name_hash}r"));
 
     if refresh_sof.exists() {
         if !busy(&instances) && !busy(&refresh_dir) {

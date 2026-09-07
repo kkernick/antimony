@@ -69,7 +69,7 @@ sudo chmod ug+s /usr/bin/antimony
 ```
 
 >[!note]
->Antimony does not *require* SetUID to function, all that is required is that the `AT_HOME` environment variable points to somewhere it has write access. Note, however, that provided a globally accessible home for Antimony can allowed for trivial sandbox compromise by writing to the sandboxes SOF folder. It also allows erroneous modifications to be made to Profiles and Features without Antimony being able to mediate it.
+>Antimony does not *require* SetUID to function, all that is required is that the `AT_HOME` environment variable points to somewhere it has write access. SetUID provides a stronger boundary between users and the sandbox environment.
 
 >[!note]
 >If you intend to use the Lockdown functionality, you will additonally need to create a new `antimony-lockdown` user and create a dedicated directory for it in `$AT_HOME`

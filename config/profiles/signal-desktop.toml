@@ -1,5 +1,5 @@
 id = "signal"
-features = ["pipewire", "locale", "electron", "network", "tray"]
+features = ["pipewire", "locale", "https", "electron", "tray"]
 arguments = ["--ozone-platform=wayland"]
 
 [home]

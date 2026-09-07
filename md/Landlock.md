@@ -47,7 +47,7 @@ sockets = ["/var/run/libvirt"]
 ```
 
 
-2. You want more granular control over which ports the sandbox can bind to locally, and connect to remotely. By default, if you do not specify ports, *all* ports will be allowed (With exception, for example, the `network` feature only allows connecting to `443` i.e HTTPS). The `ipc.ports` field provides `bind` and `connect` fields. For example, if you are serving on a specific port, you can enforce that the process cannot bind to any other port:
+2. You want more granular control over which ports the sandbox can bind to locally, and connect to remotely. By default, if you do not specify ports, *all* ports will be allowed (With exception, for example, the `https` feature only allows connecting to `443`). The `ipc.ports` field provides `bind` and `connect` fields. For example, if you are serving on a specific port, you can enforce that the process cannot bind to any other port:
 
 ```toml
 features = ["network"]  
@@ -56,13 +56,3 @@ arguments = ["--port", "8080"]
 [ipc.ports]  
 bind = [8080]
 ```
-
-
-
-
-
-
-
-
-
-

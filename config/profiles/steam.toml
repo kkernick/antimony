@@ -1,5 +1,5 @@
 landlock = false
-features = ["vulkan", "bin", "locale", "dri", "passwd", "ld", "network", "wayland", "pipewire", "fonts", "xorg", "themes", "tray"]
+features = ["vulkan", "bin", "locale", "dri", "passwd", "https", "ld", "wayland", "fonts", "pipewire", "xorg", "themes", "tray"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
 devices = ["/dev"]

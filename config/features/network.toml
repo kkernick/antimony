@@ -2,8 +2,5 @@ name = "network"
 description = "Give applications network connectivity."
 namespaces = ["Net"]
 
-[ipc.ports]
-connect = [443]
-
 [files.platform]
-ro = ["/etc/host.conf", "/etc/hosts", "/etc/resolv.conf", "/usr/share/ssl", "/etc/nsswitch.conf", "/etc/ssl", "/usr/share/pki", "/etc/gai.conf", "/etc/pki", "/usr/share/ca-certificates", "/etc/ca-certificates"]
+ro = ["/etc/ca-certificates", "/etc/hosts", "/etc/resolv.conf", "/usr/share/ssl", "/etc/nsswitch.conf", "/etc/ssl", "/usr/share/pki", "/etc/host.conf", "/etc/gai.conf", "/etc/pki", "/usr/share/ca-certificates"]

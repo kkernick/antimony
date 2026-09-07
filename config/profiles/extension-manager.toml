@@ -1,5 +1,5 @@
 id = "com.mattjakeman.ExtensionManager"
-features = ["libadwaita", "network", "gio"]
+features = ["libadwaita", "https", "gio"]
 
 [ipc]
 portals = ["Documents"]

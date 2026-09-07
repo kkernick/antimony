@@ -1,0 +1,6 @@
+name = "https"
+description = "Give applications access to HTTPS"
+requires = ["network"]
+
+[ipc.ports]
+connect = [443]
