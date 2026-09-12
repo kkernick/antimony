@@ -1,5 +1,0 @@
-name = "ld"
-description = "Provide Linker Configuration."
-
-[files.platform]
-ro = ["/etc/ld.so.conf", "/etc/ld.so.cache", "/etc/ld.so.conf.d"]

@@ -40,12 +40,12 @@ use std::{
         unix::net::UnixListener,
     },
     path::{Path, PathBuf},
+    process::exit,
     sync::{
         Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
     },
     thread,
-    time::Duration,
 };
 
 #[derive(Parser)]
@@ -76,10 +76,6 @@ pub struct RunArgs {
     /// The instance path for localizing the socket. This can be any directory.
     #[arg(long, value_hint = ValueHint::DirPath)]
     instance: String,
-
-    /// Do not enforce a timeout on the application.
-    #[arg(long, default_value_t = false)]
-    no_timeout: bool,
 
     /// Only collect from the specified syscall names.
     #[arg(long)]
@@ -143,6 +139,7 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
 #[allow(
     clippy::unwrap_used,
     clippy::missing_panics_doc,
+    clippy::significant_drop_tightening,
     reason = "Antimony expects basic syscalls to exist"
 )]
 pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Result<()> {
@@ -166,11 +163,25 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                         return;
                     }
 
-                    // We only care about exec.
                     if (filter.is_empty() || filter.contains(&call))
                         && let Ok(paths) = collect_paths(pid, &args)
                         && !paths.is_empty()
                     {
+                        if call == syscalls::get_num("execve").unwrap()
+                            && !["bash", "sh", "python", "zsh", "env"]
+                                .iter()
+                                .any(|i| paths[0].contains(i))
+                        {
+                            println!("{}", paths[0]);
+                            term.store(true, Ordering::Relaxed);
+                            let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
+                            resp.error = -EPERM;
+                            resp.flags = 0;
+
+                            // No cleanup, terminate as soon as possible.
+                            exit(0);
+                        }
+
                         let mut local_found = found.entry(pid).or_default();
                         for path in paths {
                             if !local_found.contains(&path) {
@@ -182,17 +193,6 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                                 local_found.push(path);
                             }
                         }
-
-                    // We bail on these syscalls, since they're seen
-                    // as the program falling into a steady-state.
-                    } else if call == syscalls::get_num("ppoll").unwrap()
-                        || call == syscalls::get_num("wait4").unwrap()
-                    {
-                        term.store(true, Ordering::Relaxed);
-                        let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
-                        resp.error = -EPERM;
-                        resp.flags = 0;
-                        return;
                     }
 
                     resp.val = 0;
@@ -200,11 +200,10 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                     resp.flags = 1;
 
                     // Ignore SECCOMP and EXECVE.
-                    if (((call == syscalls::get_num("prctl").unwrap()
+                    if ((call == syscalls::get_num("prctl").unwrap()
                         && args[0] == PR_SET_SECCOMP as u64)
                         || call == syscalls::get_num("seccomp").unwrap())
-                        && args[2] != 0)
-                        || call == syscalls::get_num("execve").unwrap()
+                        && args[2] != 0
                     {
                         resp.flags = 0;
                     }
@@ -323,12 +322,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
         .seccomp(filter)
         .spawn()?;
 
-    if args.no_timeout {
-        handle.wait()?;
-    } else {
-        handle.wait_timeout(Duration::from_millis(100))?;
-    }
-
+    handle.wait()?;
     Ok(())
 }
 

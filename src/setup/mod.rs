@@ -202,7 +202,7 @@ pub fn setup<'a>(
         (profile, hash, Vec::new())
     };
 
-    let name_hash = format!("{name}-{hash}");
+    let name_hash = format!("{}-{hash}", if name.len() > 8 { &name[..8] } else { &name });
     let mut sys_dir = CACHE_DIR.join("run").join(&name_hash);
     let mut instances = RUNTIME_DIR.join("antimony").join(&name_hash);
     if let Some(libraries) = &mut profile.libraries {
@@ -329,25 +329,28 @@ pub fn setup<'a>(
 
     // Start the command.
     #[rustfmt::skip]
-        let handle = Spawner::abs(
-            if profile.lockdown.unwrap_or(false) {
-                utility("lockdown")
+    let handle = Spawner::abs(
+        if profile.lockdown.unwrap_or(false) {
+            utility("lockdown")
 
-            } else {
-                "/usr/bin/bwrap".to_owned()
-            }
-        )
-        .name(&args.profile)
-        .mode(user::Mode::Real)
-        .args(profile_args)
-        .args([
-            "--new-session", "--die-with-parent",
-            "--proc", "/proc",
-            "--dev", "/dev",
-            "--tmpfs", "/tmp",
-            "--dir", runtime,
-            "--chmod", "0700", runtime,
-        ]);
+        } else {
+            "/usr/bin/bwrap".to_owned()
+        }
+    )
+    .name(&args.profile)
+    .mode(user::Mode::Real)
+    .args(profile_args)
+    .args([
+        "--new-session", "--die-with-parent",
+        "--proc", "/proc",
+        "--dev", "/dev",
+        "--tmpfs", "/tmp",
+        "--dir", runtime,
+        "--chmod", "0700", runtime,
+        "--ro-bind-try", "/etc/ld.so.conf", "/etc/ld.so.conf",
+        "--ro-bind-try", "/etc/ld.so.cache",  "/etc/ld.so.cache",
+        "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
+    ]);
 
     if profile.preserve_env.unwrap_or(false) {
         handle.preserve_env_i(true);

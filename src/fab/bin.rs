@@ -59,7 +59,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Default, Message)]
+#[derive(Default, Message, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: Set<String>,
@@ -185,11 +185,13 @@ fn parse(
             Type::Link
         } else {
             if in_lib(path) {
-                if let Some(parent) = resolve_dir(path)
-                    && PathBuf::from(&parent).is_dir()
-                {
-                    ret.directories.insert(parent);
-                }
+                ROOTS.iter().for_each(|r| {
+                    if let Some(parent) = resolve_dir(path, r.as_ref())
+                        && PathBuf::from(&parent).is_dir()
+                    {
+                        ret.directories.insert(parent);
+                    }
+                });
                 include_self = false;
             }
 
@@ -245,7 +247,7 @@ fn parse(
                 );
 
                 #[rustfmt::skip]
-                let out = Spawner::abs(utility("dumper"))
+                let out: Set<_> = Spawner::abs(utility("dumper"))
                     .args([
                         "run",
                         "--path", &resolved,
@@ -253,14 +255,16 @@ fn parse(
                         "--filter", "execve",
                     ])
                     .output(StreamMode::Pipe)
-                    .error(StreamMode::Discard)
                     .preserve_env(true)
                     .new_privileges(true)
                     .mode(user::Mode::Real)
                     .spawn()?
-                    .output_all()?;
+                    .output_all()?
+                    .lines()
+                    .filter(|path| path.starts_with("/usr/bin") || in_lib(path))
+                    .map(String::from)
+                    .collect();
 
-                let out = out.lines().map(String::from);
                 binaries.extend(out);
                 for bin in binaries {
                     let cache = parse(&bin, instance, Arc::clone(&done), true)?;
@@ -291,11 +295,10 @@ fn parse(
 
 /// Get the immediate parent within /usr/lib.
 #[inline]
-fn resolve_dir(path: &str) -> Option<String> {
-    let lib_root = Path::new("/usr/lib");
+fn resolve_dir(path: &str, root: &str) -> Option<String> {
     let mut path = Path::new(&path);
     while let Some(parent) = path.parent() {
-        if parent == lib_root {
+        if parent == root {
             return Some(path.to_string_lossy().into_owned());
         }
         path = parent;
@@ -511,12 +514,12 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                         if let Ok(resolved) = which(binary) {
                             if dest == binary.as_str()
                                 && !resolved.starts_with("/usr/bin/")
-                                && !ROOTS.iter().any(|root| resolved.starts_with(root.as_ref()))
+                                && !in_lib(resolved)
                             {
                                 info.handle.args_i(["--ro-bind", resolved, resolved]);
                             } else if !dest.starts_with("/usr/bin/")
                                 && Path::new(&dest).is_absolute()
-                                && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
+                                && !in_lib(&dest)
                             {
                                 info.handle.args_i(["--ro-bind", resolved, &dest]);
                             }
