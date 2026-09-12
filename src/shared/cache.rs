@@ -61,7 +61,7 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
     /// ## Example
     ///
     /// ```rust
-    /// use common::cache::{CacheStatic, Cache};
+    /// use crate::antimony::shared::cache::{CacheStatic, Cache};
     /// use dashmap::DashMap;
     /// use std::{
     ///     borrow::Cow,
@@ -80,7 +80,7 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
     /// ## Example
     ///
     /// ```rust
-    /// use common::cache::{CacheStatic, Cache};
+    /// use crate::antimony::shared::cache::{CacheStatic, Cache};
     /// use dashmap::DashMap;
     /// use std::{
     ///     borrow::Cow,
@@ -107,7 +107,7 @@ impl<K: Eq + Hash + Clone + 'static, V: 'static> Cache<K, V> {
     /// ## Example
     ///
     /// ```rust
-    /// use common::cache::{CacheStatic, Cache};
+    /// use crate::antimony::shared::cache::{CacheStatic, Cache};
     /// use dashmap::DashMap;
     /// use std::{
     ///     borrow::Cow,

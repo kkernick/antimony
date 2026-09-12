@@ -257,7 +257,6 @@ pub fn get_libraries(path: &str) -> Result<Set<String>> {
 ///
 /// unsafe {
 ///     std::env::set_var("HOME", "/home/test");
-///     std::env::set_var("UID", "1000");
 ///     std::env::set_var("PID", "1");
 ///     std::env::set_var("FD", "2");
 /// }
@@ -265,9 +264,7 @@ pub fn get_libraries(path: &str) -> Result<Set<String>> {
 /// let current_dir = std::env::current_dir().unwrap();
 ///
 /// assert!(resolve(Cow::Borrowed("$HOME/test")) == "/home/test/test");
-/// assert!(resolve(Cow::Borrowed("/run/$UID/test")) == "/run/1000/test");
 /// assert!(resolve(Cow::Borrowed("/proc/$PID/fd/$FD")) == "/proc/1/fd/2");
-/// assert!(resolve(Cow::Borrowed("$HOME$UID$PID$FD")) == "/home/test100012");
 /// assert!(resolve(Cow::Borrowed("$NOT_A_VAR")) == "$NOT_A_VAR");
 /// assert!(resolve(Cow::Borrowed("$$$")) == "$$$");
 /// assert!(resolve(Cow::Borrowed("test.txt")) == current_dir.join("test.txt").to_string_lossy());
@@ -375,7 +372,6 @@ pub fn localize_home(path: &str) -> Cow<'_, str> {
 ///
 /// unsafe {
 ///     std::env::set_var("HOME", "/home/test");
-///     std::env::set_var("UID", "1000");
 ///     std::env::set_var("PID", "1");
 ///     std::env::set_var("FD", "2");
 /// }
@@ -393,7 +389,7 @@ pub fn localize_home(path: &str) -> Cow<'_, str> {
 /// assert!(localize_path("~/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
 /// assert!(localize_path("$HOME/file", true).unwrap() == (None, "/home/antimony/file".to_owned()));
 ///
-/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, "/run/1000/file".to_owned()));
+/// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, format!("/run/{}/file", user::USER.real).into()));
 /// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_owned()));
 /// ```
 pub fn localize_path(

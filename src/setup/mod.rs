@@ -368,7 +368,8 @@ pub fn setup<'a>(
     }
 
     let (policy, cached) = if let Ok(abi) = landlock::abi()
-        && abi != 0
+        // We need at least 10 for Unix.
+        && abi >= 10
         && profile.landlock.unwrap_or(true)
         && package.is_none()
     {
