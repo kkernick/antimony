@@ -246,26 +246,27 @@ fn parse(
                         .map(|token| token.strip_prefix("#!").unwrap_or(token).to_owned()),
                 );
 
-                #[rustfmt::skip]
-                let out: Set<_> = Spawner::abs(utility("dumper"))
-                    .args([
-                        "run",
-                        "--path", &resolved,
-                        "--instance", &instance.full().to_string_lossy(),
-                        "--filter", "execve",
-                    ])
-                    .output(StreamMode::Pipe)
-                    .preserve_env(true)
-                    .new_privileges(true)
-                    .mode(user::Mode::Real)
-                    .spawn()?
-                    .output_all()?
-                    .lines()
-                    .filter(|path| path.starts_with("/usr/bin") || in_lib(path))
-                    .map(String::from)
-                    .collect();
-
-                binaries.extend(out);
+                if resolved.starts_with("/usr/bin") {
+                    #[rustfmt::skip]
+                    let out: Set<_> = Spawner::abs(utility("dumper"))
+                        .args([
+                            "run",
+                            "--path", &resolved,
+                            "--instance", &instance.full().to_string_lossy(),
+                            "--filter", "execve",
+                        ])
+                        .output(StreamMode::Pipe)
+                        .preserve_env(true)
+                        .new_privileges(true)
+                        .mode(user::Mode::Real)
+                        .spawn()?
+                        .output_all()?
+                        .lines()
+                        .filter(|path| path.starts_with("/usr/bin") || in_lib(path))
+                        .map(String::from)
+                        .collect();
+                    binaries.extend(out);
+                }
                 for bin in binaries {
                     let cache = parse(&bin, instance, Arc::clone(&done), true)?;
                     if let Some(parse) = cache.parse {

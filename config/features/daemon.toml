@@ -8,6 +8,10 @@ sandbox_args = ["#", "daemon-wait"]
 [files.direct.rx]
 "/usr/bin/daemon-wait" = """
 #!/bin/sh
+CURRENT=$(ps | wc -l)
+echo "Initial processes: $CURRENT"
 $@
-while [ $(ps | wc -l ) -gt 6 ]; do sleep 1; done
+while [ $(ps | wc -l ) -gt $CURRENT ]; do
+    sleep 1;
+done
 """
