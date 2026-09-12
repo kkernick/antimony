@@ -168,7 +168,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                         && !paths.is_empty()
                     {
                         if call == syscalls::get_num("execve").unwrap()
-                            && !["bash", "sh", "python", "zsh", "env"]
+                            && !["bash", "sh", "zsh", "env"]
                                 .iter()
                                 .any(|i| paths[0].contains(i))
                         {
