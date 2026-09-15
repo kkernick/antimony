@@ -3,16 +3,12 @@
 
 use antimony::{
     cli::{self, Run, run::as_symlink},
-    shared::{
-        self,
-        config::CONFIG_FILE,
-        package::{IS_PACKAGE, execute_package},
-    },
+    shared::{self, config::CONFIG_FILE},
 };
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-use std::{env, fs::File, thread::available_parallelism};
+use std::{env, thread::available_parallelism};
 
 fn main() -> Result<()> {
     // Unfortunately, there is only a finite about of things that need
@@ -42,42 +38,35 @@ fn main() -> Result<()> {
         }
     }
 
-    // If we have a package, read the message.
-    if let Some(current) = IS_PACKAGE.as_ref()
-        && let Some(name) = current.file_name()
-    {
-        execute_package(current, File::open(current)?, name)
+    let ret = if as_symlink().is_err() {
+        cli::Cli::parse().command.run()
     } else {
-        let ret = if as_symlink().is_err() {
-            cli::Cli::parse().command.run()
-        } else {
-            Ok(())
-        };
+        Ok(())
+    };
 
-        #[cfg(debug_assertions)]
-        #[allow(clippy::absolute_paths)]
-        {
-            let mut total = std::num::Saturating(0u128);
-            let mut sorted = shared::TIME_MAP
-                .iter()
-                .map(|r| {
-                    total += *r.value();
-                    (r.key().to_owned(), *r.value())
-                })
-                .collect::<Vec<_>>();
-            sorted.sort_by_key(|a| a.1);
-            sorted.reverse();
-            for (k, v) in sorted {
-                use std::ops::Div;
+    #[cfg(debug_assertions)]
+    #[allow(clippy::absolute_paths)]
+    {
+        let mut total = std::num::Saturating(0u128);
+        let mut sorted = shared::TIME_MAP
+            .iter()
+            .map(|r| {
+                total += *r.value();
+                (r.key().to_owned(), *r.value())
+            })
+            .collect::<Vec<_>>();
+        sorted.sort_by_key(|a| a.1);
+        sorted.reverse();
+        for (k, v) in sorted {
+            use std::ops::Div;
 
-                #[allow(clippy::cast_precision_loss)]
-                let weight = (v * std::num::Saturating(100)).div(total);
-                log::info!("{k} => {v} ({weight}%)");
-            }
-
-            log::info!("TOTAL => {total}");
+            #[allow(clippy::cast_precision_loss)]
+            let weight = (v * std::num::Saturating(100)).div(total);
+            log::info!("{k} => {v} ({weight}%)");
         }
 
-        ret
+        log::info!("TOTAL => {total}");
     }
+
+    ret
 }

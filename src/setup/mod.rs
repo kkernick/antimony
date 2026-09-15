@@ -11,14 +11,13 @@ mod wait;
 
 use crate::{
     cli::run::mounted,
-    fab::{find_folders, lib::ROOTS},
+    fab::lib::ROOTS,
     shared::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         find::{DirType, recursive_crawl},
         landlock::{LandlockPolicy, RW, update_policy},
-        package::{Package, get_profile},
-        profile::{Profile, seccomp::SeccompPolicy},
+        profile::Profile,
         store::mem,
         utility,
     },
@@ -56,7 +55,6 @@ struct Args<'a> {
     pub instance: &'a Temp,
 
     /// If the boolean is false, we are *creating* the package. If true, we are *using* the package.
-    pub package: Option<(Package, bool)>,
     pub run: &'a mut super::cli::run::Args,
 
     /// The policy can be None for two reasons:
@@ -75,132 +73,17 @@ pub struct Info {
     pub instance: Temp,
     pub home: Option<String>,
     pub sys_dir: PathBuf,
-    pub package: Option<(Package, bool)>,
     pub policy: Option<LandlockPolicy>,
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
 #[allow(clippy::too_many_lines)]
 pub fn setup<'a>(
-    mut name: Cow<'a, str>,
+    name: Cow<'a, str>,
     args: &'a mut super::cli::run::Args,
     flush_defer: bool,
-    mut package: Option<(Package, bool)>,
 ) -> Result<Info> {
-    let (mut profile, hash, profile_args) = if let Some((_, true)) = package {
-        let path = PathBuf::from(name.into_owned());
-        let (mut profile, profile_path) = get_profile(&path)?;
-        name = Cow::Owned(profile_path.file_stem().map_or_else(
-            || profile_path.to_string_lossy().into_owned(),
-            |stem| stem.to_string_lossy().into_owned(),
-        ));
-
-        let hash = profile.hash_str(&None);
-
-        // These do not work without a system installation.
-        profile.seccomp = Some(SeccompPolicy::Disabled);
-        profile.lockdown = Some(false);
-
-        let mut profile_args = Vec::new();
-        let root = path.join("root");
-        if root.exists() {
-            #[rustfmt::skip]
-            profile_args.extend([
-                "--overlay-src", &root.to_string_lossy(),
-                "--tmp-overlay", "/",
-            ].map(String::from));
-        }
-
-        let bin = path.join("bin");
-        let bin_str = bin.to_string_lossy();
-
-        let lib = path.join("lib");
-        let lib_str = lib.to_string_lossy();
-
-        // The package uses a single library root, and has no idea what the
-        // host system's layout is. We therefore can't try to mount the host
-        // libraries in the same way we can do binaries.
-        //
-        // Instead, the outer namespace simply overlays a bunch of hard-coded
-        // roots to /usr/lib, which we then overlay below the package libraries.
-        let root_libs = root.join("usr").join("lib");
-        let mut lib_roots = vec![lib_str];
-        let no_sof = profile
-            .libraries
-            .as_ref()
-            .map_or_else(|| false, |libraries| libraries.no_sof.unwrap_or_default());
-
-        if root_libs.exists() {
-            let root_str = root_libs.to_string_lossy();
-            lib_roots.push(root_str);
-        }
-
-        if no_sof {
-            lib_roots.insert(0, Cow::Borrowed("/usr/lib"));
-        }
-
-        if lib_roots.len() == 1
-            && let Some(root) = lib_roots.first()
-        {
-            profile_args.extend(["--ro-bind", root, "/usr/lib"].map(String::from));
-        } else {
-            for lib in lib_roots {
-                profile_args.extend(["--overlay-src", &lib].map(String::from));
-            }
-            profile_args.extend(["--ro-overlay", "/usr/lib"].map(String::from));
-        }
-
-        if profile.binaries.contains("/usr/bin") {
-            #[rustfmt::skip]
-            profile_args.extend([
-                "--overlay-src", "/usr/bin",
-                "--overlay-src", &bin_str,
-                "--ro-overlay", "/usr/bin",
-            ].map(String::from));
-        } else {
-            profile_args
-                .extend(["--overlay-src", &bin_str, "--tmp-overlay", "/usr/bin"].map(String::from));
-        }
-
-        #[rustfmt::skip]
-        profile_args.extend([
-            "--symlink", "/usr/bin", "/bin",
-            "--symlink", "/usr/bin", "/sbin",
-            "--symlink", "/usr/bin", "/usr/sbin",
-            "--symlink", "/usr/lib", "/lib",
-            "--symlink", "/usr/lib", "/usr/lib64",
-            "--symlink", "/usr/lib64", "/lib64"
-        ].map(String::from));
-
-        let links = path.join("links");
-        if links.exists() {
-            links.read_dir()?.filter_map(Result::ok).for_each(|dest| {
-                if let Ok(src) = dest.path().read_link() {
-                    profile_args.extend(
-                        [
-                            "--symlink",
-                            &src.to_string_lossy(),
-                            &dest.file_name().to_string_lossy().replace('-', "/"),
-                        ]
-                        .map(String::from),
-                    );
-                }
-            });
-        }
-
-        if no_sof {
-            for path in find_folders(&name) {
-                profile_args.extend(["--ro-bind", &path, &path].map(String::from));
-            }
-        }
-
-        profile = profile.base(Profile::from_args(args)?)?;
-        package = Some((Package::default(), true));
-        (profile, hash, profile_args)
-    } else {
-        let (profile, hash) = Profile::new(&name, args.config.take(), Some(args), false)?;
-        (profile, hash, Vec::new())
-    };
+    let (mut profile, hash) = Profile::new(&name, args.config.take(), Some(args), false)?;
 
     let name_hash = format!("{}-{hash}", if name.len() > 8 { &name[..8] } else { &name });
     let mut sys_dir = CACHE_DIR.join("run").join(&name_hash);
@@ -339,7 +222,6 @@ pub fn setup<'a>(
     )
     .name(&args.profile)
     .mode(user::Mode::Real)
-    .args(profile_args)
     .args([
         "--new-session", "--die-with-parent",
         "--proc", "/proc",
@@ -371,7 +253,6 @@ pub fn setup<'a>(
         // We need at least 10 for Unix.
         && abi >= 10
         && profile.landlock.unwrap_or(true)
-        && package.is_none()
     {
         let out = sys_dir.join("ll.toml");
         if out.exists() {
@@ -429,7 +310,6 @@ pub fn setup<'a>(
         sys_dir: sys_dir.clone(),
         instance: &instance,
         run: args,
-        package,
         policy,
     };
 
@@ -438,16 +318,13 @@ pub fn setup<'a>(
     timer!("::env", env::setup(&mut a))?;
     timer!("::fab", fab::setup(&mut a))?;
     timer!("::file", files::setup(&mut a))?;
-
-    if a.package.is_none() {
-        timer!("::syscalls", syscalls::setup(&a))?;
-    }
+    timer!("::syscalls", syscalls::setup(&a))?;
 
     // If we're dry-running, and are running under a single profile, flush as
     // soon as possible--as then we don't waste time waiting for the writing
     // to finish. We can't rely on the user interacting with the application
     // to conceal the flush, so we have to do it early.
-    if !flush_defer && a.run.dry && a.package.is_none() {
+    if !flush_defer && a.run.dry {
         timer!("::flush", mem::flush());
     }
 
@@ -462,7 +339,6 @@ pub fn setup<'a>(
         handle: a.handle,
         post,
         profile: a.profile,
-        package: a.package,
         policy: if cached {
             Some(LandlockPolicy::default())
         } else {

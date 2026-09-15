@@ -11,7 +11,6 @@ use crate::{
         Set,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         landlock::{LandlockPolicy, RW, update_policy},
-        package::Package,
         profile::{Profile, ipc::Portal, ns::Namespace},
         utility,
         which::{AntimonyWhich, which},
@@ -41,7 +40,6 @@ pub fn run(
     instance: &Temp,
     info: &Path,
     id: &str,
-    package: &Option<(Package, bool)>,
 ) -> Result<Spawner> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let cache = CACHE_DIR.join(".proxy");
@@ -69,8 +67,7 @@ pub fn run(
     // access the proxy's sandbox through the user bus. Still, we
     // have the means to do this, so might as well. The real
     // paranoia is below.
-    let is_package = package.as_ref().map_or_else(|| false, |(_, b)| *b);
-    if harden && !is_package && !sof.exists() {
+    if harden && !sof.exists() {
         as_effective!(Result<()>, {
             fs::create_dir_all(&sof)?;
             let mut libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
@@ -108,16 +105,7 @@ pub fn run(
         "--ro-bind-try", "/etc/ld.so.conf.d", "/etc/ld.so.conf.d",
     ]);
 
-    // If we are running a package, just mount its system libraries.
-    if is_package {
-        #[rustfmt::skip]
-            proxy.args_i([
-                "--ro-bind", "/pkg/lib", "/usr/lib",
-                "--symlink", "/usr/lib", "/lib",
-                "--symlink", "/usr/lib", "/usr/lib64",
-                "--symlink", "/usr/lib64", "/lib64"
-            ]);
-    } else if harden {
+    if harden {
         let sof_str = sof.to_string_lossy();
         mount_roots(&sof_str, &proxy)?;
     } else {
@@ -330,19 +318,11 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     {
         let proxy = timer!(
             "::run",
-            run(
-                &args.sys_dir,
-                &args.profile,
-                args.instance,
-                &info,
-                id,
-                &args.package
-            )
+            run(&args.sys_dir, &args.profile, args.instance, &info, id,)
         )?;
 
         if !args.run.dry {
             if ipc.harden.unwrap_or_default()
-                && args.package.is_none()
                 && let Some(policy) = args.profile.seccomp
             {
                 syscalls::install_filter(

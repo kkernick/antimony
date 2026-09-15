@@ -253,7 +253,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     .into_iter()
     .collect();
 
-    if no_sof && info.package.as_ref().map_or_else(|| true, |(_, b)| *b) {
+    if no_sof {
         mount_roots("", info.handle)?;
     } else {
         timer!("::binaries", {
@@ -328,38 +328,32 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         if !FILES.is_empty() {
             timer!(
                 "::write_files",
-                if let Some((package, false)) = info.package {
-                    for lib in FILES.iter() {
-                        package.add_library(&lib, &lib)?;
-                    }
-                } else {
-                    as_effective!(
-                        FILES
-                            .par_iter()
-                            .filter(|library| {
-                                if in_lib(library) {
-                                    true
-                                } else {
-                                    info.handle.args_i([
-                                        if library.starts_with("/home/") {
-                                            "--bind"
-                                        } else {
-                                            "--ro-bind"
-                                        },
-                                        library,
-                                        library,
-                                    ]);
-                                    false
-                                }
-                            })
-                            // Write the SOF version, as a hard link preferably.
-                            .for_each(|lib| {
-                                if let Err(e) = add_sof(&sof, &lib, &cache) {
-                                    error!("Failed to add {} to SOF: {e}", lib.as_str());
-                                }
-                            })
-                    );
-                }
+                as_effective!(
+                    FILES
+                        .par_iter()
+                        .filter(|library| {
+                            if in_lib(library) {
+                                true
+                            } else {
+                                info.handle.args_i([
+                                    if library.starts_with("/home/") {
+                                        "--bind"
+                                    } else {
+                                        "--ro-bind"
+                                    },
+                                    library,
+                                    library,
+                                ]);
+                                false
+                            }
+                        })
+                        // Write the SOF version, as a hard link preferably.
+                        .for_each(|lib| {
+                            if let Err(e) = add_sof(&sof, &lib, &cache) {
+                                error!("Failed to add {} to SOF: {e}", lib.as_str());
+                            }
+                        })
+                )
             );
 
             let sof_str = sof.to_string_lossy();
@@ -381,15 +375,8 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                         update_policy(dir.as_str(), policy, allowed.clone());
                     }
 
-                    if !home && let Some((package, false)) = info.package.as_mut() {
-                        package.add_library(&dir, &local)?;
-                    } else {
-                        info.handle.args_i([
-                            if home { "--bind" } else { "--ro-bind" },
-                            &dir,
-                            &local,
-                        ]);
-                    }
+                    info.handle
+                        .args_i([if home { "--bind" } else { "--ro-bind" }, &dir, &local]);
                 }
             });
         }

@@ -234,7 +234,7 @@ impl cli::Run for Args {
             }
         }
         let _ = CACHE_STORE.borrow();
-        match setup(Cow::Owned(self.profile.clone()), &mut self, false, None) {
+        match setup(Cow::Owned(self.profile.clone()), &mut self, false) {
             Ok(info) => {
                 if let Err(e) = run(info, &mut self) {
                     let fail = format!("Failed to run {}: {e}", self.profile);
@@ -257,7 +257,7 @@ impl Args {
     /// ## Errors
     /// If the profile cannot be run
     pub fn refresh(mut self) -> Result<()> {
-        match setup(Cow::Owned(self.profile.clone()), &mut self, true, None) {
+        match setup(Cow::Owned(self.profile.clone()), &mut self, true) {
             Ok(info) => {
                 if let Err(e) = run(info, &mut self) {
                     let fail = format!("Failed to run {}: {e}", self.profile);
@@ -427,9 +427,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         }
 
         let mut handle = info.handle.spawn()?;
-        if !info.package.map_or_else(|| false, |(_, b)| b) {
-            mem::flush();
-        }
+        mem::flush();
 
         // Drop to real while waiting so user processes/parent can signal us.
         let code = handle.wait_and();

@@ -46,6 +46,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread,
+    time::Duration,
 };
 
 #[derive(Parser)]
@@ -80,6 +81,10 @@ pub struct RunArgs {
     /// Only collect from the specified syscall names.
     #[arg(long)]
     filter: Option<Vec<String>>,
+
+    /// An optional timeout, in milliseconds
+    #[arg(long)]
+    timeout: Option<u64>,
 }
 
 #[derive(clap::Args, Default, Clone)]
@@ -322,7 +327,12 @@ pub fn runner(args: RunArgs) -> Result<()> {
         .seccomp(filter)
         .spawn()?;
 
-    handle.wait()?;
+    if let Some(timeout) = args.timeout {
+        let _ = handle.wait_timeout(Duration::from_millis(timeout));
+    } else {
+        handle.wait()?;
+    }
+
     Ok(())
 }
 

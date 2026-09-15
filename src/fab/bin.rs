@@ -254,6 +254,7 @@ fn parse(
                             "--path", &resolved,
                             "--instance", &instance.full().to_string_lossy(),
                             "--filter", "execve",
+                            "--timeout", "100"
                         ])
                         .output(StreamMode::Pipe)
                         .preserve_env(true)
@@ -484,8 +485,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         }
     };
 
-    let skip =
-        binaries.contains("/usr/bin") && info.package.as_ref().map_or_else(|| true, |(_, b)| *b);
+    let skip = binaries.contains("/usr/bin");
     if skip {
         info.profile.libraries.get_or_insert_default().no_sof = Some(true);
         info.profile
@@ -597,38 +597,24 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         // ELF files need to be processed by the library fabricator,
         // to use LDD on depends.
         for elf in parsed.elf {
-            if let Some((package, false)) = info.package.as_mut() {
-                package.add_binary(&elf, &elf)?;
-            } else {
-                info.handle.args_i(["--ro-bind", &elf, &elf]);
-            }
+            info.handle.args_i(["--ro-bind", &elf, &elf]);
+
             elf_binaries.insert(elf);
         }
 
         // Scripts are consumed here, and are only bound to the sandbox.
         for script in parsed.scripts {
-            if let Some((package, false)) = info.package.as_mut() {
-                package.add_binary(&script, &script)?;
-            } else {
-                info.handle.args_i(["--ro-bind", &script, &script]);
-            }
+            info.handle.args_i(["--ro-bind", &script, &script]);
         }
 
         for file in parsed.files {
-            if let Some((package, false)) = info.package.as_mut() {
-                package.add_binary(&file, &file)?;
-            } else {
-                info.handle.args_i(["--ro-bind", &file, &file]);
-            }
+            info.handle.args_i(["--ro-bind", &file, &file]);
         }
 
         for (src, dst) in parsed.localized {
             if elf_filter(&src)? {
-                if let Some((package, false)) = info.package.as_mut() {
-                    package.add_binary(&src, &dst)?;
-                } else {
-                    info.handle.args_i(["--ro-bind", &src, &dst]);
-                }
+                info.handle.args_i(["--ro-bind", &src, &dst]);
+
                 elf_binaries.insert(src);
             }
         }
@@ -646,19 +632,14 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         }
 
         for (link, dest) in parsed.symlinks {
-            if let Some((package, false)) = info.package.as_mut() {
-                package.add_binary(&dest, &dest)?;
-                package.add_symlink(&link, &dest);
-            } else {
-                if !elf_binaries.contains(&dest) {
-                    info.handle.args_i(["--ro-bind", &dest, &dest]);
-                    elf_binaries.insert(dest.clone());
-                }
-                if !in_lib(&link) {
-                    info.handle.args_i(["--symlink", &dest, &link]);
-                    if let Some(policy) = info.policy {
-                        update_policy(link, policy, allowed.clone());
-                    }
+            if !elf_binaries.contains(&dest) {
+                info.handle.args_i(["--ro-bind", &dest, &dest]);
+                elf_binaries.insert(dest.clone());
+            }
+            if !in_lib(&link) {
+                info.handle.args_i(["--symlink", &dest, &link]);
+                if let Some(policy) = info.policy {
+                    update_policy(link, policy, allowed.clone());
                 }
             }
         }

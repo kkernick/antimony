@@ -6,17 +6,17 @@ pub mod edit;
 pub mod env;
 pub mod feature;
 pub mod find;
-pub mod package;
+pub mod landlock;
 pub mod profile;
 pub mod store;
 pub mod stream;
 pub mod syscalls;
 pub mod which;
-pub mod landlock;
 
 use crate::shared::{
     config::CONFIG_FILE,
-    env::{AT_HOME, CACHE_DIR, SESSION_BUS}, which::AntimonyWhich,
+    env::{AT_HOME, CACHE_DIR, SESSION_BUS},
+    which::AntimonyWhich,
 };
 use dashmap::{DashMap, DashSet};
 use log::{Level, Record};

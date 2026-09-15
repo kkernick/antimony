@@ -37,34 +37,21 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         name: &args.name,
         instance: args.instance,
         sys_dir: &args.sys_dir,
-        package: &mut args.package,
         policy: &mut args.policy,
     };
 
-    let package = info
-        .package
-        .as_ref()
-        .map_or_else(|| None, |(_, b)| Some(*b));
-
     // Start caching.
-    if package.is_none() {
-        args.handle.cache_start()?;
-    }
+    args.handle.cache_start()?;
 
     // These can't be readily done in parallel, since
     // the heaviest ones (bin and lib) rely on each other.
     timer!("::fab::files", fab::files::fabricate(&mut info))?;
-
-    if package.as_ref().is_none_or(|b| !b) {
-        timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
-        timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
-    }
-
+    timer!("::fab::bin", fab::bin::fabricate(&mut info))?;
+    timer!("::fab::lib", fab::lib::fabricate(&mut info))?;
     timer!("::fab::ns", fab::ns::fabricate(&mut info))?;
     timer!("::fab::dev", fab::dev::fabricate(&mut info))?;
 
-    if package.is_none() {
-        as_effective!(args.handle.cache_write(&cmd_cache))?;
-    }
+    as_effective!(args.handle.cache_write(&cmd_cache))?;
+
     Ok(())
 }

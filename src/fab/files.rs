@@ -5,7 +5,6 @@ use crate::{
     shared::{
         env::HOME,
         landlock::{LandlockPolicy, RO, RW, update_policy},
-        package::Package,
         profile::files::{FILE_MODES, FileMode},
     },
 };
@@ -22,20 +21,15 @@ pub fn localize(
     home: bool,
     handle: &Spawner,
     can_try: bool,
-    package: &mut Option<(Package, bool)>,
     policy: &mut Option<LandlockPolicy>,
 ) -> Result<()> {
     let (src, dest) = localize_path(file, home)?;
     if let Some(source) = src {
-        if let Some((package, false)) = package.as_mut() {
-            package.add(&source, &dest)?;
-        } else {
-            handle.args_i([
-                Cow::Borrowed(mode.bind(can_try)),
-                source,
-                Cow::Borrowed(&dest),
-            ]);
-        }
+        handle.args_i([
+            Cow::Borrowed(mode.bind(can_try)),
+            source,
+            Cow::Borrowed(&dest),
+        ]);
     } else {
         let resolved = if home && !file.starts_with("/home") {
             Cow::Owned(format!("{}/{file}", HOME.as_str()))
@@ -77,15 +71,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         }
 
         for (src, dst) in &files.links {
-            if let Some((package, false)) = info.package.as_mut() {
-                package.add(src, dst)?;
-            } else {
-                info.handle.args_i(["--symlink", src, dst]);
-                if let Some(policy) = info.policy
-                    && let Some(parent) = Path::new(dst).parent()
-                {
-                    update_policy(parent, policy, RO);
-                }
+            info.handle.args_i(["--symlink", src, dst]);
+            if let Some(policy) = info.policy
+                && let Some(parent) = Path::new(dst).parent()
+            {
+                update_policy(parent, policy, RO);
             }
         }
 
@@ -100,7 +90,6 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                             true,
                             info.handle,
                             true,
-                            &mut None,
                             info.policy,
                         )?;
                     }
@@ -131,26 +120,16 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         for mode in FILE_MODES {
             if let Some(files) = system.get(&mode) {
                 for file in files {
-                    localize(mode, file, false, info.handle, true, &mut None, info.policy)?;
+                    localize(mode, file, false, info.handle, true, info.policy)?;
                 }
             }
         }
 
-        if info.package.as_ref().map_or_else(|| true, |(_, b)| !b) {
-            let system = &files.resources;
-            for mode in FILE_MODES {
-                if let Some(files) = system.get(&mode) {
-                    for file in files {
-                        localize(
-                            mode,
-                            file,
-                            false,
-                            info.handle,
-                            false,
-                            info.package,
-                            info.policy,
-                        )?;
-                    }
+        let system = &files.resources;
+        for mode in FILE_MODES {
+            if let Some(files) = system.get(&mode) {
+                for file in files {
+                    localize(mode, file, false, info.handle, false, info.policy)?;
                 }
             }
         }

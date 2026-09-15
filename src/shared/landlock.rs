@@ -62,10 +62,12 @@ impl LandlockPolicy {
         ruleset.batch_net(self.net_domain)?;
 
         for (path, attrs) in self.paths {
-            match rule::Path::new_with(path, attrs) {
-                Ok(r) => ruleset.add_rule(r),
-                Err(landlock::Error::Io(e)) if e.kind() == ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
+            if !path.is_empty() {
+                match rule::Path::new_with(path, attrs) {
+                    Ok(r) => ruleset.add_rule(r),
+                    Err(landlock::Error::Io(e)) if e.kind() == ErrorKind::NotFound => {}
+                    Err(e) => return Err(e),
+                }
             }
         }
         for (net, attrs) in self.ports {

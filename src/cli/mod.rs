@@ -5,7 +5,6 @@ pub mod export;
 pub mod import;
 pub mod info;
 pub mod integrate;
-pub mod package;
 pub mod refresh;
 pub mod remove;
 pub mod run;
@@ -79,9 +78,6 @@ pub enum Command {
 
     /// Get information about profiles/features
     Info(info::Args),
-
-    /// Package a profile into a self-contained executable.
-    Package(package::Args),
 }
 impl Default for Command {
     fn default() -> Self {
