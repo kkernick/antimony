@@ -7,7 +7,6 @@ mod home;
 mod post;
 mod proxy;
 mod syscalls;
-mod wait;
 
 use crate::{
     cli::run::mounted,
@@ -74,6 +73,8 @@ pub struct Info {
     pub home: Option<String>,
     pub sys_dir: PathBuf,
     pub policy: Option<LandlockPolicy>,
+    pub watches: Set<WatchDescriptor>,
+    pub inotify: Inotify,
 }
 
 /// The main function within antimony. It takes a name, and spits out a sandbox ready to run.
@@ -83,7 +84,10 @@ pub fn setup<'a>(
     args: &'a mut super::cli::run::Args,
     flush_defer: bool,
 ) -> Result<Info> {
-    let (mut profile, hash) = Profile::new(&name, args.config.take(), Some(args), false)?;
+    let (mut profile, hash) = timer!(
+        "::load",
+        Profile::new(&name, args.config.take(), Some(args), false)
+    )?;
 
     let name_hash = format!("{}-{hash}", if name.len() > 8 { &name[..8] } else { &name });
     let mut sys_dir = CACHE_DIR.join("run").join(&name_hash);
@@ -184,30 +188,32 @@ pub fn setup<'a>(
         && let Some(ipc) = &profile.ipc
         && !ipc.disable.unwrap_or(false)
     {
-        if !mounted(&format!("{runtime}/doc")) {
-            let connection = LocalConnection::new_session()?;
-            let msg = Message::new_method_call(
-                BusName::from("org.freedesktop.portal.Documents\0"),
-                dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                Interface::from("org.freedesktop.DBus.Peer\0"),
-                Member::from("Ping\0"),
-            );
+        timer!("::document_wakeup", {
+            if !mounted(&format!("{runtime}/doc")) {
+                let connection = LocalConnection::new_session()?;
+                let msg = Message::new_method_call(
+                    BusName::from("org.freedesktop.portal.Documents\0"),
+                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
+                    Interface::from("org.freedesktop.DBus.Peer\0"),
+                    Member::from("Ping\0"),
+                );
 
-            if let Ok(msg) = msg {
-                connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-            } else {
-                return Err(anyhow!("Failed to send ping to Document Portal"));
+                if let Ok(msg) = msg {
+                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
+                } else {
+                    return Err(anyhow!("Failed to send ping to Document Portal"));
+                }
             }
-        }
 
-        // Associate the flatpak dir with our instance so they're deleted together.
-        instance.associate(
-            temp::Builder::new()
-                .within(RUNTIME_DIR.join(".flatpak"))
-                .name(instance.name())
-                .owner(user::Mode::Real)
-                .create::<temp::Directory>()?,
-        );
+            // Associate the flatpak dir with our instance so they're deleted together.
+            instance.associate(
+                temp::Builder::new()
+                    .within(RUNTIME_DIR.join(".flatpak"))
+                    .name(instance.name())
+                    .owner(user::Mode::Real)
+                    .create::<temp::Directory>()?,
+            );
+        });
     }
 
     // Start the command.
@@ -329,16 +335,14 @@ pub fn setup<'a>(
     }
 
     let post = timer!("::post", post::setup(&mut a))?;
-    timer!(
-        "::wait",
-        wait::setup(a.watches, a.inotify, &a.handle, a.run.dry)
-    )?;
 
     Ok(Info {
         name: name.into_owned(),
         handle: a.handle,
         post,
         profile: a.profile,
+        watches: a.watches,
+        inotify: a.inotify,
         policy: if cached {
             Some(LandlockPolicy::default())
         } else {

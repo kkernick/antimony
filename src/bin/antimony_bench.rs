@@ -7,8 +7,11 @@
 //! and run the benchmarker at that iteration--it should work.
 #![allow(unused_crate_dependencies)]
 
-use antimony::shared::{self, env::HOME_PATH};
-use anyhow::{Result, anyhow};
+use antimony::{
+    fab::lib::mount_roots,
+    shared::{self, env::HOME_PATH},
+};
+use anyhow::Result;
 use clap::{Parser, ValueEnum, ValueHint};
 use nix::unistd::chdir;
 use signal_hook::{consts, flag};
@@ -17,8 +20,9 @@ use std::{
     borrow::Cow,
     env, fs,
     os::unix::fs::symlink,
-    path::{Path, PathBuf},
     sync::{Arc, atomic::AtomicBool},
+    thread,
+    time::Duration,
 };
 
 #[derive(Hash, PartialEq, Eq, Copy, Clone, ValueEnum)]
@@ -47,10 +51,9 @@ pub struct Cli {
     #[arg(value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub profiles: Vec<String>,
 
-    /// A recipe to build antimony with, and benchmark that artifact. Defaults to using
-    /// wherever `antimony` resolves to, and doesn't build.
+    /// A recipe to build antimony with, and benchmark that artifact.
     #[arg(long)]
-    pub recipe: Option<String>,
+    pub recipe: String,
 
     /// The maximum amount of times hyperfine should run the profile.
     #[arg(long)]
@@ -67,25 +70,9 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     pub output: bool,
 
-    /// An optional temperature sensor to monitor.
-    #[arg(long)]
-    pub temp_sensor: Option<String>,
-
-    /// An optional temperature to wait for cool-down. Usually, this has a precision of a thousandth, so 65000 = 65.0
-    #[arg(long)]
-    pub temp: Option<u64>,
-
     /// What benchmarks to run. By default, all
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub bench: Option<Vec<Benchmark>>,
-
-    /// How long to sleep for. Defaults to 1 second.
-    #[arg(long)]
-    pub sleep: Option<u32>,
-
-    /// Where to point `AT_HOME`. If not set, defaults to the repository root.
-    #[arg(long, value_hint = ValueHint::DirPath)]
-    pub home: Option<String>,
 
     /// Additional commands to pass to `antimony_builder`
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
@@ -98,6 +85,10 @@ pub struct Cli {
     /// Additional commands to pass to hyperfine
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub hyperfine_args: Option<Vec<String>>,
+
+    /// Internal flag
+    #[arg(long, hide = true)]
+    pub run: bool,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -105,60 +96,9 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
-
     let profiles = &cli.profiles;
 
-    let root = Spawner::new("git")?
-        .args(["rev-parse", "--show-toplevel"])
-        .output(spawn::StreamMode::Pipe)
-        .spawn()?
-        .output_all()?;
-    let root = root.strip_suffix('\n').unwrap_or(&root);
-    chdir(root)?;
-
-    let term = Arc::new(AtomicBool::new(false));
-    flag::register(consts::SIGINT, Arc::clone(&term))?;
-
-    if let Some(checkout) = &cli.checkout {
-        // We need to impose a minimum to ensure --sandbox-args is supported. This also allows us to use --hard without
-        // recourse. Unfortunately, there's no real way to benchmark the older versions with how we benchmark now,
-        // since we're not effectively *always* running under the "real" mode.
-        //
-        // What is the point of benchmarking if the test is not real in the first place?
-        match checkout.strip_prefix("tags/") {
-            Some(version) => {
-                let split = version
-                    .split('.')
-                    .filter_map(|f| f.parse::<u32>().ok())
-                    .collect::<Vec<_>>();
-                if (split[0] < 2) || (split[0] == 2 && split[1] < 4) {
-                    return Err(anyhow!(
-                        "This version of the benchmark requires Antimony 2.4.0. If you need to benchmark older versions, you can checkout the repo at 4.2.1, but note output between these versions are not comparable."
-                    ));
-                }
-            }
-            None => {
-                return Err(anyhow!("Checkout only works with tagged versions!"));
-            }
-        }
-
-        // Stash our working edits
-        Spawner::new("git")?.arg("stash").spawn()?.wait()?;
-
-        // Checkout the desired state, but only for code and Cargo.
-        Spawner::new("git")?
-            .args(["checkout", checkout])
-            .spawn()?
-            .wait()?;
-
-        // Reset to the original state
-        Spawner::new("git")?
-            .args(["reset", "--hard"])
-            .spawn()?
-            .wait()?;
-    }
-
-    let antimony = || -> Result<String> {
+    if cli.run {
         let benchmarks = cli
             .bench
             .clone()
@@ -169,11 +109,10 @@ fn main() -> Result<()> {
             .map(Cow::Borrowed)
             .collect();
 
-        let timeout = cli.sleep.unwrap_or(1);
         #[rustfmt::skip]
         let sleep: Vec<String> = [
-            &format!("--sandbox-args='# sleep {timeout} !'"),
-            "--binaries", "sleep",
+            "--sandbox-args='# true !'",
+            "--binaries", "true",
             "--conflicts", "daemon"
         ]
         .into_iter()
@@ -193,101 +132,18 @@ fn main() -> Result<()> {
             args.extend([Cow::Borrowed("-m"), Cow::Owned(min.to_string())]);
         }
 
-        let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| format!("{root}/target"));
-
-        let antimony = if let Some(recipe) = &cli.recipe {
-            println!("Building recipe");
-            let path = Spawner::abs(format!("{target_dir}/debug/antimony_build"))
-                .args(["--recipe", recipe])
-                .args(cli.builder_args.unwrap_or_default())
-                .preserve_env(true)
-                .output(spawn::StreamMode::Pipe)
-                .new_privileges(true)
-                .spawn()?
-                .output_all()?;
-            let path = path.strip_suffix('\n').unwrap_or(&path);
-            let antimony: String = path.to_owned() + "/antimony";
-            Spawner::new("sudo")?
-                .args(["chown", "antimony:antimony", &antimony])
-                .new_privileges(true)
-                .spawn()?
-                .wait()?;
-
-            Spawner::new("sudo")?
-                .args(["chmod", "ug+s", &antimony])
-                .new_privileges(true)
-                .spawn()?
-                .wait()?;
-
-            Spawner::new("sudo")?
-                .args([
-                    "mount",
-                    "--bind",
-                    &format!("{root}/config"),
-                    "/usr/share/antimony/config",
-                ])
-                .new_privileges(true)
-                .spawn()?
-                .wait()?;
-
-            if !Path::new("/usr/share/antimony/profiles").exists() {
-                Spawner::new("sudo")?
-                    .args([
-                        "ln",
-                        "-s",
-                        "/usr/share/antimony/config/profiles",
-                        "/usr/share/antimony/profiles",
-                    ])
-                    .new_privileges(true)
-                    .spawn()?
-                    .wait()?;
-            }
-
-            if !Path::new("/usr/share/antimony/features").exists() {
-                #[rustfmt::skip]
-                Spawner::new("sudo")?
-                    .args([
-                        "ln", "-s",
-                        "/usr/share/antimony/config/features",
-                        "/usr/share/antimony/features",
-                    ])
-                    .new_privileges(true)
-                    .spawn()?
-                    .wait()?;
-            }
-
-            antimony
-        } else {
-            "antimony".to_owned()
-        };
-
-        if let Some(bench) = &cli.bench
-            && bench.contains(&Benchmark::Refresh)
-        {
-            let temp = PathBuf::from("/tmp/at_bench_tmp");
-            fs::create_dir_all(&temp)?;
+        if benchmarks.contains(&Benchmark::Refresh) {
+            let local = HOME_PATH.join(".local").join("bin");
+            fs::create_dir_all(&local)?;
             for profile in profiles {
-                let p = temp.join(profile);
+                let p = local.join(profile);
                 symlink("/usr/bin/antimony", p)?;
             }
-
-            let local = HOME_PATH.join(".local").join("bin");
-            #[rustfmt::skip]
-            Spawner::new("sudo")?
-                .args(["mount", "--bind",
-                    &temp.to_string_lossy(),
-                    &local.to_string_lossy(),
-                ])
-                .new_privileges(true)
-                .spawn()?
-                .wait()?;
         }
 
-        println!("Using: {antimony}");
-
-        for profile in profiles {
-            if benchmarks.contains(&Benchmark::Cold) {
-                let mut command: Vec<String> = [&antimony, "refresh", profile, "--hard", "--"]
+        if benchmarks.contains(&Benchmark::Cold) {
+            for profile in profiles {
+                let mut command: Vec<String> = ["antimony", "refresh", profile, "--hard", "--"]
                     .into_iter()
                     .map(String::from)
                     .collect();
@@ -309,10 +165,13 @@ fn main() -> Result<()> {
                     .new_privileges(true)
                     .spawn()?
                     .wait()?;
+                thread::sleep(Duration::from_millis(100));
             }
+        }
 
-            if benchmarks.contains(&Benchmark::Hot) {
-                let mut command: Vec<String> = [&antimony, "run", profile]
+        if benchmarks.contains(&Benchmark::Hot) {
+            for profile in profiles {
+                let mut command: Vec<String> = ["antimony", "run", profile]
                     .into_iter()
                     .map(String::from)
                     .collect();
@@ -330,80 +189,116 @@ fn main() -> Result<()> {
                     .spawn()?
                     .wait()?;
             }
+            thread::sleep(Duration::from_millis(100));
         }
 
         if benchmarks.contains(&Benchmark::Refresh) {
             Spawner::new("hyperfine")?
                 .args(["--command-name", "System Refresh", "--warmup", "1"])
                 .args(args)
-                .arg(format!("{antimony} refresh"))
+                .arg("antimony refresh")
                 .preserve_env(true)
                 .new_privileges(true)
                 .spawn()?
                 .wait()?;
         }
-        Ok(antimony)
-    }();
-
-    if cli.checkout.is_some() {
-        // Undo the checkout
-        Spawner::new("git")?
-            .args(["checkout", "main"])
+    } else {
+        let root = Spawner::new("git")?
+            .args(["rev-parse", "--show-toplevel"])
+            .output(spawn::StreamMode::Pipe)
             .spawn()?
-            .wait()?;
+            .output_all()?;
+        let root = root.strip_suffix('\n').unwrap_or(&root);
+        chdir(root)?;
 
-        // Reset to the original state
-        Spawner::new("git")?
-            .args(["reset", "--hard"])
-            .spawn()?
-            .wait()?;
+        let term = Arc::new(AtomicBool::new(false));
+        flag::register(consts::SIGINT, Arc::clone(&term))?;
 
-        // Return uncommitted edits.
-        Spawner::new("git")?
-            .args(["stash", "pop"])
-            .spawn()?
-            .wait()?;
+        if let Some(checkout) = &cli.checkout {
+            Spawner::new("git")?.arg("stash").spawn()?.wait()?;
+
+            // Checkout the desired state, but only for code and Cargo.
+            Spawner::new("git")?
+                .args(["checkout", checkout])
+                .spawn()?
+                .wait()?;
+
+            // Reset to the original state
+            Spawner::new("git")?
+                .args(["reset", "--hard"])
+                .spawn()?
+                .wait()?;
+        }
+
+        let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| format!("{root}/target"));
+
+        || -> Result<()> {
+            #[rustfmt::skip]
+            let handle = Spawner::new("bwrap")?.args([
+                "--new-session", "--die-with-parent",
+                "--proc", "/proc",
+                "--dev", "/dev",
+                "--bind", "/tmp", "/tmp",
+
+                "--bind", "/sys", "/sys",
+                "--bind", "/run", "/run",
+                "--bind", "/usr/bin", "/usr/bin",
+                "--bind", "/etc", "/etc",
+
+                "--symlink", "/usr/bin", "/bin",
+                "--dir", "/usr/sbin",
+                "--symlink", "/usr/sbin", "/sbin",
+
+                "--ro-bind", &format!("{root}/config"), "/usr/share/antimony/config",
+                "--ro-bind", &env::current_exe()?.to_string_lossy(), "/usr/sbin/antimony_bench",
+            ]).preserve_env(true).new_privileges(true).env("PATH", "/usr/sbin:/usr/bin");
+
+            println!("Building recipe");
+            let path = Spawner::abs(format!("{target_dir}/debug/antimony_build"))
+                .args(["--recipe", &cli.recipe])
+                .args(cli.builder_args.unwrap_or_default())
+                .preserve_env(true)
+                .output(spawn::StreamMode::Pipe)
+                .new_privileges(true)
+                .spawn()?
+                .output_all()?;
+            let path = path.strip_suffix('\n').unwrap_or(&path);
+            let antimony: String = path.to_owned() + "/antimony";
+
+            #[rustfmt::skip]
+            handle.args_i([
+                "--ro-bind", &antimony, "/usr/sbin/antimony",
+                "--ro-bind", path, "/usr/share/antimony/utilities",
+            ]);
+
+            mount_roots("", &handle)?;
+
+            let args: Vec<_> = env::args().collect();
+            handle.arg_i("/usr/sbin/antimony_bench");
+            handle.args_i(&args[1..]);
+            handle.arg("--run").spawn()?.wait()?;
+            Ok(())
+        }()?;
+
+        if cli.checkout.is_some() {
+            // Undo the checkout
+            Spawner::new("git")?
+                .args(["checkout", "main"])
+                .spawn()?
+                .wait()?;
+
+            // Reset to the original state
+            Spawner::new("git")?
+                .args(["reset", "--hard"])
+                .spawn()?
+                .wait()?;
+
+            // Return uncommitted edits.
+            Spawner::new("git")?
+                .args(["stash", "pop"])
+                .spawn()?
+                .wait()?;
+        }
     }
-
-    Spawner::new("sudo")?
-        .args(["umount", "/usr/share/antimony/config"])
-        .new_privileges(true)
-        .spawn()?
-        .wait()?;
-
-    if Path::new("/usr/share/antimony/profiles").is_symlink() {
-        Spawner::new("sudo")?
-            .args(["rm", "/usr/share/antimony/profiles"])
-            .new_privileges(true)
-            .spawn()?
-            .wait()?;
-    }
-
-    if Path::new("/usr/share/antimony/features").is_symlink() {
-        Spawner::new("sudo")?
-            .args(["rm", "/usr/share/antimony/features"])
-            .new_privileges(true)
-            .spawn()?
-            .wait()?;
-    }
-
-    let temp = PathBuf::from("/tmp/at_bench_tmp");
-    if temp.exists() {
-        let local = HOME_PATH.join(".local").join("bin");
-        Spawner::new("sudo")?
-            .args(["umount", &local.to_string_lossy()])
-            .new_privileges(true)
-            .spawn()?
-            .wait()?;
-        fs::remove_dir_all(temp)?;
-    }
-
-    let antimony = antimony?;
-    Spawner::new("sudo")?
-        .args(["rm", &antimony])
-        .new_privileges(true)
-        .spawn()?
-        .wait()?;
-
     Ok(())
 }

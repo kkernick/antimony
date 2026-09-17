@@ -4,6 +4,7 @@
 use antimony::{
     cli::{self, Run, run::as_symlink},
     shared::{self, config::CONFIG_FILE},
+    timer,
 };
 use anyhow::Result;
 use clap::Parser;
@@ -25,18 +26,24 @@ fn main() -> Result<()> {
 
     // Somehow, using half the available parallel drastically improves performance.
     // However, 3 causes a massive regression.
-    ThreadPoolBuilder::new()
-        .num_threads(available_parallelism()?.get() / 2)
-        .build_global()?;
+    timer!(
+        "::thread_pool",
+        ThreadPoolBuilder::new()
+            .num_threads(available_parallelism()?.get() / 2)
+            .build_global()
+    )?;
 
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
 
-    for (key, value) in CONFIG_FILE.environment() {
-        if env::var(key).is_err() {
-            unsafe { env::set_var(key, value) }
+    timer!(
+        "::env",
+        for (key, value) in CONFIG_FILE.environment() {
+            if env::var(key).is_err() {
+                unsafe { env::set_var(key, value) }
+            }
         }
-    }
+    );
 
     let ret = if as_symlink().is_err() {
         cli::Cli::parse().command.run()

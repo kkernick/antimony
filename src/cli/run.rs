@@ -14,9 +14,10 @@ use crate::{
             ns::Namespace,
             seccomp::SeccompPolicy,
         },
-        store::{self, CACHE_STORE, mem},
+        store::{self, mem},
         utility,
     },
+    timer,
 };
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueHint};
@@ -233,10 +234,13 @@ impl cli::Run for Args {
                 cache.replace(true);
             }
         }
-        let _ = CACHE_STORE.borrow();
-        match setup(Cow::Owned(self.profile.clone()), &mut self, false) {
+
+        match timer!(
+            "::setup",
+            setup(Cow::Owned(self.profile.clone()), &mut self, false)
+        ) {
             Ok(info) => {
-                if let Err(e) = run(info, &mut self) {
+                if let Err(e) = timer!("::run", run(info, &mut self)) {
                     let fail = format!("Failed to run {}: {e}", self.profile);
                     error!("{fail}");
                     return Err(anyhow!(fail));
@@ -298,6 +302,7 @@ pub fn wait_for_doc() {
     reason = "This function never actually panics"
 )]
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::unwrap_used)]
 pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     // Add landlock
     if let Some(policy) = info.policy.take() {
@@ -378,7 +383,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             && !ipc.disable.unwrap_or(false)
         {
             log::info!("Waiting for document portal");
-            wait_for_doc();
+            timer!("::wait_document", wait_for_doc());
         }
 
         if info.profile.lockdown.unwrap_or(false) {
@@ -395,7 +400,6 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             info.handle.new_privileges_i(true);
         }
 
-        #[allow(clippy::unwrap_used)]
         if let Some(hooks) = &mut info.profile.hooks {
             log::info!("Processing pre-hooks");
             for hook in &mut hooks.pre {
@@ -426,11 +430,33 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             }
         }
 
-        let mut handle = info.handle.spawn()?;
-        mem::flush();
+        // Ensure the proxy didn't die.
+        if let Some(mut proxy) = info.handle.get_associate("proxy")
+            && proxy.alive()?.is_none()
+        {
+            return Err(anyhow!("Proxy died!"));
+        }
+
+        // Wait for the bus to be available.
+        timer!("::inotify", {
+            if !info.watches.is_empty() {
+                let mut buffer = [0; 1024];
+                while !info.watches.is_empty() {
+                    let events = info.inotify.read_events_blocking(&mut buffer)?;
+                    for event in events {
+                        if info.watches.contains(&event.wd) {
+                            info.watches.remove(&event.wd);
+                        }
+                    }
+                }
+            }
+        });
+
+        let mut handle = timer!("::spawn", info.handle.spawn())?;
+        timer!("::flush", mem::flush());
 
         // Drop to real while waiting so user processes/parent can signal us.
-        let code = handle.wait_and();
+        let code = timer!("::spawn_wait", handle.wait_and());
 
         let ret: Result<()> = match code {
             Ok(code) => {
@@ -509,6 +535,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                 )?;
             }
         }
+
         ret
     }
 }
