@@ -59,28 +59,31 @@ pub fn localize(
 }
 
 pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
-    let lockdown = info.profile.lockdown.unwrap_or(false);
-
     if let Some(files) = &info.profile.files {
-        for temp in &files.temp {
-            let (_, dest) = localize_path(temp, false)?;
-            info.handle.args_i(["--tmpfs", &dest]);
-            if let Some(policy) = info.policy {
-                update_policy(dest, policy, RW);
+        if let Some(temp) = &files.temp {
+            for temp in temp {
+                let (_, dest) = localize_path(temp, false)?;
+                info.handle.args_i(["--tmpfs", &dest]);
+                if let Some(policy) = info.policy {
+                    update_policy(dest, policy, RW);
+                }
             }
         }
 
-        for (src, dst) in &files.links {
-            info.handle.args_i(["--symlink", src, dst]);
-            if let Some(policy) = info.policy
-                && let Some(parent) = Path::new(dst).parent()
-            {
-                update_policy(parent, policy, RO);
+        if let Some(links) = &files.links {
+            for (src, dst) in links {
+                info.handle.args_i(["--symlink", src, dst]);
+                if let Some(policy) = info.policy
+                    && let Some(parent) = Path::new(dst).parent()
+                {
+                    update_policy(parent, policy, RO);
+                }
             }
         }
 
-        if !lockdown {
-            let user_files = &files.user;
+        if !info.profile.lockdown.unwrap_or(false)
+            && let Some(user_files) = &files.user
+        {
             for mode in FILE_MODES {
                 if let Some(files) = user_files.get(&mode) {
                     for file in files {
@@ -97,8 +100,10 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             }
         }
 
-        if let Some(policy) = info.policy {
-            for (path, mode) in &files.permissions {
+        if let Some(policy) = info.policy
+            && let Some(permissions) = &files.permissions
+        {
+            for (path, mode) in permissions {
                 let (_, dest) = localize_path(path, false)?;
                 match mode {
                     FileMode::ReadOnly => update_policy(dest, policy, RO),
@@ -116,20 +121,22 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             }
         }
 
-        let system = &files.platform;
-        for mode in FILE_MODES {
-            if let Some(files) = system.get(&mode) {
-                for file in files {
-                    localize(mode, file, false, info.handle, true, info.policy)?;
+        if let Some(system) = &files.platform {
+            for mode in FILE_MODES {
+                if let Some(files) = system.get(&mode) {
+                    for file in files {
+                        localize(mode, file, false, info.handle, true, info.policy)?;
+                    }
                 }
             }
         }
 
-        let system = &files.resources;
-        for mode in FILE_MODES {
-            if let Some(files) = system.get(&mode) {
-                for file in files {
-                    localize(mode, file, false, info.handle, false, info.policy)?;
+        if let Some(system) = &files.resources {
+            for mode in FILE_MODES {
+                if let Some(files) = system.get(&mode) {
+                    for file in files {
+                        localize(mode, file, false, info.handle, false, info.policy)?;
+                    }
                 }
             }
         }

@@ -1,12 +1,11 @@
 use crate::{cli, shared::env::DATA_HOME};
-use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Sandboxes can define home folders in the user's home at ~/.local/share/antimony
 /// for persistent configurations and caches.
-#[derive(Deserialize, Serialize, Default, PartialEq, Eq, Message, Clone)]
+#[derive(Deserialize, Serialize, Default, PartialEq, Eq, Clone, Debug)]
 pub struct Home {
     /// The name of the home folder in ~/.local/share/antimony
     pub name: Option<String>,
@@ -61,9 +60,7 @@ impl Home {
 }
 
 /// The Home Policy being set creates a persistent home folder for the profile.
-#[derive(
-    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Enumeration,
-)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug)]
 #[serde(deny_unknown_fields)]
 pub enum HomePolicy {
     /// Do not use a home profile.
@@ -86,9 +83,7 @@ pub enum HomePolicy {
 }
 
 /// What to do when the profile is locked.
-#[derive(
-    Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Enumeration,
-)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Copy, ValueEnum, Default, Debug)]
 #[serde(deny_unknown_fields)]
 pub enum HomeLockPolicy {
     /// Ask the user while waiting for the home to be unlocked.

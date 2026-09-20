@@ -20,16 +20,18 @@ use crate::{
     timer,
 };
 use anyhow::Result;
-use bilrost::{Message, OwnedMessage};
 use dashmap::DashMap;
+use foldhash::fast::FixedState;
 use heck::ToTitleCase;
 use log::debug;
 use path_clean::clean;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     env,
     fs::{self, File},
+    hash::BuildHasher,
     io::{self, Read},
     path::{Path, PathBuf},
     sync::LazyLock,
@@ -51,7 +53,7 @@ pub struct FabInfo<'a> {
 }
 
 /// `bilrost` compatible struct for saving cached data
-#[derive(Message)]
+#[derive(Serialize, Deserialize)]
 pub struct Cache {
     /// The data
     pub cache: Set<String>,
@@ -97,19 +99,19 @@ pub fn find_folders(name: &str) -> Set<String> {
 #[inline]
 #[must_use]
 pub fn hash(i: &str) -> String {
-    format!("{}", ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(i))
+    format!("{}", FixedState::with_seed(0).hash_one(i))
 }
 
 /// Get cached definitions.
 #[inline]
-pub fn get_cache<T: OwnedMessage>(name: &str, object: Object) -> Result<Option<T>> {
+pub fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Option<T>> {
     if let Some(map) = L1.get(&object)
         && let Some(bytes) = map.get(name)
     {
-        let content = T::decode(bytes.as_slice())?;
+        let content = bitcode::deserialize(bytes.as_slice())?;
         Ok(Some(content))
     } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash(name), object) {
-        let content = T::decode(bytes.as_slice())?;
+        let content = bitcode::deserialize(bytes.as_slice())?;
         L1.insert(object, ThreadMap::default())
             .insert(name.to_owned(), bytes);
         Ok(Some(content))
@@ -120,8 +122,8 @@ pub fn get_cache<T: OwnedMessage>(name: &str, object: Object) -> Result<Option<T
 
 /// Write the cache file.
 #[inline]
-pub fn write_cache<T: Message>(name: &str, content: T, object: Object) -> Result<T> {
-    let bytes = content.encode_to_bytes();
+pub fn write_cache<T: Serialize>(name: &str, content: T, object: Object) -> Result<T> {
+    let bytes = bitcode::serialize(&content)?;
     CACHE_STORE.borrow().dump(&hash(name), object, &bytes)?;
     Ok(content)
 }

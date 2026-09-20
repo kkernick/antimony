@@ -28,12 +28,10 @@ pub static RO: [Filesystem; 2] = [Filesystem::ReadFile, Filesystem::ReadDir];
 #[serde(deny_unknown_fields, default)]
 pub struct LandlockPolicy {
     /// Top level attribute flags
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub flags: Set<ruleset::Flag>,
+    pub flags: Option<Set<ruleset::Flag>>,
 
     /// Top level attribute flags
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub scopes: Set<ruleset::Scope>,
+    pub scopes: Option<Set<ruleset::Scope>>,
 
     /// FS attributes the policy should regulate. Note you only need to provide
     /// this field for attributes not mentioned in `paths`--as those are added
@@ -46,32 +44,42 @@ pub struct LandlockPolicy {
     pub net_domain: Set<ruleset::Network>,
 
     /// Paths
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub paths: Map<String, Set<ruleset::Filesystem>>,
+    pub paths: Option<Map<String, Set<ruleset::Filesystem>>>,
 
     /// Ports
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub ports: Map<u64, Set<ruleset::Network>>,
+    pub ports: Option<Map<u64, Set<ruleset::Network>>>,
 }
 impl LandlockPolicy {
     pub fn construct_ruleset(self) -> Result<Ruleset, landlock::Error> {
         let mut ruleset = Ruleset::new()?;
-        ruleset.add_flags(self.flags)?;
-        ruleset.batch_scope(self.scopes)?;
+
+        if let Some(flags) = self.flags {
+            ruleset.add_flags(flags)?;
+        }
+
+        if let Some(scopes) = self.scopes {
+            ruleset.batch_scope(scopes)?;
+        }
+
         ruleset.batch_fs(self.fs_domain)?;
         ruleset.batch_net(self.net_domain)?;
 
-        for (path, attrs) in self.paths {
-            if !path.is_empty() {
-                match rule::Path::new_with(path, attrs) {
-                    Ok(r) => ruleset.add_rule(r),
-                    Err(landlock::Error::Io(e)) if e.kind() == ErrorKind::NotFound => {}
-                    Err(e) => return Err(e),
+        if let Some(paths) = self.paths {
+            for (path, attrs) in paths {
+                if !path.is_empty() {
+                    match rule::Path::new_with(path, attrs) {
+                        Ok(r) => ruleset.add_rule(r),
+                        Err(landlock::Error::Io(e)) if e.kind() == ErrorKind::NotFound => {}
+                        Err(e) => return Err(e),
+                    }
                 }
             }
         }
-        for (net, attrs) in self.ports {
-            ruleset.add_rule(rule::Net::new_with(net, attrs)?);
+
+        if let Some(ports) = self.ports {
+            for (net, attrs) in ports {
+                ruleset.add_rule(rule::Net::new_with(net, attrs)?);
+            }
         }
 
         Ok(ruleset)
@@ -92,12 +100,11 @@ pub fn update_policy(
 
     if let Some(parent) = dest {
         let dir = parent.to_string_lossy().into_owned();
-        if let Some(existing) = policy.paths.get_mut(&dir) {
+        let paths = policy.paths.get_or_insert_default();
+        if let Some(existing) = paths.get_mut(&dir) {
             existing.extend(permissions);
         } else {
-            policy
-                .paths
-                .insert(dir.clone(), permissions.into_iter().collect());
+            paths.insert(dir.clone(), permissions.into_iter().collect());
         }
     }
 }

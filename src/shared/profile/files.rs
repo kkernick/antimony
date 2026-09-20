@@ -1,16 +1,13 @@
 use crate::{
     cli,
-    shared::{Map, Set},
+    shared::{Map, Set, extend_option},
 };
-use bilrost::{Enumeration, Message};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// How a file should be exposed in the sandbox.
-#[derive(
-    Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum, Enumeration,
-)]
+#[derive(Hash, Default, Eq, Deserialize, Serialize, PartialEq, Clone, Copy, ValueEnum, Debug)]
 #[serde(deny_unknown_fields)]
 pub enum FileMode {
     /// Only allow reads
@@ -80,7 +77,7 @@ pub static FILE_MODES: [FileMode; 3] = [
 pub type FileList = Map<FileMode, Set<String>>;
 
 /// Files, RO/RW, and Modes.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Message, Clone)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Files {
     /// The default mode for files passed through the command line. If no passthrough
@@ -89,93 +86,79 @@ pub struct Files {
     pub passthrough: Option<FileMode>,
 
     /// A list of paths in the sandbox to mount as TMPFS.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub temp: Vec<String>,
+    pub temp: Option<Vec<String>>,
 
     /// User files assume a root of /home/antimony unless absolute.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub user: FileList,
+    pub user: Option<FileList>,
 
     /// Platform files are device-specific system files (Locale, Configuration, etc)
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub platform: FileList,
+    pub platform: Option<FileList>,
 
     /// Resource files are system files required by libraries/binaries.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub resources: FileList,
+    pub resources: Option<FileList>,
 
     /// Runtime files are system files with unstable paths (i.e environment variables
     /// Or files located on temporary file systems). These are normalized outside
     /// caching (With all the benefits and drawbacks that entails.)
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub runtime: FileList,
+    pub runtime: Option<FileList>,
 
     /// Direct files take a path, and file contents.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub direct: Map<FileMode, Map<String, String>>,
+    pub direct: Option<Map<FileMode, Map<String, String>>>,
 
     /// Symlinks within the sandbox. Note that the source/destination should be
     /// normalized for the sandbox, not host (i.e /home/antimony). You will
     /// need to ensure the source exists in the sandbox (Either through a standard
     /// file passthrough or by adding the file to the profile home)
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub links: Map<String, String>,
+    pub links: Option<Map<String, String>>,
 
     /// A map of filesystem paths within the sandbox to Landlock permissions that are required.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub permissions: Map<String, FileMode>,
+    pub permissions: Option<Map<String, FileMode>>,
 }
 impl Files {
     /// Merge two file sets together.
-    pub fn merge(&mut self, mut files: Self) {
+    pub fn merge(&mut self, files: Self) {
         if files.passthrough.is_some() {
             self.passthrough = files.passthrough;
         }
 
-        let mut user = files.user;
-        let s_user = &mut self.user;
-        for mode in FILE_MODES {
-            if let Some(map) = user.remove(&mode) {
-                s_user.entry(mode).or_default().extend(map);
+        #[allow(clippy::items_after_statements)]
+        type FileMap = Map<FileMode, Set<String>>;
+        let file_map = |lhs: &mut Option<FileMap>, rhs: Option<FileMap>| {
+            if let Some(mut rhs) = rhs {
+                match lhs {
+                    Some(lhs) => {
+                        for mode in FILE_MODES {
+                            if let Some(map) = rhs.remove(&mode) {
+                                lhs.entry(mode).or_default().extend(map);
+                            }
+                        }
+                    }
+                    None => *lhs = Some(rhs),
+                }
+            }
+        };
+
+        file_map(&mut self.user, files.user);
+        file_map(&mut self.platform, files.platform);
+        file_map(&mut self.resources, files.resources);
+        file_map(&mut self.runtime, files.runtime);
+
+        if let Some(mut direct) = files.direct {
+            match &mut self.direct {
+                Some(s_direct) => {
+                    for mode in FILE_MODES {
+                        if let Some(map) = direct.remove(&mode) {
+                            s_direct.entry(mode).or_default().extend(map);
+                        }
+                    }
+                }
+                None => self.direct = Some(direct),
             }
         }
 
-        let mut sys = files.platform;
-        let s_user = &mut self.platform;
-
-        for mode in FILE_MODES {
-            if let Some(map) = sys.remove(&mode) {
-                s_user.entry(mode).or_default().extend(map);
-            }
-        }
-
-        let mut sys = files.resources;
-        let s_user = &mut self.resources;
-        for mode in FILE_MODES {
-            if let Some(map) = sys.remove(&mode) {
-                s_user.entry(mode).or_default().extend(map);
-            }
-        }
-
-        let mut direct = files.direct;
-        let s_user = &mut self.direct;
-        for mode in FILE_MODES {
-            if let Some(map) = direct.remove(&mode) {
-                s_user.entry(mode).or_default().extend(map);
-            }
-        }
-
-        let mut runtime = files.runtime;
-        let s_user = &mut self.runtime;
-        for mode in FILE_MODES {
-            if let Some(map) = runtime.remove(&mode) {
-                s_user.entry(mode).or_default().extend(map);
-            }
-        }
-
-        self.temp.append(&mut files.temp);
-        self.links.extend(files.links);
-        self.permissions.extend(files.permissions);
+        extend_option(&mut self.temp, files.temp);
+        extend_option(&mut self.links, files.links);
+        extend_option(&mut self.permissions, files.permissions);
     }
 
     /// Construct a file set from the command line.
@@ -189,9 +172,9 @@ impl Files {
             let files = files.get_or_insert_default();
             for file in ro {
                 let list = if file.starts_with("/home") {
-                    &mut files.user
+                    files.user.get_or_insert_default()
                 } else {
-                    &mut files.platform
+                    files.platform.get_or_insert_default()
                 };
                 list.entry(FileMode::ReadOnly).or_default().insert(file);
             }
@@ -200,9 +183,9 @@ impl Files {
             let files = files.get_or_insert_default();
             for file in rw {
                 let list = if file.starts_with("/home") {
-                    &mut files.user
+                    files.user.get_or_insert_default()
                 } else {
-                    &mut files.platform
+                    files.platform.get_or_insert_default()
                 };
                 list.entry(FileMode::ReadWrite).or_default().insert(file);
             }
@@ -210,11 +193,11 @@ impl Files {
 
         if let Some(mut temp) = args.temp.take() {
             let files = files.get_or_insert_default();
-            files.temp.append(&mut temp);
+            files.temp.get_or_insert_default().append(&mut temp);
         }
 
         if let Some(link) = args.link.take() {
-            let links = &mut files.get_or_insert_default().links;
+            let links = files.get_or_insert_default().links.get_or_insert_default();
             for pair in link {
                 if let Some((src, dst)) = pair.split_once('=') {
                     links.insert(src.to_owned(), dst.to_owned());

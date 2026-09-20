@@ -1,11 +1,8 @@
-use bilrost::Enumeration;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 /// The SECCOMP Policy for the Profile
-#[derive(
-    Hash, Deserialize, Serialize, PartialEq, Eq, Copy, Clone, ValueEnum, Default, Enumeration,
-)]
+#[derive(Hash, Deserialize, Serialize, PartialEq, Eq, Copy, Clone, ValueEnum, Default, Debug)]
 #[serde(deny_unknown_fields)]
 pub enum SeccompPolicy {
     /// Disable SECCOMP

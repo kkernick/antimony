@@ -3,13 +3,12 @@
 
 use antimony::{
     cli::{self, Command, run::as_symlink},
-    shared::{self, config::CONFIG_FILE},
-    timer,
+    shared, timer,
 };
 use anyhow::Result;
 use clap::Parser;
 use rayon::ThreadPoolBuilder;
-use std::{env, thread::available_parallelism};
+use std::thread::available_parallelism;
 
 fn main() -> Result<()> {
     // Unfortunately, there is only a finite about of things that need
@@ -35,15 +34,6 @@ fn main() -> Result<()> {
 
     notify::init()?;
     notify::set_notifier(Box::new(shared::logger))?;
-
-    timer!(
-        "::env",
-        for (key, value) in CONFIG_FILE.environment() {
-            if env::var(key).is_err() {
-                unsafe { env::set_var(key, value) }
-            }
-        }
-    );
 
     let ret = if as_symlink().is_err() {
         match cli::Cli::parse().command {

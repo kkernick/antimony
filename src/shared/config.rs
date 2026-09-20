@@ -2,8 +2,9 @@
 //! The configuration file is a global configuration for Antimony.
 
 use crate::shared::{
-    Map, Set, edit,
+    Set, edit,
     env::{AT_HOME, USER_NAME},
+    extend_option,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -23,53 +24,20 @@ pub fn digest_config() -> ConfigFile {
             config.merge(ConfigFile::new(&drop_in.path()));
         }
     }
-
-    if let Ok(env) = env::var("AT_FORCE_TEMP") {
-        config.force_temp = Some(env != "0");
-    }
-    if let Ok(env) = env::var("AT_SYSTEM_MODE") {
-        config.system_mode = Some(env != "0");
-    }
-    if let Ok(env) = env::var("AT_AUTO_REFRESH") {
-        config.auto_refresh = Some(env != "0");
-    }
     if let Ok(env) = env::var("AT_LIB_ROOTS") {
-        config.library_roots = env.split(' ').map(String::from).collect();
+        config.library_roots = Some(env.split(' ').map(String::from).collect());
     }
 
     config
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigFile {
-    pub force_temp: Option<bool>,
-    pub system_mode: Option<bool>,
-    pub auto_refresh: Option<bool>,
     pub privileged_users: Option<Set<String>>,
-
-    #[serde(skip_serializing_if = "Set::is_empty", default = "Set::default")]
-    pub library_roots: Set<String>,
-
-    #[serde(skip_serializing_if = "Map::is_empty", default = "Map::default")]
-    pub environment: Map<String, String>,
+    pub library_roots: Option<Set<String>>,
 }
 impl ConfigFile {
-    #[must_use]
-    pub fn auto_refresh(&self) -> bool {
-        self.auto_refresh.unwrap_or(false)
-    }
-
-    #[must_use]
-    pub fn force_temp(&self) -> bool {
-        self.force_temp.unwrap_or(false)
-    }
-
-    #[must_use]
-    pub fn system_mode(&self) -> bool {
-        self.system_mode.unwrap_or(false)
-    }
-
     #[must_use]
     pub fn is_privileged(&self) -> bool {
         self.privileged_users
@@ -77,39 +45,14 @@ impl ConfigFile {
             .is_some_and(|users| users.contains(USER_NAME.as_str()))
     }
 
-    #[must_use]
-    pub const fn library_roots(&self) -> &Set<String> {
-        &self.library_roots
-    }
-
-    #[must_use]
-    pub const fn environment(&self) -> &Map<String, String> {
-        &self.environment
-    }
-
     #[allow(clippy::missing_errors_doc)]
     pub fn edit(config: &str) -> Result<Option<String>, edit::Error> {
         edit::edit::<Self>(config)
     }
 
-    pub fn merge(&mut self, mut config: Self) {
-        let switch = |s: &mut Option<bool>, o: Option<bool>| {
-            *s = match s {
-                Some(true) => Some(true),
-                None | Some(false) => o,
-            }
-        };
-
-        switch(&mut self.force_temp, config.force_temp);
-        switch(&mut self.system_mode, config.system_mode);
-        switch(&mut self.auto_refresh, config.auto_refresh);
-
-        self.library_roots.extend(config.library_roots);
-        self.environment.extend(config.environment);
-
-        if let Some(users) = config.privileged_users.take() {
-            self.privileged_users.get_or_insert_default().extend(users);
-        }
+    pub fn merge(&mut self, config: Self) {
+        extend_option(&mut self.library_roots, config.library_roots);
+        extend_option(&mut self.privileged_users, config.privileged_users);
     }
 
     fn new(config_path: &Path) -> Self {
@@ -125,13 +68,6 @@ impl ConfigFile {
             }
         }
 
-        Self {
-            force_temp: None,
-            system_mode: None,
-            auto_refresh: None,
-            privileged_users: None,
-            library_roots: Set::default(),
-            environment: Map::default(),
-        }
+        Self::default()
     }
 }

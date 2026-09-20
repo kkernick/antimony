@@ -79,8 +79,9 @@ pub fn setup(args: &super::Args) -> Result<()> {
     match seccomp {
         SeccompPolicy::Disabled => {}
         policy => {
-            if !args.run.dry {
-                let binaries = &args.profile.binaries;
+            if !args.run.dry
+                && let Some(binaries) = &args.profile.binaries
+            {
                 install_filter(
                     &args.name,
                     args.instance,

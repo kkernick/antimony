@@ -1,7 +1,9 @@
 #![allow(clippy::missing_docs_in_private_items, clippy::missing_errors_doc)]
 
-use crate::{fab::resolve, shared::which::AntimonyWhich};
-use bilrost::{Enumeration, Message};
+use crate::{
+    fab::resolve,
+    shared::{extend_option, which::AntimonyWhich},
+};
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
@@ -41,16 +43,14 @@ pub enum HookError {
 }
 
 /// The Hooks structure contains both pre and post hooks.
-#[derive(Deserialize, Serialize, Default, Clone, PartialEq, Eq, Message)]
+#[derive(Deserialize, Serialize, Default, Clone, PartialEq, Eq, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Hooks {
     /// Pre-Hooks are run before the executes.
-    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
-    pub pre: Vec<Hook>,
+    pub pre: Option<Vec<Hook>>,
 
     /// Post-Hooks are run on cleanup.
-    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
-    pub post: Vec<Hook>,
+    pub post: Option<Vec<Hook>>,
 
     /// The parent Hook is an Attached Pre-Hook who controls the lifespan of the
     /// sandbox. When the parent dies, the sandbox does.
@@ -63,10 +63,10 @@ pub struct Hooks {
 }
 impl Hooks {
     /// Merge two Hooks together.
-    pub fn merge(&mut self, mut hooks: Self) {
+    pub fn merge(&mut self, hooks: Self) {
         if self.inherit.unwrap_or(true) {
-            self.pre.append(&mut hooks.pre);
-            self.post.append(&mut hooks.post);
+            extend_option(&mut self.pre, hooks.pre);
+            extend_option(&mut self.post, hooks.post);
 
             if self.parent.is_none() {
                 self.parent = hooks.parent;
@@ -75,7 +75,7 @@ impl Hooks {
     }
 }
 
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Enumeration)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 pub enum Type {
     Shell = 0,
     Program = 1,
@@ -89,7 +89,7 @@ pub enum Type {
 ///     `ANTIMONY_NAME`: The name of the current profile.
 ///     `ANTIMONY_HOME`: The path to the home folder, if it exists.
 ///     `ANTIMONY_CACHE`: The cache of the profile in /usr/share/antimony/cache
-#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Message)]
+#[derive(Deserialize, Serialize, Clone, PartialEq, Eq, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Hook {
     /// An optional name to identify the process.
@@ -105,8 +105,7 @@ pub struct Hook {
     pub content: String,
 
     /// A list of arguments to be passed to the hook
-    #[serde(default = "Vec::default", skip_serializing_if = "Vec::is_empty")]
-    pub arguments: Vec<String>,
+    pub arguments: Option<Vec<String>>,
 
     /// In pre-hooks a hook can be attached to the sandbox. In this mode, the hook runs alongside
     /// the sandbox. If false, the program waits for the hook to terminate before launching
@@ -178,7 +177,9 @@ impl Hook {
                 .mode(user::Mode::Original),
         }
         .name(self.name.get_or_insert_with(|| "hook".to_owned()));
-        handle.args_i(self.arguments.drain(..));
+        if let Some(arguments) = self.arguments.take() {
+            handle.args_i(arguments);
+        }
 
         if parent {
             if let Some(main) = main {

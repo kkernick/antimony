@@ -4,9 +4,11 @@ use anyhow::Result;
 
 #[inline]
 pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
-    info.profile.devices.iter().for_each(|device| {
-        info.handle.args_i(["--dev-bind-try", device, device]);
-    });
+    if let Some(devices) = &info.profile.devices {
+        for device in devices {
+            info.handle.args_i(["--dev-bind-try", device, device]);
+        }
+    }
 
     Ok(())
 }

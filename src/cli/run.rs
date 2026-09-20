@@ -2,11 +2,9 @@
 #![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
-    cli,
     fab::localize_home,
     setup::{self, setup},
     shared::{
-        config::CONFIG_FILE,
         env::{RUNTIME_DIR, SESSION_BUS},
         profile::{
             files::FileMode,
@@ -21,7 +19,7 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
-use clap::{Parser, ValueHint};
+use clap::ValueHint;
 use heck::ToTitleCase;
 use nix::{errno::Errno, sys::signal::Signal};
 use spawn::{HandleError, Spawner, StreamMode};
@@ -310,7 +308,7 @@ pub fn wait_for_doc() {
 #[allow(clippy::unwrap_used)]
 pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     // Add landlock
-    if let Some(policy) = info.policy.take() {
+    if let Some(policy) = &info.policy {
         let landlock_path = info.sys_dir.join("ll.toml");
         if !landlock_path.exists() {
             let policy_string = toml::to_string(&policy)?;
@@ -326,10 +324,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         ]);
     }
 
-    let sandbox_args = &info.profile.sandbox_args;
-    let add_regular = if sandbox_args.is_empty() {
-        true
-    } else {
+    let add_regular = if let Some(sandbox_args) = &info.profile.sandbox_args {
         let mut add = true;
         if sandbox_args.iter().filter(|&e| *e == "#").count() > 1 {
             return Err(anyhow!("Conflicting features! Only one feature can use #"));
@@ -357,6 +352,8 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             info.handle.arg_i(arg);
         }
         add
+    } else {
+        true
     };
 
     if add_regular {
@@ -380,7 +377,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     if args.dry {
         Ok(())
     } else {
-        if let Some(ipc) = info.profile.ipc.take()
+        if let Some(ipc) = &info.profile.ipc
             && !ipc.disable.unwrap_or(false)
         {
             log::info!("Waiting for document portal");
@@ -401,9 +398,11 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             info.handle.new_privileges_i(true);
         }
 
-        if let Some(hooks) = &mut info.profile.hooks {
+        if let Some(hooks) = &mut info.profile.hooks
+            && let Some(pre) = &mut hooks.pre
+        {
             log::info!("Processing pre-hooks");
-            for hook in &mut hooks.pre {
+            for hook in pre {
                 info.handle = hook
                     .process(
                         Some(info.handle),
@@ -461,30 +460,12 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
 
         let ret: Result<()> = match code {
             Ok(code) => {
-                if code != 0 && !info.profile.ignored_exit_codes.contains(&code) {
-                    if CONFIG_FILE.auto_refresh() && !args.refresh {
-                        Spawner::abs(utility("notify"))
-                            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                            .output(StreamMode::Pipe)
-                            .args([
-                                "--title",
-                                &format!("Sandbox Auto-Refreshing: {}", info.name.to_title_case()),
-                                "--body",
-                                "The sandbox encountered an error, and is automatically attempting
-                        to refresh cached definitions.",
-                                "--timeout",
-                                "5000",
-                            ])
-                            .spawn()?
-                            .wait()?;
-
-                        let cli = cli::Cli::parse();
-                        if let cli::Command::Run(mut args) = cli.command {
-                            args.refresh = true;
-                            return args.run();
-                        }
-                    }
-
+                if code != 0
+                    && !info
+                        .profile
+                        .ignored_exit_codes
+                        .map_or_else(|| true, |codes| codes.contains(&code))
+                {
                     // Alert the user.
                     let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
                     Spawner::abs(utility("notify")).mode(user::Mode::Real)
@@ -523,9 +504,11 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             Err(e) => Err(e.into()),
         };
 
-        if let Some(mut hooks) = info.profile.hooks.take() {
+        if let Some(mut hooks) = info.profile.hooks
+            && let Some(post) = &mut hooks.post
+        {
             log::info!("Executing post-hooks");
-            for hook in &mut hooks.post {
+            for hook in post {
                 hook.process(
                     None,
                     &info.name,

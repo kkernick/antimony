@@ -20,11 +20,11 @@ use crate::{
     timer,
 };
 use anyhow::{Context, Result};
-use bilrost::{Enumeration, Message};
 use landlock::ruleset::Filesystem;
 use log::{debug, warn};
 use path_clean::clean;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -36,7 +36,7 @@ use std::{
 use temp::Temp;
 
 /// A `bilrost` struct for serializing.
-#[derive(Message, Default)]
+#[derive(Serialize, Deserialize, Default)]
 struct Cache {
     /// What the binary was identified as.
     t: Type,
@@ -46,7 +46,7 @@ struct Cache {
 }
 
 /// The kind of thing we just analyzed.
-#[derive(Enumeration, Eq, PartialEq, Default)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Default)]
 pub enum Type {
     Elf = 0,
     File = 1,
@@ -60,7 +60,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Default, Message, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: Set<String>,
@@ -369,9 +369,7 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
     let resolved = Arc::new(ThreadSet::<String>::default());
     resolved.insert(profile.app_path(name).to_string());
 
-    // Scope so the lock falls out of scope.
-    {
-        let binaries = &profile.binaries;
+    if let Some(binaries) = &profile.binaries {
         timer!("::collect::wildcard", {
             // Separate the wildcards from the files/dirs.
             let (wildcards, flat): (Set<_>, Set<_>) =
@@ -399,7 +397,9 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
     // Read direct files so we can determine dependencies.
     timer!("::collect::files", {
         if let Some(files) = &profile.files {
-            if let Some(x) = files.user.get(&FileMode::Executable) {
+            if let Some(user) = &files.user
+                && let Some(x) = user.get(&FileMode::Executable)
+            {
                 x.par_iter()
                     .filter_map(|file| {
                         handle_localize(file, instance, true, true, Arc::clone(&done)).ok()
@@ -408,7 +408,9 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                     .iter()
                     .for_each(|parsed| ret.merge(parsed));
             }
-            if let Some(x) = files.resources.get(&FileMode::Executable) {
+            if let Some(resources) = &files.resources
+                && let Some(x) = resources.get(&FileMode::Executable)
+            {
                 x.par_iter()
                     .filter_map(|file| {
                         handle_localize(file, instance, false, true, Arc::clone(&done)).ok()
@@ -417,7 +419,9 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                     .iter()
                     .for_each(|parsed| ret.merge(parsed));
             }
-            if let Some(x) = files.platform.get(&FileMode::Executable) {
+            if let Some(platform) = &files.platform
+                && let Some(x) = platform.get(&FileMode::Executable)
+            {
                 x.par_iter()
                     .filter_map(|file| {
                         handle_localize(file, instance, false, true, Arc::clone(&done)).ok()
@@ -426,7 +430,9 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
                     .iter()
                     .for_each(|parsed| ret.merge(parsed));
             }
-            if let Some(x) = files.direct.get(&FileMode::Executable) {
+            if let Some(direct) = &files.direct
+                && let Some(x) = direct.get(&FileMode::Executable)
+            {
                 x.par_iter()
                     .filter_map(|(file, _)| {
                         let path = direct_path(file);
@@ -471,7 +477,8 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
 )]
 #[allow(clippy::too_many_lines)]
 pub fn fabricate(info: &mut FabInfo) -> Result<()> {
-    let binaries = &info.profile.binaries;
+    let mut binaries = info.profile.binaries.clone().unwrap_or_default();
+
     let allowed = Set::from_iter([
         Filesystem::Execute,
         Filesystem::ReadFile,
@@ -492,9 +499,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     let skip = binaries.contains("/usr/bin");
     if skip {
         info.profile.libraries.get_or_insert_default().no_sof = Some(true);
-        info.profile
-            .binaries
-            .insert(info.profile.app_path(info.name).into_owned());
+        binaries.insert(info.profile.app_path(info.name).into_owned());
 
         #[rustfmt::skip]
         info.handle.args_i([
@@ -508,7 +513,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             "--symlink", "/usr/sbin", "/sbin",
         ]);
 
-        info.profile.binaries.iter().for_each(|binary| {
+        for binary in &binaries {
             if let Ok(localized) = localize_path(binary, false) {
                 match localized {
                     (Some(src), dest) if !src.starts_with("/usr/bin") => {
@@ -536,13 +541,13 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     _ => {}
                 }
             }
-        });
+        }
 
         // Crawl the binary folder to:
         // 1. Discover external directories that are linked to that need to be included.
         // 2. Discover ELF binaries to add to the SOF
-        if let Ok(mut binaries) = find::crawl_dir("/usr/bin")
-            && let Some(links) = binaries.remove(&DirType::Link)
+        if let Ok(mut sys_binaries) = find::crawl_dir("/usr/bin")
+            && let Some(links) = sys_binaries.remove(&DirType::Link)
         {
             #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
             links
@@ -576,7 +581,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     info.handle.args_i(["--ro-bind", &str, &str]);
 
                     if dest.is_file() && elf_filter(&str).unwrap_or_default() {
-                        info.profile.binaries.insert(str.into_owned());
+                        binaries.insert(str.into_owned());
                         if let Some(policy) = info.policy {
                             update_policy(dest, policy, allowed.clone());
                         }
@@ -630,7 +635,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     if let Some(policy) = info.policy {
                         update_policy(dir.clone(), policy, allowed.clone());
                     }
-                    let _ = libraries.directories.insert(dir);
+                    let _ = libraries.directories.get_or_insert_default().insert(dir);
                 });
             });
         }
@@ -666,7 +671,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             ]);
         }
 
-        info.profile.binaries = Arc::into_inner(elf_binaries).unwrap().into_iter().collect();
+        info.profile.binaries = Some(Arc::into_inner(elf_binaries).unwrap().into_iter().collect());
     }
 
     if let Some(policy) = info.policy {
@@ -675,7 +680,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         }
 
         // Add the libraries for the landlock utility.
-        info.profile.binaries.insert(utility("landlock"));
+        info.profile
+            .binaries
+            .get_or_insert_default()
+            .insert(utility("landlock"));
     }
 
     Ok(())

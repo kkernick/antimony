@@ -165,19 +165,21 @@ pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
         profile.desktop(name).into_owned()
     };
 
-    let configurations: Vec<_> = profile.configuration.drain().collect();
-    for (config, mut info) in configurations {
-        if info.id.is_some() {
-            info.merge(profile.clone())?;
-            remove(&mut info, cmd)?;
-        } else {
-            let config_desktop = DATA_HOME
-                .join("applications")
-                .join(format!("{name}-{config}.desktop"));
-            match remove_file(config_desktop.as_path()) {
-                Ok(true) => println!("Removed configuration integration"),
-                Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
-                _ => {}
+    if let Some(config) = &mut profile.configuration {
+        let configurations: Vec<_> = config.drain().collect();
+        for (config, mut info) in configurations {
+            if info.id.is_some() {
+                info.merge(profile.clone())?;
+                remove(&mut info, cmd)?;
+            } else {
+                let config_desktop = DATA_HOME
+                    .join("applications")
+                    .join(format!("{name}-{config}.desktop"));
+                match remove_file(config_desktop.as_path()) {
+                    Ok(true) => println!("Removed configuration integration"),
+                    Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
+                    _ => {}
+                }
             }
         }
     }
@@ -253,52 +255,63 @@ fn manage_configurations(
         // Integrate each into one desktop file with actions.
         ConfigMode::Action => {
             contents.push("\n".into());
-            for config in profile.configuration.keys() {
-                if package {
-                    contents.push(format!(
-                        "[Desktop Action {config}]\n\
+            if let Some(configuration) = &profile.configuration {
+                for config in configuration.keys() {
+                    if package {
+                        contents.push(format!(
+                            "[Desktop Action {config}]\n\
                             Name=Antimony {} Configuration \n\
                             Exec={local} --config {config} %U \n",
-                        config.to_title_case(),
-                    ));
-                } else {
-                    contents.push(format!(
-                        "[Desktop Action {config}]\n\
+                            config.to_title_case(),
+                        ));
+                    } else {
+                        contents.push(format!(
+                            "[Desktop Action {config}]\n\
                         Name=Antimony {} Configuration \n\
                         Exec=antimony run {} --config {config} -- %U \n",
-                        config.to_title_case(),
-                        cmd.profile
-                    ));
+                            config.to_title_case(),
+                            cmd.profile
+                        ));
+                    }
                 }
             }
         }
 
         // Provide each configuration as a desktop file.
         ConfigMode::File => {
-            let configurations: Vec<_> = profile.configuration.drain().collect();
-            for (config, mut info) in configurations {
-                if info.id.is_some() {
-                    info.merge(profile.clone())?;
-                    integrate(&mut info, cmd, package)?;
-                } else {
-                    let config_desktop = DATA_HOME
-                        .join("applications")
-                        .join(format!("{name}-{config}.desktop"));
+            if let Some(configuration) = &mut profile.configuration {
+                let configurations: Vec<_> = configuration.drain().collect();
+                for (config, mut info) in configurations {
+                    if info.id.is_some() {
+                        info.merge(profile.clone())?;
+                        integrate(&mut info, cmd, package)?;
+                    } else {
+                        let config_desktop = DATA_HOME
+                            .join("applications")
+                            .join(format!("{name}-{config}.desktop"));
 
-                    let mut contents = contents.clone();
-                    for line in &mut contents {
-                        // Point to the symlink
-                        if line.starts_with("Exec=") {
-                            fix_exec("Exec", local, line, Some(config.as_str()), cmd, package);
+                        let mut contents = contents.clone();
+                        for line in &mut contents {
+                            // Point to the symlink
+                            if line.starts_with("Exec=") {
+                                fix_exec("Exec", local, line, Some(config.as_str()), cmd, package);
+                            }
+                            if line.starts_with("TryExec=") {
+                                fix_exec(
+                                    "TryExec",
+                                    local,
+                                    line,
+                                    Some(config.as_str()),
+                                    cmd,
+                                    package,
+                                );
+                            }
+                            if line.starts_with("Name=") {
+                                let _ = write!(line, " ({})", config.to_title_case());
+                            }
                         }
-                        if line.starts_with("TryExec=") {
-                            fix_exec("TryExec", local, line, Some(config.as_str()), cmd, package);
-                        }
-                        if line.starts_with("Name=") {
-                            let _ = write!(line, " ({})", config.to_title_case());
-                        }
+                        write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
                     }
-                    write!(File::create(config_desktop)?, "{}", contents.join("\n"))?;
                 }
             }
         }
@@ -371,8 +384,10 @@ pub fn format_desktop(
 
     let desktop_actions = desktop.contains("Actions=");
     let append_actions = |line: &mut String| {
-        for name in profile.configuration.keys() {
-            let _ = write!(line, "{name};");
+        if let Some(configuration) = &profile.configuration {
+            for name in configuration.keys() {
+                let _ = write!(line, "{name};");
+            }
         }
 
         line.push_str("native;");
@@ -500,8 +515,10 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
         .collect();
 
         let mut actions = "Actions=native;".to_owned();
-        if cmd.config_mode == Some(ConfigMode::Action) {
-            for config in profile.configuration.keys() {
+        if cmd.config_mode == Some(ConfigMode::Action)
+            && let Some(configuration) = &profile.configuration
+        {
+            for config in configuration.keys() {
                 let _ = write!(actions, "{config};");
             }
         }
@@ -579,7 +596,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
         create_parent(service_path.as_path())?;
         fs::write(&service_path, service_vec(false).join("\n"))?;
 
-        if !profile.configuration.is_empty() {
+        if profile.configuration.is_some() {
             service_path.set_file_name(format!("antimony-{name}@.service"));
             fs::write(&service_path, service_vec(true).join("\n"))?;
             println!("This profile has a configuration! A configuration service has been added.");
@@ -592,7 +609,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
                 .spawn()?
                 .wait()?;
 
-            if profile.configuration.is_empty() {
+            if profile.configuration.is_none() {
                 Spawner::which::<AntimonyWhich>("systemctl")?
                     .args(["--user", "enable", &format!("antimony-{name}.service")])
                     .preserve_env(true)

@@ -1,25 +1,24 @@
-use std::fmt;
-
-use crate::{cli, shared::Set};
-use bilrost::{Enumeration, Message};
+use crate::{
+    cli,
+    shared::{Set, extend_option},
+};
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Networking IPC mediated via Landlock.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Message)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ports {
     /// Ports the sandbox should be allowed bind to.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub bind: Set<u16>,
+    pub bind: Option<Set<u16>>,
 
     /// Ports the sandbox should be allowed to connect to.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub connect: Set<u16>,
+    pub connect: Option<Set<u16>>,
 }
 
 /// IPC mediated via xdg-dbus-proxy.
-#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Message)]
+#[derive(Default, Deserialize, Serialize, PartialEq, Eq, Clone, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Ipc {
     /// Disable all IPC, regardless of what has been set.
@@ -40,35 +39,29 @@ pub struct Ipc {
     pub harden: Option<bool>,
 
     /// Freedesktop portals.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub portals: Set<Portal>,
+    pub portals: Option<Set<Portal>>,
 
     /// Busses that the sandbox can see, but not interact with.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub sees: Set<String>,
+    pub sees: Option<Set<String>>,
 
     /// Busses the sandbox can talk over.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub talks: Set<String>,
+    pub talks: Option<Set<String>>,
 
     /// Busses the sandbox owns.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub owns: Set<String>,
+    pub owns: Option<Set<String>>,
 
     /// Call semantics.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub calls: Set<String>,
+    pub calls: Option<Set<String>>,
 
     /// Sockets paths the sandbox should be allowed to connect to (Besides user/system/proxy)
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub sockets: Set<String>,
+    pub sockets: Option<Set<String>>,
 
     /// Landlock mediated ports.
     pub ports: Option<Ports>,
 }
 impl Ipc {
     /// Merge two IPC sets together.
-    pub fn merge(&mut self, ipc: Self) {
+    pub fn merge(&mut self, mut ipc: Self) {
         if self.disable.is_none() {
             self.disable = ipc.disable;
         }
@@ -83,22 +76,19 @@ impl Ipc {
             self.harden = ipc.harden;
         }
 
-        self.portals.extend(ipc.portals);
-        self.sees.extend(ipc.sees);
-        self.talks.extend(ipc.talks);
-        self.owns.extend(ipc.owns);
-        self.calls.extend(ipc.calls);
-        self.sockets.extend(ipc.sockets);
+        extend_option(&mut self.portals, ipc.portals);
+        extend_option(&mut self.sees, ipc.sees);
+        extend_option(&mut self.talks, ipc.talks);
+        extend_option(&mut self.owns, ipc.owns);
+        extend_option(&mut self.calls, ipc.calls);
+        extend_option(&mut self.sockets, ipc.sockets);
 
-        if let Some(ports) = ipc.ports {
-            if !ports.bind.is_empty() {
-                self.ports.get_or_insert_default().bind.extend(ports.bind);
-            }
-            if !ports.connect.is_empty() {
-                self.ports
-                    .get_or_insert_default()
-                    .connect
-                    .extend(ports.connect);
+        if let Some(ports) = ipc.ports.take() {
+            if let Some(self_ports) = &mut self.ports {
+                extend_option(&mut self_ports.bind, ports.bind);
+                extend_option(&mut self_ports.connect, ports.connect);
+            } else {
+                self.ports = Some(ports);
             }
         }
     }
@@ -108,34 +98,34 @@ impl Ipc {
         let mut ipc: Option<Self> = None;
 
         if let Some(portals) = args.portals.take() {
-            ipc.get_or_insert_default().portals = portals.into_iter().collect();
+            ipc.get_or_insert_default().portals = Some(portals.into_iter().collect());
         }
         if let Some(see) = args.sees.take() {
-            ipc.get_or_insert_default().sees = see.into_iter().collect();
+            ipc.get_or_insert_default().sees = Some(see.into_iter().collect());
         }
         if let Some(talk) = args.talks.take() {
-            ipc.get_or_insert_default().talks = talk.into_iter().collect();
+            ipc.get_or_insert_default().talks = Some(talk.into_iter().collect());
         }
         if let Some(own) = args.owns.take() {
-            ipc.get_or_insert_default().owns = own.into_iter().collect();
+            ipc.get_or_insert_default().owns = Some(own.into_iter().collect());
         }
         if let Some(call) = args.calls.take() {
-            ipc.get_or_insert_default().calls = call.into_iter().collect();
+            ipc.get_or_insert_default().calls = Some(call.into_iter().collect());
         }
         if let Some(sockets) = args.sockets.take() {
-            ipc.get_or_insert_default().sockets = sockets.into_iter().collect();
+            ipc.get_or_insert_default().sockets = Some(sockets.into_iter().collect());
         }
         if let Some(bind) = args.bind.take() {
             ipc.get_or_insert_default()
                 .ports
                 .get_or_insert_default()
-                .bind = bind.into_iter().collect();
+                .bind = Some(bind.into_iter().collect());
         }
         if let Some(connect) = args.connect.take() {
             ipc.get_or_insert_default()
                 .ports
                 .get_or_insert_default()
-                .connect = connect.into_iter().collect();
+                .connect = Some(connect.into_iter().collect());
         }
 
         if args.user_bus {
@@ -159,7 +149,7 @@ impl Ipc {
 /// implemented for certain Desktop Environments.
 /// Not all applications use portals, even if they
 /// are provided to the sandbox.
-#[derive(Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Enumeration)]
+#[derive(Eq, Hash, PartialEq, Deserialize, Serialize, ValueEnum, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub enum Portal {
     Background = 0,

@@ -86,6 +86,7 @@ fn lockdown_file(
         }
         policy
             .paths
+            .get_or_insert_default()
             .insert(parent.to_string_lossy().into_owned(), allowed);
     }
     Ok(())
@@ -119,6 +120,7 @@ pub fn add_file(
         }
         policy
             .paths
+            .get_or_insert_default()
             .insert(parent.to_string_lossy().into_owned(), allowed);
     }
     Ok(())
@@ -142,44 +144,46 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     }
 
     if let Some(files) = &mut args.profile.files {
-        let user = &mut files.user;
-        if let Some(exe) = user.remove(&FileMode::Executable) {
-            exe.into_iter().try_for_each(|file| {
-                let (src, dest) = localize_path(&file, true)?;
-                get_x(src, &dest, &args.handle, &mut args.policy)
-            })?;
-        }
-
-        // Lockdown takes all user files and passes them as FDs. Folders are not supported.
-        if lockdown {
-            if let Some(ro) = user.remove(&FileMode::ReadOnly) {
-                ro.into_iter().try_for_each(|file| {
+        if let Some(user) = &mut files.user {
+            if let Some(exe) = user.remove(&FileMode::Executable) {
+                exe.into_iter().try_for_each(|file| {
                     let (src, dest) = localize_path(&file, true)?;
-                    lockdown_file(src, &dest, &args.handle, true, &mut args.policy)
+                    get_x(src, &dest, &args.handle, &mut args.policy)
                 })?;
             }
-            if let Some(rw) = user.remove(&FileMode::ReadWrite) {
-                rw.into_iter().try_for_each(|file| {
-                    let (src, dest) = localize_path(&file, true)?;
-                    lockdown_file(src, &dest, &args.handle, false, &mut args.policy)
-                })?;
+
+            // Lockdown takes all user files and passes them as FDs. Folders are not supported.
+            if lockdown {
+                if let Some(ro) = user.remove(&FileMode::ReadOnly) {
+                    ro.into_iter().try_for_each(|file| {
+                        let (src, dest) = localize_path(&file, true)?;
+                        lockdown_file(src, &dest, &args.handle, true, &mut args.policy)
+                    })?;
+                }
+                if let Some(rw) = user.remove(&FileMode::ReadWrite) {
+                    rw.into_iter().try_for_each(|file| {
+                        let (src, dest) = localize_path(&file, true)?;
+                        lockdown_file(src, &dest, &args.handle, false, &mut args.policy)
+                    })?;
+                }
             }
         }
 
-        let system = &mut files.platform;
-        if let Some(exe) = system.remove(&FileMode::Executable) {
+        if let Some(system) = &mut files.platform
+            && let Some(exe) = system.remove(&FileMode::Executable)
+        {
             exe.into_iter()
                 .try_for_each(|file| get_x(None, &file, &args.handle, &mut args.policy))?;
         }
 
-        let system = &mut files.resources;
-        if let Some(exe) = system.remove(&FileMode::Executable) {
+        if let Some(system) = &mut files.resources
+            && let Some(exe) = system.remove(&FileMode::Executable)
+        {
             exe.into_iter()
                 .try_for_each(|file| get_x(None, &file, &args.handle, &mut args.policy))?;
         }
 
-        let direct = &mut files.direct;
-        if !direct.is_empty() {
+        if let Some(direct) = &mut files.direct {
             as_effective!(Result<()>, {
                 for mode in FILE_MODES {
                     if let Some(files) = direct.get(&mode) {

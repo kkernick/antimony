@@ -51,9 +51,9 @@ impl Args {
         let import = |src: &Path| -> anyhow::Result<()> {
             let name = src.to_string_lossy();
             let content = if self.feature {
-                toml::to_string(&store::load::<Feature, feature::Error>(&name, table, true)?)
+                toml::to_string(&store::load::<Feature, feature::Error>(&name, table)?)
             } else {
-                toml::to_string(&store::load::<Profile, profile::Error>(&name, table, true)?)
+                toml::to_string(&store::load::<Profile, profile::Error>(&name, table)?)
             };
 
             if let Ok(content) = content

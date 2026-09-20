@@ -11,15 +11,15 @@ spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", 
 temp = { git = "https://github.com/kkernick/temp", features = ["user"]}
 user = { git = "https://github.com/kkernick/user" }
 
-ahash = { version = "0.8.12", default-features = false, features = ["no-rng"] }
 anyhow = { version = "1.0.98", features = ["std"], default-features = false }
-bilrost = { version = "0.1014.2", default-features = false, features = ["auto-optimize", "bstr", "derive", "std"] }
+bitcode = { version = "0.6.9", features = ["serde"] }
 caps = "0.5.6"
 clap = { version = "4.5.39", features = ["derive", "help", "usage", "std", "suggestions", "env"], default-features = false }
 clap_complete = { version = "4.5.63", default-features = false }
-console = { version = "0.16.6", default-features = false, features = ["alloc", "std", "unicode-width"] }
+console = { version = "0.16.6", default-features = false, features = ["alloc", "std"] }
 dashmap = { version = "6.1.0", features = ["rayon"], default-features = false }
 dbus = { version = "0.9.10", features = ["stdfd"], default-features = false }
+foldhash = { version = "0.2.0", default-features = false, features = ["std"] }
 heck = { version = "0.5.0", default-features = false }
 inotify = { version = "0.11.0", default-features = false }
 log = { version = "0.4.27", default-features = false }

@@ -12,7 +12,6 @@ pub mod mem;
 
 use crate::shared::{
     Map, Set,
-    config::CONFIG_FILE,
     env::{AT_CONFIG, CACHE_DIR, USER_NAME},
 };
 use parking_lot::Mutex;
@@ -194,13 +193,7 @@ pub fn load<
 >(
     name: &str,
     object: Object,
-    def: bool,
 ) -> Result<T, E> {
-    if def && name == "default" && CONFIG_FILE.system_mode() {
-        log::warn!("Default not allowed");
-        return Ok(T::default());
-    }
-
     // Try and load a file absolutely if the file is given.
     if std::path::Path::new(name)
         .extension()
@@ -212,9 +205,7 @@ pub fn load<
         }
     }
 
-    if !CONFIG_FILE.system_mode()
-        && let Ok(str) = USER_STORE.borrow().fetch(name, object)
-    {
+    if let Ok(str) = USER_STORE.borrow().fetch(name, object) {
         return Ok(toml::from_str(&str)?);
     }
 

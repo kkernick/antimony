@@ -4,7 +4,7 @@ use crate::shared::profile::ns::Namespace;
 use spawn::SpawnError;
 
 pub fn fabricate(info: &mut super::FabInfo) -> Result<(), SpawnError> {
-    let namespaces = &mut info.profile.namespaces;
+    let mut namespaces = info.profile.namespaces.take().unwrap_or_default();
     // All overrules None.
     if namespaces.contains(&Namespace::All) {
         namespaces.extend([

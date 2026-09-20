@@ -6,22 +6,15 @@ use crate::{
     timer,
 };
 use anyhow::Result;
-use bilrost::{Enumeration, Message};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fs, path::Path};
 
 /// Each directory is indexed based on filetype, and a list of those files.
 pub type DirMap = Map<DirType, Set<String>>;
 
-/// A Bilrost-compatible parcel for serializing a `DirMap`.
-#[derive(Default, Message)]
-struct DirMessage {
-    /// The actual `DirMap`
-    map: DirMap,
-}
-
 /// The kind of entry in a `DirMap`.
-#[derive(PartialEq, Eq, Hash, Enumeration)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DirType {
     /// Files
     File = 0,
@@ -44,8 +37,8 @@ pub enum WildcardFilter {
 pub fn crawl_dir(dir: &str) -> Result<DirMap> {
     timer!(
         "::crawl_dir",
-        if let Some(cached) = get_cache::<DirMessage>(dir, Object::Search)? {
-            Ok(cached.map)
+        if let Some(cached) = get_cache::<DirMap>(dir, Object::Search)? {
+            Ok(cached)
         } else {
             let mut crawled: DirMap = Map::default();
             let entries = fs::read_dir(dir)?
@@ -72,7 +65,7 @@ pub fn crawl_dir(dir: &str) -> Result<DirMap> {
                     }
                 }
             }
-            Ok(write_cache(dir, DirMessage { map: crawled }, Object::Search)?.map)
+            Ok(write_cache(dir, crawled, Object::Search)?)
         }
     )
 }

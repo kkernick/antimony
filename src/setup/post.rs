@@ -8,7 +8,10 @@ use std::{fs, path::Path};
 pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
     let mut post_args = Vec::new();
 
-    post_args.append(&mut args.profile.arguments);
+    if let Some(mut arguments) = args.profile.arguments.take() {
+        post_args.append(&mut arguments);
+    }
+
     if let Some(passthrough) = &args.run.passthrough {
         post_args.extend(passthrough.iter().cloned());
     }

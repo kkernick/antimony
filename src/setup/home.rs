@@ -180,6 +180,7 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         if let Some(policy) = &mut args.policy {
             policy
                 .paths
+                .get_or_insert_default()
                 .insert("/home/antimony".to_owned(), permissions);
         }
         Ok(Some(home_str.into_owned()))

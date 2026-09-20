@@ -9,11 +9,11 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::shared::landlock::update_policy;
-use crate::shared::{create_parent, create_path};
+use crate::shared::{StaticHash, create_parent, create_path};
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
     shared::{
-        Set, StaticHash, ThreadSet,
+        Set, ThreadSet,
         config::CONFIG_FILE,
         env::{AT_HOME, CACHE_DIR, HOME},
         find::{self, WildcardFilter},
@@ -45,16 +45,20 @@ pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default)
 /// Roots to search for files and directories
 pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
     CONFIG_FILE
-        .library_roots()
-        .par_iter()
-        .map(|root| {
-            if root.ends_with('/') {
-                Cow::Borrowed(root.as_str())
-            } else {
-                Cow::Owned(format!("{root}/"))
-            }
+        .library_roots
+        .as_ref()
+        .map_or_else(ThreadSet::default, |roots| {
+            roots
+                .iter()
+                .map(|root| {
+                    if root.ends_with('/') {
+                        Cow::Borrowed(root.as_str())
+                    } else {
+                        Cow::Owned(format!("{root}/"))
+                    }
+                })
+                .collect()
         })
-        .collect()
 });
 
 /// Add a file to the SOF.
@@ -216,12 +220,14 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                         .libraries
                         .get_or_insert_default()
                         .directories
+                        .get_or_insert_default()
                         .insert(name);
                 } else {
                     info.profile
                         .libraries
                         .get_or_insert_default()
                         .files
+                        .get_or_insert_default()
                         .insert(name);
                 }
             }
@@ -238,6 +244,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 .libraries
                 .get_or_insert_default()
                 .directories
+                .get_or_insert_default()
                 .insert(path);
         }
     }
@@ -253,50 +260,55 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     if no_sof {
         mount_roots("", info.handle)?;
     } else {
-        timer!("::binaries", {
-            info.profile
-                .binaries
-                .par_iter()
-                .for_each(|binary| match get_libraries(binary) {
-                    Ok(libraries) => {
-                        for lib in libraries {
-                            {
-                                let _ = FILES.insert(lib);
+        if let Some(binaries) = &info.profile.binaries {
+            timer!("::binaries", {
+                binaries
+                    .par_iter()
+                    .for_each(|binary| match get_libraries(binary) {
+                        Ok(libraries) => {
+                            for lib in libraries {
+                                {
+                                    let _ = FILES.insert(lib);
+                                }
                             }
                         }
-                    }
-                    Err(e) => warn!("Could not get libraries for {binary}: {e}"),
-                });
-        });
+                        Err(e) => warn!("Could not get libraries for {binary}: {e}"),
+                    });
+            });
+        }
 
-        if let Some(libraries) = info.profile.libraries.take() {
-            timer!(
-                "::lib::directories",
-                resolve_wildcards(libraries.directories, WildcardFilter::Directories)
-                    .par_bridge()
-                    .for_each(|e| {
-                        if let Ok(libraries) = find::dir(&e) {
-                            libraries.into_par_iter().for_each(|lib| {
-                                let _ = FILES.insert(lib);
-                            });
-                        }
-                        DIRS.insert(e);
-                    })
-            );
+        if let Some(mut libraries) = info.profile.libraries.take() {
+            if let Some(directories) = libraries.directories.take() {
+                timer!(
+                    "::lib::directories",
+                    resolve_wildcards(directories, WildcardFilter::Directories)
+                        .par_bridge()
+                        .for_each(|e| {
+                            if let Ok(libraries) = find::dir(&e) {
+                                libraries.into_par_iter().for_each(|lib| {
+                                    let _ = FILES.insert(lib);
+                                });
+                            }
+                            DIRS.insert(e);
+                        })
+                );
+            }
 
-            timer!(
-                "::lib::files",
-                resolve_wildcards(libraries.files, WildcardFilter::Files)
-                    .par_bridge()
-                    .for_each(|file| {
-                        if let Ok(libraries) = get_libraries(&file) {
-                            libraries.into_par_iter().for_each(|lib| {
-                                let _ = FILES.insert(lib);
-                            });
-                        }
-                        FILES.insert(file);
-                    })
-            );
+            if let Some(files) = libraries.files.take() {
+                timer!(
+                    "::lib::files",
+                    resolve_wildcards(files, WildcardFilter::Files)
+                        .par_bridge()
+                        .for_each(|file| {
+                            if let Ok(libraries) = get_libraries(&file) {
+                                libraries.into_par_iter().for_each(|lib| {
+                                    let _ = FILES.insert(lib);
+                                });
+                            }
+                            FILES.insert(file);
+                        })
+                );
+            }
         }
 
         let sof = sof_dir(info.sys_dir);

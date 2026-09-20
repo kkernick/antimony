@@ -93,13 +93,17 @@ pub fn setup<'a>(
     let name_hash = format!("{}-{hash}", if name.len() > 8 { &name[..8] } else { &name });
     let mut sys_dir = CACHE_DIR.join("run").join(&name_hash);
     let mut instances = RUNTIME_DIR.join("antimony").join(&name_hash);
-    if let Some(libraries) = &mut profile.libraries {
-        libraries.roots.drain().for_each(|root| {
+    if let Some(libraries) = &mut profile.libraries
+        && let Some(roots) = libraries.roots.take()
+    {
+        for root in roots {
             if Path::new(&root).exists() {
                 let _ = ROOTS.insert(Cow::Owned(root));
             }
-        });
+        }
     }
+
+    log::debug!("{profile:?}");
 
     // Refreshing logic tries to avoid deleting an SOF from underneath a running instance.
     // If another instance is running this profile, we defer to a refresh folder, which new
@@ -259,7 +263,7 @@ pub fn setup<'a>(
             (None, true)
         } else {
             let mut policy = LandlockPolicy::default();
-            policy.flags.insert(Flag::TSync);
+            policy.flags.get_or_insert_default().insert(Flag::TSync);
 
             // This rule is necessary, but not as permissive as it seems, since most sandboxes are in a
             // separate PID namespace.

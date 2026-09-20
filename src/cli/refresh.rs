@@ -126,10 +126,10 @@ impl Args {
                 if let Err(e) = refresh {
                     eprintln!("{}", style(format!("Failed to refresh {name}: {e}")).red());
                 }
-                if let Ok(profile) =
-                    store::load::<Profile, profile::Error>(&name, Object::Profile, true)
+                if let Ok(profile) = store::load::<Profile, profile::Error>(&name, Object::Profile)
+                    && let Some(configuration) = profile.configuration
                 {
-                    for (conf, _) in profile.configuration {
+                    for (conf, _) in configuration {
                         println!("Refreshing {} ({conf})", style(&name).bold());
 
                         let args = run::Args {

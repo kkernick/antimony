@@ -174,38 +174,42 @@ fn main() -> anyhow::Result<()> {
                     }
 
                     if let Some(files) = &feature.files {
-                        let direct = &files.direct;
-                        for (mode, entry) in direct {
-                            for d_name in entry.keys() {
-                                if matches(mode, d_name, &file).is_some() {
-                                    break 'feature_loop;
+                        if let Some(direct) = &files.direct {
+                            for (mode, entry) in direct {
+                                for d_name in entry.keys() {
+                                    if matches(mode, d_name, &file).is_some() {
+                                        break 'feature_loop;
+                                    }
                                 }
                             }
                         }
 
-                        let user = &files.user;
-                        for (mode, entry) in user {
-                            for d_name in entry {
-                                if matches(mode, d_name, &file).is_some() {
-                                    break 'feature_loop;
+                        if let Some(user) = &files.user {
+                            for (mode, entry) in user {
+                                for d_name in entry {
+                                    if matches(mode, d_name, &file).is_some() {
+                                        break 'feature_loop;
+                                    }
                                 }
                             }
                         }
 
-                        let system = &files.platform;
-                        for (mode, entry) in system {
-                            for d_name in entry {
-                                if matches(mode, d_name, &file).is_some() {
-                                    break 'feature_loop;
+                        if let Some(system) = &files.platform {
+                            for (mode, entry) in system {
+                                for d_name in entry {
+                                    if matches(mode, d_name, &file).is_some() {
+                                        break 'feature_loop;
+                                    }
                                 }
                             }
                         }
 
-                        let system = &files.resources;
-                        for (mode, entry) in system {
-                            for d_name in entry {
-                                if matches(mode, d_name, &file).is_some() {
-                                    break 'feature_loop;
+                        if let Some(system) = &files.resources {
+                            for (mode, entry) in system {
+                                for d_name in entry {
+                                    if matches(mode, d_name, &file).is_some() {
+                                        break 'feature_loop;
+                                    }
                                 }
                             }
                         }
@@ -218,14 +222,19 @@ fn main() -> anyhow::Result<()> {
                         }
                     }
                     if let Some(libraries) = &feature.libraries {
-                        for d_name in &libraries.files {
-                            if matches(&FileMode::Executable, d_name, &file).is_some() {
-                                break 'feature_loop;
+                        if let Some(files) = &libraries.files {
+                            for d_name in files {
+                                if matches(&FileMode::Executable, d_name, &file).is_some() {
+                                    break 'feature_loop;
+                                }
                             }
                         }
-                        for d_name in &libraries.directories {
-                            if matches(&FileMode::Executable, d_name, &file).is_some() {
-                                break 'feature_loop;
+
+                        if let Some(directories) = &libraries.directories {
+                            for d_name in directories {
+                                if matches(&FileMode::Executable, d_name, &file).is_some() {
+                                    break 'feature_loop;
+                                }
                             }
                         }
                     }

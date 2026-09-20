@@ -20,6 +20,7 @@ use crate::shared::{
 };
 use console::Term;
 use dashmap::{DashMap, DashSet};
+use foldhash::fast::{FixedState, FoldHasher};
 use log::{Level, Record};
 use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
@@ -37,9 +38,9 @@ use user::USER;
 #[derive(Default, Copy, Clone)]
 pub struct StaticHash;
 impl BuildHasher for StaticHash {
-    type Hasher = ahash::AHasher;
+    type Hasher = FoldHasher<'static>;
     fn build_hasher(&self) -> Self::Hasher {
-        ahash::RandomState::with_seeds(0, 0, 0, 0).build_hasher()
+        FixedState::with_seed(0).build_hasher()
     }
 }
 
@@ -105,6 +106,36 @@ pub fn confirm(question: &str) -> Result<bool, io::Error> {
         }
     };
     Ok(response)
+}
+
+pub fn extend_option<A, T: Extend<A> + IntoIterator<Item = A>>(
+    lhs: &mut Option<T>,
+    rhs: Option<T>,
+) {
+    match lhs {
+        Some(env) => {
+            if let Some(val) = rhs {
+                env.extend(val);
+            }
+        }
+        None => *lhs = rhs,
+    }
+}
+
+/// Extend two
+pub fn extend_cmdline<A, X, Y>(lhs: &mut Option<X>, rhs: Option<Y>)
+where
+    X: Extend<A> + IntoIterator<Item = A> + FromIterator<A>,
+    Y: Extend<A> + IntoIterator<Item = A> + Default,
+{
+    match lhs {
+        Some(env) => {
+            if let Some(val) = rhs {
+                env.extend(val);
+            }
+        }
+        None => *lhs = Some(rhs.unwrap_or_default().into_iter().collect()),
+    }
 }
 
 /// Check that the Real User is privileged. This is used to allow modifying the

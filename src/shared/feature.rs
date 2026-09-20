@@ -3,7 +3,7 @@
 
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
-    Map, Set, edit,
+    Map, Set, edit, extend_option,
     profile::{self, Profile, files::Files, hooks::Hooks, lib::Libraries, seccomp::SeccompPolicy},
     store::{self, Object},
     which::AntimonyWhich,
@@ -107,7 +107,7 @@ pub struct Feature {
 impl Feature {
     /// Get a feature from its name.
     pub fn new(name: &str) -> Result<Self, Error> {
-        store::load::<Self, Error>(name, Object::Feature, false)
+        store::load::<Self, Error>(name, Object::Feature)
     }
 
     /// Edit a feature.
@@ -318,31 +318,22 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         p_files.merge(files);
     }
 
-    if let Some(binaries) = feature.binaries.take() {
-        profile.binaries.extend(binaries);
-    }
-    if let Some(devices) = feature.devices.take() {
-        profile.devices.extend(devices);
-    }
-    if let Some(namespaces) = feature.namespaces.take() {
-        profile.namespaces.extend(namespaces);
-    }
-    if let Some(args) = feature.sandbox_args.take() {
-        profile.sandbox_args.extend(args);
-    }
+    extend_option(&mut profile.binaries, feature.binaries);
+    extend_option(&mut profile.devices, feature.devices);
+    extend_option(&mut profile.namespaces, feature.namespaces);
+    extend_option(&mut profile.sandbox_args, feature.sandbox_args);
 
-    if let Some(libraries) = feature.libraries.take() {
+    if let Some(mut libraries) = feature.libraries.take() {
         let p_lib = profile.libraries.get_or_insert_default();
-        p_lib.directories.extend(libraries.directories);
-        p_lib.files.extend(libraries.files);
-        p_lib.roots.extend(libraries.roots);
+        let no_sof = libraries.no_sof.take();
         p_lib.no_sof = match p_lib.no_sof {
-            Some(false) | None => libraries.no_sof,
+            Some(false) | None => no_sof,
             Some(true) => Some(true),
         };
+        p_lib.merge(libraries);
     }
 
-    if let Some(ipc) = feature.ipc.take() {
+    if let Some(mut ipc) = feature.ipc.take() {
         let p_ipc = profile.ipc.get_or_insert_default();
 
         // Features, as the name implies, *add* functionality. Antimony
@@ -353,102 +344,79 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
         // Features can enable the global bus flags if they need it,
         // but they cannot try and restrict the bus if another feature/profile
         // has turned it on.
+        let system_bus = ipc.system_bus.take();
         p_ipc.system_bus = match p_ipc.system_bus {
-            Some(false) | None => ipc.system_bus,
+            Some(false) | None => system_bus,
             Some(true) => Some(true),
         };
+
+        let user_bus = ipc.user_bus.take();
         p_ipc.user_bus = match p_ipc.user_bus {
-            Some(false) | None => ipc.user_bus,
+            Some(false) | None => user_bus,
             Some(true) => Some(true),
         };
 
         // Conversely, if a feature or profile has explicitly set
         // disable to false for compatibility, you cannot enable it.
+        let disable = ipc.disable.take();
         p_ipc.disable = match p_ipc.disable {
             Some(true) => {
-                if ipc.disable.is_some() {
-                    ipc.disable
+                if disable.is_some() {
+                    disable
                 } else {
                     Some(true)
                 }
             }
             Some(false) => Some(false),
-            None => ipc.disable,
+            None => disable,
         };
+
+        let harden = ipc.harden.take();
         p_ipc.harden = match p_ipc.harden {
             Some(true) => {
-                if ipc.harden.is_some() {
-                    ipc.harden
+                if harden.is_some() {
+                    harden
                 } else {
                     Some(true)
                 }
             }
             Some(false) => Some(false),
-            None => ipc.harden,
+            None => harden,
         };
 
-        let format_all = |ipc_list: Set<String>| -> Set<String> {
-            ipc_list
-                .into_iter()
-                .filter_map(|f| format(f, map).ok())
-                .collect()
+        let format_all = |ipc_list: Option<Set<String>>| -> Option<Set<String>> {
+            ipc_list.map_or_else(
+                || None,
+                |ipc_list| {
+                    Some(
+                        ipc_list
+                            .into_iter()
+                            .filter_map(|f| format(f, map).ok())
+                            .collect(),
+                    )
+                },
+            )
         };
 
-        if !ipc.portals.is_empty() {
-            p_ipc.portals.extend(ipc.portals);
-        }
-        if !ipc.sees.is_empty() {
-            let formatted = format_all(ipc.sees);
-            if !formatted.is_empty() {
-                p_ipc.sees.extend(formatted);
-            }
-        }
-        if !ipc.talks.is_empty() {
-            let formatted = format_all(ipc.talks);
-            if !formatted.is_empty() {
-                p_ipc.talks.extend(formatted);
-            }
-        }
-        if !ipc.owns.is_empty() {
-            let formatted = format_all(ipc.owns);
-            if !formatted.is_empty() {
-                p_ipc.owns.extend(formatted);
-            }
-        }
-        if !ipc.calls.is_empty() {
-            p_ipc.calls.extend(ipc.calls);
-        }
-        if !ipc.sockets.is_empty() {
-            p_ipc.sockets.extend(ipc.sockets);
-        }
+        extend_option(&mut p_ipc.portals, ipc.portals);
+        extend_option(&mut p_ipc.calls, ipc.calls);
+        extend_option(&mut p_ipc.sockets, ipc.sockets);
+        extend_option(&mut p_ipc.sees, format_all(ipc.sees));
+        extend_option(&mut p_ipc.talks, format_all(ipc.talks));
+        extend_option(&mut p_ipc.owns, format_all(ipc.owns));
+
         if let Some(ports) = ipc.ports {
-            if !ports.bind.is_empty() {
-                p_ipc.ports.get_or_insert_default().bind.extend(ports.bind);
-            }
-            if !ports.connect.is_empty() {
-                p_ipc
-                    .ports
-                    .get_or_insert_default()
-                    .connect
-                    .extend(ports.connect);
-            }
+            let p_ports = p_ipc.ports.get_or_insert_default();
+            extend_option(&mut p_ports.bind, ports.bind);
+            extend_option(&mut p_ports.connect, ports.connect);
         }
     }
 
-    if let Some(env) = feature.environment.take() {
-        profile.environment.extend(env);
-    }
+    extend_option(&mut profile.environment, feature.environment);
 
-    if let Some(mut hooks) = feature.hooks.take() {
+    if let Some(hooks) = feature.hooks.take() {
         let p_hooks = profile.hooks.get_or_insert_default();
-        p_hooks.pre.append(&mut hooks.pre);
-        p_hooks.post.append(&mut hooks.post);
-
-        // Yeah, no great answer here. The last feature that sets a parent
-        // hook get it.
-        if p_hooks.parent.is_none() {
-            p_hooks.parent = hooks.parent;
-        }
+        p_hooks.merge(hooks);
     }
 
     if let Some(policy) = feature.seccomp.take()
@@ -471,8 +439,10 @@ pub fn fabricate(profile: &mut Profile, name: &str) -> Result<(), Error> {
     map.insert("{name}", name.to_owned());
     map.insert("{desktop}", profile.desktop(name).to_string());
 
-    for feature in resolve_features(&profile.features, &profile.conflicts)? {
-        add_feature(profile, &map, feature);
+    if let Some(features) = &profile.features {
+        for feature in resolve_features(features, profile.conflicts.get_or_insert_default())? {
+            add_feature(profile, &map, feature);
+        }
     }
     Ok(())
 }

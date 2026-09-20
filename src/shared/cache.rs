@@ -22,6 +22,7 @@
 //! Then, you can use the Cache to retrieve static values, and insert them.
 
 use dashmap::{DashMap, mapref::one::Ref};
+use foldhash::fast::RandomState;
 use std::{
     borrow::Borrow,
     hash::Hash,
@@ -29,7 +30,7 @@ use std::{
 };
 
 /// The underlying data store. You should not use this besides passing it to the Cache instance.
-pub type CacheStatic<K, V> = LazyLock<DashMap<K, Arc<V>, ahash::RandomState>>;
+pub type CacheStatic<K, V> = LazyLock<DashMap<K, Arc<V>, RandomState>>;
 
 /// The Cache interface. Store within a `LazyLock`, and pass the corresponding `CacheStatic` to the `LazyLock::new()`
 pub struct Cache<K: Eq + Hash + 'static, V: 'static> {

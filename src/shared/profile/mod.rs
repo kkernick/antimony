@@ -18,21 +18,18 @@ pub mod seccomp;
 use crate::{
     cli,
     shared::{
-        Map, Set,
-        config::CONFIG_FILE,
-        edit,
+        Map, Set, edit,
         env::HOME,
-        feature,
+        extend_cmdline, extend_option, feature,
         profile::lib::Libraries,
-        store::{self, CACHE_STORE, Object, USER_STORE},
+        store::{self, CACHE_STORE, Object},
         which::which,
     },
 };
-use ahash::RandomState;
-use bilrost::{Message, OwnedMessage};
+use foldhash::fast::FixedState;
 use log::info;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, io, path::Path};
+use std::{borrow::Cow, hash::BuildHasher, io, path::Path};
 use thiserror::Error;
 
 /// An error for issues around Profiles.
@@ -46,13 +43,13 @@ pub enum Error {
     #[error("Failed to deserialize profile: {0}")]
     Deserialize(#[from] toml::de::Error),
 
+    /// When the profile cannot be Deserialized.
+    #[error("Failed to deserialize profile: {0}")]
+    Bitcode(#[from] bitcode::Error),
+
     /// When the profile cannot be Serialized.
     #[error("Failed to serialize profile: {0}")]
     Serialize(#[from] toml::ser::Error),
-
-    /// When the profile cannot be Deserialized from cache.
-    #[error("Failed to deserialize cached profile: {0}")]
-    Cache(#[from] bilrost::DecodeError),
 
     /// Misc IO errors.
     #[error("I/O Error: {0}")]
@@ -74,21 +71,8 @@ pub enum Error {
     Store(#[from] store::Error),
 }
 
-#[inline]
-fn default_inherits() -> Set<String> {
-    if !CONFIG_FILE.system_mode() && USER_STORE.borrow().exists("default", Object::Profile) {
-        Set::from_iter(["default".to_owned()])
-    } else {
-        Set::default()
-    }
-}
-
-fn empty_inherits(inherits: &Set<String>) -> bool {
-    inherits.is_empty() || inherits.len() == 1 && inherits.contains("default")
-}
-
 /// The definitions needed to sandbox an application.
-#[derive(Deserialize, Serialize, Default, PartialEq, Message, Clone)]
+#[derive(Deserialize, Serialize, Default, PartialEq, Clone, Debug)]
 #[serde(deny_unknown_fields, default)]
 pub struct Profile {
     /// The path to the application
@@ -128,12 +112,10 @@ pub struct Profile {
     pub id: Option<String>,
 
     /// Features the sandbox uses.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub features: Set<String>,
+    pub features: Option<Set<String>>,
 
     /// Features that should be excluded from running under the profile.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub conflicts: Set<String>,
+    pub conflicts: Option<Set<String>>,
 
     /// A list of profiles to use as a foundation for missing values.
     ///
@@ -154,9 +136,7 @@ pub struct Profile {
     /// exclude the default profile (In case you need to exempt a profile
     /// from the Default Profile). You can define inherits to [] if you just want to exempt
     /// the Profile from the Default.
-    #[serde(default = "default_inherits")]
-    #[serde(skip_serializing_if = "empty_inherits")]
-    pub inherits: Set<String>,
+    pub inherits: Option<Set<String>>,
 
     /// Configuration for the profile's home.
     pub home: Option<home::Home>,
@@ -172,8 +152,7 @@ pub struct Profile {
     pub files: Option<files::Files>,
 
     /// Binaries needed in the sandbox.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub binaries: Set<String>,
+    pub binaries: Option<Set<String>>,
 
     /// Libraries needed in the sandbox. They can be listed as:
     /// 1. Files (eg /usr/lib/lib.so)
@@ -182,43 +161,35 @@ pub struct Profile {
     pub libraries: Option<Libraries>,
 
     /// Devices needed in the sandbox, at /dev.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub devices: Set<String>,
+    pub devices: Option<Set<String>>,
 
     /// Namespaces, such as User and Net.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub namespaces: Set<ns::Namespace>,
+    pub namespaces: Option<Set<ns::Namespace>>,
 
     /// Environment Variable Keypairs
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    pub environment: Map<String, String>,
+    pub environment: Option<Map<String, String>>,
 
     /// Preserve the system environment.
     pub preserve_env: Option<bool>,
 
     /// Arguments to pass to the sandboxed application directly.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub arguments: Vec<String>,
+    pub arguments: Option<Vec<String>>,
 
     /// Configurations act as embedded profiles, inheriting the main one.
-    #[serde(skip_serializing_if = "Map::is_empty")]
-    #[bilrost(recurses)]
-    pub configuration: Map<String, Self>,
+    pub configuration: Option<Map<String, Self>>,
 
     /// Hooks are either embedded shell scripts, or paths to executables that are run in coordination with the profile.
     pub hooks: Option<hooks::Hooks>,
 
     /// Arguments to pass to Bubblewrap directly before the program. This could be actual bubblewrap arguments,
     /// or a wrapper for the sandbox.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub sandbox_args: Vec<String>,
+    pub sandbox_args: Option<Vec<String>>,
 
     /// Some profiles can return error codes that don't actually indicate errors.
     /// For example, Antimony will return error code 2 on --help, and keepassxc will
     /// return error codes on devel builds. Antimony can optionally ignore such
     /// codes, rather than notifying.
-    #[serde(skip_serializing_if = "Set::is_empty")]
-    pub ignored_exit_codes: Set<i32>,
+    pub ignored_exit_codes: Option<Set<i32>>,
 }
 impl Profile {
     /// Construct a profile from the command line.
@@ -240,44 +211,25 @@ impl Profile {
             ..Default::default()
         };
 
-        if let Some(mut arguments) = args.passthrough.take() {
-            profile.arguments.append(&mut arguments);
-        }
-
-        if let Some(mut sandbox_args) = args.sandbox_args.take() {
-            profile.sandbox_args.append(&mut sandbox_args);
-        }
-
-        if let Some(features) = args.features.take() {
-            profile.features.extend(features);
-        }
-
-        if let Some(inherits) = args.inherits.take() {
-            profile.inherits.extend(inherits);
-        }
-
-        if let Some(conflicts) = args.conflicts.take() {
-            profile.conflicts.extend(conflicts);
-        }
-
-        if let Some(binaries) = args.binaries.take() {
-            profile.binaries.extend(binaries);
-        }
-
-        if let Some(devices) = args.devices.take() {
-            profile.devices.extend(devices);
-        }
-
-        if let Some(namespaces) = args.namespaces.take() {
-            profile.namespaces.extend(namespaces);
-        }
+        extend_option(&mut profile.arguments, args.passthrough.take());
+        extend_option(&mut profile.sandbox_args, args.sandbox_args.take());
+        extend_cmdline(&mut profile.features, args.features.take());
+        extend_cmdline(&mut profile.inherits, args.inherits.take());
+        extend_cmdline(&mut profile.conflicts, args.conflicts.take());
+        extend_cmdline(&mut profile.binaries, args.binaries.take());
+        extend_cmdline(&mut profile.devices, args.devices.take());
+        extend_cmdline(&mut profile.namespaces, args.namespaces.take());
+        extend_cmdline(
+            &mut profile.ignored_exit_codes,
+            args.ignored_exit_codes.take(),
+        );
 
         profile.libraries = lib::Libraries::from_args(args);
         profile.files = files::Files::from_args(args);
         profile.ipc = ipc::Ipc::from_args(args);
 
         if let Some(env) = args.env.take() {
-            let environment = &mut profile.environment;
+            let environment = profile.environment.get_or_insert_default();
             for pair in env {
                 if let Some((key, value)) = pair.split_once('=') {
                     environment.insert(key.to_owned(), value.to_owned());
@@ -297,9 +249,6 @@ impl Profile {
         if let Some(policy) = args.home_policy.take() {
             profile.home.get_or_insert_default().policy = Some(policy);
         }
-        if let Some(ignored) = args.ignored_exit_codes.take() {
-            profile.ignored_exit_codes.extend(ignored);
-        }
 
         Ok(profile)
     }
@@ -312,7 +261,7 @@ impl Profile {
         args: Option<&mut cli::run::Args>,
         foreign: bool,
     ) -> Result<(Self, String), Error> {
-        let mut profile = match store::load::<Self, Error>(name, Object::Profile, true) {
+        let mut profile = match store::load::<Self, Error>(name, Object::Profile) {
             Ok(profile) => profile,
             Err(Error::Store(store::Error::Io(e))) if e.kind() == io::ErrorKind::NotFound => {
                 if name == "default" {
@@ -332,10 +281,9 @@ impl Profile {
         }
 
         if let Some(args) = args {
-            if !CONFIG_FILE.system_mode() {
-                let cmd_profile = Self::from_args(args)?;
-                profile = profile.base(cmd_profile)?;
-            }
+            let cmd_profile = Self::from_args(args)?;
+            profile = profile.base(cmd_profile)?;
+
             if !std::path::Path::new(name)
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"))
@@ -345,9 +293,9 @@ impl Profile {
             }
         }
 
-        let hash = profile.hash_str(&config);
+        let hash = profile.hash_str(&config)?;
         if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash, Object::Profile) {
-            return Ok((Self::decode(bytes.as_slice())?, hash));
+            return Ok((bitcode::deserialize(bytes.as_slice())?, hash));
         }
 
         if let Some(path) = &profile.path {
@@ -373,34 +321,42 @@ impl Profile {
             }
         }
 
-        for inherit in profile.inherits.clone() {
+        let inherits = profile
+            .inherits
+            .take()
+            .unwrap_or_else(|| std::iter::once("default").map(String::from).collect());
+
+        for inherit in inherits {
             profile.merge(Self::new(&inherit, None, None, true)?.0)?;
         }
 
         if let Some(config) = config {
-            if profile.configuration.is_empty() {
-                return Err(Error::NotFound("Profile does not have any configurations"));
-            }
-            match profile.configuration.remove(&config) {
-                Some(conf) => {
-                    let hooks = conf.hooks.clone();
-                    profile = profile.base(conf)?;
-                    if let Some(hooks) = hooks
-                        && !hooks.inherit.unwrap_or(true)
-                    {
-                        profile.hooks = Some(hooks);
+            if let Some(configuration) = &mut profile.configuration {
+                match configuration.remove(&config) {
+                    Some(conf) => {
+                        let hooks = conf.hooks.clone();
+                        profile = profile.base(conf)?;
+                        if let Some(hooks) = hooks
+                            && !hooks.inherit.unwrap_or(true)
+                        {
+                            profile.hooks = Some(hooks);
+                        }
+                    }
+                    None => {
+                        return Err(Error::NotFound("Configuration does not exist"));
                     }
                 }
-                None => {
-                    return Err(Error::NotFound("Configuration does not exist"));
-                }
+            } else {
+                return Err(Error::NotFound("Profile does not have any configurations"));
             }
         }
 
         feature::fabricate(&mut profile, name)?;
-        CACHE_STORE
-            .borrow()
-            .dump(&hash, Object::Profile, &Self::encode_to_bytes(&profile))?;
+        CACHE_STORE.borrow().dump(
+            &hash,
+            Object::Profile,
+            bitcode::serialize(&profile)?.as_slice(),
+        )?;
 
         Ok((profile, hash))
     }
@@ -410,8 +366,8 @@ impl Profile {
     /// The values in the source take precedent, either appending or
     /// overwriting the caller.
     #[allow(clippy::assigning_clones)]
-    pub fn base(self, mut source: Self) -> Result<Self, Error> {
-        source.inherits.extend(self.inherits.clone());
+    pub fn base(mut self, mut source: Self) -> Result<Self, Error> {
+        extend_option(&mut source.inherits, self.inherits.take());
         source.merge(self)?;
         Ok(source)
     }
@@ -424,7 +380,7 @@ impl Profile {
     ///         taken if the caller has no value defined, or
     ///         the caller's list is appended with the contents
     ///         of the argument.
-    pub fn merge(&mut self, mut profile: Self) -> Result<(), Error> {
+    pub fn merge(&mut self, profile: Self) -> Result<(), Error> {
         if self.path.is_none() {
             self.path = profile.path;
         }
@@ -490,23 +446,16 @@ impl Profile {
             }
         }
 
-        for (name, config) in profile.configuration {
-            self.configuration.insert(name, config);
-        }
-
-        for (key, val) in profile.environment {
-            self.environment.insert(key, val);
-        }
-
-        self.namespaces.extend(profile.namespaces);
-        self.binaries.extend(profile.binaries);
-        self.devices.extend(profile.devices);
-        self.features.extend(profile.features);
-        self.conflicts.extend(profile.conflicts);
-        self.arguments.append(&mut profile.arguments);
-        self.sandbox_args.append(&mut profile.sandbox_args);
-        self.ignored_exit_codes
-            .extend(&mut profile.ignored_exit_codes.into_iter());
+        extend_option(&mut self.configuration, profile.configuration);
+        extend_option(&mut self.environment, profile.environment);
+        extend_option(&mut self.namespaces, profile.namespaces);
+        extend_option(&mut self.binaries, profile.binaries);
+        extend_option(&mut self.devices, profile.devices);
+        extend_option(&mut self.features, profile.features);
+        extend_option(&mut self.conflicts, profile.conflicts);
+        extend_option(&mut self.arguments, profile.arguments);
+        extend_option(&mut self.sandbox_args, profile.sandbox_args);
+        extend_option(&mut self.ignored_exit_codes, profile.ignored_exit_codes);
         Ok(())
     }
 
@@ -560,19 +509,17 @@ impl Profile {
     }
 
     /// Get the numerical hash of the profile.
-    pub fn num_hash(&self, config: &Option<String>) -> u64 {
-        let mut bytes = Self::encode_to_bytes(self).to_vec();
-        bytes.push(u8::from(CONFIG_FILE.system_mode()));
+    pub fn num_hash(&self, config: &Option<String>) -> Result<u64, Error> {
+        let mut bytes = toml::to_string(&self)?.into_bytes();
         if let Some(config) = config {
             bytes.extend_from_slice(config.as_bytes());
         }
-        RandomState::with_seeds(0, 0, 0, 0).hash_one(bytes)
+        Ok(FixedState::with_seed(0).hash_one(bytes))
     }
 
     /// Get the Profile's hash.
-    #[must_use]
-    pub fn hash_str(&self, config: &Option<String>) -> String {
-        format!("{}", self.num_hash(config))
+    pub fn hash_str(&self, config: &Option<String>) -> Result<String, Error> {
+        Ok(format!("{}", self.num_hash(config)?))
     }
 
     /// Edit a profile.

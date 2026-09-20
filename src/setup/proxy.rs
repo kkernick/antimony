@@ -186,7 +186,7 @@ pub fn run(
         };
 
         if let Some(ipc) = &profile.ipc {
-            if !ipc.portals.is_empty() {
+            if let Some(portals) = &ipc.portals {
                 let desktop = "org.freedesktop.portal.Desktop";
                 let path = "/org/freedesktop/portal/desktop";
                 proxy.args_i([
@@ -196,7 +196,7 @@ pub fn run(
                     ),
                 ]);
 
-                for portal in &ipc.portals {
+                for portal in portals {
                     if portal == &Portal::Settings {
                         proxy.arg_i(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"));
                     }
@@ -206,17 +206,28 @@ pub fn run(
                     ]);
                 }
             }
-            for portal in &ipc.sees {
-                proxy.args_i([format!("--see={portal}"), permit_call(portal)]);
+
+            if let Some(sees) = &ipc.sees {
+                for portal in sees {
+                    proxy.args_i([format!("--see={portal}"), permit_call(portal)]);
+                }
             }
-            for portal in &ipc.talks {
-                proxy.args_i([format!("--talk={portal}"), permit_call(portal)]);
+            if let Some(talks) = &ipc.talks {
+                for portal in talks {
+                    proxy.args_i([format!("--talk={portal}"), permit_call(portal)]);
+                }
             }
-            for portal in &ipc.owns {
-                proxy.args_i([format!("--own={portal}"), permit_call(portal)]);
+
+            if let Some(owns) = &ipc.owns {
+                for portal in owns {
+                    proxy.args_i([format!("--own={portal}"), permit_call(portal)]);
+                }
             }
-            for portal in &ipc.calls {
-                proxy.arg_i(format!("--call={portal}"));
+
+            if let Some(calls) = &ipc.calls {
+                for portal in calls {
+                    proxy.arg_i(format!("--call={portal}"));
+                }
             }
         }
         as_effective!(proxy.cache_write(&cache))?;
@@ -233,17 +244,18 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         } else {
             if let Some(policy) = &mut args.policy {
                 // Prohibit communication outside the sandbox
-                policy.scopes.insert(Scope::NoSignals);
-                policy.scopes.insert(Scope::NoSockets);
+                let scopes = policy.scopes.get_or_insert_default();
+                scopes.insert(Scope::NoSignals);
+                scopes.insert(Scope::NoSockets);
             }
             return Ok(());
         }
     };
 
-    if !ipc.sockets.is_empty()
+    if let Some(sockets) = &ipc.sockets
         && let Some(policy) = &mut args.policy
     {
-        for sock in &ipc.sockets {
+        for sock in sockets {
             update_policy(sock, policy, [Filesystem::MakeSock, Filesystem::Unix]);
         }
     }
@@ -251,24 +263,30 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(ports) = &ipc.ports
         && let Some(policy) = &mut args.policy
     {
-        for port in &ports.bind {
-            policy.ports.insert(
-                u64::from(*port),
-                [Network::BindTCP, Network::BindUDP].into_iter().collect(),
-            );
+        if let Some(bind) = &ports.bind {
+            let policy_ports = policy.ports.get_or_insert_default();
+            for port in bind {
+                policy_ports.insert(
+                    u64::from(*port),
+                    [Network::BindTCP, Network::BindUDP].into_iter().collect(),
+                );
+            }
         }
-        for port in &ports.connect {
-            policy
-                .ports
-                .insert(u64::from(*port), iter::once(Network::ConnectTCP).collect());
+
+        if let Some(connect) = &ports.connect {
+            let policy_ports = policy.ports.get_or_insert_default();
+            for port in connect {
+                policy_ports.insert(u64::from(*port), iter::once(Network::ConnectTCP).collect());
+            }
         }
     }
 
     if ipc.disable.unwrap_or(false) {
         if let Some(policy) = &mut args.policy {
             // Prohibit communication outside the sandbox
-            policy.scopes.insert(Scope::NoSignals);
-            policy.scopes.insert(Scope::NoSockets);
+            let scopes = policy.scopes.get_or_insert_default();
+            scopes.insert(Scope::NoSignals);
+            scopes.insert(Scope::NoSockets);
         }
         return Ok(());
     }
@@ -307,11 +325,11 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         }
 
     // Or mediate via the proxy if the proxy is actually needed.
-    } else if !ipc.portals.is_empty()
-        || !ipc.owns.is_empty()
-        || !ipc.talks.is_empty()
-        || !ipc.sees.is_empty()
-        || !ipc.calls.is_empty()
+    } else if ipc.portals.is_some()
+        || ipc.owns.is_some()
+        || ipc.talks.is_some()
+        || ipc.sees.is_some()
+        || ipc.calls.is_some()
     {
         let proxy = timer!(
             "::proxy_run",
@@ -333,9 +351,6 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 )?;
             }
 
-            // Create the flatpak-info, but don't bother if we're running dry.
-            let namespaces = args.profile.namespaces.clone();
-
             // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
             #[rustfmt::skip]
             let mut info_contents: Vec<String> = vec![
@@ -348,7 +363,9 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                 "sockets=session-bus;system-bus;",
             ].into_iter().map(ToOwned::to_owned).collect();
 
-            if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
+            if let Some(namespaces) = &args.profile.namespaces
+                && (namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All))
+            {
                 info_contents.push("shared=network;".to_owned());
             }
 
@@ -398,8 +415,9 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         && let Some(policy) = &mut args.policy
     {
         // Prohibit communication outside the sandbox
-        policy.scopes.insert(Scope::NoSignals);
-        policy.scopes.insert(Scope::NoSockets);
+        let scopes = policy.scopes.get_or_insert_default();
+        scopes.insert(Scope::NoSignals);
+        scopes.insert(Scope::NoSockets);
     }
 
     Ok(())

@@ -1,6 +1,6 @@
 //! Environment Variables Antimony needs defined.
 
-use crate::shared::{config::CONFIG_FILE, create_path, which};
+use crate::shared::{create_path, which};
 use anyhow::Result;
 use log::{info, warn};
 use nix::{
@@ -40,8 +40,7 @@ pub static AT_HOME: LazyLock<PathBuf> = LazyLock::new(|| {
 )]
 pub static CACHE_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     let mut cache_dir = AT_HOME.join("cache");
-    if CONFIG_FILE.force_temp()
-        || (as_effective!({ create_path(cache_dir.as_path()) }).is_err())
+    if (as_effective!({ create_path(cache_dir.as_path()) }).is_err())
         || as_effective!(access(&cache_dir, AccessFlags::W_OK).is_err())
     {
         info!(
