@@ -23,6 +23,7 @@ use anyhow::{Context, Result};
 use bilrost::{Enumeration, Message};
 use landlock::ruleset::Filesystem;
 use log::{debug, warn};
+use path_clean::clean;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -163,7 +164,10 @@ fn parse(
             dest = parent.join(dest);
         }
 
-        let dest = dest.canonicalize()?;
+        let mut dest = clean(dest);
+        if !dest.exists() {
+            dest = dest.canonicalize()?;
+        }
         Ok(resolve_bin(&dest.to_string_lossy())?.into_owned())
     }();
 

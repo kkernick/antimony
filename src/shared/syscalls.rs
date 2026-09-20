@@ -2,7 +2,7 @@
 #![allow(clippy::absolute_paths)]
 
 use crate::shared::{
-    Set, ThreadMap,
+    Set, ThreadMap, create_parent,
     env::{AT_HOME, DATA_HOME},
     find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
@@ -66,12 +66,7 @@ pub enum Error {
 fn new_connection() -> Result<Connection, Error> {
     as_effective!({
         let db = AT_HOME.join("seccomp").join("syscalls.db");
-        if let Some(parent) = db.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
-
+        create_parent(db.as_path())?;
         let conn = if db.exists() {
             Connection::open(db)?
         } else {
@@ -444,14 +439,9 @@ pub fn new(
             .join(".seccomp")
             .join(format!("{hash}.bpf"));
 
-        if let Some(parent) = bpf.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
-
-        Some(if bpf.exists() {
-            File::open(&bpf)?.into()
+        create_parent(bpf.as_path())?;
+        Some(if let Ok(file) = File::open(&bpf) {
+            file.into()
         } else {
             filter.write(&bpf)?
         })

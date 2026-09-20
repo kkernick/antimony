@@ -1,6 +1,8 @@
 //! Export user-profiles
+#![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::shared::{
+    create_path,
     env::{AT_HOME, PWD},
     store::{Object, SYSTEM_STORE, USER_STORE},
 };
@@ -35,8 +37,8 @@ pub struct Args {
     #[arg(long)]
     pub seccomp: bool,
 }
-impl super::Run for Args {
-    fn run(self) -> Result<()> {
+impl Args {
+    pub fn run(self) -> Result<()> {
         if self.seccomp {
             let db = AT_HOME.join("seccomp").join("syscalls.db");
             if db.exists() {
@@ -75,10 +77,7 @@ impl super::Run for Args {
             Ok(())
         };
 
-        if !dest.exists() {
-            fs::create_dir_all(&dest)?;
-        }
-
+        create_path(dest.as_path())?;
         if let Some(object) = self.name {
             export(&object)
         } else {

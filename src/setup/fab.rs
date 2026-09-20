@@ -3,14 +3,11 @@
 
 use crate::{
     fab::{self, FabInfo},
-    shared::env::USER_NAME,
+    shared::{create_parent, env::USER_NAME},
     timer,
 };
 use anyhow::Result;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use user::as_effective;
 
 #[inline]
@@ -25,11 +22,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         return Ok(());
     }
 
-    if let Some(parent) = cmd_cache.parent()
-        && !parent.exists()
-    {
-        as_effective!(fs::create_dir_all(parent))?;
-    }
+    as_effective!({ create_parent(cmd_cache.as_path()) })?;
 
     let mut info = FabInfo {
         profile: &mut args.profile,

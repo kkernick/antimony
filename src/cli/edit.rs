@@ -1,18 +1,16 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
+#![allow(clippy::missing_errors_doc, dead_code)]
 
-use crate::{
-    cli,
-    shared::{
-        env::AT_CONFIG,
-        feature::Feature,
-        privileged,
-        profile::Profile,
-        store::{Object, SYSTEM_STORE, USER_STORE},
-    },
+use crate::shared::{
+    env::AT_CONFIG,
+    feature::Feature,
+    privileged,
+    profile::Profile,
+    store::{Object, SYSTEM_STORE, USER_STORE},
 };
 use anyhow::anyhow;
 use clap::ValueHint;
-use dialoguer::console::style;
+use console::style;
 use std::fs;
 
 #[derive(clap::Args, Default)]
@@ -29,8 +27,8 @@ pub struct Args {
     #[arg(short, long)]
     pub system: bool,
 }
-impl cli::Run for Args {
-    fn run(self) -> anyhow::Result<()> {
+impl Args {
+    pub fn run(self) -> anyhow::Result<()> {
         let (table, kind) = if self.feature {
             (Object::Feature, "feature")
         } else {

@@ -17,6 +17,8 @@ export RUST_BACKTRACE=1
 export AT_HOME="$ROOT"
 export AT_FORCE_TEMP=1
 
+ln -sv "$DIR" "$AT_HOME/utilities"
+
 SOURCE=""
 for UTIL in $(find "." -name "*.util"); do
   SOURCE="$SOURCE source $UTIL;"
@@ -42,3 +44,4 @@ echo "Done"
 cd $OLD
 
 rm -r $AT_HOME/config/$USER
+rm -rv "$AT_HOME/utilities"

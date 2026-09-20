@@ -9,6 +9,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::shared::landlock::update_policy;
+use crate::shared::{create_parent, create_path};
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
     shared::{
@@ -23,9 +24,10 @@ use anyhow::Result;
 use dashmap::iter_set::OwningIter;
 use heck::ToTitleCase;
 use landlock::ruleset::Filesystem;
-use log::{error, info, warn};
+use log::{error, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
+use std::io::ErrorKind;
 use std::{
     borrow::Cow,
     fs,
@@ -63,44 +65,39 @@ pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
 #[inline]
 pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
     let sof_path = sof.join(&library[1..]);
-    if let Some(parent) = sof_path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent)?;
-        }
-        let path: Cow<'_, Path> = Cow::Owned(PathBuf::from(library));
-        let canon = if path.is_symlink() {
-            Cow::Owned(fs::canonicalize(path.as_ref())?)
-        } else {
-            Cow::Borrowed(path.as_ref())
-        };
+    create_parent(sof_path.as_path())?;
 
-        if !sof_path.exists()
-            && let Err(e) = fs::hard_link(canon.as_ref(), &sof_path)
+    let path: Cow<'_, Path> = Cow::Owned(PathBuf::from(library));
+    let canon = if path.is_symlink() {
+        Cow::Owned(fs::canonicalize(path.as_ref())?)
+    } else {
+        Cow::Borrowed(path.as_ref())
+    };
+
+    if let Err(e) = fs::hard_link(canon.as_ref(), &sof_path)
+        && e.kind() != ErrorKind::AlreadyExists
+    {
+        warn!(
+            "Failed to hardlink {} => {}: {e}",
+            canon.display(),
+            sof_path.display()
+        );
+
+        // If we cannot hard-link directly, then we created a shared source
+        // of library copies within the CACHE_DIR, then hard-link from that.
+        //
+        // This reduces redundancy between profiles, and since shared exists
+        // in the CACHE_DIR, hard links will work.
+        let shared_path = &cache.join("shared").join(&library[1..]);
+        create_parent(shared_path.as_path())?;
+        if let Err(e) = fs::copy(canon.as_ref(), shared_path)
+            && e.kind() != ErrorKind::AlreadyExists
         {
-            warn!(
-                "Failed to hardlink {} => {}: {e}",
-                canon.display(),
-                sof_path.display()
-            );
-
-            // If we cannot hard-link directly, then we created a shared source
-            // of library copies within the CACHE_DIR, then hard-link from that.
-            //
-            // This reduces redundancy between profiles, and since shared exists
-            // in the CACHE_DIR, hard links will work.
-            let shared_path = &cache.join("shared").join(&library[1..]);
-            if let Some(parent) = shared_path.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)?;
-                }
-
-                if !shared_path.exists() {
-                    fs::copy(canon.as_ref(), shared_path)?;
-                }
-                fs::hard_link(shared_path, &sof_path)?;
-            }
+            return Err(e.into());
         }
+        fs::hard_link(shared_path, &sof_path)?;
     }
+
     Ok(())
 }
 
@@ -306,20 +303,13 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         let cache = timer!("::setup", {
             as_effective!(Result<PathBuf>, {
                 let cache = cache_dir();
-                if !cache.exists() {
-                    fs::create_dir_all(cache.as_path())?;
-                }
-                if !sof.exists() {
-                    fs::create_dir(&sof)?;
-                }
+                create_path(cache.as_path())?;
+                create_path(sof.as_path())?;
 
                 // We do need the cache on disk in case we need to use a shared SOF source.
                 if !cache.starts_with(AT_HOME.as_path()) {
                     let shared = cache.join("shared");
-                    if !shared.exists() {
-                        info!("Creating shared directory at {}", shared.display());
-                        let _ = fs::create_dir(&shared);
-                    }
+                    create_path(shared.as_path())?;
                 }
                 Ok(cache)
             })?
@@ -368,9 +358,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
                     if in_lib(dir.as_ref()) {
                         let sof_path = sof.join(&dir[1..]);
-                        if !sof_path.exists() {
-                            as_effective!(fs::create_dir_all(sof_path))?;
-                        }
+                        as_effective!({ create_path(sof_path.as_path()) })?;
                     } else if !home && let Some(policy) = info.policy {
                         update_policy(dir.as_str(), policy, allowed.clone());
                     }

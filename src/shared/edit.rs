@@ -1,8 +1,7 @@
 //! Edit a file.
 #![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 
-use crate::shared::{env::EDITOR, which::AntimonyWhich};
-use dialoguer::Confirm;
+use crate::shared::{confirm, env::EDITOR, which::AntimonyWhich};
 use log::error;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::Spawner;
@@ -35,10 +34,6 @@ pub enum Error {
     /// Errors managing a spawned profile
     #[error("Failed to communicate with editor: {0}")]
     Handle(#[from] spawn::HandleError),
-
-    /// Dialog errors
-    #[error("Dialog errors: {0}")]
-    Dialog(#[from] dialoguer::Error),
 
     /// Temp errors
     #[error("Temporary File Error: {0}")]
@@ -82,11 +77,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
 
                 // If there's an error, make the user correct, or bail entirely.
                 Err(e) => {
-                    let retry = Confirm::new()
-                        .with_prompt(format!("Syntax error: {e}\nTry again?"))
-                        .interact()?;
-
-                    if !retry {
+                    if !confirm(&format!("Syntax error: {e}\nTry again"))? {
                         return Ok(None);
                     }
                 }

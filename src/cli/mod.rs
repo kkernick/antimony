@@ -9,9 +9,7 @@ pub mod refresh;
 pub mod remove;
 pub mod run;
 
-use anyhow::Result;
 use clap::{Parser, Subcommand};
-use enum_dispatch::enum_dispatch;
 
 /// Create run arguments from subcommand passthrough.
 #[allow(clippy::unreachable)]
@@ -52,7 +50,6 @@ pub struct Cli {
 }
 
 #[derive(Subcommand)]
-#[enum_dispatch(Run)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
     /// Run a profile
@@ -83,13 +80,4 @@ impl Default for Command {
     fn default() -> Self {
         Self::Run(run::Args::default())
     }
-}
-
-#[enum_dispatch]
-pub trait Run {
-    /// Run the command.
-    ///
-    /// ## Errors
-    /// If the subcommand fails.
-    fn run(self) -> Result<()>;
 }

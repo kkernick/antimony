@@ -18,6 +18,7 @@ use crate::shared::{
     env::{AT_HOME, CACHE_DIR, SESSION_BUS},
     which::AntimonyWhich,
 };
+use console::Term;
 use dashmap::{DashMap, DashSet};
 use log::{Level, Record};
 use nix::unistd::getpid;
@@ -25,10 +26,11 @@ use notify::{level_name, level_urgency};
 use spawn::Spawner;
 use std::{
     collections::{HashMap, HashSet},
-    fs::metadata,
+    fs::{self, metadata},
     hash::BuildHasher,
+    io::{self, ErrorKind},
     os::unix::fs::MetadataExt,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use user::USER;
 
@@ -45,6 +47,65 @@ pub type Set<T> = HashSet<T, StaticHash>;
 pub type ThreadSet<T> = DashSet<T, StaticHash>;
 pub type Map<K, V> = HashMap<K, V, StaticHash>;
 pub type ThreadMap<K, V> = DashMap<K, V, StaticHash>;
+
+/// Create the parent directory of a path
+#[inline]
+pub fn create_path<'a>(path: impl Into<&'a Path>) -> Result<bool, io::Error> {
+    match fs::create_dir_all(path.into()) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Create the parent directory of a path
+#[inline]
+pub fn create_parent<'a>(path: impl Into<&'a Path>) -> Result<bool, io::Error> {
+    path.into().parent().map_or_else(
+        || Err(ErrorKind::NotFound.into()),
+        |parent| match fs::create_dir_all(parent) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(e),
+        },
+    )
+}
+
+/// Remove a file
+#[inline]
+pub fn remove_file<'a>(path: impl Into<&'a Path>) -> Result<bool, io::Error> {
+    match fs::remove_file(path.into()) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Remove a directory
+#[inline]
+pub fn remove_directory<'a>(path: impl Into<&'a Path>) -> Result<bool, io::Error> {
+    match fs::remove_dir_all(path.into()) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Confirm a simple yes/no question
+#[inline]
+pub fn confirm(question: &str) -> Result<bool, io::Error> {
+    let term = Term::stdout();
+    term.write_line(&format!("{question}? (y/N): "))?;
+    let response = loop {
+        let response = term.read_char()?.to_ascii_lowercase();
+        if response == 'y' {
+            break true;
+        } else if response == 'n' {
+            break false;
+        }
+    };
+    Ok(response)
+}
 
 /// Check that the Real User is privileged. This is used to allow modifying the
 /// Antimony system, it does not correlate to actual administrative access (i.e. sudo/polkit)

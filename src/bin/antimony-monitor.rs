@@ -3,7 +3,7 @@
 #![allow(unused_crate_dependencies)]
 
 use antimony::shared::{
-    self, Set, ThreadMap,
+    self, Set, ThreadMap, create_parent,
     env::{DATA_HOME, SESSION_BUS},
     find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
@@ -569,11 +569,7 @@ fn main() -> Result<()> {
     // All binaries use the same monitor for a profile (i.e. proxy and sandbox)
     let monitor_path = PathBuf::from(cli.instance).join("monitor");
 
-    if let Some(parent) = monitor_path.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent)?;
-    }
+    create_parent(monitor_path.as_path())?;
     let listener = UnixListener::bind(&monitor_path)?;
 
     println!(

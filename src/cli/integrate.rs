@@ -1,10 +1,13 @@
 //! Integrate a profile into the DE.
+#![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
-    cli::{self, Cli, Command},
+    cli::{Cli, Command},
     shared::{
+        create_parent,
         env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
         profile::Profile,
+        remove_file,
         which::{AntimonyWhich, which},
     },
 };
@@ -16,7 +19,7 @@ use spawn::Spawner;
 use std::{
     fmt::Write as FormatWrite,
     fs::{self, File},
-    io::Write as IoWrite,
+    io::{ErrorKind, Write as IoWrite},
     os::unix::fs::symlink,
     path::Path,
 };
@@ -103,8 +106,8 @@ pub enum ConfigMode {
     File,
 }
 
-impl cli::Run for Args {
-    fn run(self) -> Result<()> {
+impl Args {
+    pub fn run(self) -> Result<()> {
         if self.remove {
             let mut profile = match Profile::new(&self.profile, None, None, true) {
                 Ok(profile) => profile.0,
@@ -171,11 +174,10 @@ pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
             let config_desktop = DATA_HOME
                 .join("applications")
                 .join(format!("{name}-{config}.desktop"));
-            if config_desktop.exists() {
-                match fs::remove_file(&config_desktop) {
-                    Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
-                    Ok(()) => println!("Removed configuration integration"),
-                }
+            match remove_file(config_desktop.as_path()) {
+                Ok(true) => println!("Removed configuration integration"),
+                Err(e) => eprintln!("{}: {e}.", config_desktop.display()),
+                _ => {}
             }
         }
     }
@@ -184,11 +186,10 @@ pub fn remove(profile: &mut Profile, cmd: &Args) -> Result<()> {
         .join("systemd")
         .join("user")
         .join(format!("antimony-{name}.service"));
-    if service.exists() {
-        match fs::remove_file(&service) {
-            Err(e) => eprintln!("{}: {e}.", service.display()),
-            Ok(()) => println!("Removed autostart service file"),
-        }
+    match remove_file(service.as_path()) {
+        Err(e) => eprintln!("{}: {e}.", service.display()),
+        Ok(true) => println!("Removed autostart service file"),
+        _ => {}
     }
 
     let copy = DATA_HOME
@@ -349,11 +350,7 @@ pub fn format_desktop(
         // Write it out.
         let shadow = out_path.join(format!("{}.desktop", profile.desktop(name)));
 
-        if let Some(parent) = shadow.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
+        create_parent(shadow.as_path())?;
 
         write!(File::create(shadow)?, "{}", local_desktop.join("\n"))?;
         profile.id(name)
@@ -422,11 +419,7 @@ pub fn format_desktop(
     // Add configurations.
     manage_configurations(&mut contents, cmd, profile, &name, local, package)?;
 
-    if let Some(parent) = antimony_desktop.parent()
-        && !parent.exists()
-    {
-        fs::create_dir_all(parent)?;
-    }
+    create_parent(antimony_desktop.as_path())?;
 
     write!(
         File::create(antimony_desktop).with_context(|| "Failed to create new desktop file")?,
@@ -454,16 +447,25 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
     // path in /usr/bin is given.
     info!("Creating symlink in ~/.local/bin");
     let local = HOME_PATH.join(".local").join("bin");
-    if !local.exists() {
-        println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
+    match fs::create_dir_all(&local) {
+        Ok(()) => {
+            println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
             to launch sandboxed applications from the command line without the explicit path.");
-        fs::create_dir_all(&local)?;
+        }
+        Err(e) if e.kind() != ErrorKind::AlreadyExists => {
+            return Err(e.into());
+        }
+        _ => {}
     }
 
     let local = local.join(name);
-    if !local.exists() {
-        symlink(antimony, &local).with_context(|| "Failed to create local symlink")?;
+
+    if let Err(e) = symlink(antimony, &local)
+        && e.kind() != ErrorKind::AlreadyExists
+    {
+        return Err(e.into());
     }
+
     let local = local.to_string_lossy();
 
     let desktop_file = Path::new("/usr")
@@ -510,11 +512,8 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             format!("Name=Run {} Natively", name.to_title_case()),
             format!("Exec={}", profile.app_path(&cmd.profile)),
         ]);
-        if let Some(parent) = out.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
+        create_parent(out.as_path())?;
+
         manage_configurations(&mut contents, cmd, profile, name, &local, package)?;
         fs::write(&out, contents.join("\n"))?;
     }
@@ -530,12 +529,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             info!("Overriding XDG Service");
             let shadow = make_shadow(&service_file)?;
             let shadow_path = CONFIG_HOME.join("autostart").join(autostart_name);
-            if let Some(parent) = shadow_path.parent()
-                && !parent.exists()
-            {
-                fs::create_dir_all(parent)?;
-            }
-
+            create_parent(shadow_path.as_path())?;
             fs::write(shadow_path, shadow.join("\n"))?;
         }
 
@@ -582,11 +576,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             .join("systemd")
             .join("user")
             .join(format!("antimony-{name}.service"));
-        if let Some(parent) = service_path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
+        create_parent(service_path.as_path())?;
         fs::write(&service_path, service_vec(false).join("\n"))?;
 
         if !profile.configuration.is_empty() {
@@ -631,20 +621,16 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             .join("autostart")
             .join(profile.desktop(name).as_ref())
             .with_extension("desktop");
-        if let Some(parent) = autostart_path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
+        create_parent(autostart_path.as_path())?;
 
-        if out.exists() {
-            fs::copy(out, autostart_path)?;
-        } else {
-            return Err(anyhow!(
+        return match fs::copy(&out, autostart_path) {
+            Ok(_) => Ok(()),
+            Err(e) if e.kind() == ErrorKind::NotFound => Err(anyhow!(
                 "No desktop file to integrate in {}! You may need --create-desktop!",
                 out.display()
-            ));
-        }
+            )),
+            Err(e) => Err(e.into()),
+        };
     }
 
     Ok(())

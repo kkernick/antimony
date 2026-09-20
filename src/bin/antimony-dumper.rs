@@ -11,7 +11,7 @@
 #![allow(unused_crate_dependencies)]
 
 use antimony::shared::{
-    self, ThreadMap,
+    self, ThreadMap, create_path,
     stream::receive_fd,
     syscalls::{self, Notifier, get_num},
     utility,
@@ -265,9 +265,8 @@ pub fn runner(args: RunArgs) -> Result<()> {
     };
 
     let path = PathBuf::from(args.instance);
-    if !path.exists() {
-        fs::create_dir_all(&path)?;
-    }
+    create_path(path.as_path())?;
+
     let temp = temp::Builder::new()
         .within(path)
         .name(format!("dumper-{name}"))

@@ -1,7 +1,7 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 use crate::shared::{
-    Set,
+    Set, create_path,
     env::SESSION_BUS,
     landlock::{RO, RW},
     profile::home::{HomeLockPolicy, HomePolicy},
@@ -134,8 +134,8 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
         }
 
         let home_str = home_dir.to_string_lossy();
-        if !home_dir.exists() && !args.run.dry {
-            fs::create_dir_all(&home_dir)?;
+        if !args.run.dry {
+            create_path(home_dir.as_path())?;
         }
 
         let dest = home.path.as_ref().map_or("/home/antimony", |path| path);

@@ -3,7 +3,7 @@
 use crate::{
     fab::{localize_path, resolve},
     shared::{
-        Set, direct_path,
+        Set, create_parent, direct_path,
         landlock::{LandlockPolicy, update_policy},
         profile::{
             files::{FILE_MODES, FileMode},
@@ -100,10 +100,7 @@ pub fn add_file(
     policy: &mut Option<LandlockPolicy>,
 ) -> Result<()> {
     let path = direct_path(file);
-    if !path.exists()
-        && let Some(parent) = path.parent()
-    {
-        fs::create_dir_all(parent)?;
+    if create_parent(path.as_path())? {
         let contents = resolve(Cow::Borrowed(contents));
         fs::write(&path, contents.as_ref())?;
     }

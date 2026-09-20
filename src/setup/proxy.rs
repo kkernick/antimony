@@ -8,7 +8,7 @@ use crate::{
     },
     setup::syscalls,
     shared::{
-        Set,
+        Set, create_parent, create_path,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         landlock::{LandlockPolicy, RW, update_policy},
         profile::{Profile, ipc::Portal, ns::Namespace},
@@ -53,12 +53,8 @@ pub fn run(
     let landlock = harden && landlock::abi().is_ok();
     let utility = utility("landlock");
 
-    if !proxy.exists() {
-        fs::create_dir_all(&proxy)?;
-    }
-    if !app_dir.exists() {
-        fs::create_dir_all(&app_dir)?;
-    }
+    create_path(proxy.as_path())?;
+    create_path(app_dir.as_path())?;
 
     // Create an SOF for the proxy.
     // It's shared between every application and instance.
@@ -67,16 +63,17 @@ pub fn run(
     // access the proxy's sandbox through the user bus. Still, we
     // have the means to do this, so might as well. The real
     // paranoia is below.
-    if harden && !sof.exists() {
+    if harden {
         as_effective!(Result<()>, {
-            fs::create_dir_all(&sof)?;
-            let mut libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
-            if landlock {
-                libraries.extend(get_libraries(&utility)?);
+            if create_path(sof.as_path())? {
+                let mut libraries = get_libraries("/usr/bin/xdg-dbus-proxy")?;
+                if landlock {
+                    libraries.extend(get_libraries(&utility)?);
+                }
+                libraries
+                    .into_par_iter()
+                    .try_for_each(|library| add_sof(&sof, &library, &cache))?;
             }
-            libraries
-                .into_par_iter()
-                .try_for_each(|library| add_sof(&sof, &library, &cache))?;
             Ok(())
         })?;
     }
@@ -317,7 +314,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         || !ipc.calls.is_empty()
     {
         let proxy = timer!(
-            "::run",
+            "::proxy_run",
             run(&args.sys_dir, &args.profile, args.instance, &info, id,)
         )?;
 
@@ -341,42 +338,35 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
 
             // https://docs.flatpak.org/en/latest/flatpak-command-reference.html
             #[rustfmt::skip]
-                let mut info_contents: Vec<String> = vec![
-                    "[Application]",
-                    &format!("name={id}"),
-                    "[Instance]",
-                    &format!("instance-id={}", args.instance.name()),
-                    "app-path=/usr",
-                    "[Context]",
-                    "sockets=session-bus;system-bus;",
-                ].into_iter().map(ToOwned::to_owned).collect();
+            let mut info_contents: Vec<String> = vec![
+                "[Application]",
+                &format!("name={id}"),
+                "[Instance]",
+                &format!("instance-id={}", args.instance.name()),
+                "app-path=/usr",
+                "[Context]",
+                "sockets=session-bus;system-bus;",
+            ].into_iter().map(ToOwned::to_owned).collect();
 
             if namespaces.contains(&Namespace::Net) || namespaces.contains(&Namespace::All) {
                 info_contents.push("shared=network;".to_owned());
             }
 
-            if let Some(parent) = info.parent()
-                && !parent.exists()
-            {
-                fs::create_dir_all(parent)?;
-            }
+            create_parent(info.as_path())?;
             let out = fs::File::create_new(&info)?;
             write!(&out, "{}", info_contents.join("\n"))?;
 
             #[rustfmt::skip]
-                args.handle.args_i([
-                    "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
-                    "--ro-bind", "/run/dbus", "/run/dbus",
-                    "--setenv", "DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str(),
-                    "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
-                    "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
-                ]);
+            args.handle.args_i([
+                "--bind", &format!("{runtime}/doc"), &format!("{runtime}/doc"),
+                "--ro-bind", "/run/dbus", "/run/dbus",
+                "--setenv", "DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str(),
+                "--ro-bind", &format!("{instance_dir_str}/.flatpak-info"), "/.flatpak-info",
+                "--symlink", "/.flatpak-info", &format!("{runtime}/flatpak-info"),
+            ]);
 
             let flatpak_dir = RUNTIME_DIR.join(".flatpak").join(args.instance.name());
-
-            if !flatpak_dir.exists() {
-                fs::create_dir_all(&flatpak_dir)?;
-            }
+            create_path(flatpak_dir.as_path())?;
             let file = File::create(flatpak_dir.join("bwrapinfo.json"))?;
 
             args.handle

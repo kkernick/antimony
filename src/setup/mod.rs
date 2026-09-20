@@ -12,11 +12,12 @@ use crate::{
     cli::run::mounted,
     fab::lib::ROOTS,
     shared::{
-        Set,
+        Set, create_path,
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
         find::{DirType, recursive_crawl},
         landlock::{LandlockPolicy, RW, update_policy},
         profile::Profile,
+        remove_directory,
         store::mem,
         utility,
     },
@@ -121,13 +122,8 @@ pub fn setup<'a>(
     if refresh_sof.exists() {
         if !busy(&instances) && !busy(&refresh_dir) {
             as_effective!(Result<()>, {
-                if refresh_dir.exists() {
-                    fs::remove_dir_all(&refresh_dir)?;
-                }
-                if sys_dir.exists() {
-                    fs::remove_dir_all(&sys_dir)?;
-                }
-
+                remove_directory(refresh_dir.as_path())?;
+                remove_directory(sys_dir.as_path())?;
                 fs::rename(&refresh_sof, &sys_dir)?;
                 Ok(())
             })?;
@@ -176,9 +172,7 @@ pub fn setup<'a>(
         .owner(user::Mode::Real)
         .create::<temp::Directory>()?;
 
-    if !sys_dir.exists() {
-        as_effective!(fs::create_dir_all(&sys_dir))?;
-    }
+    as_effective!({ create_path(sys_dir.as_path()) })?;
     let runtime = RUNTIME_STR.as_str();
 
     // The Document Portal doesn't run until something pings it. If this is the

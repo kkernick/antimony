@@ -1,7 +1,7 @@
 //! Generate shell completions and man pages for Antimony.
 #![allow(unused_crate_dependencies)]
 
-use antimony::{cli, shared::which::AntimonyWhich};
+use antimony::{cli, shared::create_path};
 use clap::CommandFactory;
 use clap_complete::{generate, shells};
 use spawn::Spawner;
@@ -10,7 +10,7 @@ use std::{fs, path::Path};
 fn main() -> anyhow::Result<()> {
     let mut cli = cli::Cli::command();
 
-    let root = Spawner::which::<AntimonyWhich>("git")?
+    let root = Spawner::new("git")?
         .args(["rev-parse", "--show-toplevel"])
         .output(spawn::StreamMode::Pipe)
         .spawn()?
@@ -18,9 +18,7 @@ fn main() -> anyhow::Result<()> {
     let root = root.strip_suffix('\n').unwrap_or(&root);
 
     let path = Path::new(root).join("generated");
-    if !path.exists() {
-        fs::create_dir(&path)?;
-    }
+    create_path(path.as_path())?;
 
     let mut out = fs::File::create(path.join("antimony.bash"))?;
     generate(shells::Bash, &mut cli, "antimony", &mut out);
@@ -30,19 +28,6 @@ fn main() -> anyhow::Result<()> {
 
     let mut out = fs::File::create(path.join("_antimony"))?;
     generate(shells::Zsh, &mut cli, "antimony", &mut out);
-
-    // One man page per subcommand
-    for sub in cli.get_subcommands() {
-        let man = clap_mangen::Man::new(sub.clone());
-        let mut buffer: Vec<u8> = Vec::new();
-        man.render(&mut buffer)?;
-        fs::write(path.join(format!("antimony-{}.1", sub.get_name())), buffer)?;
-    }
-
-    let man = clap_mangen::Man::new(cli);
-    let mut buffer: Vec<u8> = Vec::default();
-    man.render(&mut buffer)?;
-    fs::write(path.join("antimony.1"), buffer)?;
 
     Ok(())
 }

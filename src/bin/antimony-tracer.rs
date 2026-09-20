@@ -15,7 +15,7 @@ use antimony::{
         store::{Object, SYSTEM_STORE, USER_STORE},
     },
 };
-use dialoguer::console::style;
+use console::style;
 use rayon::prelude::*;
 use signal_hook::{consts, flag};
 use std::{

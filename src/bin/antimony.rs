@@ -2,7 +2,7 @@
 #![allow(unused_crate_dependencies)]
 
 use antimony::{
-    cli::{self, Run, run::as_symlink},
+    cli::{self, Command, run::as_symlink},
     shared::{self, config::CONFIG_FILE},
     timer,
 };
@@ -46,7 +46,16 @@ fn main() -> Result<()> {
     );
 
     let ret = if as_symlink().is_err() {
-        cli::Cli::parse().command.run()
+        match cli::Cli::parse().command {
+            Command::Run(args) => args.run(),
+            Command::Edit(args) => args.run(),
+            Command::Refresh(args) => args.run(),
+            Command::Integrate(args) => args.run(),
+            Command::Remove(args) => args.run(),
+            Command::Export(args) => args.run(),
+            Command::Import(args) => args.run(),
+            Command::Info(args) => args.run(),
+        }
     } else {
         Ok(())
     };

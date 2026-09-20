@@ -4,7 +4,7 @@
 //! in `$AT_HOME/config`, and Caches are stored in `$AT_HOME/cache`.
 //! This Backend is best for fast disks.
 
-use crate::shared::{Map, Set, store::Object};
+use crate::shared::{Map, Set, create_parent, store::Object};
 use rayon::prelude::*;
 use std::{
     any::Any,
@@ -98,11 +98,7 @@ impl super::BackingStore for Store {
     fn dump(&self, name: &str, object: Object, content: &[u8]) -> Result<(), super::Error> {
         as_effective!(Result<(), super::Error>, {
             let path = self.path(name, object);
-            if let Some(parent) = path.parent()
-                && !parent.exists()
-            {
-                fs::create_dir_all(parent)?;
-            }
+            create_parent(path.as_path())?;
             File::create(path)?.write_all(content)?;
             Ok(())
         })

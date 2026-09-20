@@ -1,16 +1,14 @@
 //! Edit profiles/features, Create New Ones, and Modify the Default.
+#![allow(clippy::missing_errors_doc, dead_code)]
 
-use crate::{
-    cli,
-    shared::{
-        Set,
-        store::{Object, SYSTEM_STORE, USER_STORE},
-        syscalls,
-    },
+use crate::shared::{
+    Set,
+    store::{Object, SYSTEM_STORE, USER_STORE},
+    syscalls,
 };
 use anyhow::Result;
 use clap::ValueHint;
-use dialoguer::console::style;
+use console::style;
 use seccomp::syscall::Syscall;
 use similar::{Algorithm, TextDiff};
 
@@ -39,9 +37,9 @@ pub struct Args {
     pub seccomp: bool,
 }
 
-impl cli::Run for Args {
+impl Args {
     #[allow(clippy::too_many_lines)]
-    fn run(self) -> Result<()> {
+    pub fn run(self) -> Result<()> {
         if self.seccomp {
             match self.name {
                 // Get Profile/Binary information depending on a path.

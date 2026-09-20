@@ -1,20 +1,22 @@
 //! Refresh installed profiles.
+#![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
-    cli::{self, run, run_vec},
+    cli::{run, run_vec},
     shared::{
         Set,
         env::{CACHE_DIR, HOME_PATH, RUNTIME_DIR},
         profile::{self, Profile},
+        remove_directory,
         store::{self, Object, mem},
         syscalls,
     },
 };
 use anyhow::Result;
 use clap::ValueHint;
-use indicatif::{ProgressBar, ProgressStyle};
+use console::{Term, style};
 use log::info;
-use std::{fs, time::Duration};
+use std::fs;
 use user::as_effective;
 
 #[derive(clap::Args, Default)]
@@ -41,8 +43,8 @@ pub struct Args {
     #[arg(short, long)]
     pub seccomp: bool,
 }
-impl cli::Run for Args {
-    fn run(self) -> Result<()> {
+impl Args {
+    pub fn run(self) -> Result<()> {
         if self.seccomp {
             syscalls::clean_database()?;
             syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
@@ -78,12 +80,13 @@ impl cli::Run for Args {
                     .filter_map(|f| f.file_name().into_string().ok())
                     .collect();
 
-                for stale in saved.difference(&session) {
-                    let cache = CACHE_DIR.join("run").join(stale);
-                    if cache.exists() {
-                        as_effective!(fs::remove_dir_all(cache))?;
+                as_effective!(Result<()>, {
+                    for stale in saved.difference(&session) {
+                        let cache = CACHE_DIR.join("run").join(stale);
+                        remove_directory(cache.as_path())?;
                     }
-                }
+                    Ok(())
+                })?;
             }
         }
 
@@ -108,15 +111,9 @@ impl cli::Run for Args {
         // If not dry, repopulate the cache.
         } else if !self.dry {
             let profiles = installed_profiles()?;
-            let pb = ProgressBar::new(profiles.len().checked_add(1).unwrap_or(0) as u64);
-            pb.set_style(
-                ProgressStyle::default_spinner()
-                    .template(" {spinner} {msg} [{wide_bar}] {eta_precise} ")?,
-            );
-            pb.enable_steady_tick(Duration::from_millis(100));
-
+            let terminal = Term::stdout();
             profiles.into_iter().try_for_each(|name| -> Result<()> {
-                pb.set_message(format!("Refreshing {name}"));
+                println!("Refreshing {}", style(&name).bold());
 
                 let args = run::Args {
                     profile: name.clone(),
@@ -124,29 +121,40 @@ impl cli::Run for Args {
                     refresh: true,
                     ..Default::default()
                 };
-                args.refresh()?;
-
+                let refresh = args.refresh();
+                terminal.clear_last_lines(1)?;
+                if let Err(e) = refresh {
+                    eprintln!("{}", style(format!("Failed to refresh {name}: {e}")).red());
+                }
                 if let Ok(profile) =
                     store::load::<Profile, profile::Error>(&name, Object::Profile, true)
                 {
                     for (conf, _) in profile.configuration {
+                        println!("Refreshing {} ({conf})", style(&name).bold());
+
                         let args = run::Args {
                             profile: name.clone(),
                             dry: true,
                             refresh: true,
-                            config: Some(conf),
+                            config: Some(conf.clone()),
                             ..Default::default()
                         };
-                        args.refresh()?;
+                        let refresh = args.refresh();
+                        terminal.clear_last_lines(1)?;
+                        if let Err(e) = refresh {
+                            eprintln!(
+                                "{}",
+                                style(format!("Failed to refresh {name} ({conf}): {e}")).red()
+                            );
+                        }
                     }
-                    pb.inc(1);
                 }
                 Ok(())
             })?;
 
-            pb.inc(1);
-            pb.set_message("Flushing to disk");
+            println!("Flushing to disk");
             mem::flush();
+            terminal.clear_last_lines(1)?;
         }
         Ok(())
     }

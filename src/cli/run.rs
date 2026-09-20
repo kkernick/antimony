@@ -1,7 +1,8 @@
 //! Run a profile.
+#![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
-    cli::{self, Run},
+    cli,
     fab::localize_home,
     setup::{self, setup},
     shared::{
@@ -22,10 +23,9 @@ use crate::{
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueHint};
 use heck::ToTitleCase;
-use log::error;
 use nix::{errno::Errno, sys::signal::Signal};
 use spawn::{HandleError, Spawner, StreamMode};
-use std::{borrow::Cow, env, fs, path::Path, thread, time::Duration};
+use std::{borrow::Cow, env, fs, thread, time::Duration};
 use user::as_effective;
 
 #[derive(clap::Args, Default)]
@@ -226,56 +226,61 @@ pub struct Args {
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub passthrough: Option<Vec<String>>,
 }
-impl cli::Run for Args {
-    fn run(mut self) -> Result<()> {
+impl Args {
+    /// Run with explicit deferred cache flush
+    ///
+    /// ## Errors
+    ///
+    /// If the profile could not be run
+    fn run_deferred(mut self, refresh: bool) -> Result<()> {
+        #[cfg(debug_assertions)]
+        {
+            let info = timer!("::setup", {
+                setup(Cow::Owned(self.profile.clone()), &mut self, refresh)
+            })?;
+            timer!("::run", run(info, &mut self))?;
+        }
+
+        #[cfg(not(debug_assertions))]
+        match setup(Cow::Owned(self.profile.clone()), &mut self, refresh) {
+            Ok(info) => {
+                if let Err(e) = run(info, &mut self) {
+                    let fail = format!("Failed to run {}: {e}", self.profile);
+                    log::error!("{fail}");
+                    return Err(anyhow!(fail));
+                }
+            }
+            Err(e) => {
+                let fail = format!("Failed to run {}: {e}", self.profile);
+                log::error!("{fail}");
+                return Err(anyhow!(fail));
+            }
+        }
+        Ok(())
+    }
+
+    /// Run with explicit deferred cache flush
+    ///
+    /// ## Errors
+    ///
+    /// If the profile could not be run
+    pub fn run(self) -> Result<()> {
         {
             let mut cache = store::CACHE.lock();
             if cache.is_none() {
                 cache.replace(true);
             }
         }
-
-        match timer!(
-            "::setup",
-            setup(Cow::Owned(self.profile.clone()), &mut self, false)
-        ) {
-            Ok(info) => {
-                if let Err(e) = timer!("::run", run(info, &mut self)) {
-                    let fail = format!("Failed to run {}: {e}", self.profile);
-                    error!("{fail}");
-                    return Err(anyhow!(fail));
-                }
-            }
-            Err(e) => {
-                let fail = format!("Failed to run {}: {e}", self.profile);
-                error!("{fail}");
-                return Err(anyhow!(fail));
-            }
-        }
-        Ok(())
+        self.run_deferred(false)
     }
-}
-impl Args {
+
     /// Run under refresh (Disables flushing caches)
     ///
     /// ## Errors
+    ///
     /// If the profile cannot be run
-    pub fn refresh(mut self) -> Result<()> {
-        match setup(Cow::Owned(self.profile.clone()), &mut self, true) {
-            Ok(info) => {
-                if let Err(e) = run(info, &mut self) {
-                    let fail = format!("Failed to run {}: {e}", self.profile);
-                    error!("{fail}");
-                    return Err(anyhow!(fail));
-                }
-            }
-            Err(e) => {
-                let fail = format!("Failed to run {}: {e}", self.profile);
-                error!("{fail}");
-                return Err(anyhow!(fail));
-            }
-        }
-        Ok(())
+    pub fn refresh(self) -> Result<()> {
+        self.run_deferred(true)
     }
 }
 
@@ -307,13 +312,9 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     // Add landlock
     if let Some(policy) = info.policy.take() {
         let landlock_path = info.sys_dir.join("ll.toml");
-
         if !landlock_path.exists() {
             let policy_string = toml::to_string(&policy)?;
-            let landlock_path = info.sys_dir.join("ll.toml");
-            if !Path::new(&landlock_path).exists() {
-                as_effective!(fs::write(&landlock_path, policy_string))?;
-            }
+            as_effective!(fs::write(&landlock_path, policy_string))?;
         }
         let utility = utility("landlock");
         #[rustfmt::skip]
@@ -487,23 +488,23 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                     // Alert the user.
                     let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
                     Spawner::abs(utility("notify")).mode(user::Mode::Real)
-                .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                .output(StreamMode::Pipe)
-                .args([
-                "--title",
-                &format!("Sandbox Error: {}", info.name.to_title_case()),
-                "--body",
-                &format!(
-                    "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
-                    if error_name == Errno::UnknownErrno {
-                        format!("exit code: {code}")
-                    } else {
-                        format!("{error_name}")
-                    }
-                ),
-                "--timeout", "5000",
-                "--urgency", "critical",
-            ]).spawn()?.output_all()?;
+                        .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                        .output(StreamMode::Pipe)
+                        .args([
+                        "--title",
+                        &format!("Sandbox Error: {}", info.name.to_title_case()),
+                        "--body",
+                        &format!(
+                            "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
+                            if error_name == Errno::UnknownErrno {
+                                format!("exit code: {code}")
+                            } else {
+                                format!("{error_name}")
+                            }
+                        ),
+                        "--timeout", "5000",
+                        "--urgency", "critical",
+                    ]).spawn()?.output_all()?;
                 }
                 Ok(())
             }

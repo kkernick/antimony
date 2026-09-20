@@ -1,4 +1,5 @@
 //! Import user-profiles
+#![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::shared::{
     feature::{self, Feature},
@@ -30,8 +31,8 @@ pub struct Args {
     #[arg(long)]
     pub seccomp: bool,
 }
-impl super::Run for Args {
-    fn run(self) -> anyhow::Result<()> {
+impl Args {
+    pub fn run(self) -> anyhow::Result<()> {
         if self.seccomp {
             if privileged()? {
                 return syscalls::merge_database(Path::new(&self.name));
