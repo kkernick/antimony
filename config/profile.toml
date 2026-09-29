@@ -224,6 +224,19 @@
 #
 # Call are formatted as BUS=METHOD@PATH. If you don't know what that means, you don't need it.
 # calls = []
+#
+# Antimony utilizes LandLock to restrict IPC via ports. Note that if your kernel is not recent enough
+# (i.e ABI < 10), or ports are not explicitly defined in the profile, Antimony will allow all ports.
+# For example, the `network` feature simply permits networking without specifying ports, so all
+# connectivity is permitted. In contrast, the `https` feature is a superset of `network` that specifies
+# `bind` to 443, thus only this port can be connected to
+# [ipc.ports]
+#
+# What ports the application is permitted to bind to locally.
+# bind = []
+#
+# What ports the application is permitted to connect to remotely.
+# connect = []
 
 # Files specify various user, system, and direct files to be provided to the sandbox. Libraries and binaries
 # do not fall into this group. Each group specifies three kinds of files:
@@ -295,6 +308,13 @@
 # above sections or through the sandbox home).
 # [files.link]
 # "/path/to/src" = "/path/to/dest"
+#
+# If the profile is running under LandLock, you can explicitly define permissions for the policy; usually, this
+# is not necessary, but might be required (Especially rx), for paths Antimony doesn't parse
+# [files.permissions]
+# "/my/path" = "ro"
+# "/my/path2" = "rw"
+# "/my/path3" = "rx"
 
 # Keypair environment variables to pass to the sandbox.
 # [environment]

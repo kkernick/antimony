@@ -1,7 +1,10 @@
 //! Edit a file.
 #![allow(clippy::missing_errors_doc, clippy::absolute_paths)]
 
-use crate::shared::{confirm, env::EDITOR, which::AntimonyWhich};
+use crate::{
+    confirm,
+    shared::{env::EDITOR, which::AntimonyWhich},
+};
 use log::error;
 use serde::{Serialize, de::DeserializeOwned};
 use spawn::Spawner;
@@ -77,7 +80,7 @@ pub fn edit<T: DeserializeOwned + Serialize + PartialEq>(
 
                 // If there's an error, make the user correct, or bail entirely.
                 Err(e) => {
-                    if !confirm(&format!("Syntax error: {e}\nTry again"))? {
+                    if !confirm!("Syntax error: {e}\nTry again")? {
                         return Ok(None);
                     }
                 }

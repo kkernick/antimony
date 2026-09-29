@@ -25,7 +25,6 @@ use foldhash::fast::FixedState;
 use heck::ToTitleCase;
 use log::debug;
 use path_clean::clean;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -50,13 +49,6 @@ pub struct FabInfo<'a> {
     pub instance: &'a Temp,
     pub sys_dir: &'a Path,
     pub policy: &'a mut Option<LandlockPolicy>,
-}
-
-/// `bilrost` compatible struct for saving cached data
-#[derive(Serialize, Deserialize)]
-pub struct Cache {
-    /// The data
-    pub cache: Set<String>,
 }
 
 /// The L1 Cache caches the disk cache for repeated look-ups in memory.
@@ -104,14 +96,14 @@ pub fn hash(i: &str) -> String {
 
 /// Get cached definitions.
 #[inline]
-pub fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Option<T>> {
+pub fn get_cache<T: bitcode::DecodeOwned>(name: &str, object: Object) -> Result<Option<T>> {
     if let Some(map) = L1.get(&object)
         && let Some(bytes) = map.get(name)
     {
-        let content = bitcode::deserialize(bytes.as_slice())?;
+        let content = bitcode::decode(bytes.as_slice())?;
         Ok(Some(content))
     } else if let Ok(bytes) = CACHE_STORE.borrow().bytes(&hash(name), object) {
-        let content = bitcode::deserialize(bytes.as_slice())?;
+        let content = bitcode::decode(bytes.as_slice())?;
         L1.insert(object, ThreadMap::default())
             .insert(name.to_owned(), bytes);
         Ok(Some(content))
@@ -122,8 +114,8 @@ pub fn get_cache<T: DeserializeOwned>(name: &str, object: Object) -> Result<Opti
 
 /// Write the cache file.
 #[inline]
-pub fn write_cache<T: Serialize>(name: &str, content: T, object: Object) -> Result<T> {
-    let bytes = bitcode::serialize(&content)?;
+pub fn write_cache<T: bitcode::Encode>(name: &str, content: T, object: Object) -> Result<T> {
+    let bytes = bitcode::encode(&content);
     CACHE_STORE.borrow().dump(&hash(name), object, &bytes)?;
     Ok(content)
 }
@@ -238,11 +230,12 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
 /// ```
 pub fn get_libraries(path: &str) -> Result<Set<String>> {
     timer!("::get_libraries", {
-        let libraries = if let Ok(Some(libraries)) = get_cache::<Cache>(path, Object::Libraries) {
-            libraries.cache
-        } else {
-            write_cache(path, Cache { cache: ldd(path)? }, Object::Libraries)?.cache
-        };
+        let libraries =
+            if let Ok(Some(libraries)) = get_cache::<Set<String>>(path, Object::Libraries) {
+                libraries
+            } else {
+                write_cache(path, ldd(path)?, Object::Libraries)?
+            };
         Ok(libraries)
     })
 }

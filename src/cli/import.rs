@@ -34,7 +34,7 @@ pub struct Args {
 impl Args {
     pub fn run(self) -> anyhow::Result<()> {
         if self.seccomp {
-            if privileged()? {
+            if privileged() {
                 return syscalls::merge_database(Path::new(&self.name));
             }
             return Err(anyhow::anyhow!(
@@ -61,7 +61,7 @@ impl Args {
                 && let Some(str) = name.to_str()
             {
                 if self.system {
-                    if privileged()? {
+                    if privileged() {
                         store::SYSTEM_STORE.borrow().store(str, table, &content)?;
                     } else {
                         return Err(anyhow::anyhow!("Not allowed to modify system store"));

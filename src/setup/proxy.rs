@@ -110,7 +110,7 @@ pub fn run(
     }
 
     if landlock {
-        let landlock_path = cache.join("ll.toml");
+        let landlock_path = cache.join("ll.policy");
         if !landlock_path.exists() {
             let mut policy = LandlockPolicy::default();
             update_policy(
@@ -145,7 +145,7 @@ pub fn run(
                 [Filesystem::ReadDir, Filesystem::ReadFile, Filesystem::Unix],
             );
 
-            let policy_string = toml::to_string(&policy)?;
+            let policy_string = bitcode::serialize(&policy)?;
             if !Path::new(&landlock_path).exists() {
                 as_effective!(fs::write(&landlock_path, policy_string))?;
             }

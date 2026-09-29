@@ -1,20 +1,15 @@
 #![allow(clippy::missing_docs_in_private_items)]
 //! The configuration file is a global configuration for Antimony.
 
-use crate::shared::{
-    Set, edit,
-    env::{AT_HOME, USER_NAME},
-    extend_option,
-};
+use crate::shared::{Set, edit, env::USER_NAME, extend_option};
 use serde::{Deserialize, Serialize};
 use std::{
     env,
     fs::{self, read_to_string},
-    path::{Path, PathBuf},
+    path::Path,
     sync::LazyLock,
 };
 
-pub static CONFIG_PATH: LazyLock<PathBuf> = LazyLock::new(|| AT_HOME.join("config.toml"));
 pub static CONFIG_FILE: LazyLock<ConfigFile> = LazyLock::new(digest_config);
 
 pub fn digest_config() -> ConfigFile {

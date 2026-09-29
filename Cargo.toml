@@ -5,9 +5,9 @@ edition = "2024"
 
 [dependencies]
 landlock = { git = "https://github.com/kkernick/landlock", features = ["serde"]}
-notify = { git = "https://github.com/kkernick/notify" }
+notify = { git = "https://github.com/kkernick/notify", features = ["clap"] }
 seccomp = { git = "https://github.com/kkernick/seccomp", features = ["notify"] }
-spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", "landlock", "seccomp", "user"] }
+spawn = { git = "https://github.com/kkernick/spawn", features = ["cache", "fd", "landlock", "seccomp", "user", "rayon"] }
 temp = { git = "https://github.com/kkernick/temp", features = ["user"]}
 user = { git = "https://github.com/kkernick/user" }
 

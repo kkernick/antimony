@@ -24,7 +24,6 @@ use landlock::ruleset::Filesystem;
 use log::{debug, warn};
 use path_clean::clean;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
@@ -36,7 +35,7 @@ use std::{
 use temp::Temp;
 
 /// A `bilrost` struct for serializing.
-#[derive(Serialize, Deserialize, Default)]
+#[derive(bitcode::Encode, bitcode::Decode, Default)]
 struct Cache {
     /// What the binary was identified as.
     t: Type,
@@ -46,7 +45,7 @@ struct Cache {
 }
 
 /// The kind of thing we just analyzed.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Default)]
+#[derive(Eq, PartialEq, Default, bitcode::Encode, bitcode::Decode)]
 pub enum Type {
     Elf = 0,
     File = 1,
@@ -60,7 +59,7 @@ pub enum Type {
 }
 
 /// Information returned from parse.
-#[derive(Default, Serialize, Deserialize, Debug)]
+#[derive(Default, bitcode::Encode, bitcode::Decode, Debug)]
 pub struct ParseReturn {
     /// ELF files, to be passed to the library fabricator.
     pub elf: Set<String>,

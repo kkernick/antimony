@@ -52,27 +52,27 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 let mut buffer = [0; 1024];
                                 let title = args.name.to_title_case();
                                 let mut prompt = Spawner::abs(utility("notify"))
-                            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                            .output(StreamMode::Pipe)
-                            .args([
-                                "--title",
-                                &format!("{title} is Locked"),
-                                "--body",
-                                &format!(
-                                    "{title}'s home folder has been locked by another instance. If you can confirm no such \
-                                    instance exists, it's possible it was terminated before the lock could be removed. However, \
-                                    bypassing the lock when another instance is running may cause issues. You can also skip mounting \
-                                    the home folder for this instance, or mount it on an overlay."
-                                ),
-                                "--timeout",
-                                "10000",
-                                "--action", "Ignore",
-                                "--action", "Unlock",
-                                "--action", "Skip",
-                                "--action", "Overlay",
-                                "--action", "Abort"
-                            ])
-                            .spawn()?;
+                                    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                                    .output(StreamMode::Pipe)
+                                    .args([
+                                        "--title",
+                                        &format!("{title} is Locked"),
+                                        "--body",
+                                        &format!(
+                                            "{title}'s home folder has been locked by another instance. If you can confirm no such \
+                                            instance exists, it's possible it was terminated before the lock could be removed. However, \
+                                            bypassing the lock when another instance is running may cause issues. You can also skip mounting \
+                                            the home folder for this instance, or mount it on an overlay."
+                                        ),
+                                        "--timeout",
+                                        "10000",
+                                        "--action", "Ignore",
+                                        "--action", "Unlock",
+                                        "--action", "Skip",
+                                        "--action", "Overlay",
+                                        "--action", "Abort"
+                                    ])
+                                    .spawn()?;
 
                                 while prompt.alive()?.is_some() {
                                     match inotify.read_events(&mut buffer) {

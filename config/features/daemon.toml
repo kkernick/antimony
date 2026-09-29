@@ -9,7 +9,6 @@ sandbox_args = ["#", "daemon-wait"]
 "/usr/bin/daemon-wait" = """
 #!/bin/sh
 CURRENT=$(ps | wc -l)
-echo "Initial processes: $CURRENT"
 $@
 while [ $(ps | wc -l ) -gt $CURRENT ]; do
     sleep 1;

@@ -39,7 +39,7 @@ impl Args {
         let system = SYSTEM_STORE.borrow().fetch(&self.name, table);
 
         let (buffer, new) = if self.system {
-            if privileged()? {
+            if privileged() {
                 if let Ok(str) = system {
                     (str, false)
                 } else {

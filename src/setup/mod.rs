@@ -13,7 +13,7 @@ use crate::{
     fab::lib::ROOTS,
     shared::{
         Set, create_path,
-        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR},
+        env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         find::{DirType, recursive_crawl},
         landlock::{LandlockPolicy, RW, update_policy},
         profile::Profile,
@@ -29,11 +29,12 @@ use dbus::{
     blocking::{BlockingSender, LocalConnection},
     strings::{BusName, Interface, Member},
 };
+use heck::ToTitleCase;
 use inotify::{Inotify, WatchDescriptor};
 use landlock::ruleset::{Filesystem, Flag};
 use log::{info, warn};
 use rayon::prelude::*;
-use spawn::Spawner;
+use spawn::{Spawner, StreamMode};
 use std::{
     borrow::Cow,
     fs,
@@ -103,8 +104,6 @@ pub fn setup<'a>(
         }
     }
 
-    log::debug!("{profile:?}");
-
     // Refreshing logic tries to avoid deleting an SOF from underneath a running instance.
     // If another instance is running this profile, we defer to a refresh folder, which new
     // instances will be redirected to, and which will replace the original once all instances
@@ -125,8 +124,8 @@ pub fn setup<'a>(
 
     if refresh_sof.exists() {
         if !busy(&instances) && !busy(&refresh_dir) {
+            remove_directory(refresh_dir.as_path())?;
             as_effective!(Result<()>, {
-                remove_directory(refresh_dir.as_path())?;
                 remove_directory(sys_dir.as_path())?;
                 fs::rename(&refresh_sof, &sys_dir)?;
                 Ok(())
@@ -160,9 +159,30 @@ pub fn setup<'a>(
             );
             as_effective!(fs::remove_dir_all(&sys_dir))?;
         } else if sys_dir == refresh_sof {
-            return Err(anyhow!(
-                "Already refreshed! Please close all active instances to commit changes!"
-            ));
+            #[rustfmt::skip]
+            let action = Spawner::abs(utility("notify"))
+                .mode(user::Mode::Real)
+                .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                .output(StreamMode::Pipe)
+                .args([
+                    "--title", &format!("Already Refreshed: {}", name.to_title_case()),
+                    "--body", "An existing deferred refresh has already been run on this profile, \
+                               and both the original instance and deferred instance still have an active instance running. \
+                               What would you like to do?",
+                    "--action", "Override",
+                    "--action", "Abort",
+                ])
+                .spawn()?
+                .output_all()?;
+
+            let action = action.trim();
+            if action == "Override" {
+                as_effective!(fs::remove_dir_all(&sys_dir))?;
+                sys_dir = refresh_sof;
+                instances = refresh_dir;
+            } else {
+                return Err(anyhow!("Already refreshed! Please close active instances!"));
+            }
         } else {
             info!("Instance is busy. Refreshing in a new location");
             sys_dir = refresh_sof;
@@ -258,7 +278,7 @@ pub fn setup<'a>(
         && abi >= 10
         && profile.landlock.unwrap_or(true)
     {
-        let out = sys_dir.join("ll.toml");
+        let out = sys_dir.join("ll.policy");
         if out.exists() {
             (None, true)
         } else {

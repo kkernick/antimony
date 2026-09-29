@@ -1,20 +1,19 @@
 //! Antimony's custom file-finder, crawling directories and indexing the results.
 
 use crate::{
-    fab::{Cache, get_cache, ldd, lib::ROOTS, write_cache},
+    fab::{get_cache, ldd, lib::ROOTS, write_cache},
     shared::{Map, Set, store::Object},
     timer,
 };
 use anyhow::Result;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fs, path::Path};
 
 /// Each directory is indexed based on filetype, and a list of those files.
 pub type DirMap = Map<DirType, Set<String>>;
 
 /// The kind of entry in a `DirMap`.
-#[derive(PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Hash, bitcode::Encode, bitcode::Decode)]
 pub enum DirType {
     /// Files
     File = 0,
@@ -160,8 +159,8 @@ pub fn match_wildcard(wild: &str, name: &str) -> bool {
 /// Get all executable files in a directory. This is very expensive.
 pub fn dir(dir: &str) -> Result<Set<String>> {
     timer!("::find::dir", {
-        if let Ok(Some(libraries)) = get_cache::<Cache>(dir, Object::Directories) {
-            return Ok(libraries.cache.into_iter().collect());
+        if let Ok(Some(libraries)) = get_cache::<Set<String>>(dir, Object::Directories) {
+            return Ok(libraries.into_iter().collect());
         }
         let crawled = recursive_crawl(dir, None)?
             .remove(&DirType::File)
@@ -170,7 +169,7 @@ pub fn dir(dir: &str) -> Result<Set<String>> {
             .filter_map(|lib| ldd(&lib).ok())
             .flatten()
             .collect();
-        Ok(write_cache(dir, Cache { cache: crawled }, Object::Directories)?.cache)
+        Ok(write_cache(dir, crawled, Object::Directories)?)
     })
 }
 
@@ -204,8 +203,8 @@ pub fn wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set
                 .collect())
         };
 
-        if let Some(libraries) = get_cache::<Cache>(pattern, Object::Wildcards)? {
-            return Ok(libraries.cache);
+        if let Some(libraries) = get_cache::<Set<String>>(pattern, Object::Wildcards)? {
+            return Ok(libraries);
         }
 
         let libraries = if lib {
@@ -218,6 +217,6 @@ pub fn wildcards(pattern: &str, lib: bool, filter: WildcardFilter) -> Result<Set
             run(Cow::Borrowed("/usr/bin"), pattern)?
         };
 
-        Ok(write_cache(pattern, Cache { cache: libraries }, Object::Wildcards)?.cache)
+        Ok(write_cache(pattern, libraries, Object::Wildcards)?)
     })
 }

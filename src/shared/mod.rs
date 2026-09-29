@@ -16,13 +16,11 @@ pub mod which;
 use crate::shared::{
     config::CONFIG_FILE,
     env::{AT_HOME, CACHE_DIR, SESSION_BUS},
-    which::AntimonyWhich,
 };
 use console::Term;
 use dashmap::{DashMap, DashSet};
 use foldhash::fast::{FixedState, FoldHasher};
 use log::{Level, Record};
-use nix::unistd::getpid;
 use notify::{level_name, level_urgency};
 use spawn::Spawner;
 use std::{
@@ -108,6 +106,13 @@ pub fn confirm(question: &str) -> Result<bool, io::Error> {
     Ok(response)
 }
 
+#[macro_export]
+macro_rules! confirm {
+    ($($arg:tt)*) => {
+        $crate::shared::confirm(&format!($($arg)*))
+    };
+}
+
 pub fn extend_option<A, T: Extend<A> + IntoIterator<Item = A>>(
     lhs: &mut Option<T>,
     rhs: Option<T>,
@@ -139,32 +144,16 @@ where
 }
 
 /// Check that the Real User is privileged. This is used to allow modifying the
-/// Antimony system, it does not correlate to actual administrative access (i.e. sudo/polkit)
-pub fn privileged() -> anyhow::Result<bool> {
+/// Antimony system, it does not correlate to actual administrative access.
+///
+/// Privileged users are specified in the /etc/antimony.{toml/d}
+pub fn privileged() -> bool {
     if CONFIG_FILE.is_privileged() {
-        Ok(true)
-
-    // If the running user owns AT_HOME, they don't need permission checks.
-    } else if let Ok(meta) = metadata(AT_HOME.as_path())
-        && meta.uid() == USER.real.as_raw()
-    {
-        Ok(true)
+        true
+    } else if let Ok(meta) = metadata(AT_HOME.as_path()) {
+        meta.uid() == USER.real.as_raw()
     } else {
-        Ok(Spawner::which::<AntimonyWhich>("pkcheck")?
-            .args([
-                "--action-id",
-                "org.freedesktop.policykit.exec",
-                "--allow-user-interaction",
-                "--process",
-                &format!("{}", getpid().as_raw()),
-            ])
-            .mode(user::Mode::Real)
-            .preserve_env(true)
-            .error(spawn::StreamMode::Discard)
-            .output(spawn::StreamMode::Discard)
-            .spawn()?
-            .wait()?
-            == 0)
+        false
     }
 }
 

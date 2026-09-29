@@ -1,7 +1,7 @@
 //! This application runs a program underneath Landlock.
 #![allow(unused_crate_dependencies)]
 
-use std::fs;
+use std::{fs, process::exit};
 
 use antimony::shared::landlock::LandlockPolicy;
 use anyhow::Result;
@@ -32,18 +32,17 @@ fn main() -> Result<()> {
     let _ = notify::init();
     let cli = Cli::parse();
 
-    let policy: LandlockPolicy = toml::from_str(&fs::read_to_string(cli.policy)?)?;
+    let policy: LandlockPolicy = bitcode::deserialize(&fs::read(cli.policy)?)?;
     let ruleset = policy.construct_ruleset()?;
 
     let handle = Spawner::new(cli.command)?;
     if let Some(args) = cli.passthrough {
         handle.args_i(args);
     }
-    handle
+    let code = handle
         .landlock(ruleset)
         .preserve_env(true)
         .spawn()?
         .wait()?;
-
-    Ok(())
+    exit(code);
 }

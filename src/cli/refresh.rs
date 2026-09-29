@@ -2,7 +2,7 @@
 #![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
-    cli::{run, run_vec},
+    cli::run,
     shared::{
         Set,
         env::{CACHE_DIR, HOME_PATH, RUNTIME_DIR},
@@ -44,6 +44,33 @@ pub struct Args {
     pub seccomp: bool,
 }
 impl Args {
+    /// Refresh a profile and all it's configurations
+    #[allow(clippy::needless_pass_by_value)]
+    fn refresh(name: &str, config: Option<String>, terminal: &Term) -> Result<()> {
+        let args = run::Args {
+            profile: name.to_owned(),
+            dry: true,
+            refresh: true,
+            config: config.clone(),
+            ..Default::default()
+        };
+        let result = args.refresh();
+        terminal.clear_last_lines(1)?;
+        if let Err(e) = result {
+            eprintln!("{}", style(format!("Failed to refresh {name}: {e}")).red());
+        }
+        if config.is_none()
+            && let Ok(profile) = store::load::<Profile, profile::Error>(name, Object::Profile)
+            && let Some(configuration) = profile.configuration
+        {
+            for (conf, _) in configuration {
+                println!("Refreshing {} ({conf})", style(&name).bold());
+                Self::refresh(name, Some(conf), terminal)?;
+            }
+        }
+        Ok(())
+    }
+
     pub fn run(self) -> Result<()> {
         if self.seccomp {
             syscalls::clean_database()?;
@@ -68,8 +95,9 @@ impl Args {
                 }
                 Ok(())
             })?;
-        } else if self.profile.is_none() {
-            for hash in fs::read_dir(CACHE_DIR.join("run"))?.filter_map(Result::ok) {
+            fs::remove_dir_all(RUNTIME_DIR.join("antimony"))?;
+        } else if self.profile.is_none() && let Ok(iter) = fs::read_dir(CACHE_DIR.join("run")) {
+            for hash in iter.filter_map(Result::ok) {
                 let saved: Set<String> = fs::read_dir(hash.path())?
                     .filter_map(Result::ok)
                     .filter_map(|f| f.file_name().into_string().ok())
@@ -100,7 +128,7 @@ impl Args {
             let mut args = self
                 .passthrough
                 .map_or_else(run::Args::default, |passthrough| {
-                    run_vec(&profile, passthrough)
+                    run::Args::from_vec(&profile, passthrough)
                 });
 
             args.refresh = true;
@@ -110,45 +138,27 @@ impl Args {
 
         // If not dry, repopulate the cache.
         } else if !self.dry {
-            let profiles = installed_profiles()?;
-            let terminal = Term::stdout();
-            profiles.into_iter().try_for_each(|name| -> Result<()> {
-                println!("Refreshing {}", style(&name).bold());
-
-                let args = run::Args {
-                    profile: name.clone(),
-                    dry: true,
-                    refresh: true,
-                    ..Default::default()
-                };
-                let refresh = args.refresh();
-                terminal.clear_last_lines(1)?;
-                if let Err(e) = refresh {
-                    eprintln!("{}", style(format!("Failed to refresh {name}: {e}")).red());
-                }
-                if let Ok(profile) = store::load::<Profile, profile::Error>(&name, Object::Profile)
-                    && let Some(configuration) = profile.configuration
-                {
-                    for (conf, _) in configuration {
-                        println!("Refreshing {} ({conf})", style(&name).bold());
-
-                        let args = run::Args {
-                            profile: name.clone(),
-                            dry: true,
-                            refresh: true,
-                            config: Some(conf.clone()),
-                            ..Default::default()
-                        };
-                        let refresh = args.refresh();
-                        terminal.clear_last_lines(1)?;
-                        if let Err(e) = refresh {
-                            eprintln!(
-                                "{}",
-                                style(format!("Failed to refresh {name} ({conf}): {e}")).red()
-                            );
+            let bin = HOME_PATH.join(".local").join("bin");
+            let profiles: Vec<String> = fs::read_dir(bin)?
+                .filter_map(|file| {
+                    if let Ok(file) = file {
+                        let file = file.path();
+                        if let Ok(dest) = fs::read_link(&file)
+                            && dest.ends_with("antimony")
+                            && let Some(name) = file.file_name()
+                        {
+                            let name = name.to_string_lossy();
+                            return Some(name.into_owned());
                         }
                     }
-                }
+                    None
+                })
+                .collect();
+            let terminal = Term::stdout();
+
+            profiles.into_iter().try_for_each(|name| -> Result<()> {
+                println!("Refreshing {}", style(&name).bold());
+                Self::refresh(&name, None, &terminal)?;
                 Ok(())
             })?;
 
@@ -158,28 +168,4 @@ impl Args {
         }
         Ok(())
     }
-}
-
-/// Get integrated profiles by polling ~/.local/bin for antimony symlinks.
-///
-/// ## Errors
-/// If we cannot read the bin directory.
-pub fn installed_profiles() -> Result<Vec<String>> {
-    let bin = HOME_PATH.join(".local").join("bin");
-    let profiles = fs::read_dir(bin)?
-        .filter_map(|file| {
-            if let Ok(file) = file {
-                let file = file.path();
-                if let Ok(dest) = fs::read_link(&file)
-                    && dest.ends_with("antimony")
-                    && let Some(name) = file.file_name()
-                {
-                    let name = name.to_string_lossy();
-                    return Some(name.into_owned());
-                }
-            }
-            None
-        })
-        .collect();
-    Ok(profiles)
 }

@@ -15,7 +15,7 @@ use clap::{Parser, ValueHint};
 use dashmap::mapref::one::RefMut;
 use heck::ToTitleCase;
 use nix::{
-    errno::{self, Errno},
+    errno::Errno,
     libc::{EPERM, PR_SET_SECCOMP},
     poll::{PollFd, PollFlags, PollTimeout, poll},
     sys::{
@@ -35,8 +35,6 @@ use seccomp::{notify::Pair, syscall::Syscall};
 use signal_hook::{consts, flag};
 use spawn::{Spawner, StreamMode};
 use std::{
-    error,
-    fmt::{self, Display},
     fs, io,
     os::{
         fd::{AsFd, AsRawFd, OwnedFd},
@@ -50,42 +48,6 @@ use std::{
     thread,
     time::Duration,
 };
-
-/// Monitor Errors
-#[derive(Debug)]
-pub enum Error {
-    /// Errors relating to setting up the socket or reading/writing to the database.
-    Io(io::Error),
-
-    /// Generic Errno errors.
-    Errno(errno::Errno),
-}
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Io(e) => write!(f, "I/O Error: {e}"),
-            Self::Errno(e) => write!(f, "{e}"),
-        }
-    }
-}
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            Self::Io(e) => Some(e),
-            Self::Errno(e) => Some(e),
-        }
-    }
-}
-impl From<io::Error> for Error {
-    fn from(value: io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-impl From<errno::Errno> for Error {
-    fn from(value: errno::Errno) -> Self {
-        Self::Errno(value)
-    }
-}
 
 #[derive(Parser, Default)]
 #[command(name = "Antimony-Monitor")]
@@ -335,7 +297,7 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
     .output(StreamMode::Pipe)
     .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
     .spawn()?.output_all()?;
-    Ok(String::from(out.strip_suffix('\n').unwrap_or(&out)))
+    Ok(out.trim().to_owned())
 }
 
 /// A thread worker for listening on the Kernel FD, and storing data on used syscalls

@@ -4,7 +4,7 @@
 use crate::{
     cli::{Cli, Command},
     shared::{
-        create_parent,
+        create_parent, create_path,
         env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
         profile::Profile,
         remove_file,
@@ -462,8 +462,8 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
     // path in /usr/bin is given.
     info!("Creating symlink in ~/.local/bin");
     let local = HOME_PATH.join(".local").join("bin");
-    match fs::create_dir_all(&local) {
-        Ok(()) => {
+    match create_path(local.as_path()) {
+        Ok(true) => {
             println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
             to launch sandboxed applications from the command line without the explicit path.");
         }

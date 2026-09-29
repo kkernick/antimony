@@ -1,13 +1,16 @@
 //! Reset a user profile back to the system default.
 #![allow(clippy::missing_errors_doc, dead_code)]
 
-use crate::shared::{
-    Set, confirm,
-    env::AT_HOME,
-    feature::Feature,
-    privileged,
-    profile::Profile,
-    store::{Object, SYSTEM_STORE, USER_STORE},
+use crate::{
+    confirm,
+    shared::{
+        Set,
+        env::AT_HOME,
+        feature::Feature,
+        privileged,
+        profile::Profile,
+        store::{Object, SYSTEM_STORE, USER_STORE},
+    },
 };
 use anyhow::Result;
 use clap::ValueHint;
@@ -36,7 +39,7 @@ pub struct Args {
 impl Args {
     pub fn run(self) -> Result<()> {
         if self.seccomp {
-            if privileged()? {
+            if privileged() {
                 as_effective!({ fs::remove_dir_all(AT_HOME.join("seccomp")) })?;
                 info!("Deleted");
                 return Ok(());
@@ -62,19 +65,19 @@ impl Args {
                 USER_STORE.borrow().remove(&name, table)?;
             } else if user {
                 if self.yes
-                    || confirm(&format!(
-                        "{name} is a user-created {kind}. There is no system default to reset to. Are you sure you want to remove it",
-                    ))?
+                    || confirm!(
+                        "{name} is a user-created {kind}. There is no system default to reset to. Are you sure you want to remove it"
+                    )?
                 {
                     println!("Goodbye, {name}!");
                     USER_STORE.borrow().remove(&name, table)?;
                 }
             } else if system && name != "default" {
-                if privileged()?
+                if privileged()
                     && (self.yes
-                        || confirm(&format!(
-                            "{name} is a system {kind}. Are you sure you want to remove it",
-                        ))?)
+                        || confirm!(
+                            "{name} is a system {kind}. Are you sure you want to remove it"
+                        )?)
                 {
                     println!("Deleting system {kind}");
                     SYSTEM_STORE.borrow().remove(&name, table)?;

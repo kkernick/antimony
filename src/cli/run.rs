@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc, dead_code)]
 
 use crate::{
+    cli::{self, Command},
     fab::localize_home,
     setup::{self, setup},
     shared::{
@@ -19,12 +20,12 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
-use clap::ValueHint;
+use clap::{Parser, ValueHint};
 use heck::ToTitleCase;
 use nix::{errno::Errno, sys::signal::Signal};
 use spawn::{HandleError, Spawner, StreamMode};
 use std::{borrow::Cow, env, fs, thread, time::Duration};
-use user::as_effective;
+use user::{Mode, as_effective};
 
 #[derive(clap::Args, Default)]
 #[allow(clippy::struct_excessive_bools)]
@@ -280,6 +281,23 @@ impl Args {
     pub fn refresh(self) -> Result<()> {
         self.run_deferred(true)
     }
+
+    /// Create run arguments from subcommand passthrough.
+    pub fn from_vec(profile: &str, mut passthrough: Vec<String>) -> Self {
+        let mut command: Vec<String> = vec!["antimony", "run", profile]
+            .into_iter()
+            .map(String::from)
+            .collect();
+
+        command.append(&mut passthrough);
+        let cli = super::Cli::parse_from(command);
+        match cli.command {
+            Command::Run(args) => args,
+
+            #[allow(clippy::unreachable, reason = "We construct the subcommand with run")]
+            _ => unreachable!(),
+        }
+    }
 }
 
 /// Wait for a filesystem to be mounted.
@@ -309,16 +327,16 @@ pub fn wait_for_doc() {
 pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
     // Add landlock
     if let Some(policy) = &info.policy {
-        let landlock_path = info.sys_dir.join("ll.toml");
+        let landlock_path = info.sys_dir.join("ll.policy");
         if !landlock_path.exists() {
-            let policy_string = toml::to_string(&policy)?;
+            let policy_string = bitcode::serialize(&policy)?;
             as_effective!(fs::write(&landlock_path, policy_string))?;
         }
         let utility = utility("landlock");
         #[rustfmt::skip]
         info.handle.args_i([
-            "--ro-bind", &landlock_path.to_string_lossy(), "/landlock.toml",
-            "--setenv", "LANDLOCK_POLICY", "/landlock.toml",
+            "--ro-bind", &landlock_path.to_string_lossy(), "/landlock.policy",
+            "--setenv", "LANDLOCK_POLICY", "/landlock.policy",
             "--ro-bind", &utility, &utility,
             &utility
         ]);
@@ -468,24 +486,46 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                 {
                     // Alert the user.
                     let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
-                    Spawner::abs(utility("notify")).mode(user::Mode::Real)
+                    #[rustfmt::skip]
+                    let action = Spawner::abs(utility("notify"))
+                        .mode(user::Mode::Real)
                         .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                         .output(StreamMode::Pipe)
                         .args([
-                        "--title",
-                        &format!("Sandbox Error: {}", info.name.to_title_case()),
-                        "--body",
-                        &format!(
-                            "The sandbox terminated with <b>{}</b>. This may indicate a missing library or resource, incomplete SECCOMP filter, or invalid configuration.",
-                            if error_name == Errno::UnknownErrno {
-                                format!("exit code: {code}")
-                            } else {
-                                format!("{error_name}")
-                            }
-                        ),
-                        "--timeout", "5000",
-                        "--urgency", "critical",
-                    ]).spawn()?.output_all()?;
+                            "--title", &format!("Sandbox Error: {}", info.name.to_title_case()),
+                            "--body", &format!(
+                                "The sandbox terminated with <b>{}</b>. What would you like to do?",
+                                if error_name == Errno::UnknownErrno {
+                                    format!("exit code: {code}")
+                                } else {
+                                    format!("{error_name}")
+                                }
+                            ),
+                            "--timeout", "5000",
+                            "--action", "Refresh",
+                            "--action", "Retry",
+                            "--action", "Abort",
+                        ])
+                        .spawn()?.output_all()?;
+
+                    let action = action.trim();
+                    if action == "Refresh" {
+                        user::set(Mode::Real)?;
+                        return cli::refresh::Args {
+                            profile: Some(info.name.clone()),
+                            ..Default::default()
+                        }
+                        .run();
+                    } else if action == "Retry" {
+                        user::set(Mode::Real)?;
+                        return cli::run::Args {
+                            profile: info.name.clone(),
+                            ..Default::default()
+                        }
+                        .run();
+                    } else if action == "Abort" {
+                        return Err(anyhow!("Sandbox terminated!"));
+                    }
                 }
                 Ok(())
             }
