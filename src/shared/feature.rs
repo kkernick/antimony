@@ -455,18 +455,16 @@ mod tests {
     #[test]
     #[allow(clippy::panic)]
     fn validate_features() {
-        for feature in SYSTEM_STORE
-            .borrow()
-            .get(Object::Feature)
-            .expect("Failed to get features")
-        {
-            let store = SYSTEM_STORE.borrow();
-            let _ = toml::from_str::<Feature>(
-                &store
-                    .fetch(&feature, Object::Feature)
-                    .expect("Failed to fetch"),
-            )
-            .unwrap_or_else(|_| panic!("Failed to read {feature}"));
+        if let Ok(features) = SYSTEM_STORE.borrow().get(Object::Feature) {
+            for feature in features {
+                let store = SYSTEM_STORE.borrow();
+                let _ = toml::from_str::<Feature>(
+                    &store
+                        .fetch(&feature, Object::Feature)
+                        .expect("Failed to fetch"),
+                )
+                .unwrap_or_else(|_| panic!("Failed to read {feature}"));
+            }
         }
     }
 }

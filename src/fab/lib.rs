@@ -96,6 +96,10 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
         create_parent(shared_path.as_path())?;
         if let Err(e) = fs::copy(canon.as_ref(), shared_path)
             && e.kind() != ErrorKind::AlreadyExists
+
+            // Permission errors can be hit if the destination already exists, but doesn't have
+            // write permission. Since the file already exists, we can ignore these.
+            && (e.kind() != ErrorKind::PermissionDenied || fs::metadata(shared_path).is_err())
         {
             return Err(e.into());
         }

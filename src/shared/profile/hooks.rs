@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
 use std::borrow::Cow;
 use thiserror::Error;
+use user::Mode;
 
 /// An error for hooks.
 #[derive(Debug, Error)]
@@ -155,6 +156,7 @@ impl Hook {
                     }
                     Type::Profile => unreachable!(),
                 }
+                .mode(Mode::Real)
                 .preserve_env(self.env.unwrap_or(false))
                 .env("ANTIMONY_NAME", name)
                 .env("ANTIMONY_CACHE", cache)
@@ -174,7 +176,7 @@ impl Hook {
                 .args(["run", self.content.as_str()])
                 .new_privileges(true)
                 .preserve_env(true)
-                .mode(user::Mode::Original),
+                .mode(Mode::Original),
         }
         .name(self.name.get_or_insert_with(|| "hook".to_owned()));
         if let Some(arguments) = self.arguments.take() {

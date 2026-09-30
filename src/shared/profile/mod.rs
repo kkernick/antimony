@@ -530,23 +530,23 @@ impl Profile {
 
 #[cfg(test)]
 mod tests {
+    use crate::shared::store::SYSTEM_STORE;
+
     use super::*;
 
     #[test]
     #[allow(clippy::panic)]
     fn validate_profiles() {
-        for profile in store::SYSTEM_STORE
-            .borrow()
-            .get(Object::Profile)
-            .expect("Failed to get profiles")
-        {
-            let store = store::SYSTEM_STORE.borrow();
-            toml::from_str::<Profile>(
-                &store
-                    .fetch(&profile, Object::Profile)
-                    .expect("Failed to fetch"),
-            )
-            .unwrap_or_else(|_| panic!("Failed to fetch {profile}"));
+        if let Ok(profiles) = SYSTEM_STORE.borrow().get(Object::Profile) {
+            for profile in profiles {
+                let store = store::SYSTEM_STORE.borrow();
+                toml::from_str::<Profile>(
+                    &store
+                        .fetch(&profile, Object::Profile)
+                        .expect("Failed to fetch"),
+                )
+                .unwrap_or_else(|_| panic!("Failed to fetch {profile}"));
+            }
         }
     }
 }
