@@ -1,6 +1,6 @@
 name = "flatpak-spawn"
 description = "Use Antimony-Spawn to permit sandboxes to run other applications under Antimony."
-binaries = ["$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn", "bwrap", "bash"]
+binaries = ["$AT_HOME/utilities/antimony-spawn=/usr/local/bin/flatpak-spawn", "bwrap", "bash"]
 namespaces = ["User"]
 
 [files.platform]

@@ -8,7 +8,7 @@ namespaces = ["Pid"]
 ro = ["/run/udev/data"]
 
 [files.links]
-"/usr/bin/missioncenter-magpie" = "/usr/bin/missioncenter-magpie-glibc"
+"/usr/bin/missioncenter-magpie" = "/usr/local/bin/missioncenter-magpie-glibc"
 
 [libraries]
 files = ["libdrm*"]

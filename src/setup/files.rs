@@ -40,7 +40,15 @@ fn get_x(
     if let Some(policy) = policy
         && let Some(parent) = Path::new(dst).parent()
     {
-        update_policy(parent, policy, [Filesystem::Execute, Filesystem::ReadFile]);
+        update_policy(
+            parent,
+            policy,
+            [
+                Filesystem::Execute,
+                Filesystem::ReadFile,
+                Filesystem::ReadDir,
+            ],
+        );
     }
     Ok(())
 }
@@ -87,7 +95,9 @@ fn lockdown_file(
         policy
             .paths
             .get_or_insert_default()
-            .insert(parent.to_string_lossy().into_owned(), allowed);
+            .entry(parent.to_string_lossy().into_owned())
+            .or_default()
+            .extend(allowed);
     }
     Ok(())
 }
@@ -118,10 +128,15 @@ pub fn add_file(
         if op == FileMode::ReadWrite {
             allowed.extend([Filesystem::WriteFile, Filesystem::Truncate]);
         }
+        if op == FileMode::Executable {
+            allowed.extend([Filesystem::ReadDir, Filesystem::Execute]);
+        }
         policy
             .paths
             .get_or_insert_default()
-            .insert(parent.to_string_lossy().into_owned(), allowed);
+            .entry(parent.to_string_lossy().into_owned())
+            .or_default()
+            .extend(allowed);
     }
     Ok(())
 }

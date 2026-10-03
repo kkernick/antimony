@@ -463,6 +463,15 @@ pub fn collect(profile: &Profile, name: &str, instance: &Temp) -> Result<ParseRe
     Ok(ret)
 }
 
+pub fn update_dirs(str: &str, directories: &mut Set<String>) {
+    let path = Path::new(str);
+    if path.is_dir() {
+        directories.insert(str.to_owned());
+    } else if let Some(parent) = path.parent() {
+        directories.insert(parent.to_string_lossy().into_owned());
+    }
+}
+
 /// Fabricate the binaries.
 #[allow(
     clippy::missing_panics_doc,
@@ -481,38 +490,34 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     let mut directories =
         Set::from_iter(["/usr/bin", "/usr/sbin", "/bin", "/sbin"].map(String::from));
 
-    let mut update_dirs = |str: &str| {
-        let path = Path::new(str);
-        if path.is_dir() {
-            directories.insert(str.to_owned());
-        } else if let Some(parent) = path.parent() {
-            directories.insert(parent.to_string_lossy().into_owned());
-        }
-    };
-
     let skip = binaries.contains("/usr/bin");
     if skip {
         info.profile.libraries.get_or_insert_default().no_sof = Some(true);
         binaries.insert(info.profile.app_path(info.name).into_owned());
 
-        #[rustfmt::skip]
-        info.handle.args_i([
-            "--overlay-src", "/usr/bin",
-            "--tmp-overlay", "/usr/bin",
-
-            "--overlay-src", "/usr/sbin",
-            "--tmp-overlay", "/usr/sbin",
-
-            "--symlink", "/usr/bin", "/bin",
-            "--symlink", "/usr/sbin", "/sbin",
-        ]);
+        for root in &directories {
+            if let Ok(src) = fs::read_link(root)
+                && let Ok(src) = src.canonicalize()
+            {
+                let str = src.to_string_lossy();
+                if !directories.contains(str.as_ref()) {
+                    info.handle.args_i(["--ro-bind", &str, &str]);
+                    if let Some(policy) = info.policy {
+                        update_policy(&src, policy, allowed.clone());
+                    }
+                }
+                info.handle.args_i(["--symlink", &str, root]);
+            } else {
+                info.handle.args_i(["--ro-bind", root, root]);
+            }
+        }
 
         for binary in &binaries {
             if let Ok(localized) = localize_path(binary, false) {
                 match localized {
                     (Some(src), dest) if !src.starts_with("/usr/bin") => {
                         info.handle.args_i(["--ro-bind", &src, &dest]);
-                        update_dirs(&dest);
+                        update_dirs(&dest, &mut directories);
                     }
                     (None, dest) => {
                         if let Ok(resolved) = which(binary) {
@@ -530,7 +535,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                         } else {
                             warn!("Could not resolve binary: {binary}");
                         }
-                        update_dirs(&dest);
+                        update_dirs(&dest, &mut directories);
                     }
                     _ => {}
                 }
@@ -576,7 +581,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                 });
         }
     } else {
-        update_dirs(&localize_path(&info.profile.app_path(info.name), false)?.1);
+        update_dirs(
+            &localize_path(&info.profile.app_path(info.name), false)?.1,
+            &mut directories,
+        );
         info.handle.args_i(["--dir", "/usr/bin"]);
         let bin_cache = format!("{}-bin", info.instance.name());
         let parsed = if let Ok(Some(parsed)) = get_cache(&bin_cache, Object::Binaries) {

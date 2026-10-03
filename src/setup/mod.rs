@@ -271,7 +271,7 @@ pub fn setup<'a>(
             "--dir", "/home/antimony",
             "--setenv", "USER", "antimony",
             "--setenv", "HOME", "/home/antimony",
-            "--setenv", "PATH", "/usr/bin",
+            "--setenv", "PATH", "/usr/local/bin:/usr/bin",
             "--setenv", "DESKTOP_FILE_ID", &profile.id(&name),
             "--setenv", "XDG_RUNTIME_DIR", RUNTIME_STR.as_str(),
         ]);
@@ -308,7 +308,6 @@ pub fn setup<'a>(
                 ],
             );
             update_policy("/tmp", &mut policy, RW);
-
             (Some(policy), false)
         }
 

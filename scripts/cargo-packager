@@ -19,3 +19,5 @@ fpm -t deb \
 
 fpm -t rpm --depends libseccomp --depends sqlite --depends dbus-devel --version $VERSION \
   ./config/config.d/fedora.toml=/etc/antimony.d/fedora.toml
+
+mv antimony-sandbox* generated

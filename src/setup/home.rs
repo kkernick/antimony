@@ -185,7 +185,9 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             policy
                 .paths
                 .get_or_insert_default()
-                .insert("/home/antimony".to_owned(), permissions);
+                .entry("/home/antimony".to_owned())
+                .or_default()
+                .extend(permissions);
         }
         Ok(Some(home_str.into_owned()))
     } else {
