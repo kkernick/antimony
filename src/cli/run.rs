@@ -485,47 +485,48 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                         .map_or_else(|| true, |codes| codes.contains(&code))
                 {
                     // Alert the user.
-                    let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
-                    #[rustfmt::skip]
-                    let action = Spawner::abs(utility("notify"))
-                        .mode(user::Mode::Real)
-                        .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                        .output(StreamMode::Pipe)
-                        .args([
-                            "--title", &format!("Sandbox Error: {}", info.name.to_title_case()),
-                            "--body", &format!(
-                                "The sandbox terminated with <b>{}</b>. What would you like to do?",
-                                if error_name == Errno::UnknownErrno {
-                                    format!("exit code: {code}")
-                                } else {
-                                    format!("{error_name}")
-                                }
-                            ),
-                            "--timeout", "5000",
-                            "--action", "Refresh",
-                            "--action", "Retry",
-                            "--action", "Abort",
-                        ])
-                        .spawn()?.output_all()?;
+                    if notify::can_notify() {
+                        let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
+                        #[rustfmt::skip]
+                        let action = Spawner::abs(utility("notify"))
+                            .mode(user::Mode::Real)
+                            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                            .output(StreamMode::Pipe)
+                            .args([
+                                "--title", &format!("Sandbox Error: {}", info.name.to_title_case()),
+                                "--body", &format!(
+                                    "The sandbox terminated with <b>{}</b>. What would you like to do?",
+                                    if error_name == Errno::UnknownErrno {
+                                        format!("exit code: {code}")
+                                    } else {
+                                        format!("{error_name}")
+                                    }
+                                ),
+                                "--timeout", "5000",
+                                "--action", "Refresh",
+                                "--action", "Retry",
+                                "--action", "Abort",
+                            ])
+                            .spawn()?.output_all()?;
 
-                    let action = action.trim();
-                    if action == "Refresh" {
-                        user::set(Mode::Real)?;
-                        return cli::refresh::Args {
-                            profile: Some(info.name.clone()),
-                            ..Default::default()
+                        let action = action.trim();
+                        if action == "Refresh" {
+                            user::set(Mode::Real)?;
+                            return cli::refresh::Args {
+                                profile: Some(info.name.clone()),
+                                ..Default::default()
+                            }
+                            .run();
+                        } else if action == "Retry" {
+                            user::set(Mode::Real)?;
+                            return cli::run::Args {
+                                profile: info.name.clone(),
+                                ..Default::default()
+                            }
+                            .run();
                         }
-                        .run();
-                    } else if action == "Retry" {
-                        user::set(Mode::Real)?;
-                        return cli::run::Args {
-                            profile: info.name.clone(),
-                            ..Default::default()
-                        }
-                        .run();
-                    } else if action == "Abort" {
-                        return Err(anyhow!("Sandbox terminated!"));
                     }
+                    return Err(anyhow!("Sandbox terminated!"));
                 }
                 Ok(())
             }

@@ -9,11 +9,7 @@ use crate::shared::{
 use anyhow::{Result, anyhow};
 use clap::ValueHint;
 use nix::unistd::getcwd;
-use std::{
-    fs::{self, File},
-    io,
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
 #[derive(clap::Args)]
 pub struct Args {
@@ -47,7 +43,7 @@ impl Args {
                     None => getcwd()?.join("syscalls.db"),
                 };
 
-                io::copy(&mut File::open(db)?, &mut File::create(&dest)?)?;
+                fs::copy(db, &dest)?;
                 println!("Exported to {}", dest.display());
             } else {
                 return Err(anyhow!("No database exists!"));

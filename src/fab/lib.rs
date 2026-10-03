@@ -93,15 +93,19 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
         // This reduces redundancy between profiles, and since shared exists
         // in the CACHE_DIR, hard links will work.
         let shared_path = &cache.join("shared").join(&library[1..]);
-        create_parent(shared_path.as_path())?;
-        if let Err(e) = fs::copy(canon.as_ref(), shared_path)
-            && e.kind() != ErrorKind::AlreadyExists
 
-            // Permission errors can be hit if the destination already exists, but doesn't have
-            // write permission. Since the file already exists, we can ignore these.
-            && (e.kind() != ErrorKind::PermissionDenied || fs::metadata(shared_path).is_err())
+        // Copy will always overwrite, so we need to check if it exists
+        if !shared_path.exists()
+            && let Err(e) = fs::copy(canon.as_ref(), shared_path)
         {
-            return Err(e.into());
+            // Only create the parent if we actually need to.
+            if e.kind() == ErrorKind::NotFound {
+                log::debug!("Creating parent for {}", shared_path.display());
+                create_parent(shared_path.as_path())?;
+                fs::copy(canon.as_ref(), shared_path)?;
+            } else {
+                return Err(e.into());
+            }
         }
         fs::hard_link(shared_path, &sof_path)?;
     }

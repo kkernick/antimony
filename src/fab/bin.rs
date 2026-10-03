@@ -22,7 +22,6 @@ use crate::{
 use anyhow::{Context, Result};
 use landlock::ruleset::Filesystem;
 use log::{debug, warn};
-use path_clean::clean;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -155,24 +154,18 @@ fn parse(
 
     let mut ret = ParseReturn::new();
 
-    let dest = || -> Result<String> {
-        let mut dest = fs::read_link(resolved.as_ref())?;
-        if !dest.is_absolute()
-            && let Some(parent) = Path::new(resolved.as_ref()).parent()
-        {
-            dest = parent.join(dest);
-        }
-
-        let mut dest = clean(dest);
-        if !dest.exists() {
-            dest = dest.canonicalize()?;
-        }
-        Ok(resolve_bin(&dest.to_string_lossy())?.into_owned())
-    }();
+    let dest = if Path::new(resolved.as_ref()).is_symlink()
+        && let Ok(dest) = fs::canonicalize(resolved.as_ref())
+        && let Ok(resolved) = resolve_bin(&dest.to_string_lossy())
+    {
+        Some(resolved.into_owned())
+    } else {
+        None
+    };
 
     // Ensure it's a valid binary.
     let t = {
-        if let Ok(dest) = dest {
+        if let Some(dest) = dest {
             if let Some(parsed) = parse(&dest, instance, done, true)?.parse {
                 ret.merge(&parsed);
             }
@@ -341,10 +334,12 @@ fn handle_localize(
                 }
 
                 Type::Link => {
-                    let link = fs::read_link(src.as_ref())?;
-                    let (_, ldst) = localize_path(&link.to_string_lossy(), home)?;
+                    let (_, ldst) =
+                        localize_path(&fs::canonicalize(src.as_ref())?.to_string_lossy(), home)?;
+
+                    debug!("Localizing Link named {file} (into) {src} at {ldst}");
                     ret.merge(&handle_localize(&ldst, instance, home, false, done)?);
-                    ret.symlinks.insert((dst, ldst));
+                    ret.symlinks.insert((src.into_owned(), ldst));
                 }
                 _ => {}
             }
@@ -551,16 +546,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
             links
                 .into_iter()
-                .filter_map(|link| {
-                    let target = fs::read_link(&link).ok()?;
-                    let link_parent = Path::new(&link).parent()?;
-                    let resolved = if target.is_absolute() {
-                        target
-                    } else {
-                        link_parent.join(target)
-                    };
-                    fs::canonicalize(&resolved).ok()
-                })
+                .filter_map(|link| fs::canonicalize(&link).ok())
                 .filter(|dest| {
                     !dest.starts_with("/usr/bin/")
                         && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
@@ -602,11 +588,12 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
         let elf_binaries = Arc::new(ThreadSet::default());
 
+        log::trace!("{parsed:?}");
+
         // ELF files need to be processed by the library fabricator,
         // to use LDD on depends.
         for elf in parsed.elf {
             info.handle.args_i(["--ro-bind", &elf, &elf]);
-
             elf_binaries.insert(elf);
         }
 
@@ -639,15 +626,16 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             });
         }
 
-        for (link, dest) in parsed.symlinks {
-            if !elf_binaries.contains(&dest) {
-                info.handle.args_i(["--ro-bind", &dest, &dest]);
-                elf_binaries.insert(dest.clone());
+        for (link, src) in parsed.symlinks {
+            if !elf_binaries.contains(&src) {
+                info.handle.args_i(["--ro-bind", &src, &src]);
+                elf_binaries.insert(src.clone());
             }
             if !in_lib(&link) {
-                info.handle.args_i(["--symlink", &dest, &link]);
+                info.handle.args_i(["--symlink", &src, &link]);
                 if let Some(policy) = info.policy {
                     update_policy(link, policy, allowed.clone());
+                    update_policy(src, policy, allowed.clone());
                 }
             }
         }

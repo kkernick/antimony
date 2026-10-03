@@ -51,7 +51,8 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                 let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
                                 let mut buffer = [0; 1024];
                                 let title = args.name.to_title_case();
-                                let mut prompt = Spawner::abs(utility("notify"))
+                                if notify::can_notify() {
+                                    let mut prompt = Spawner::abs(utility("notify"))
                                     .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                                     .output(StreamMode::Pipe)
                                     .args([
@@ -74,42 +75,45 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                     ])
                                     .spawn()?;
 
-                                while prompt.alive()?.is_some() {
-                                    match inotify.read_events(&mut buffer) {
-                                        Ok(events) => {
-                                            for event in events {
-                                                if event.wd == wd {
-                                                    break;
+                                    while prompt.alive()?.is_some() {
+                                        match inotify.read_events(&mut buffer) {
+                                            Ok(events) => {
+                                                for event in events {
+                                                    if event.wd == wd {
+                                                        break;
+                                                    }
                                                 }
                                             }
+                                            Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                                                continue;
+                                            }
+                                            _ => return Err(anyhow!("Error while reading events")),
                                         }
-                                        Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                                            continue;
-                                        }
-                                        _ => return Err(anyhow!("Error while reading events")),
                                     }
-                                }
 
-                                inotify.watches().remove(wd)?;
+                                    inotify.watches().remove(wd)?;
 
-                                if prompt.alive()?.is_none() {
-                                    let choice = prompt.output_all()?;
-                                    match choice.as_str() {
-                                        "Ignore\n" => cont = true,
-                                        "Unlock\n" => {
-                                            File::open(&home_dir)?.unlock()?;
-                                            cont = true;
+                                    if prompt.alive()?.is_none() {
+                                        let choice = prompt.output_all()?;
+                                        match choice.as_str() {
+                                            "Ignore\n" => cont = true,
+                                            "Unlock\n" => {
+                                                File::open(&home_dir)?.unlock()?;
+                                                cont = true;
+                                            }
+                                            "Skip\n" => return Ok(None),
+                                            "Overlay\n" => {
+                                                policy = HomePolicy::Overlay;
+                                                cont = true;
+                                            }
+                                            "Abort\n" => return error,
+                                            _ => {}
                                         }
-                                        "Skip\n" => return Ok(None),
-                                        "Overlay\n" => {
-                                            policy = HomePolicy::Overlay;
-                                            cont = true;
-                                        }
-                                        "Abort\n" => return error,
-                                        _ => {}
+                                    } else {
+                                        prompt.signal(SIGKILL)?;
                                     }
                                 } else {
-                                    prompt.signal(SIGKILL)?;
+                                    return error;
                                 }
                             }
                             HomeLockPolicy::Abort => return error,

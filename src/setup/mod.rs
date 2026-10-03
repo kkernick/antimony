@@ -159,27 +159,31 @@ pub fn setup<'a>(
             );
             as_effective!(fs::remove_dir_all(&sys_dir))?;
         } else if sys_dir == refresh_sof {
-            #[rustfmt::skip]
-            let action = Spawner::abs(utility("notify"))
-                .mode(user::Mode::Real)
-                .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                .output(StreamMode::Pipe)
-                .args([
-                    "--title", &format!("Already Refreshed: {}", name.to_title_case()),
-                    "--body", "An existing deferred refresh has already been run on this profile, \
-                               and both the original instance and deferred instance still have an active instance running. \
-                               What would you like to do?",
-                    "--action", "Override",
-                    "--action", "Abort",
-                ])
-                .spawn()?
-                .output_all()?;
+            if notify::can_notify() {
+                #[rustfmt::skip]
+                let action = Spawner::abs(utility("notify"))
+                    .mode(user::Mode::Real)
+                    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                    .output(StreamMode::Pipe)
+                    .args([
+                        "--title", &format!("Already Refreshed: {}", name.to_title_case()),
+                        "--body", "An existing deferred refresh has already been run on this profile, \
+                                   and both the original instance and deferred instance still have an active instance running. \
+                                   What would you like to do?",
+                        "--action", "Override",
+                        "--action", "Abort",
+                    ])
+                    .spawn()?
+                    .output_all()?;
 
-            let action = action.trim();
-            if action == "Override" {
-                as_effective!(fs::remove_dir_all(&sys_dir))?;
-                sys_dir = refresh_sof;
-                instances = refresh_dir;
+                let action = action.trim();
+                if action == "Override" {
+                    as_effective!(fs::remove_dir_all(&sys_dir))?;
+                    sys_dir = refresh_sof;
+                    instances = refresh_dir;
+                } else {
+                    return Err(anyhow!("Already refreshed! Please close active instances!"));
+                }
             } else {
                 return Err(anyhow!("Already refreshed! Please close active instances!"));
             }
@@ -277,6 +281,7 @@ pub fn setup<'a>(
         // We need at least 10 for Unix.
         && abi >= 10
         && profile.landlock.unwrap_or(true)
+        && Path::new(&utility("landlock")).exists()
     {
         let out = sys_dir.join("ll.policy");
         if out.exists() {

@@ -15,7 +15,7 @@ cargo build --bin antimony_bench --bin antimony_build
 echo "Benchmarking"
 
 if [[ $1 == "bencher" ]]; then
-  $TARGET/debug/antimony_bench "${@:2}"
+  $TARGET/debug/antimony_bench setup "${@:2}"
 else
-  $TARGET/debug/antimony_bench "${@:1}"
+  $TARGET/debug/antimony_bench setup "${@:1}"
 fi

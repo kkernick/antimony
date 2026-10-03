@@ -463,7 +463,7 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
     info!("Creating symlink in ~/.local/bin");
     let local = HOME_PATH.join(".local").join("bin");
     match create_path(local.as_path()) {
-        Ok(true) => {
+        Ok(false) => {
             println!("Creating a local bin folder at ~/.local/bin. You may need to update your PATH if you want
             to launch sandboxed applications from the command line without the explicit path.");
         }
@@ -638,16 +638,20 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             .join("autostart")
             .join(profile.desktop(name).as_ref())
             .with_extension("desktop");
-        create_parent(autostart_path.as_path())?;
 
-        return match fs::copy(&out, autostart_path) {
-            Ok(_) => Ok(()),
-            Err(e) if e.kind() == ErrorKind::NotFound => Err(anyhow!(
-                "No desktop file to integrate in {}! You may need --create-desktop!",
-                out.display()
-            )),
-            Err(e) => Err(e.into()),
-        };
+        if !autostart_path.exists() || cmd.overwrite {
+            create_parent(autostart_path.as_path())?;
+            if let Err(e) = fs::copy(&out, autostart_path) {
+                return if e.kind() == ErrorKind::NotFound {
+                    Err(anyhow!(
+                        "No desktop file to integrate in {}! You may need --create-desktop!",
+                        out.display()
+                    ))
+                } else {
+                    Err(e.into())
+                };
+            }
+        }
     }
 
     Ok(())
