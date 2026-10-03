@@ -588,8 +588,6 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
         let elf_binaries = Arc::new(ThreadSet::default());
 
-        log::trace!("{parsed:?}");
-
         // ELF files need to be processed by the library fabricator,
         // to use LDD on depends.
         for elf in parsed.elf {

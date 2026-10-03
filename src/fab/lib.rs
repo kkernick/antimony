@@ -100,7 +100,6 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
         {
             // Only create the parent if we actually need to.
             if e.kind() == ErrorKind::NotFound {
-                log::debug!("Creating parent for {}", shared_path.display());
                 create_parent(shared_path.as_path())?;
                 fs::copy(canon.as_ref(), shared_path)?;
             } else {
