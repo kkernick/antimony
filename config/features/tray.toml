@@ -3,3 +3,4 @@ description = "Tray icons"
 
 [ipc]
 talks = ["org.kde.StatusNotifierWatcher"]
+owns = ["org.freedesktop.*"]

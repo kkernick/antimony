@@ -29,9 +29,20 @@ use std::{
     fs::{self, File},
     io::{self, BufRead, BufReader, Read, Seek},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, LazyLock},
 };
 use temp::Temp;
+
+/// System folders for binaries.
+pub static BINARY_ROOTS: [&str; 5] = [
+    "/usr/bin/",
+    "/bin/",
+    "/usr/sbin/",
+    "/sbin/",
+    "/usr/libexec/",
+];
+
+pub static SPLIT_ROOT: LazyLock<bool> = LazyLock::new(|| fs::read_link("/usr/sbin").is_ok());
 
 /// A `bilrost` struct for serializing.
 #[derive(bitcode::Encode, bitcode::Decode, Default)]
@@ -107,6 +118,12 @@ impl ParseReturn {
     }
 }
 
+/// Check if a given path is within the binary roots.
+#[must_use]
+pub fn in_bin(path: &str) -> bool {
+    BINARY_ROOTS.iter().any(|r| path.starts_with(r))
+}
+
 /// Resolve the path of a binary, canonicalized to /usr/bin.
 fn resolve_bin(path: &str) -> Result<Cow<'_, str>> {
     let resolved: Cow<'_, str> = if path.contains("..") {
@@ -144,11 +161,17 @@ fn parse(
         });
     }
 
-    if let Ok(Some(cache)) = get_cache::<Cache>(path, Object::Binaries) {
+    let path: Cow<'_, str> = if *SPLIT_ROOT {
+        Cow::Borrowed(path)
+    } else {
+        Cow::Owned(path.replace("/sbin/", "/bin/"))
+    };
+
+    if let Ok(Some(cache)) = get_cache::<Cache>(&path, Object::Binaries) {
         return Ok(cache);
     }
 
-    let Ok(resolved) = resolve_bin(path) else {
+    let Ok(resolved) = resolve_bin(&path) else {
         return Ok(Cache::default());
     };
 
@@ -170,7 +193,7 @@ fn parse(
                 ret.merge(&parsed);
             }
             if include_self {
-                if !dest.contains("bin")
+                if !in_bin(&dest)
                     && let Some(i) = dest.rfind('/')
                 {
                     ret.directories.insert(dest[..i].to_owned());
@@ -180,9 +203,9 @@ fn parse(
             }
             Type::Link
         } else {
-            if in_lib(path) {
+            if in_lib(&path) {
                 ROOTS.iter().for_each(|r| {
-                    if let Some(parent) = resolve_dir(path, r.as_ref())
+                    if let Some(parent) = resolve_dir(&path, r.as_ref())
                         && PathBuf::from(&parent).is_dir()
                     {
                         ret.directories.insert(parent);
@@ -216,6 +239,7 @@ fn parse(
             // LDD can't deal with them. Programs used in the script, however,
             // will be added if the themselves are ELF binaries.
             else if magic[0] == b'#' {
+                log::trace!("Shell Script: {resolved}");
                 if include_self {
                     ret.scripts.insert(resolved.to_string());
                 }
@@ -242,7 +266,7 @@ fn parse(
                         .map(|token| token.strip_prefix("#!").unwrap_or(token).to_owned()),
                 );
 
-                if resolved.starts_with("/usr/bin") {
+                if in_bin(&resolved) && !header.contains("python") {
                     #[rustfmt::skip]
                     let out: Set<_> = Spawner::abs(utility("dumper"))
                         .args([
@@ -250,7 +274,6 @@ fn parse(
                             "--path", &resolved,
                             "--instance", &instance.full().to_string_lossy(),
                             "--filter", "execve",
-                            "--timeout", "100"
                         ])
                         .output(StreamMode::Pipe)
                         .preserve_env(true)
@@ -259,7 +282,7 @@ fn parse(
                         .spawn()?
                         .output_all()?
                         .lines()
-                        .filter(|path| path.starts_with("/usr/bin") || in_lib(path))
+                        .filter(|path| in_bin(path) || in_lib(path))
                         .map(String::from)
                         .collect();
                     binaries.extend(out);
@@ -282,7 +305,7 @@ fn parse(
     };
 
     write_cache(
-        path,
+        &path,
         Cache {
             t,
             parse: Some(ret),
@@ -337,7 +360,6 @@ fn handle_localize(
                     let (_, ldst) =
                         localize_path(&fs::canonicalize(src.as_ref())?.to_string_lossy(), home)?;
 
-                    debug!("Localizing Link named {file} (into) {src} at {ldst}");
                     ret.merge(&handle_localize(&ldst, instance, home, false, done)?);
                     ret.symlinks.insert((src.into_owned(), ldst));
                 }
@@ -487,46 +509,51 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         Filesystem::ReadFile,
         Filesystem::ReadDir,
     ]);
-    let mut directories =
-        Set::from_iter(["/usr/bin", "/usr/sbin", "/bin", "/sbin"].map(String::from));
+    let mut directories: Set<_> = BINARY_ROOTS.iter().map(ToString::to_string).collect();
 
     let skip = binaries.contains("/usr/bin");
     if skip {
+        binaries.remove("/usr/bin");
         info.profile.libraries.get_or_insert_default().no_sof = Some(true);
         binaries.insert(info.profile.app_path(info.name).into_owned());
 
+        let mut roots = Set::default();
         for root in &directories {
-            if let Ok(src) = fs::read_link(root)
-                && let Ok(src) = src.canonicalize()
-            {
+            let path = Path::new(root.strip_suffix('/').unwrap_or(root));
+            if let Ok(mut src) = fs::read_link(path) {
+                if !src.is_absolute()
+                    && let Some(parent) = path.parent()
+                {
+                    src = parent.join(&src);
+                }
                 let str = src.to_string_lossy();
                 if !directories.contains(str.as_ref()) {
-                    info.handle.args_i(["--ro-bind", &str, &str]);
+                    info.handle
+                        .args_i(["--overlay-src", &str, "--tmp-overlay", &str]);
                     if let Some(policy) = info.policy {
                         update_policy(&src, policy, allowed.clone());
                     }
                 }
                 info.handle.args_i(["--symlink", &str, root]);
             } else {
-                info.handle.args_i(["--ro-bind", root, root]);
+                info.handle
+                    .args_i(["--overlay-src", root, "--tmp-overlay", root]);
+                roots.insert(root.clone());
             }
         }
 
         for binary in &binaries {
             if let Ok(localized) = localize_path(binary, false) {
                 match localized {
-                    (Some(src), dest) if !src.starts_with("/usr/bin") => {
+                    (Some(src), dest) if !in_bin(src.as_ref()) => {
                         info.handle.args_i(["--ro-bind", &src, &dest]);
                         update_dirs(&dest, &mut directories);
                     }
                     (None, dest) => {
                         if let Ok(resolved) = which(binary) {
-                            if dest == binary.as_str()
-                                && !resolved.starts_with("/usr/bin/")
-                                && !in_lib(resolved)
-                            {
+                            if dest == binary.as_str() && !in_bin(resolved) && !in_lib(resolved) {
                                 info.handle.args_i(["--ro-bind", resolved, resolved]);
-                            } else if !dest.starts_with("/usr/bin/")
+                            } else if !in_bin(&dest)
                                 && Path::new(&dest).is_absolute()
                                 && !in_lib(&dest)
                             {
@@ -545,40 +572,42 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
         // Crawl the binary folder to:
         // 1. Discover external directories that are linked to that need to be included.
         // 2. Discover ELF binaries to add to the SOF
-        if let Ok(mut sys_binaries) = find::crawl_dir("/usr/bin")
-            && let Some(links) = sys_binaries.remove(&DirType::Link)
-        {
-            #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
-            links
-                .into_iter()
-                .filter_map(|link| fs::canonicalize(&link).ok())
-                .filter(|dest| {
-                    !dest.starts_with("/usr/bin/")
-                        && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
-                })
-                .map(|dest| {
-                    if let Some(parent) = dest.parent() {
-                        parent.to_path_buf()
-                    } else {
-                        dest
-                    }
-                })
-                .collect::<Set<_>>()
-                .into_iter()
-                .for_each(|dest| {
-                    debug!("Add external binary path: {}", dest.display());
-                    let str = dest.to_string_lossy();
-                    info.handle.args_i(["--ro-bind", &str, &str]);
+        for root in roots {
+            if let Ok(mut sys_binaries) = find::crawl_dir(&root)
+                && let Some(links) = sys_binaries.remove(&DirType::Link)
+            {
+                #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
+                links
+                    .into_iter()
+                    .filter_map(|link| fs::canonicalize(&link).ok())
+                    .filter(|dest| {
+                        !in_bin(&dest.to_string_lossy())
+                            && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
+                    })
+                    .map(|dest| {
+                        if let Some(parent) = dest.parent() {
+                            parent.to_path_buf()
+                        } else {
+                            dest
+                        }
+                    })
+                    .collect::<Set<_>>()
+                    .into_iter()
+                    .for_each(|dest| {
+                        debug!("Add external binary path: {}", dest.display());
+                        let str = dest.to_string_lossy();
+                        info.handle.args_i(["--ro-bind", &str, &str]);
 
-                    if dest.is_file() && elf_filter(&str).unwrap_or_default() {
-                        binaries.insert(str.into_owned());
-                        if let Some(policy) = info.policy {
+                        if dest.is_file() && elf_filter(&str).unwrap_or_default() {
+                            binaries.insert(str.into_owned());
+                            if let Some(policy) = info.policy {
+                                update_policy(dest, policy, allowed.clone());
+                            }
+                        } else if let Some(policy) = info.policy {
                             update_policy(dest, policy, allowed.clone());
                         }
-                    } else if let Some(policy) = info.policy {
-                        update_policy(dest, policy, allowed.clone());
-                    }
-                });
+                    });
+            }
         }
     } else {
         update_dirs(
@@ -656,7 +685,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
         info.handle.args_i(["--symlink", "/usr/bin", "/bin"]);
 
-        if fs::read_link("/usr/sbin").is_ok() {
+        if !*SPLIT_ROOT {
             #[rustfmt::skip]
             info.handle.args_i([
                 "--symlink", "/usr/bin", "/usr/sbin",

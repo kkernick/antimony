@@ -1,6 +1,4 @@
-path = "~/.local/bin/opencode-native"
-notes = "You'll need to download the copilot-cli and update the path accordingly."
-features = ["bin", "https"]
+features = ["bin", "network"]
 seccomp = "Disabled"
 
 [home]

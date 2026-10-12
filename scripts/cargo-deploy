@@ -26,7 +26,7 @@ fi
 
 sudo cp --remove-destination -v "$DIR/antimony" "/usr/bin/antimony"
 
-for UTIL in spawn monitor dumper open tracer lockdown notify landlock; do
+for UTIL in spawn monitor dumper open tracer lockdown notify landlock writer; do
     sudo cp --remove-destination -v "$DIR/antimony-$UTIL" "/usr/share/antimony/utilities/antimony-$UTIL"
 done
 
@@ -78,10 +78,10 @@ $exec refresh --hard --dry
 
 sudo chown -R antimony:antimony /usr/share/antimony
 
-$exec refresh
-
 sudo setcap cap_audit_read+ep /usr/share/antimony/utilities/antimony-monitor
 sudo setcap cap_sys_ptrace+ep /usr/share/antimony/utilities/antimony-dumper
+sudo setcap cap_fowner+ep /usr/share/antimony/utilities/antimony-writer
+
 
 sudo chown -R antimony-lockdown:antimony-lockdown /usr/share/antimony/lockdown
 sudo chmod 700 /usr/share/antimony/lockdown
@@ -100,3 +100,5 @@ if [[ -d /etc/apparmor.d ]]; then
         sudo systemctl reload apparmor
     fi
 fi
+
+$exec refresh

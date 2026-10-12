@@ -20,6 +20,7 @@
 ./target/x86_64-unknown-linux-gnu/release/antimony-lockdown=/usr/share/antimony/utilities/antimony-lockdown
 ./target/x86_64-unknown-linux-gnu/release/antimony-notify=/usr/share/antimony/utilities/antimony-notify
 ./target/x86_64-unknown-linux-gnu/release/antimony-landlock=/usr/share/antimony/utilities/antimony-landlock
+./target/x86_64-unknown-linux-gnu/release/antimony-writer=/usr/share/antimony/utilities/antimony-writer
 
 ./config/profiles=/usr/share/antimony/config
 ./config/features=/usr/share/antimony/config

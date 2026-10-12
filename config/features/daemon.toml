@@ -6,7 +6,7 @@ binaries = ["ps", "wc", "sh", "sleep"]
 sandbox_args = ["#", "daemon-wait"]
 
 [files.direct.rx]
-"/usr/local/bin/daemon-wait" = """
+"/usr/bin/daemon-wait" = """
 #!/bin/sh
 CURRENT=$(ps | wc -l)
 $@

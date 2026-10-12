@@ -3,6 +3,7 @@
 
 use crate::{
     fab::{
+        bin::BINARY_ROOTS,
         get_libraries,
         lib::{add_sof, mount_roots},
     },
@@ -131,7 +132,7 @@ pub fn run(
                 );
             }
 
-            for bin in ["/usr/bin", "/usr/sbin", "/bin", "/sbin"] {
+            for bin in BINARY_ROOTS {
                 update_policy(
                     bin,
                     &mut policy,

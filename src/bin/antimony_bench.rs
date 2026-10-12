@@ -5,6 +5,11 @@
 //! and thus may fail when running in this benchmark, as it is only run
 //! in user-mode. You can manually checkout the repo at that particular point,
 //! and run the benchmarker at that iteration--it should work.
+//!
+//! You can also use the `--seccomp` mode, which uses a SECCOMP notifier filter to
+//! to fix incompatibility in older versions (Note all benchmarks will fail, and
+//! hyperfine will use `--ignore-failure`. This failure, however, occurs right on
+//! sandbox init--so it isn't a premature exit per-say)
 #![allow(unused_crate_dependencies)]
 
 use antimony::{
@@ -27,6 +32,7 @@ use std::{
     env::{self, current_exe},
     fs,
     io::IoSlice,
+    iter,
     os::{
         fd::{AsFd, AsRawFd, IntoRawFd, OwnedFd},
         unix::{
@@ -136,9 +142,13 @@ pub struct RunArgs {
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub hyperfine_args: Option<Vec<String>>,
 
-    /// If we're running under seccomp
+    /// If we're running under SECCOMP
     #[arg(long, default_value_t = false)]
     pub seccomp: bool,
+
+    /// Manually delete the `CACHE_DIR`  instead of using `antimony refresh`
+    #[arg(long, default_value_t = false)]
+    pub manual_refresh: bool,
 }
 
 #[derive(clap::Args)]
@@ -253,6 +263,7 @@ fn setup(cli: SetupArgs) -> Result<()> {
             "--new-session", "--die-with-parent",
             "--proc", "/proc",
             "--dev", "/dev",
+            "--dev", "/dev/dri",
             "--bind", "/tmp", "/tmp",
 
             "--bind", "/sys", "/sys",
@@ -265,8 +276,13 @@ fn setup(cli: SetupArgs) -> Result<()> {
             "--symlink", "/usr/sbin", "/sbin",
 
             "--ro-bind", &format!("{root}/config"), "/usr/share/antimony/config",
+
+            // Compat symlinks. Older versions expected profiles/features to be in AT_HOME directly.
+            "--symlink", "/usr/share/antimony/config/profiles", "/usr/share/antimony/profiles",
+            "--symlink", "/usr/share/antimony/config/features", "/usr/share/antimony/features",
+
             "--ro-bind", &env::current_exe()?.to_string_lossy(), "/usr/sbin/antimony_bench",
-        ]).preserve_env(true).new_privileges(true).env("PATH", "/usr/sbin:/usr/bin").env("NOTIFY", "none");
+        ]).preserve_env(true).new_privileges(true).env("PATH", "/usr/sbin:/usr/bin").env("NOTIFY", "none").env("AT_LANDLOCK", "false");
 
         let notify_socket = temp::Builder::new().create::<temp::Directory>()?;
         let _monitor = if cli.seccomp {
@@ -342,6 +358,7 @@ fn setup(cli: SetupArgs) -> Result<()> {
 }
 
 /// Run the benchmarker.
+#[allow(clippy::too_many_lines)]
 fn run(cli: RunArgs) -> Result<()> {
     let profiles = &cli.profiles;
     let benchmarks = cli
@@ -349,7 +366,7 @@ fn run(cli: RunArgs) -> Result<()> {
         .clone()
         .unwrap_or_else(|| vec![Benchmark::Cold, Benchmark::Hot]);
 
-    let mut args: Vec<Cow<'static, str>> = vec!["--shell=none", "--time-unit=millisecond"]
+    let mut args: Vec<Cow<'static, str>> = vec!["--shell=none"]
         .into_iter()
         .map(Cow::Borrowed)
         .collect();
@@ -371,10 +388,13 @@ fn run(cli: RunArgs) -> Result<()> {
     }
 
     #[rustfmt::skip]
-    let sleep: Vec<String> = ["--sandbox-args='# true !'", "--binaries", "true", "--conflicts", "daemon"]
-        .into_iter()
-        .map(String::from)
-        .collect();
+    let post: Vec<String> = if cli.seccomp {
+       iter::once("--disable-ipc").map(String::from)
+       .collect()
+    } else {
+        ["--sandbox-args='# true !'", "--binaries", "true", "--conflicts", "daemon"].into_iter().map(String::from)
+        .collect()
+    };
 
     if benchmarks.contains(&Benchmark::Refresh) {
         let local = HOME_PATH.join(".local").join("bin");
@@ -387,23 +407,31 @@ fn run(cli: RunArgs) -> Result<()> {
 
     if benchmarks.contains(&Benchmark::Cold) {
         for profile in profiles {
-            let mut command: Vec<String> = ["antimony", "refresh", profile]
-                .into_iter()
-                .map(String::from)
-                .collect();
-            if !cli.seccomp {
-                command.extend(sleep.iter().cloned());
-            }
+            let mut command: Vec<String> = [
+                "antimony",
+                if cli.manual_refresh { "run" } else { "refresh" },
+                profile,
+            ]
+            .into_iter()
+            .map(String::from)
+            .collect();
+            command.extend(post.iter().cloned());
 
             if let Some(add) = &cli.antimony_args {
                 command.extend(add.clone());
             }
             #[rustfmt::skip]
-            Spawner::new("hyperfine")?
+            let handle = Spawner::new("hyperfine")?
                 .args([
                     "--command-name", &format!("Cold {profile}"),
                     "--warmup", "1",
-                ])
+                ]);
+
+            if cli.manual_refresh {
+                handle.args_i(["--prepare", "rm -fr /usr/share/antimony/cache"]);
+            }
+
+            handle
                 .args(args.clone())
                 .arg(command.join(" "))
                 .preserve_env(true)
@@ -420,9 +448,7 @@ fn run(cli: RunArgs) -> Result<()> {
                 .into_iter()
                 .map(String::from)
                 .collect();
-            if !cli.seccomp {
-                command.extend(sleep.iter().cloned());
-            }
+            command.extend(post.iter().cloned());
 
             if let Some(add) = &cli.antimony_args {
                 command.extend(add.clone());
@@ -504,7 +530,6 @@ fn monitor(cli: MonitorArgs) -> Result<()> {
                 match pair.recv(fd.as_raw_fd()) {
                     Ok(Some(())) => {
                         let raw = fd.as_raw_fd();
-                        //let profile_name = name.clone();
 
                         // Spawn a handler.
                         rayon::spawn(move || {

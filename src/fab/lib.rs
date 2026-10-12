@@ -9,7 +9,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::shared::landlock::update_policy;
-use crate::shared::{StaticHash, create_parent, create_path};
+use crate::shared::{StaticHash, create_parent, create_path, utility};
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
     shared::{
@@ -20,11 +20,12 @@ use crate::{
     },
     timer,
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use caps::Capability;
 use dashmap::iter_set::OwningIter;
 use heck::ToTitleCase;
 use landlock::ruleset::Filesystem;
-use log::{error, warn};
+use log::{Level, error, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
 use std::io::ErrorKind;
@@ -34,7 +35,7 @@ use std::{
     path::{Path, PathBuf},
     sync::LazyLock,
 };
-use user::as_effective;
+use user::{Mode, as_effective};
 
 /// Library Files (i.e. .so files)
 static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
@@ -335,35 +336,50 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
         });
 
         if !FILES.is_empty() {
-            timer!(
-                "::write_files",
-                as_effective!(
-                    FILES
-                        .par_iter()
-                        .filter(|library| {
-                            if in_lib(library) {
-                                true
-                            } else {
-                                info.handle.args_i([
-                                    if library.starts_with("/home/") {
-                                        "--bind"
-                                    } else {
-                                        "--ro-bind"
-                                    },
-                                    library,
-                                    library,
-                                ]);
-                                false
-                            }
-                        })
-                        // Write the SOF version, as a hard link preferably.
-                        .for_each(|lib| {
-                            if let Err(e) = add_sof(&sof, &lib, &cache) {
-                                error!("Failed to add {} to SOF: {e}", lib.as_str());
-                            }
-                        })
-                )
-            );
+            timer!("::write_files", {
+                let libraries: Set<_> = FILES
+                    .par_iter()
+                    .filter(|library| {
+                        if in_lib(library) {
+                            true
+                        } else {
+                            info.handle.args_i([
+                                if library.starts_with("/home/") {
+                                    "--bind"
+                                } else {
+                                    "--ro-bind"
+                                },
+                                library,
+                                library,
+                            ]);
+                            false
+                        }
+                    })
+                    .map(|lib| lib.to_owned())
+                    .collect();
+
+                if *user::SETUID {
+                    let code = Spawner::abs(utility("writer"))
+                        .new_privileges(true)
+                        .cap(Capability::CAP_FOWNER)
+                        .mode(Mode::Effective)
+                        .error(spawn::StreamMode::Log(Level::Warn))
+                        .args([sof.to_string_lossy(), cache.to_string_lossy()])
+                        .args(libraries)
+                        .spawn()?
+                        .wait()?;
+
+                    if code != 0 {
+                        return Err(anyhow!("Failed to create SOF via writer: {code}"));
+                    }
+                } else {
+                    libraries.par_iter().for_each(|lib| {
+                        if let Err(e) = add_sof(&sof, lib, &cache) {
+                            error!("Failed to add {} to SOF: {e}", lib.as_str());
+                        }
+                    });
+                }
+            });
 
             let sof_str = sof.to_string_lossy();
             timer!("::mount_roots", mount_roots(&sof_str, info.handle))?;

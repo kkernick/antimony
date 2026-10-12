@@ -10,14 +10,17 @@
 //! Or whatever instance value you have.
 #![allow(unused_crate_dependencies)]
 
-use antimony::shared::{
-    self, ThreadMap, create_path,
-    stream::receive_fd,
-    syscalls::{self, Notifier, get_num},
-    utility,
-    which::AntimonyWhich,
+use antimony::{
+    fab::bin::in_bin,
+    shared::{
+        self, ThreadMap, create_path,
+        stream::receive_fd,
+        syscalls::{self, Notifier, get_num},
+        utility,
+        which::AntimonyWhich,
+    },
 };
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use caps::Capability;
 use clap::{Parser, Subcommand, ValueHint};
 use inotify::{Inotify, WatchMask};
@@ -30,7 +33,6 @@ use nix::{
 use seccomp::{
     action::Action, attribute::Attribute, filter::Filter, notify::Pair, syscall::Syscall,
 };
-use signal_hook::{consts, flag};
 use spawn::Spawner;
 use std::{
     fs::{self, File},
@@ -40,13 +42,10 @@ use std::{
         unix::net::UnixListener,
     },
     path::{Path, PathBuf},
-    process::exit,
     sync::{
         Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
     },
-    thread,
-    time::Duration,
 };
 
 #[derive(Parser)]
@@ -81,10 +80,6 @@ pub struct RunArgs {
     /// Only collect from the specified syscall names.
     #[arg(long)]
     filter: Option<Vec<String>>,
-
-    /// An optional timeout, in milliseconds
-    #[arg(long)]
-    timeout: Option<u64>,
 }
 
 #[derive(clap::Args, Default, Clone)]
@@ -147,9 +142,9 @@ pub fn collect_paths(pid: u32, args: &[u64; 6]) -> Result<Vec<String>> {
     clippy::significant_drop_tightening,
     reason = "Antimony expects basic syscalls to exist"
 )]
-pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Result<()> {
+pub fn reader(fd: OwnedFd, filter: Vec<i32>) -> Result<()> {
     let found = Arc::new(ThreadMap::<u32, Vec<String>>::default());
-
+    let term = AtomicBool::new(false);
     while !term.load(Ordering::Relaxed) {
         let pair = Pair::new()?;
         match pair.recv(fd.as_raw_fd()) {
@@ -172,19 +167,13 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                         && let Ok(paths) = collect_paths(pid, &args)
                         && !paths.is_empty()
                     {
-                        if call == syscalls::get_num("execve").unwrap()
-                            && !["bash", "sh", "zsh", "env"]
-                                .iter()
-                                .any(|i| paths[0].contains(i))
-                        {
+                        if call == syscalls::get_num("execve").unwrap() && !in_bin(&paths[0]) {
                             println!("{}", paths[0]);
                             term.store(true, Ordering::Relaxed);
                             let _ = kill(Pid::from_raw(pid as i32), SIGKILL);
                             resp.error = -EPERM;
                             resp.flags = 0;
-
-                            // No cleanup, terminate as soon as possible.
-                            exit(0);
+                            return;
                         }
 
                         let mut local_found = found.entry(pid).or_default();
@@ -204,7 +193,7 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
                     resp.error = 0;
                     resp.flags = 1;
 
-                    // Ignore SECCOMP and EXECVE.
+                    // Ignore SECCOMP.
                     if ((call == syscalls::get_num("prctl").unwrap()
                         && args[0] == PR_SET_SECCOMP as u64)
                         || call == syscalls::get_num("seccomp").unwrap())
@@ -227,24 +216,12 @@ pub fn reader(term: Arc<AtomicBool>, fd: OwnedFd, filter: Arc<Vec<i32>>) -> Resu
 /// If we cannot bind to the socket or register the signal handler
 pub fn collection(args: AttachArgs) -> Result<()> {
     let listener = UnixListener::bind(args.socket)?;
-    let filter: Arc<Vec<i32>> = Arc::new(args.filter.unwrap_or_default());
 
-    // Ensure that we can record syscall info after the attached process dies.
-    let term = Arc::new(AtomicBool::new(false));
-    flag::register(consts::SIGTERM, Arc::clone(&term))?;
-    flag::register(consts::SIGINT, Arc::clone(&term))?;
-    while !term.load(Ordering::Relaxed) {
-        match receive_fd(&listener) {
-            Ok(Some((fd, _))) => {
-                let term_clone = Arc::clone(&term);
-                let filter_clone = Arc::clone(&filter);
-                thread::spawn(move || reader(term_clone, fd, filter_clone));
-            }
-            Ok(None) => continue,
-            Err(_) => break,
-        }
+    if let Ok(Some((fd, _))) = receive_fd(&listener) {
+        reader(fd, args.filter.unwrap_or_default())
+    } else {
+        Err(anyhow!("Failed to receive SECCOMP FD"))
     }
-    Ok(())
 }
 
 /// Run the application under a monitor.
@@ -289,7 +266,7 @@ pub fn runner(args: RunArgs) -> Result<()> {
     filter.set_attribute(Attribute::BadArchAction(Action::KillProcess))?;
 
     // Create an attached version to listen.
-    let handle = Spawner::abs(utility("dumper"))
+    let monitor = Spawner::abs(utility("dumper"))
         .args(["attach", &sock_str])
         .preserve_env(true)
         .new_privileges(true)
@@ -300,10 +277,10 @@ pub fn runner(args: RunArgs) -> Result<()> {
             .into_iter()
             .filter_map(|name| get_num(&name))
             .for_each(|syscall| {
-                handle.args_i(["--filter", &format!("{syscall}")]);
+                monitor.args_i(["--filter", &format!("{syscall}")]);
             });
     }
-    let _handle = handle.spawn()?;
+    let monitor = monitor.spawn()?;
 
     // Wait for it to be ready.
     let mut buffer = [0; 1024];
@@ -319,19 +296,18 @@ pub fn runner(args: RunArgs) -> Result<()> {
     }
 
     // Spawn the program under our Notify policy.
-    let handle = Spawner::which::<AntimonyWhich>(args.path)?
+    let mut handle = Spawner::which::<AntimonyWhich>(args.path)?
         .preserve_env(true)
         .output(spawn::StreamMode::Pipe)
         .error(spawn::StreamMode::Pipe)
         .seccomp(filter)
         .spawn()?;
 
-    if let Some(timeout) = args.timeout {
-        let _ = handle.wait_timeout(Duration::from_millis(timeout));
-    } else {
-        handle.wait()?;
-    }
+    // Wait for the monitor to finish.
+    monitor.wait()?;
 
+    // Terminate the child.
+    handle.terminate()?;
     Ok(())
 }
 

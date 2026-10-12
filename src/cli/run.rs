@@ -62,11 +62,11 @@ pub struct Args {
     pub dir: Option<String>,
 
     /// Run in lockdown mode
-    #[arg(long)]
+    #[arg(long, env = "AT_LOCKDOWN")]
     pub lockdown: Option<bool>,
 
     /// Run with landlock mode
-    #[arg(long)]
+    #[arg(long, env = "AT_LANDLOCK")]
     pub landlock: Option<bool>,
 
     /// Use a configuration within the profile.
@@ -106,7 +106,7 @@ pub struct Args {
     pub home_lock_policy: Option<HomeLockPolicy>,
 
     /// Override the seccomp policy
-    #[arg(long)]
+    #[arg(long, env = "AT_SECCOMP")]
     pub seccomp: Option<SeccompPolicy>,
 
     /// Add portals
@@ -154,7 +154,7 @@ pub struct Args {
     pub user_bus: bool,
 
     /// Harden the proxy sandbox.
-    #[arg(long)]
+    #[arg(long, env = "AT_HARDEN_IPC")]
     pub harden_ipc: bool,
 
     /// Override the file passthrough mode.
@@ -416,21 +416,21 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             info.handle.new_privileges_i(true);
         }
 
-        if let Some(hooks) = &mut info.profile.hooks
-            && let Some(pre) = &mut hooks.pre
-        {
-            log::info!("Processing pre-hooks");
-            for hook in pre {
-                info.handle = hook
-                    .process(
-                        Some(info.handle),
-                        &info.name,
-                        &info.sys_dir.to_string_lossy(),
-                        info.instance.name(),
-                        &info.home,
-                        false,
-                    )?
-                    .unwrap();
+        if let Some(hooks) = &mut info.profile.hooks {
+            if let Some(pre) = &mut hooks.pre {
+                log::info!("Processing pre-hooks");
+                for hook in pre {
+                    info.handle = hook
+                        .process(
+                            Some(info.handle),
+                            &info.name,
+                            &info.sys_dir.to_string_lossy(),
+                            info.instance.name(),
+                            &info.home,
+                            false,
+                        )?
+                        .unwrap();
+                }
             }
 
             // Attaching to the parent means info.handle becomes the parent
@@ -485,7 +485,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
                         .map_or_else(|| true, |codes| codes.contains(&code))
                 {
                     // Alert the user.
-                    if notify::can_notify() {
+                    if notify::can_notify() && !args.refresh {
                         let error_name = Errno::from_raw(code.checked_mul(-1).unwrap_or(code));
                         #[rustfmt::skip]
                         let action = Spawner::abs(utility("notify"))
@@ -511,12 +511,19 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
 
                         let action = action.trim();
                         if action == "Refresh" {
-                            user::set(Mode::Real)?;
-                            return cli::refresh::Args {
-                                profile: Some(info.name.clone()),
-                                ..Default::default()
+                            let handle = Spawner::abs("/usr/bin/antimony")
+                                .mode(Mode::Original)
+                                .new_privileges(true)
+                                .preserve_env(true)
+                                .args(["refresh", &info.name]);
+
+                            if let args = env::args().collect::<Vec<_>>()
+                                && args.len() > 3
+                            {
+                                handle.args_i(&args[3..]);
                             }
-                            .run();
+
+                            handle.spawn()?.wait()?;
                         } else if action == "Retry" {
                             user::set(Mode::Real)?;
                             return cli::run::Args {

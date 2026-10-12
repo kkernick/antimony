@@ -108,7 +108,7 @@ fn main() -> Result<()> {
         eprintln!("Peforming Benchmark Profiling");
         Spawner::abs(format!("{root}/scripts/cargo-bencher"))
             .args(profiles)
-            .args(["--recipe", &instrumented, "--bench", "real"])
+            .args(["--recipe", &instrumented, "--", "--bench", "real"])
             .new_privileges(true)
             .preserve_env(true)
             .env(
