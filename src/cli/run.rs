@@ -545,7 +545,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             // If our wait was interrupted, then we need to bail fast.
             // SIGKILL the child so we can get to any post hooks.
             Err(HandleError::Signal) => {
-                log::info!("Signal recieved, closing sandbox");
+                log::info!("Signal received, closing sandbox");
                 let _ = handle.signal(Signal::SIGTERM);
                 Ok(())
             }

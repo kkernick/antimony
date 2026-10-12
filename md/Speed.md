@@ -126,13 +126,9 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 > [!note]
 > A SECCOMP scaling factor has been applied to more accurately compare the SECCOMP sandboxed and non-SECCOMP runs. There are obtained as 6.0.0 can run under both modes. The below modifiers are subtracted to each value from 2.5.0 onward to account for the lack of IPC (Syncthing and Sh do not use IPC, and while there is some skewing due to `bwrap` never actually setting up, they bias—about 0.8—was not enough to constitute adjustment)
 
-
-
-
 | Chromium | Zed | Okular |
 | -------- | --- | ------ |
 | 7.9      | 7.6 | 7.3    |
-
 
 |       | Chromium | Zed  | Okular | Syncthing | Sh   |
 | ----- | -------- | ---- | ------ | --------- | ---- |
@@ -167,7 +163,7 @@ We can also see how the performance of Antimony has evolved over releases. Attac
 | 5.1.1 | 5.9      | 7.1  | 6.7    | 6.1       | 6.6  |
 | 5.2.0 | 5.8      | 5.9  | 6.4    | 6.1       | 6.5  |
 | 5.2.1 | 5.9      | 5.8  | 6.7    | 6.2       | 6.6  |
-| 6.0.0 | 5.8      | 5.9  | 6.5    | 5.4       | 5.6  |
+| 6.0.0 | 5.6      | 5.9  | 6.1    | 5.4       | 5.6  |
 
 
 ^HistoryHot
@@ -218,7 +214,7 @@ spanGaps: true
 | 5.1.1 | 175      | 0.38  | 49  | 0.74  | 481    | 0.40  | 12        | 0.26  | 13  | 0.62  |
 | 5.2.0 | 175      | 0.38  | 50  | 0.76  | 483    | 0.40  | 13        | 0.28  | 13  | 0.62  |
 | 5.2.1 | 172      | 0.37  | 51  | 0.77  | 478    | 0.39  | 12        | 0.26  | 13  | 0.62  |
-| 6.0.0 | 63       | 0.14  | 27  | 0.41  | 215    | 0.18  | 10        | 0.21  | 9   | 0.43  |
+| 6.0.0 | 62       | 0.13  | 26  | 0.39  | 211    | 0.17  | 9         | 0.19  | 9   | 0.43  |
 
 
 ^HistoryCold

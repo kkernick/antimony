@@ -84,10 +84,10 @@ By default, when Antimony detects a lock, it will prompt you with a Notification
 
 Additionally, you can modify what Antimony should do when it runs into a lock via the `lock_policy` attribute. This is useful if your profile has a known fallback strategy and you can’t be bothered to select it each time:
 * `Notify`: By default, Antimony prompts you with the above notification and waits for a response or timeout.
-* `Abort`: Immediately fail should the lock be detected.
+* `Abort`: Immediately fail should the lock be detected. This was how previous versions worked.
 * `Overlay`: Mount the home under a Temporary OverlayFS.
 
 Consider the two example TOML files:
-* For `zed`, the default home is mounted as `Overlay`, so a Lock is useless (And in fact, is ignored by Antimony). The `ide` configuration, however, needs to write extension data to disk, so needs to be `Enabled`. Zed also only wants a single instance running, and will refuse to open a second instance. To work around this, we lock the home, and open successive instances under an `Overlay`; the primary instance will have updated extensions, but we need to be cognizant that any modifications to the configuration in these instances will be lost.
+* For `zed`, the default home is mounted as `Overlay`, so a Lock is useless (And in fact, is ignored by Antimony). The `ide` configuration, however, needs to write extension data to disk, so needs to be `Enabled`. Zed also only wants a single instance running, and will refuse to open a second instance. To work around this, we lock the home, and open successive instances under an `Overlay`; the primary instance will have write access, but we need to be cognizant that any modifications to the configuration in subsequent instances will be lost.
 * For `chromium` the default home is mounted as `Enabled`, as we want to persist login, extension updates, settings, etc. Unfortunately, Chromium does not appreciate multiple Antimony instances, and will spit out an avalanche of error messages should you try and open another one, hence our lock. We set the lock policy to `Overlay` for the same reason as Zed. Our `secure` configuration uses the `gocryptfs` feature, which means our home is actually mounted from an encrypted volume; running multiple instances would cause multiple mounts, and due to its specialized use-case there is no good reason to need multiple instances. Therefore, we abort immediately.
 

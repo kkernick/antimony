@@ -214,10 +214,6 @@ description = ""
 # no guarantee on how they will run in relation to other features. So, if you have hooks A,B,C defined
 # in a feature, and D,E,F defined in another feature, Antimony will either run A,B,C,D,E,F or D,E,F,A,B,C.
 # That is to say: DON'T RELY ON OTHER FEATURE'S HOOK RUNNING BEFORE/AFTER YOURS.
-# Additionally, be incredibly careful about the parent hook. Just as you cannot guarantee when other features
-# are imported in respect to yours, you cannot guarantee whether another feature's parent hook overwrites yours.
-# That is to say: DON'T DEFINE PARENT HOOKS IN FEATURES UNLESS YOU ABSOLUTELY HAVE TO. EVEN THEN, RECONSIDER. IF
-# YOU MUST, YOU MUST SET conflicts TO EVERY FEATURE THAT DOES THE SAME.
 # [hooks]
 #
 # By default hooks are inherited by other profiles, so if you defined a hook in your Default, it would

@@ -32,6 +32,11 @@ env = false
 can_fail = true
 ```
 
+## Parent Hook
+
+The *Parent* hook is a special kind of pre-hook that controls the lifespan of the sandbox. Unlike regular pre-hooks, to which there can be many, and to which the death of the sandbox will cull the child hooks, the parent hook—to which only a single can be defined—will teardown the sandbox when it dies.
+
+Features that use a parent hook should conflict with other such features—as there is no guarantee on which parent hook will be chosen.
 
 ## Hook Components
 
@@ -63,7 +68,7 @@ The `env` setting toggles whether the environment is shared with the hook. By de
 Regardless of this setting, Antimony will provide the hook with the following environment variables:
 * `ANTIMONY_NAME` will be set to the name of the current profile.
 * `ANTIMONY_CACHE` will point to the system directory of the current profile. Note, that because hooks run as the user, not the system, this directory will be read-only to the hook.
-* `ANTIMONY_HOME` will point to the profile’s dedicated home folder, if it exists. The profile must have `home.policy` set to either `Enabled` or `Overlay`.
+* `ANTIMONY_HOME` will point to the profile’s dedicated home folder, if it exists. The profile must have `home.policy` set to something other than `None`
 
 The setting is optional, and defaults to `false`.
 

@@ -1,6 +1,6 @@
 # Landlock
 
-*Landlock* is a [LSM](https://landlock.io/) that provides granular control over how a process is allowed to access file-system and network resources—to a far greater degree than traditional DAC.
+*Landlock* is an [LSM](https://landlock.io/) that provides granular control over how a process is allowed to access file-system and network resources—to a far greater degree than traditional DAC.
 
 Antimony uses Landlock as a means to further strengthen the sandbox barrier as:
 1. Landlock is unprivileged, thus it does not require additional permission or capabilities.
@@ -56,3 +56,7 @@ arguments = ["--port", "8080"]
 [ipc.ports]  
 bind = [8080]
 ```
+
+## ABI
+
+Antimony requires an ABI of 10 in order to utilize Landlock.
