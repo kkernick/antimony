@@ -519,7 +519,8 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
         let mut roots = Set::default();
         for root in &directories {
-            let path = Path::new(root.strip_suffix('/').unwrap_or(root));
+            let root = root.strip_suffix('/').unwrap_or(root);
+            let path = Path::new(root);
             if let Ok(mut src) = fs::read_link(path) {
                 if !src.is_absolute()
                     && let Some(parent) = path.parent()
@@ -538,7 +539,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             } else {
                 info.handle
                     .args_i(["--overlay-src", root, "--tmp-overlay", root]);
-                roots.insert(root.clone());
+                roots.insert(root.to_owned());
             }
         }
 
