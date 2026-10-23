@@ -51,7 +51,15 @@ pub fn run(
         .ipc
         .as_ref()
         .map_or_else(|| false, |ipc| ipc.harden.unwrap_or_default());
-    let landlock = harden && landlock::abi().is_ok();
+    let landlock = if harden && let Ok(abi) = landlock::abi()
+        // We need at least 10 for Unix.
+        && abi >= 10
+        && Path::new(&utility("landlock")).exists()
+    {
+        true
+    } else {
+        false
+    };
     let utility = utility("landlock");
 
     create_path(proxy.as_path())?;
@@ -132,7 +140,7 @@ pub fn run(
                 );
             }
 
-            for bin in BINARY_ROOTS {
+            for bin in BINARY_ROOTS.iter() {
                 update_policy(
                     bin,
                     &mut policy,

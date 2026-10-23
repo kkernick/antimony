@@ -128,10 +128,9 @@ pub fn extend_option<A, T: Extend<A> + IntoIterator<Item = A>>(
 }
 
 /// Extend two
-pub fn extend_cmdline<A, X, Y>(lhs: &mut Option<X>, rhs: Option<Y>)
+pub fn extend_cmdline<A, X>(lhs: &mut Option<X>, rhs: Option<Vec<A>>)
 where
     X: Extend<A> + IntoIterator<Item = A> + FromIterator<A>,
-    Y: Extend<A> + IntoIterator<Item = A> + Default,
 {
     match lhs {
         Some(env) => {
@@ -139,7 +138,12 @@ where
                 env.extend(val);
             }
         }
-        None => *lhs = Some(rhs.unwrap_or_default().into_iter().collect()),
+        None if let Some(r) = rhs
+            && !r.is_empty() =>
+        {
+            *lhs = Some(r.into_iter().collect());
+        }
+        _ => {}
     }
 }
 

@@ -34,13 +34,14 @@ use std::{
 use temp::Temp;
 
 /// System folders for binaries.
-pub static BINARY_ROOTS: [&str; 5] = [
+pub static BINARY_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| [
     "/usr/bin/",
     "/bin/",
     "/usr/sbin/",
     "/sbin/",
     "/usr/libexec/",
-];
+    ].into_iter().filter(|r| Path::new(r).exists()).map(String::from).collect()
+);
 
 pub static SPLIT_ROOT: LazyLock<bool> = LazyLock::new(|| fs::read_link("/usr/sbin").is_ok());
 
