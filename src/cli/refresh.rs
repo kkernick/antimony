@@ -3,6 +3,7 @@
 
 use crate::{
     cli::run,
+    fab::lib,
     shared::{
         Set,
         env::{CACHE_DIR, HOME_PATH, RUNTIME_DIR},
@@ -34,14 +35,14 @@ pub struct Args {
     #[arg(long)]
     pub hard: bool,
 
-    /// Run arguments
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-    pub passthrough: Option<Vec<String>>,
-
     /// Refresh the SECCOMP database by removing nonexistent binaries and optimizing.
     /// Overrides PROFILE, --hard and --dry
     #[arg(short, long)]
-    pub seccomp: bool,
+    pub clean_seccomp: bool,
+
+    /// Run arguments
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub passthrough: Option<Vec<String>>,
 }
 impl Args {
     /// Refresh a profile and all it's configurations
@@ -72,7 +73,7 @@ impl Args {
     }
 
     pub fn run(self) -> Result<()> {
-        if self.seccomp {
+        if self.clean_seccomp {
             syscalls::clean_database()?;
             syscalls::CONNECTION.with_borrow_mut(|conn| -> Result<()> {
                 conn.execute("VACUUM;", [])?;
@@ -95,8 +96,13 @@ impl Args {
                 }
                 Ok(())
             })?;
-            fs::remove_dir_all(RUNTIME_DIR.join("antimony"))?;
-        } else if self.profile.is_none() && let Ok(iter) = fs::read_dir(CACHE_DIR.join("run")) {
+            let runtime = RUNTIME_DIR.join("antimony");
+            if runtime.exists() {
+                fs::remove_dir_all(runtime)?;
+            }
+        } else if self.profile.is_none()
+            && let Ok(iter) = fs::read_dir(CACHE_DIR.join("run"))
+        {
             for hash in iter.filter_map(Result::ok) {
                 let saved: Set<String> = fs::read_dir(hash.path())?
                     .filter_map(Result::ok)
@@ -127,9 +133,7 @@ impl Args {
         if let Some(profile) = self.profile {
             let mut args = self
                 .passthrough
-                .map_or_else(run::Args::default, |passthrough| {
-                    run::Args::from_vec(&profile, passthrough)
-                });
+                .map_or_default(|passthrough| run::Args::from_vec(&profile, passthrough));
 
             args.refresh = true;
             args.dry = self.dry;
@@ -159,6 +163,8 @@ impl Args {
             profiles.into_iter().try_for_each(|name| -> Result<()> {
                 println!("Refreshing {}", style(&name).bold());
                 Self::refresh(&name, None, &terminal)?;
+                lib::FILES.clear();
+                lib::DIRS.clear();
                 Ok(())
             })?;
 

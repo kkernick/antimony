@@ -1,5 +1,5 @@
 id = "com.obsproject.Studio"
-features = ["python", "pipewire", "sdl", "vaapi", "qt6", "tray"]
+features = ["pipewire", "python", "sdl", "qt6", "vaapi", "tray"]
 seccomp = "Permissive"
 binaries = ["obs-ffmpeg-mux"]
 

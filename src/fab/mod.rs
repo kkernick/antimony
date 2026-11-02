@@ -52,11 +52,11 @@ pub struct FabInfo<'a> {
 }
 
 /// The L1 Cache caches the disk cache for repeated look-ups in memory.
-static _L1: CacheStatic<Object, ThreadMap<String, Vec<u8>>> = LazyLock::new(DashMap::default);
+static L1_CACHE: CacheStatic<Object, ThreadMap<String, Vec<u8>>> = LazyLock::new(DashMap::default);
 
 /// The L1 Cache for get/write cache.
 static L1: LazyLock<cache::Cache<Object, ThreadMap<String, Vec<u8>>>> =
-    LazyLock::new(|| cache::Cache::new(&_L1));
+    LazyLock::new(|| cache::Cache::new(&L1_CACHE));
 
 /// Discover application folders across the filesystem.
 #[must_use]
@@ -122,7 +122,7 @@ pub fn write_cache<T: bitcode::Encode>(name: &str, content: T, object: Object) -
 
 #[inline]
 pub fn in_lib(path: &str) -> bool {
-    ROOTS.iter().any(|r| path.starts_with(r.as_ref()))
+    ROOTS.iter().any(|r| path.starts_with(r.as_str()))
 }
 
 /// Filter non-elf files.
@@ -146,17 +146,6 @@ fn elf_filter(path: &str) -> io::Result<bool> {
     Ok(e_type == 2 || e_type == 3)
 }
 
-/// The path to the Linux System Linker
-static LD: LazyLock<String> = LazyLock::new(|| {
-    for root in ROOTS.iter() {
-        let ld = format!("{}/ld-linux-x86-64.so.2", root.as_ref());
-        if Path::new(&ld).exists() {
-            return ld;
-        }
-    }
-    String::from("/lib64/ld-linux-x86-64.so.2")
-});
-
 /// LDD an executable to get its library dependencies.
 ///
 /// ```rust
@@ -170,8 +159,18 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
         if fs::read_link(path).is_ok() {
             Ok(Set::default())
         } else {
+            let ld = if in_lib(path)
+                && let Some(parent) = Path::new(path).parent()
+                && let ld = parent.join("ld-linux-x86-64.so.2")
+                && ld.exists()
+            {
+                Cow::Owned(ld.to_string_lossy().into_owned())
+            } else {
+                Cow::Borrowed("/lib64/ld-linux-x86-64.so.2")
+            };
+
             let depends = if elf_filter(path)? {
-                Spawner::abs(LD.as_str())
+                Spawner::abs(ld)
                     .arg(path)
                     .output(StreamMode::Pipe)
                     .error(StreamMode::Discard)
@@ -196,7 +195,7 @@ pub fn ldd(path: &str) -> Result<Set<String>> {
                             && let Some(name) = path.file_name()
                         {
                             let mut path = clean(parent).join(name);
-                            if !ROOTS.iter().any(|root| path.starts_with(root.as_ref())) {
+                            if !ROOTS.iter().any(|root| path.starts_with(root.as_str())) {
                                 let usr_path = format!("/usr{}", path.to_string_lossy());
                                 if Path::new(&usr_path).exists() && in_lib(&usr_path) {
                                     path = PathBuf::from(usr_path);
@@ -265,63 +264,61 @@ pub fn get_libraries(path: &str) -> Result<Set<String>> {
 /// std::fs::remove_file("test.txt");
 /// ```
 pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
-    timer!("::resolve", {
-        if string.starts_with('~') {
-            string = Cow::Owned(string.replacen('~', "/home/antimony", 1));
-        }
+    if string.starts_with('~') {
+        string = Cow::Owned(string.replacen('~', "/home/antimony", 1));
+    }
 
-        let mut resolved = if string.contains('$') {
-            let mut resolved = String::new();
-            let mut chars = string.chars().peekable();
+    let mut resolved = if string.contains('$') {
+        let mut resolved = String::new();
+        let mut chars = string.chars().peekable();
 
-            while let Some(ch) = chars.next() {
-                if ch == '$' {
-                    let mut var_name = String::new();
-                    while let Some(&next) = chars.peek() {
-                        if next.is_ascii_uppercase() || next.is_ascii_digit() || next == '_' {
-                            var_name.push(next);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if var_name.is_empty() {
-                        resolved.push('$');
+        while let Some(ch) = chars.next() {
+            if ch == '$' {
+                let mut var_name = String::new();
+                while let Some(&next) = chars.peek() {
+                    if next.is_ascii_uppercase() || next.is_ascii_digit() || next == '_' {
+                        var_name.push(next);
+                        chars.next();
                     } else {
-                        // These values may not be defined in the environment, but have explicit
-                        // values Antimony can fill.
-                        let val = match var_name.as_str() {
-                            "UID" => format!("{}", user::USER.real),
-                            "AT_HOME" => AT_HOME.display().to_string(),
-                            "XDG_CONFIG_HOME" => CONFIG_HOME.display().to_string(),
-                            "XDG_DATA_HOME" => DATA_HOME.display().to_string(),
-                            name => env::var(name).unwrap_or_else(|_| format!("${name}")),
-                        };
-                        resolved.push_str(&val);
+                        break;
                     }
-                } else {
-                    resolved.push(ch);
                 }
+                if var_name.is_empty() {
+                    resolved.push('$');
+                } else {
+                    // These values may not be defined in the environment, but have explicit
+                    // values Antimony can fill.
+                    let val = match var_name.as_str() {
+                        "UID" => format!("{}", user::USER.real),
+                        "AT_HOME" => AT_HOME.display().to_string(),
+                        "XDG_CONFIG_HOME" => CONFIG_HOME.display().to_string(),
+                        "XDG_DATA_HOME" => DATA_HOME.display().to_string(),
+                        name => env::var(name).unwrap_or_else(|_| format!("${name}")),
+                    };
+                    resolved.push_str(&val);
+                }
+            } else {
+                resolved.push(ch);
             }
-            Cow::Owned(resolved)
-        } else {
-            string
-        };
+        }
+        Cow::Owned(resolved)
+    } else {
+        string
+    };
 
-        let path = Path::new(resolved.as_ref());
-        if !path.is_absolute() || !path.exists() {
-            let mut path = clean(path);
-            if (!path.is_absolute() || !path.exists())
-                && let Ok(canon) = fs::canonicalize(&path)
-            {
-                path = canon;
-            }
-
-            resolved = Cow::Owned(path.to_string_lossy().into_owned());
+    let path = Path::new(resolved.as_ref());
+    if !path.is_absolute() || !path.exists() {
+        let mut path = clean(path);
+        if (!path.is_absolute() || !path.exists())
+            && let Ok(canon) = fs::canonicalize(&path)
+        {
+            path = canon;
         }
 
-        resolved
-    })
+        resolved = Cow::Owned(path.to_string_lossy().into_owned());
+    }
+
+    resolved
 }
 
 /// Localize a home path to /home/antimony
@@ -334,13 +331,11 @@ pub fn resolve(mut string: Cow<'_, str>) -> Cow<'_, str> {
 /// ```
 #[inline]
 pub fn localize_home(path: &str) -> Cow<'_, str> {
-    timer!("::localize_home", {
-        if path.starts_with("/home") {
-            Cow::Owned(path.replacen(HOME.as_str(), "/home/antimony", 1))
-        } else {
-            Cow::Borrowed(path)
-        }
-    })
+    if path.starts_with("/home") {
+        Cow::Owned(path.replacen(HOME.as_str(), "/home/antimony", 1))
+    } else {
+        Cow::Borrowed(path)
+    }
 }
 
 /// Localize a path, returning the resolved source, and where it should be mounted in the sandbox.
@@ -384,32 +379,36 @@ pub fn localize_home(path: &str) -> Cow<'_, str> {
 ///
 /// assert!(localize_path("/run/$UID/file", false).unwrap() == (None, format!("/run/{}/file", user::USER.real).into()));
 /// assert!(localize_path("/proc/$PID/fd/$FD=/init-err", false).unwrap() == (None, "/init-err".to_owned()));
+/// assert!(localize_path("test=.another/test", true).unwrap() == (None, "/home/antimony/.another/test".to_owned()));
 /// ```
-pub fn localize_path(
-    file: &str,
+pub fn localize_path<'a>(
+    file: &'a str,
     home: bool,
-) -> Result<(Option<Cow<'_, str>>, String), user::Error> {
-    timer!("::localize_path", {
-        let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
-            (resolve(Cow::Borrowed(source)), Cow::Borrowed(dest))
-        } else {
-            let mut resolved = resolve(Cow::Borrowed(file));
-            if home
-                && !resolved.starts_with("/home")
-                && (!resolved.starts_with('/') || !Path::new(resolved.as_ref()).exists())
-            {
-                resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
-            }
-            (resolved.clone(), resolved)
-        };
-        let dest = localize_home(&dest);
+) -> Result<(Option<Cow<'a, str>>, String), user::Error> {
+    let norm = |path: &'a str| -> Cow<'a, str> {
+        let mut resolved = resolve(Cow::Borrowed(path));
+        if home
+            && !resolved.starts_with("/home")
+            && (!resolved.starts_with('/') || !Path::new(resolved.as_ref()).exists())
+        {
+            resolved = Cow::Owned(format!("{}/{resolved}", HOME.as_str()));
+        }
+        resolved
+    };
 
-        Ok(if Path::new(source.as_ref()).exists() {
-            debug!("{source} => {dest}");
-            (Some(source), dest.into_owned())
-        } else {
-            debug!("{source} (does not exist) => {dest}");
-            (None, dest.into_owned())
-        })
+    let (source, dest) = if let Some((source, dest)) = file.split_once('=') {
+        (norm(source), norm(dest))
+    } else {
+        let resolved: Cow<'a, str> = Cow::Owned(norm(file).into_owned());
+        (resolved.clone(), resolved)
+    };
+
+    let dest = localize_home(dest.as_ref());
+    Ok(if Path::new(source.as_ref()).exists() {
+        debug!("{source} => {dest}");
+        (Some(source), dest.into_owned())
+    } else {
+        debug!("{source} (does not exist) => {dest}");
+        (None, dest.into_owned())
     })
 }

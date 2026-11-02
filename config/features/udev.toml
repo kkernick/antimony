@@ -1,7 +1,11 @@
 name = "udev"
 description = "Device information"
 caveat = "This provides access to /sys, allowing the sandbox to see all devices."
+requires = ["sys"]
 binaries = ["dmidecode", "udevadm"]
 
+[files.user]
+ro = ["/run/udev"]
+
 [files.platform]
-ro = ["/usr/share/hwdata", "/sys", "/etc/udev"]
+ro = ["/etc/udev", "/usr/share/hwdata"]

@@ -1,10 +1,10 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::{
-    fab::localize_path,
+    fab::{localize_home, localize_path, resolve},
     shared::{
         env::HOME,
-        landlock::{LandlockPolicy, RO, RW, update_policy},
+        landlock::{LandlockPolicy, RO, RW, RX, WX, update_policy},
         profile::files::{FILE_MODES, FileMode},
     },
 };
@@ -52,6 +52,7 @@ pub fn localize(
             FileMode::Executable => {
                 update_policy(parent, policy, [Filesystem::ReadFile, Filesystem::Execute]);
             }
+            FileMode::ExecWrite => update_policy(parent, policy, WX),
         }
     }
 
@@ -72,9 +73,11 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
 
         if let Some(links) = &files.links {
             for (src, dst) in links {
+                let src = &resolve(src.into());
+                let dst = &resolve(dst.into());
                 info.handle.args_i(["--symlink", src, dst]);
                 if let Some(policy) = info.policy
-                    && let Some(parent) = Path::new(dst).parent()
+                    && let Some(parent) = Path::new(dst.as_ref()).parent()
                 {
                     update_policy(parent, policy, RO);
                 }
@@ -108,15 +111,8 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                 match mode {
                     FileMode::ReadOnly => update_policy(dest, policy, RO),
                     FileMode::ReadWrite => update_policy(dest, policy, RW),
-                    FileMode::Executable => update_policy(
-                        dest,
-                        policy,
-                        [
-                            Filesystem::ReadDir,
-                            Filesystem::ReadFile,
-                            Filesystem::Execute,
-                        ],
-                    ),
+                    FileMode::Executable => update_policy(dest, policy, RX),
+                    FileMode::ExecWrite => update_policy(path, policy, WX),
                 }
             }
         }
@@ -138,6 +134,18 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                         localize(mode, file, false, info.handle, false, info.policy)?;
                     }
                 }
+            }
+        }
+
+        if let Some(overlays) = &files.overlays {
+            for overlay in overlays {
+                let path = resolve(Cow::Borrowed(overlay.as_str()));
+                info.handle.args_i([
+                    "--overlay-src",
+                    &path,
+                    "--tmp-overlay",
+                    &localize_home(&path),
+                ]);
             }
         }
     }

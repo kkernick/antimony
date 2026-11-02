@@ -23,6 +23,10 @@ pub enum FileMode {
     /// correctly.
     #[serde(rename = "rx")]
     Executable = 2,
+
+    /// Executable files that the sandbox can modify. Use with caution!
+    #[serde(rename = "wx")]
+    ExecWrite,
 }
 impl FileMode {
     /// Get the bwrap argument for binding this file.
@@ -53,6 +57,7 @@ impl FileMode {
             Self::ReadOnly => "444",
             Self::ReadWrite => "666",
             Self::Executable => "555",
+            Self::ExecWrite => "777",
         }
     }
 }
@@ -62,15 +67,17 @@ impl fmt::Display for FileMode {
             Self::ReadOnly => write!(f, "ro"),
             Self::ReadWrite => write!(f, "rw"),
             Self::Executable => write!(f, "rx"),
+            Self::ExecWrite => write!(f, "wx"),
         }
     }
 }
 
 /// Why use strum when we can just make a static array?
-pub static FILE_MODES: [FileMode; 3] = [
+pub static FILE_MODES: [FileMode; 4] = [
     FileMode::Executable,
     FileMode::ReadOnly,
     FileMode::ReadWrite,
+    FileMode::ExecWrite,
 ];
 
 /// For each file mode, we have a list of files.
@@ -110,6 +117,12 @@ pub struct Files {
     /// need to ensure the source exists in the sandbox (Either through a standard
     /// file passthrough or by adding the file to the profile home)
     pub links: Option<Map<String, String>>,
+
+    /// Overlays are layered mounts where the underlying path is mounted underneath
+    /// a temporary upper dir. This gives the appearance of being writable, but any
+    /// changes made will be discarded when the sandbox closes and will not persist
+    /// on the host.
+    pub overlays: Option<Set<String>>,
 
     /// A map of filesystem paths within the sandbox to Landlock permissions that are required.
     pub permissions: Option<Map<String, FileMode>>,
@@ -159,6 +172,7 @@ impl Files {
         extend_option(&mut self.temp, files.temp);
         extend_option(&mut self.links, files.links);
         extend_option(&mut self.permissions, files.permissions);
+        extend_option(&mut self.overlays, files.overlays);
     }
 
     /// Construct a file set from the command line.
@@ -196,13 +210,21 @@ impl Files {
             files.temp.get_or_insert_default().append(&mut temp);
         }
 
-        if let Some(link) = args.link.take() {
+        if let Some(link) = args.links.take() {
             let links = files.get_or_insert_default().links.get_or_insert_default();
             for pair in link {
                 if let Some((src, dst)) = pair.split_once('=') {
                     links.insert(src.to_owned(), dst.to_owned());
                 }
             }
+        }
+
+        if let Some(overlays) = args.overlays.take() {
+            files
+                .get_or_insert_default()
+                .overlays
+                .get_or_insert_default()
+                .extend(overlays);
         }
 
         files

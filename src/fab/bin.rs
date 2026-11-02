@@ -11,7 +11,7 @@ use crate::{
     shared::{
         Map, Set, ThreadSet, direct_path,
         find::{self, DirType, WildcardFilter},
-        landlock::update_policy,
+        landlock::{RX, update_policy},
         profile::{Profile, files::FileMode},
         store::Object,
         utility,
@@ -20,7 +20,6 @@ use crate::{
     timer,
 };
 use anyhow::{Context, Result};
-use landlock::ruleset::Filesystem;
 use log::{debug, warn};
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
@@ -34,14 +33,19 @@ use std::{
 use temp::Temp;
 
 /// System folders for binaries.
-pub static BINARY_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| [
-    "/usr/bin/",
-    "/bin/",
-    "/usr/sbin/",
-    "/sbin/",
-    "/usr/libexec/",
-    ].into_iter().filter(|r| Path::new(r).exists()).map(String::from).collect()
-);
+pub static BINARY_ROOTS: LazyLock<Set<String>> = LazyLock::new(|| {
+    [
+        "/usr/bin/",
+        "/bin/",
+        "/usr/sbin/",
+        "/sbin/",
+        "/usr/libexec/",
+    ]
+    .into_iter()
+    .filter(|r| Path::new(r).exists())
+    .map(String::from)
+    .collect()
+});
 
 pub static SPLIT_ROOT: LazyLock<bool> = LazyLock::new(|| fs::read_link("/usr/sbin").is_ok());
 
@@ -504,12 +508,6 @@ pub fn update_dirs(str: &str, directories: &mut Set<String>) {
 #[allow(clippy::too_many_lines)]
 pub fn fabricate(info: &mut FabInfo) -> Result<()> {
     let mut binaries = info.profile.binaries.clone().unwrap_or_default();
-
-    let allowed = Set::from_iter([
-        Filesystem::Execute,
-        Filesystem::ReadFile,
-        Filesystem::ReadDir,
-    ]);
     let mut directories: Set<_> = BINARY_ROOTS.iter().map(ToString::to_string).collect();
 
     let skip = binaries.contains("/usr/bin");
@@ -533,7 +531,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     info.handle
                         .args_i(["--overlay-src", &str, "--tmp-overlay", &str]);
                     if let Some(policy) = info.policy {
-                        update_policy(&src, policy, allowed.clone());
+                        update_policy(&src, policy, RX);
                     }
                 }
                 info.handle.args_i(["--symlink", &str, root]);
@@ -584,7 +582,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                     .filter_map(|link| fs::canonicalize(&link).ok())
                     .filter(|dest| {
                         !in_bin(&dest.to_string_lossy())
-                            && !ROOTS.iter().any(|root| dest.starts_with(root.as_ref()))
+                            && !ROOTS.iter().any(|root| dest.starts_with(root.as_str()))
                     })
                     .map(|dest| {
                         if let Some(parent) = dest.parent() {
@@ -603,10 +601,10 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
                         if dest.is_file() && elf_filter(&str).unwrap_or_default() {
                             binaries.insert(str.into_owned());
                             if let Some(policy) = info.policy {
-                                update_policy(dest, policy, allowed.clone());
+                                update_policy(dest, policy, RX);
                             }
                         } else if let Some(policy) = info.policy {
-                            update_policy(dest, policy, allowed.clone());
+                            update_policy(dest, policy, RX);
                         }
                     });
             }
@@ -656,7 +654,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             timer!("::libraries", {
                 parsed.directories.into_iter().for_each(|dir| {
                     if let Some(policy) = info.policy {
-                        update_policy(dir.clone(), policy, allowed.clone());
+                        update_policy(dir.clone(), policy, RX);
                     }
                     let _ = libraries.directories.get_or_insert_default().insert(dir);
                 });
@@ -671,8 +669,8 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
             if !in_lib(&link) {
                 info.handle.args_i(["--symlink", &src, &link]);
                 if let Some(policy) = info.policy {
-                    update_policy(link, policy, allowed.clone());
-                    update_policy(src, policy, allowed.clone());
+                    update_policy(link, policy, RX);
+                    update_policy(src, policy, RX);
                 }
             }
         }
@@ -700,7 +698,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
     if let Some(policy) = info.policy {
         for dir in directories {
-            update_policy(dir, policy, allowed.clone());
+            update_policy(dir, policy, RX);
         }
 
         // Add the libraries for the landlock utility.

@@ -1,6 +1,6 @@
 id = "calibre-gui"
 features = ["python", "kf6"]
-binaries = ["calibredb", "ebook-*", "fetch-ebook-metadata", "pdftohtml", "web2disk", "lrf*", "calibre-*", "markdown-calibre"]
+binaries = ["fetch-ebook-metadata", "markdown-calibre", "ebook-*", "calibredb", "calibre-*", "pdftohtml", "web2disk", "lrf*"]
 
 [home]
 policy = "Enabled"

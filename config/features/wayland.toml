@@ -2,10 +2,10 @@ name = "wayland"
 description = "Provide the wayland socket."
 
 [environment]
+DESKTOP_SESSION = "$DESKTOP_SESSION"
 XDG_CURRENT_DESKTOP = "$XDG_CURRENT_DESKTOP"
 XDG_SESSION_TYPE = "wayland"
 WAYLAND_DISPLAY = "$WAYLAND_DISPLAY"
-DESKTOP_SESSION = "$DESKTOP_SESSION"
 
 [libraries]
 files = ["libwayland*"]

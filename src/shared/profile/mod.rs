@@ -27,9 +27,9 @@ use crate::{
     },
 };
 use foldhash::fast::FixedState;
-use log::info;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, hash::BuildHasher, io, path::Path};
+use std::{borrow::Cow, env, hash::BuildHasher, io, path::Path};
 use thiserror::Error;
 
 /// An error for issues around Profiles.
@@ -228,11 +228,17 @@ impl Profile {
         profile.files = files::Files::from_args(args);
         profile.ipc = ipc::Ipc::from_args(args);
 
-        if let Some(env) = args.env.take() {
+        if let Some(env) = args.envs.take() {
             let environment = profile.environment.get_or_insert_default();
             for pair in env {
                 if let Some((key, value)) = pair.split_once('=') {
                     environment.insert(key.to_owned(), value.to_owned());
+                } else if let Some(env) = pair.strip_prefix('$')
+                    && let Ok(val) = env::var(env)
+                {
+                    environment.insert(env.to_owned(), val);
+                } else {
+                    warn!("Unrecognized environment variable: {pair}");
                 }
             }
         }
@@ -357,7 +363,6 @@ impl Profile {
             Object::Profile,
             bitcode::serialize(&profile)?.as_slice(),
         )?;
-
         Ok((profile, hash))
     }
 

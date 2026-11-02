@@ -12,7 +12,7 @@ Hooks are defined in the profile, particularly using either the `[[hooks.pre]]` 
 ```toml
 [[hooks.pre]]  
 type = "Program"
-content = "/usr/bin/prepare"  
+path = "/usr/bin/prepare"  
 attach = true 
 env = true  
 can_fail = false  
@@ -46,11 +46,11 @@ You can optionally give your Hook a `name`, which is chiefly used for logging. I
 
 ## Type/Content
 
-There are three Hook `types`, which dictate how the Hook behaves, and controls how the `content` field is interpreted:
+There are three Hook `types`, which dictate how the Hook behaves, and controls how the `content` field is interpreted. `content` is aliased as both `path` and `profile` as to make the field more understandable given the `type`, but you can use all three names interchangeably.
 
-1. The `Program` hook dictates a standalone executable. Content points to the path of the binary.
-2. The `Shell` hook dictates the Content should be interpreted by a shell, namely `bash`. You can use `"""` for multi-line strings for more complex scripts.
-3. The `Profile` hook dictates another profile should be run. Content specifies the profile name.
+1. The `Program` hook dictates a standalone executable. `path` points to the path of the binary.
+2. The `Shell` hook dictates the `content` should be interpreted by a shell, namely `bash`. You can use `"""` for multi-line strings for more complex scripts.
+3. The `Profile` hook dictates another profile should be run. `profile` specifies the profile name.
 ## Arguments
 
 As with profiles, you can define additional `arguments` to the hook, though this is really only useful when using `path` semantics. 

@@ -9,7 +9,7 @@ notes = """
  4. Update the final Pre-Hook in case you changed the default ports for Companion/DB
 """
 dir = "/usr/lib/invidious"
-features = ["network", "locale"]
+features = ["locale", "network"]
 binaries = ["sh"]
 
 [home]

@@ -2,9 +2,9 @@
 
 ## Creating/Editing
 
-Antimony is bundled with a curated set of profiles and features that cover a wide range of applications. These are typically installed in `/usr/share/antimony/config`, and require *privilege* to modify. This is in the typical sense of the word, as in using `sudo` to edit them directly (though doing so prevents Antimony from ensuring valid modifications), but also because Antimony keeps a list of `privileged_users` in `/etc/antimony.toml` or one of its drop-ins in `/etc/antimony.toml.d` that skip the usual PolKit check.
+Antimony is bundled with a curated set of profiles and features that cover a wide range of applications. These are typically installed in `/usr/share/antimony/config`, and require *privilege* to modify. This is in the typical sense of the word, as in using `sudo` to edit them directly (though doing so prevents Antimony from ensuring valid modifications), but also because Antimony keeps a list of `privileged_users` in `/etc/antimony.toml` or one of its drop-ins in `/etc/antimony.d`
 
-The `--system` flag on `edit` will open the system profile, but the above restrictions are in effect; if you couldn’t modify the file *outside* Antimony, and haven’t told Antimony you have permission to do so, you’ll need to pass a PolKit dialog. 
+The `--system` flag on `edit` will open the system profile, but the above restrictions are in effect.
 
 Otherwise, when the `--system` flag is omitted, Antimony creates a *copy* as a *User Profile*. As the name suggests, this is a user-specific version of the *System Profile* stored in `/usr/share/antimony/config/$USER` that you can freely modify. 
 

@@ -201,7 +201,9 @@ pub fn logger(record: &Record, level: Level) -> bool {
 /// Get where direct files should be placed.
 #[inline]
 pub fn direct_path(file: &str) -> PathBuf {
-    CACHE_DIR.join(".direct").join(&file[1..])
+    CACHE_DIR
+        .join(".direct")
+        .join(file.strip_prefix('/').unwrap_or(file))
 }
 
 #[cfg(debug_assertions)]

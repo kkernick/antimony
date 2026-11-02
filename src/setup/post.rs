@@ -35,13 +35,13 @@ pub fn setup(args: &mut super::Args) -> Result<Vec<String>> {
                 match operation {
                     FileMode::ReadOnly => args.handle.args_i(["--ro-bind", file, &dest]),
                     FileMode::ReadWrite => args.handle.args_i(["--bind", file, &dest]),
-                    FileMode::Executable => {
+                    FileMode::Executable | FileMode::ExecWrite => {
                         let contents = fs::read_to_string(file)?;
                         super::files::add_file(
                             &args.handle,
                             file,
                             &contents,
-                            FileMode::Executable,
+                            operation,
                             &mut args.policy,
                         )?;
                     }

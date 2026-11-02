@@ -12,9 +12,8 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
     if let Some(env) = &args.profile.environment {
         for (key, val) in env {
             let mut val = val.replacen(HOME.as_str(), "/home/antimony", 1);
-            // If we're passed an actual environment variable, resolve it.
-            if val.starts_with('$') {
-                val = env::var(&val[1..]).unwrap_or(val);
+            if let Some(env) = val.strip_prefix('$') {
+                val = env::var(env).unwrap_or(val);
             }
             args.handle.args_i(["--setenv", key, &val]);
         }

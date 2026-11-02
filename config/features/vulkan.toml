@@ -2,7 +2,7 @@ name = "vulkan"
 description = "Vulkan libraries and configuration."
 
 [libraries]
-files = ["libVkLayer*", "libvulkan*"]
+files = ["libvulkan*", "libVkLayer*"]
 
 [files.platform]
 ro = ["/etc/vulkan"]

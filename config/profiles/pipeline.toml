@@ -1,6 +1,6 @@
 path = "tubefeeder"
 id = "de.schmidhuberj.tubefeeder"
-features = ["libadwaita", "libclapper", "https", "gio", "libpeas"]
+features = ["libadwaita", "gio", "https", "libpeas", "libclapper"]
 
 [home]
 policy = "Enabled"

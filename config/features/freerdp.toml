@@ -3,5 +3,5 @@ description = "RDP support via FreeRDP"
 requires = ["network"]
 
 [libraries]
-files = ["libwinpr*", "libfreerdp3*"]
-directories = ["ossl-modules", "freerdp"]
+files = ["libfreerdp3*", "libwinpr*"]
+directories = ["freerdp", "ossl-modules"]

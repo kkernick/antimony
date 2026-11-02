@@ -9,4 +9,4 @@ portals = ["Settings"]
 ro = ["$XDG_DATA_HOME/pixmaps"]
 
 [files.platform]
-ro = ["/usr/share/pixmaps", "/usr/share/color-schemes", "/usr/share/themes", "/usr/share/icons", "/usr/share/cursors"]
+ro = ["/usr/share/cursors", "/usr/share/themes", "/usr/share/color-schemes", "/usr/share/pixmaps", "/usr/share/icons"]

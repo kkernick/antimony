@@ -1,5 +1,5 @@
 id = "com.rafaelmardojai.Blanket"
-features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
+features = ["pipewire", "libadwaita", "gst", "mpris", "vaapi"]
 
 [ipc]
-portals = ["Background", "FileChooser", "Inhibit"]
+portals = ["FileChooser", "Inhibit", "Background"]

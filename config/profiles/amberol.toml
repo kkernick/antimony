@@ -1,8 +1,8 @@
 id = "io.bassi.Amberol"
-features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
+features = ["pipewire", "libadwaita", "gst", "mpris", "vaapi"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
-portals = ["Background", "FileChooser", "Inhibit"]
+portals = ["FileChooser", "Inhibit", "Background"]

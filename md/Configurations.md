@@ -61,4 +61,4 @@ The `--config-mode` flag in `integrate` specifies how you want to integrate your
 
 ## Services
 
-For profiles you want to run on boot, utilize the `--service` flag along with `--autostart`. If configurations are detected, Antimony will install a variadic user-service, allowing you to enable specific configurations a la `systemctl enable --user antimony-PROFILE@CONFIG.service`
+For profiles you want to run on boot, utilize the `--service` flag. If configurations are detected, Antimony will install a variadic user-service, allowing you to enable specific configurations a la `systemctl enable --user antimony-PROFILE@CONFIG.service`

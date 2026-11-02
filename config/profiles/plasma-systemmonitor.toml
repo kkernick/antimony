@@ -1,5 +1,5 @@
 id = "org.kde.plasma-systemmonitor"
-features = ["ksysguard", "cgroup", "network", "kf6"]
+features = ["cgroup", "ksysguard", "kf6", "network"]
 namespaces = ["Pid"]
 
 [home]

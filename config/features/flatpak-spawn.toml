@@ -1,11 +1,11 @@
 name = "flatpak-spawn"
 description = "Use Antimony-Spawn to permit sandboxes to run other applications under Antimony."
-binaries = ["$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn", "bwrap", "bash"]
-namespaces = ["User"]
 landlock = false
+binaries = ["bwrap", "$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn", "bash"]
+namespaces = ["User"]
 
 [files.platform]
-ro = ["/etc/antimony.toml", "/etc/antimony.d", "/usr/share/antimony/utilities"]
+ro = ["/etc/antimony.d", "/usr/share/antimony/utilities", "/etc/antimony.toml"]
 
 [files.permissions]
 "/usr/share/antimony/utilities" = "rx"

@@ -1,0 +1,5 @@
+name = "var"
+description = "Provide /var to the sandbox"
+
+[files]
+overlays = ["/var"]

@@ -36,12 +36,11 @@ use user::as_effective;
 /// Get the Spawner used to run Proxy.
 #[allow(clippy::ref_option, clippy::too_many_lines)]
 pub fn run(
-    sys_dir: &Path,
     profile: &Profile,
     instance: &Temp,
     info: &Path,
     id: &str,
-) -> Result<Spawner> {
+) -> Result<(Spawner, Vec<String>)> {
     let runtime = RUNTIME_DIR.to_string_lossy();
     let cache = CACHE_DIR.join(".proxy");
     let sof = cache.join("sof");
@@ -51,15 +50,7 @@ pub fn run(
         .ipc
         .as_ref()
         .map_or_else(|| false, |ipc| ipc.harden.unwrap_or_default());
-    let landlock = if harden && let Ok(abi) = landlock::abi()
-        // We need at least 10 for Unix.
-        && abi >= 10
-        && Path::new(&utility("landlock")).exists()
-    {
-        true
-    } else {
-        false
-    };
+    let landlock = harden && landlock::abi().is_ok() && Path::new(&utility("landlock")).exists();
     let utility = utility("landlock");
 
     create_path(proxy.as_path())?;
@@ -118,6 +109,8 @@ pub fn run(
         mount_roots("", &proxy)?;
     }
 
+    let mut post = Vec::new();
+
     if landlock {
         let landlock_path = cache.join("ll.policy");
         if !landlock_path.exists() {
@@ -161,87 +154,85 @@ pub fn run(
         }
 
         #[rustfmt::skip]
-        proxy.args_i([
+        post.extend([
             "--ro-bind", &landlock_path.to_string_lossy(), "/landlock.toml",
             "--setenv", "LANDLOCK_POLICY", "/landlock.toml",
             "--ro-bind", &utility, &utility,
             &utility, "/usr/bin/xdg-dbus-proxy"
-        ]);
+            ].into_iter().map(String::from));
     } else {
-        proxy.args_i(["--", "/usr/bin/xdg-dbus-proxy"]);
+        post.extend(
+            ["--", "/usr/bin/xdg-dbus-proxy"]
+                .into_iter()
+                .map(String::from),
+        );
     }
 
-    proxy.args_i([
-        SESSION_BUS.as_str(),
-        &app_dir.join("bus").to_string_lossy(),
-        "--filter",
-    ]);
+    post.extend(
+        [
+            SESSION_BUS.as_str(),
+            &app_dir.join("bus").to_string_lossy(),
+            "--filter",
+        ]
+        .into_iter()
+        .map(String::from),
+    );
 
     if log::log_enabled!(log::Level::Debug) {
-        proxy.arg_i("--log");
+        post.push("--log".to_owned());
         proxy.output_i(StreamMode::Log(log::Level::Debug));
     }
 
-    // We cache the proxy's arguments directly.
-    let cache = sys_dir.join("proxy.cache");
-    if cache.exists() {
-        proxy.cache_read(&cache)?;
-    } else {
-        proxy.cache_start()?;
+    let permit_call = |portal: &str| -> String {
+        let path = portal.replace('.', "/").to_ascii_lowercase();
+        format!("--call={portal}=org.freedesktop.DBus.Properties.*@{path}")
+    };
 
-        let permit_call = |portal: &str| -> String {
-            let path = portal.replace('.', "/").to_ascii_lowercase();
-            format!("--call={portal}=org.freedesktop.DBus.Properties.*@{path}")
-        };
+    if let Some(ipc) = &profile.ipc {
+        if let Some(portals) = &ipc.portals {
+            let desktop = "org.freedesktop.portal.Desktop";
+            let path = "/org/freedesktop/portal/desktop";
+            post.extend([
+                format!("--call={desktop}=org.freedesktop.DBus.Properties.*@{path}/*"),
+                format!("--call={desktop}=org.freedesktop.DBus.Introspectable.Introspect@{path}"),
+            ]);
 
-        if let Some(ipc) = &profile.ipc {
-            if let Some(portals) = &ipc.portals {
-                let desktop = "org.freedesktop.portal.Desktop";
-                let path = "/org/freedesktop/portal/desktop";
-                proxy.args_i([
-                    format!("--call={desktop}=org.freedesktop.DBus.Properties.*@{path}/*"),
-                    format!(
-                        "--call={desktop}=org.freedesktop.DBus.Introspectable.Introspect@{path}"
-                    ),
+            for portal in portals {
+                if portal == &Portal::Settings {
+                    post.push(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"));
+                }
+                post.extend([
+                    format!("--call={desktop}=org.freedesktop.portal.{portal}.*@{path}"),
+                    format!("--talk=org.freedesktop.portal.{portal}"),
                 ]);
-
-                for portal in portals {
-                    if portal == &Portal::Settings {
-                        proxy.arg_i(format!("--broadcast={desktop}=org.freedesktop.portal.Settings.SettingChanged@{path}"));
-                    }
-                    proxy.args_i([
-                        format!("--call={desktop}=org.freedesktop.portal.{portal}.*@{path}"),
-                        format!("--talk=org.freedesktop.portal.{portal}"),
-                    ]);
-                }
-            }
-
-            if let Some(sees) = &ipc.sees {
-                for portal in sees {
-                    proxy.args_i([format!("--see={portal}"), permit_call(portal)]);
-                }
-            }
-            if let Some(talks) = &ipc.talks {
-                for portal in talks {
-                    proxy.args_i([format!("--talk={portal}"), permit_call(portal)]);
-                }
-            }
-
-            if let Some(owns) = &ipc.owns {
-                for portal in owns {
-                    proxy.args_i([format!("--own={portal}"), permit_call(portal)]);
-                }
-            }
-
-            if let Some(calls) = &ipc.calls {
-                for portal in calls {
-                    proxy.arg_i(format!("--call={portal}"));
-                }
             }
         }
-        as_effective!(proxy.cache_write(&cache))?;
+
+        if let Some(sees) = &ipc.sees {
+            for portal in sees {
+                post.extend([format!("--see={portal}"), permit_call(portal)]);
+            }
+        }
+        if let Some(talks) = &ipc.talks {
+            for portal in talks {
+                post.extend([format!("--talk={portal}"), permit_call(portal)]);
+            }
+        }
+
+        if let Some(owns) = &ipc.owns {
+            for portal in owns {
+                post.extend([format!("--own={portal}"), permit_call(portal)]);
+            }
+        }
+
+        if let Some(calls) = &ipc.calls {
+            for portal in calls {
+                post.push(format!("--call={portal}"));
+            }
+        }
     }
-    Ok(proxy)
+
+    Ok((proxy, post))
 }
 
 #[allow(clippy::too_many_lines)]
@@ -340,10 +331,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
         || ipc.sees.is_some()
         || ipc.calls.is_some()
     {
-        let proxy = timer!(
-            "::proxy_run",
-            run(&args.sys_dir, &args.profile, args.instance, &info, id,)
-        )?;
+        let (proxy, post) = timer!("::proxy_run", run(&args.profile, args.instance, &info, id,))?;
 
         if !args.run.dry {
             if ipc.harden.unwrap_or_default()
@@ -406,7 +394,7 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
                     .add(instance_dir.join("proxy"), WatchMask::CREATE)?,
             );
 
-            args.handle.associate(proxy.spawn()?);
+            args.handle.associate(proxy.args(post).spawn()?);
         }
 
         args.handle.args_i([

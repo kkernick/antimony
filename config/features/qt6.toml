@@ -1,16 +1,16 @@
 name = "qt6"
 description = "Provide necessary files for QT6 applications"
-requires = ["fonts", "dri", "locale", "vaapi", "mime", "themes", "wayland"]
+requires = ["dri", "fonts", "locale", "themes", "mime", "vaapi", "wayland"]
 
 [environment]
 QT_QPA_PLATFORM = "wayland"
 
 [libraries]
 roots = ["/usr/lib/qt6/plugins"]
-directories = ["qt6/plugins/kiconthemes6", "qt6/plugins/platform*", "qt6/plugins/styles", "qt6/plugins/imageformats", "qt6/plugins/iconengines", "qt6/plugins/wayland-*"]
+directories = ["qt6/plugins/wayland-*", "qt6/plugins/iconengines", "qt6/plugins/imageformats", "qt6/plugins/platform*", "qt6/plugins/styles", "qt6/plugins/kiconthemes6"]
 
 [files.user]
-ro = ["$XDG_CONFIG_HOME/kdedefaults", "$XDG_CONFIG_HOME/kdeglobals", "$XDG_CONFIG_HOME/breezerc", "$XDG_CONFIG_HOME/Trolltech.conf", "$XDG_CONFIG_HOME/kde.org"]
+ro = ["$XDG_CONFIG_HOME/Trolltech.conf", "$XDG_CONFIG_HOME/kde.org", "$XDG_CONFIG_HOME/kdeglobals", "$XDG_CONFIG_HOME/kdedefaults", "$XDG_CONFIG_HOME/breezerc"]
 
 [files.resources]
 ro = ["/usr/share/qt6"]

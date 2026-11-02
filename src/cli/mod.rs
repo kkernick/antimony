@@ -35,6 +35,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
+#[command(defer = true)]
 pub enum Command {
     /// Run a profile
     Run(run::Args),

@@ -1,5 +1,5 @@
 id = "org.kde.haruna"
-features = ["sdl", "pipewire", "vaapi", "qt6-sql", "mpris", "qt6-qml", "kf6"]
+features = ["pipewire", "qt6-qml", "sdl", "qt6-sql", "mpris", "vaapi", "kf6"]
 
 [home]
 policy = "Enabled"

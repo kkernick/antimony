@@ -1,4 +1,4 @@
-features = ["bin", "vulkan", "daemon", "vaapi", "electron", "rust-devel"]
+features = ["daemon", "electron", "vulkan", "rust-devel", "vaapi", "bin"]
 
 [home]
 policy = "Enabled"

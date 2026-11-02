@@ -4,7 +4,7 @@ features = ["network"]
 policy = "Enabled"
 
 [libraries]
-files = ["libstdc++*", "libsecret*"]
+files = ["libsecret*", "libstdc++*"]
 
 [configuration.run]
 arguments = ["start", "--no-daemon"]

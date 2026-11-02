@@ -1,6 +1,6 @@
 name = "libspelling"
 description = "Spell Checking Library"
-requires = ["hunspell", "enchant"]
+requires = ["enchant", "hunspell"]
 
 [libraries]
 files = ["libspelling*"]

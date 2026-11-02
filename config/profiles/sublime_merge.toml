@@ -1,5 +1,5 @@
 path = "smerge"
-features = ["gtk3", "daemon"]
+features = ["daemon", "gtk3"]
 conflicts = ["hardened_malloc"]
 binaries = ["git"]
 

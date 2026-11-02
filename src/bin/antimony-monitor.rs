@@ -288,10 +288,10 @@ pub fn notify(profile: &str, call: i32, path: &Path) -> Result<String> {
         ),
         "--timeout", "30000",
         "--action", "All=Save All",
-        "--action", "Save",
-        "--action", "Allow",
+        "--action", "Once=Allow",
         "--action", "Deny",
-        "--action", "Kill"
+        "--action", "Kill",
+        "--action", "Save"
     ])
     .mode(user::Mode::Real)
     .output(StreamMode::Pipe)

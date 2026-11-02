@@ -10,3 +10,4 @@ type = "Program"
 content = "$AT_HOME/utilities/antimony-tracer"
 env = true
 capture_error = true
+log_output = true

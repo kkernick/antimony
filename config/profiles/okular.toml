@@ -11,44 +11,44 @@ portals = ["FileChooser"]
 files = ["libOkular6Core*"]
 directories = ["qt6/plugins/okular_generators"]
 
-[configuration.djvu]
-id = "okularApplication_djvu"
-
-[configuration.md]
-id = "okularApplication_md"
-
-[configuration.xps]
-id = "okularApplication_xps"
-
-[configuration.dvi]
-id = "okularApplication_dvi"
-
 [configuration.ghostview]
 id = "okularApplication_ghostview"
 
-[configuration.epub]
-id = "okularApplication_epub"
-
-[configuration.fax]
-id = "okularApplication_fax"
-
-[configuration.kimgio]
-id = "okularApplication_kimgio"
-
-[configuration.mobi]
-id = "okularApplication_mobi"
-
-[configuration.fb]
-id = "okularApplication_fb"
+[configuration.djvu]
+id = "okularApplication_djvu"
 
 [configuration.comicbook]
 id = "okularApplication_comicbook"
 
-[configuration.pdf]
-id = "okularApplication_pdf"
+[configuration.kimgio]
+id = "okularApplication_kimgio"
 
 [configuration.tiff]
 id = "okularApplication_tiff"
 
 [configuration.txt]
 id = "okularApplication_txt"
+
+[configuration.fax]
+id = "okularApplication_fax"
+
+[configuration.xps]
+id = "okularApplication_xps"
+
+[configuration.md]
+id = "okularApplication_md"
+
+[configuration.dvi]
+id = "okularApplication_dvi"
+
+[configuration.fb]
+id = "okularApplication_fb"
+
+[configuration.mobi]
+id = "okularApplication_mobi"
+
+[configuration.pdf]
+id = "okularApplication_pdf"
+
+[configuration.epub]
+id = "okularApplication_epub"

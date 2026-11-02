@@ -1,4 +1,4 @@
-features = ["pipewire", "vaapi", "xdg-open", "electron", "https"]
+features = ["pipewire", "electron", "xdg-open", "https", "vaapi"]
 
 [home]
 policy = "Enabled"

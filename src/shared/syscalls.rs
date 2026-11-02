@@ -3,7 +3,7 @@
 
 use crate::shared::{
     Set, ThreadMap, create_parent,
-    env::{AT_HOME, DATA_HOME},
+    env::{AT_HOME, CACHE_DIR, DATA_HOME},
     find::{DirType, recursive_crawl},
     profile::seccomp::SeccompPolicy,
     store::{Object, SYSTEM_STORE, USER_STORE},
@@ -434,17 +434,15 @@ pub fn new(
         syscalls.hash(&mut s);
         let hash = format!("{}", s.finish());
 
-        let bpf = AT_HOME
-            .join("cache")
-            .join(".seccomp")
-            .join(format!("{hash}.bpf"));
-
-        create_parent(bpf.as_path())?;
-        Some(if let Ok(file) = File::open(&bpf) {
-            file.into()
-        } else {
-            filter.write(&bpf)?
-        })
+        let bpf = CACHE_DIR.join(".seccomp").join(format!("{hash}.bpf"));
+        as_effective!(Result<_, Error>, {
+            create_parent(bpf.as_path())?;
+            Ok(Some(if let Ok(file) = File::open(&bpf) {
+                file.into()
+            } else {
+                filter.write(&bpf)?
+            }))
+        })?
     } else {
         None
     };

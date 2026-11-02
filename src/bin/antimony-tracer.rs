@@ -11,7 +11,7 @@ use antimony::{
         Set, ThreadMap,
         feature::Feature,
         find::{self, WildcardFilter},
-        profile::files::FileMode,
+        profile::{Profile, files::FileMode},
         store::{Object, SYSTEM_STORE, USER_STORE},
     },
 };
@@ -20,7 +20,9 @@ use rayon::prelude::*;
 use signal_hook::{consts, flag};
 use std::{
     borrow::Cow,
-    io::{self, Write, stdin},
+    env,
+    fs::{self, File},
+    io::{self, ErrorKind, Write, stdin},
     path::Path,
     sync::{
         Arc,
@@ -47,6 +49,31 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    let mut profile_features = Set::default();
+    if let Ok(cache) = env::var("ANTIMONY_CACHE") {
+        let name = if let Some(i) = cache.rfind('/')
+            && let Some(i) = i.checked_add(1)
+        {
+            &cache[i..]
+        } else {
+            cache.as_str()
+        };
+        if let Some((_, hash)) = name.split_once('-')
+            && let Some(cache_dir) = cache.strip_suffix(&format!("run/{name}"))
+        {
+            let profile = Path::new(cache_dir)
+                .join("profiles")
+                .join(hash)
+                .with_extension("cache");
+            if profile.exists() {
+                let mut profile: Profile = bitcode::deserialize(fs::read(profile)?.as_slice())?;
+                if let Some(features) = profile.features.take() {
+                    profile_features.extend(features);
+                }
+            }
+        }
+    }
+
     let extract = |line: &str, delim_l: char, delim_r: char| -> Option<String> {
         if let Some(l) = line.find(delim_l)
             && let Some(l) = l.checked_add(1)
@@ -59,15 +86,14 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    println!("Generating Report...");
     // Get the files.
     let not_found: Set<String> = err
         .par_iter()
         .enumerate()
-        .filter(|(_, e)| e.contains("ENOENT") || e.contains("EACCES"))
+        .filter(|(_, e)| e.contains("ENOENT"))
         .filter_map(|(i, e)| {
             // Try and extract the path
-            extract(e, '"', '"').map_or_else(
+            let path = extract(e, '"', '"').map_or_else(
                 // If there is no path, grab the PID and name.
                 || {
                     extract(e, '[', ']').and_then(|pid| {
@@ -90,11 +116,26 @@ fn main() -> anyhow::Result<()> {
                     })
                 },
                 Some,
-            )
+            );
+
+            if let Some(path) = &path
+                && e.contains("EACCES")
+                && let Err(e) = File::open(path)
+                && e.kind() == ErrorKind::PermissionDenied
+            {
+                None
+            } else {
+                path
+            }
         })
         .filter(|e| {
             let path = Path::new(e);
-            path.exists() && !e.starts_with("/home/antimony") && !e.starts_with("/proc")
+            path.exists()
+
+                // Skip the home, ephemeral/caches, and symlinks
+                && !["/home/antimony", "/proc", "/var/cache", "/lib", "/bin"]
+                    .iter()
+                    .any(|r| path.starts_with(r))
         })
         .collect();
 
@@ -158,7 +199,7 @@ fn main() -> anyhow::Result<()> {
                         *d_name == *file
                     };
 
-                    if found {
+                    if found && !profile_features.contains(name) {
                         features.insert((name.clone(), d_name.into_owned(), *mode));
                         Some(())
                     } else {
@@ -210,6 +251,13 @@ fn main() -> anyhow::Result<()> {
                                     if matches(mode, d_name, &file).is_some() {
                                         break 'feature_loop;
                                     }
+                                }
+                            }
+                        }
+                        if let Some(overlays) = &files.overlays {
+                            for d_name in overlays {
+                                if matches(&FileMode::ReadOnly, d_name, &file).is_some() {
+                                    break 'feature_loop;
                                 }
                             }
                         }
@@ -268,6 +316,7 @@ fn main() -> anyhow::Result<()> {
                         FileMode::ReadOnly => style(mode).green(),
                         FileMode::ReadWrite => style(mode).yellow(),
                         FileMode::Executable => style(mode).red(),
+                        FileMode::ExecWrite => style(mode).red().bold(),
                     };
                     println!("\t- {} (via {path}) as {styled}", style(feature).bold());
                 }

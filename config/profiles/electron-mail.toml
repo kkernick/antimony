@@ -1,5 +1,4 @@
-features = ["https", "xdg-open", "secrets", "electron", "tray"]
-arguments = ["--ozone-platform=wayland"]
+features = ["electron", "secrets", "xdg-open", "https", "tray"]
 
 [home]
 policy = "Enabled"

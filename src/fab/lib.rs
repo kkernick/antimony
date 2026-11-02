@@ -9,6 +9,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 use crate::shared::landlock::update_policy;
+use crate::shared::store::{CACHE_STORE, Object};
 use crate::shared::{StaticHash, create_parent, create_path, utility};
 use crate::{
     fab::{find_folders, get_libraries, in_lib, localize_home},
@@ -28,39 +29,112 @@ use landlock::ruleset::Filesystem;
 use log::{Level, error, warn};
 use rayon::prelude::*;
 use spawn::Spawner;
-use std::io::ErrorKind;
 use std::{
     borrow::Cow,
-    fs,
+    fs::{self, File},
+    io::{self, ErrorKind, Read},
     path::{Path, PathBuf},
     sync::LazyLock,
 };
 use user::{Mode, as_effective};
 
 /// Library Files (i.e. .so files)
-static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
+pub static FILES: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 
 /// Library Directories (e.g. /usr/lib/qt6)
 pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default);
 
 /// Roots to search for files and directories
-pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
-    CONFIG_FILE
-        .library_roots
-        .as_ref()
-        .map_or_else(ThreadSet::default, |roots| {
-            roots
-                .iter()
-                .map(|root| {
-                    if root.ends_with('/') {
-                        Cow::Borrowed(root.as_str())
-                    } else {
-                        Cow::Owned(format!("{root}/"))
-                    }
-                })
-                .collect()
-        })
+pub static ROOTS: LazyLock<ThreadSet<String>> = LazyLock::new(|| {
+    parse_cache("/etc/ld.so.cache").map_or_default(|mut roots| {
+        if let Some(cached) = &CONFIG_FILE.library_roots {
+            roots.extend(cached.clone());
+        }
+
+        roots
+            .into_iter()
+            .filter(|root| !root.is_empty() && root != "/")
+            .map(|root| {
+                if root.ends_with('/') {
+                    root
+                } else {
+                    format!("{root}/")
+                }
+            })
+            .collect()
+    })
 });
+
+/// Parse the host ld.so.cache to extract roots
+#[allow(clippy::arithmetic_side_effects)]
+fn parse_cache(filepath: &str) -> Result<Set<String>> {
+    let roots = if let Ok(bytes) = CACHE_STORE.borrow().bytes("ld.so", Object::Libraries) {
+        bitcode::deserialize(bytes.as_slice())?
+    } else {
+        let mut file = File::open(filepath)?;
+        let mut data = Vec::default();
+        file.read_to_end(&mut data)?;
+
+        let magic_new = b"glibc-ld.so.cache1.1";
+        let h = data
+            .windows(magic_new.len())
+            .position(|window| window == magic_new)
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Modern glibc cache format not found.",
+                )
+            })?;
+
+        let size = 20 + 4 + 4 + 5 * 4;
+        let libs = u32::from_le_bytes([data[h + 20], data[h + 21], data[h + 22], data[h + 23]]);
+        let offset = h + size;
+        let entry_size = 24;
+
+        let mut roots: Set<String> = (0..libs)
+            .into_par_iter()
+            .map(|i| offset + (i as usize * entry_size))
+            .filter(|c| c + entry_size <= data.len())
+            .filter_map(|c| {
+                let val_idx =
+                    u32::from_le_bytes([data[c + 8], data[c + 9], data[c + 10], data[c + 11]])
+                        as usize;
+                let ptr = offset + val_idx;
+                let end = data[ptr..]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .map_or(data.len(), |pos| ptr + pos);
+                if let Ok(path) = str::from_utf8(&data[ptr..end])
+                    && path.starts_with('/')
+                    && let Some(parent) = Path::new(&path).parent()
+                    && let Ok(canon) = parent.canonicalize()
+                    && canon.exists()
+                {
+                    Some(canon.to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for auxiliary in ["/usr/lib64", "/usr/libexec"] {
+            let path = Path::new(auxiliary);
+            if path.exists()
+                && !path.is_symlink()
+                && let Ok(canon) = path.canonicalize()
+            {
+                roots.insert(canon.to_string_lossy().into_owned());
+            }
+        }
+        CACHE_STORE.borrow().dump(
+            "ld.so",
+            Object::Libraries,
+            bitcode::serialize(&roots)?.as_slice(),
+        )?;
+        roots
+    };
+    Ok(roots)
+}
 
 /// Add a file to the SOF.
 /// This function must be run underneath an effective UID
@@ -69,7 +143,7 @@ pub static ROOTS: LazyLock<ThreadSet<Cow<'static, str>>> = LazyLock::new(|| {
 /// If the path cannot be resolved, or the file cannot be added to the SOF.
 #[inline]
 pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
-    let sof_path = sof.join(&library[1..]);
+    let sof_path = sof.join(library.strip_prefix("/").unwrap_or(library));
     create_parent(sof_path.as_path())?;
 
     let path: Cow<'_, Path> = Cow::Owned(PathBuf::from(library));
@@ -93,7 +167,9 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
         //
         // This reduces redundancy between profiles, and since shared exists
         // in the CACHE_DIR, hard links will work.
-        let shared_path = &cache.join("shared").join(&library[1..]);
+        let shared_path = &cache
+            .join("shared")
+            .join(library.strip_prefix('/').unwrap_or(library));
 
         // Copy will always overwrite, so we need to check if it exists
         if !shared_path.exists()
@@ -117,7 +193,7 @@ pub fn add_sof(sof: &Path, library: &str, cache: &Path) -> Result<()> {
 #[inline]
 pub fn mount_roots(sof: &str, handle: &Spawner) -> Result<()> {
     ROOTS.iter().try_for_each(|root| -> Result<()> {
-        let path = PathBuf::from(format!("{sof}{}", root.as_ref()));
+        let path = PathBuf::from(format!("{sof}{}", root.as_str()));
         if path.exists() {
             if sof.is_empty() {
                 handle.args_i(["--ro-bind", &path.display().to_string(), root.as_ref()]);
@@ -168,7 +244,7 @@ fn resolve_wildcards(set: Set<String>, filter: WildcardFilter) -> OwningIter<Str
                 resolved.insert(e.replacen('~', HOME.as_str(), 1));
             } else {
                 for root in ROOTS.iter() {
-                    let path = format!("{}/{e}", root.as_ref());
+                    let path = format!("{}/{e}", root.as_str());
                     if Path::new(&path).exists() {
                         resolved.insert(path);
                         if filter == WildcardFilter::Files {
@@ -219,7 +295,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
             Cow::Owned(info.name.to_title_case()),
             Cow::Owned(info.name.to_lowercase()),
         ] {
-            let name = format!("{}/{}", lib_root.as_ref(), norm);
+            let name = format!("{}/{}", lib_root.as_str(), norm);
             if Path::new(&name).exists() {
                 if no_sof {
                     info.handle.args_i(["--ro-bind", &name, &name]);
@@ -392,7 +468,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
                     let home = dir.starts_with("/home/");
 
                     if in_lib(dir.as_ref()) {
-                        let sof_path = sof.join(&dir[1..]);
+                        let sof_path = sof.join(dir.strip_prefix('/').unwrap_or(&dir));
                         as_effective!({ create_path(sof_path.as_path()) })?;
                     } else if !home && let Some(policy) = info.policy {
                         update_policy(dir.as_str(), policy, allowed.clone());
@@ -406,7 +482,7 @@ pub fn fabricate(info: &mut super::FabInfo) -> Result<()> {
     }
     if let Some(policy) = info.policy {
         for root in ROOTS.iter() {
-            update_policy(root.as_ref(), policy, allowed.clone());
+            update_policy(root.as_str(), policy, allowed.clone());
         }
     }
 

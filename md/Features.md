@@ -18,7 +18,7 @@ user.ro = ["$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY"]
 "DESKTOP_SESSION" = "$DESKTOP_SESSION"
 ```
 
-However, if you check any such application in the System Store, it almost certainly doesn’t have `wayland` in the `features` list. This is because of Antimony’s greatest strength: Flexibility.
+However, if you check any such application in the System Store, it almost certainly doesn’t have `wayland` in the `features` list. This is because features can depend on other features.
 
 ## History
 
@@ -90,7 +90,6 @@ binaries = ["prlimit", "$AT_HOME/utilities/antimony-spawn=/usr/bin/flatpak-spawn
 libraries = ["libsoftokn3*", "libfreeblpriv3*", "libsmime3*", "libnss*", "gtk-3.0", "tinysparql-3.0", "libgdk-3*", "libgtk-3*", "dri", "gbm", "libMesa*", "libGL*", "libEGL*", "gdk-pixbuf-2.0", "libgdk_pixbuf*", "librsvg-2*", "girepository-1.0", "glycin-loaders", "libglycin*", "libpipewire*", "pipewire-0.3", "spa-0.2", "pulseaudio", "libva-drm*", "libva-wayland*", "libva.so*", "libavcodec*", "libavdevice*", "libavfilter*", "libavformat*", "libavutil*"]
 devices = ["/dev/null", "/dev/urandom", "/dev/shm", "/dev/dri"]
 namespaces = ["User", "Net"]
-arguments = ["--ozone-platform=wayland"]
 
 [home]
 policy = "Enabled"
@@ -199,6 +198,7 @@ sandbox_args = ["strace", "-ffyY", "-v", "-s", "256"]
 binaries = ["strace"]
 
 [hooks.parent]
+type = "Program"
 name = "tracer"
 path = "$AT_HOME/utilities/antimony-tracer"
 capture_error = true

@@ -1,6 +1,6 @@
 name = "gst"
 description = "GStreamer for video/audio playback"
-requires = ["passwd", "python", "gir"]
+requires = ["python", "passwd", "gir"]
 
 [libraries]
 files = ["libgst*"]

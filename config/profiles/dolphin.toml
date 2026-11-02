@@ -1,5 +1,5 @@
 id = "org.kde.dolphin"
-features = ["xdg-open", "kf6"]
+features = ["kf6", "xdg-open"]
 
 [ipc]
 owns = ["org.kde.dolphin.*"]

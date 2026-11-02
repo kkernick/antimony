@@ -3,8 +3,8 @@ description = "DRI for accelerated video rendering"
 devices = ["/dev/udmabuf", "/dev/dri"]
 
 [libraries]
-files = ["libGL*", "libgallium*", "libMesa*", "libEGL*"]
+files = ["libEGL*", "libGL*", "libgallium*", "libMesa*"]
 directories = ["dri", "gbm"]
 
 [files.platform]
-ro = ["/sys/devices/pci0000:00", "/etc/OpenCL/", "/sys/dev/char", "/usr/share/drirc.d", "/usr/share/libdrm", "/usr/share/glvnd"]
+ro = ["/usr/share/glvnd", "/sys/dev/char", "/usr/share/libdrm", "/usr/share/drirc.d", "/etc/OpenCL/", "/sys/devices/pci0000:00"]

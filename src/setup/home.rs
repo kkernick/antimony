@@ -68,10 +68,10 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                         "--timeout",
                                         "10000",
                                         "--action", "Ignore",
-                                        "--action", "Unlock",
                                         "--action", "Skip",
+                                        "--action", "Abort",
+                                        "--action", "Unlock",
                                         "--action", "Overlay",
-                                        "--action", "Abort"
                                     ])
                                     .spawn()?;
 

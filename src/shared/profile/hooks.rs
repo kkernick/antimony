@@ -4,6 +4,7 @@ use crate::{
     fab::resolve,
     shared::{extend_option, which::AntimonyWhich},
 };
+use log::Level;
 use nix::{errno, unistd::pipe};
 use serde::{Deserialize, Serialize};
 use spawn::{HandleError, SpawnError, Spawner, StreamMode};
@@ -103,6 +104,7 @@ pub struct Hook {
     /// For scripts, the full content.
     /// For programs, the name/path of the binary.
     /// For antimony, the profile
+    #[serde(alias = "profile", alias = "path")]
     pub content: String,
 
     /// A list of arguments to be passed to the hook
@@ -132,6 +134,12 @@ pub struct Hook {
     /// STDIN. Only one of `capture_output` and `capture_error` can be
     /// set. If both are set, `capture_error` is used.
     pub capture_error: Option<bool>,
+
+    /// Send the hook's output to Antimony's logger under INFO.
+    pub log_output: Option<bool>,
+
+    /// Send the hook's error to Antimony's logger under INFO.
+    pub log_error: Option<bool>,
 }
 impl Hook {
     /// Process the hook.
@@ -181,6 +189,12 @@ impl Hook {
         .name(self.name.get_or_insert_with(|| "hook".to_owned()));
         if let Some(arguments) = self.arguments.take() {
             handle.args_i(arguments);
+        }
+        if self.log_output.unwrap_or_default() {
+            handle.output_i(StreamMode::Log(Level::Info));
+        }
+        if self.log_error.unwrap_or_default() {
+            handle.error_i(StreamMode::Log(Level::Info));
         }
 
         if parent {

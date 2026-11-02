@@ -1,5 +1,5 @@
 path = "~/.local/zed.app/libexec/zed-editor"
-inherits = ["zed", "default"]
+inherits = ["zed"]
 
 [files.user]
 ro = ["~/.local/zed.app"]

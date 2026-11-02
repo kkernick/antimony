@@ -1,4 +1,4 @@
-features = ["gtk3", "python", "gtksourceview", "network"]
+features = ["gtksourceview", "python", "gtk3", "network"]
 
 [home]
 policy = "Enabled"
@@ -9,11 +9,11 @@ owns = ["org.virt-manager.virt-manager"]
 sockets = ["/var/run/libvirt"]
 
 [files.platform]
-ro = ["/usr/share/misc", "/var/run/libvirt", "/sys", "/usr/share/osinfo", "/usr/share/hwdata"]
+ro = ["/usr/share/hwdata", "/sys", "/var/run/libvirt", "/usr/share/misc", "/usr/share/osinfo"]
 
 [files.permissions]
 "/var/cache" = "rw"
 
 [libraries]
-files = ["libosinfo*", "libvirt*", "libspice-client*"]
+files = ["libosinfo*", "libspice-client*", "libvirt*"]
 directories = ["libvirt"]

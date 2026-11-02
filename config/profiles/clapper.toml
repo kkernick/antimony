@@ -1,5 +1,5 @@
 id = "com.github.rafostar.Clapper"
-features = ["libadwaita", "mpris", "libclapper"]
+features = ["libclapper", "libadwaita", "mpris"]
 
 [home]
 policy = "Enabled"

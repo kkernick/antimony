@@ -1,0 +1,8 @@
+name = "machine-id"
+description = "Provide a /etc/machine-id"
+
+[files.direct.ro]
+"/var/lib/dbus/machine-id" = "616e74696d6f6e7a2073616e64626f78"
+
+[files.links]
+"/var/lib/dbus/machine-id" = "/etc/machine-id"

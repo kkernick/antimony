@@ -1,9 +1,9 @@
-features = ["vulkan", "dri", "network"]
+features = ["dri", "vulkan", "network"]
 
 [home]
 policy = "Enabled"
 
 [environment]
+OLLAMA_HOST = "http://0.0.0.0:11434"
 OLLAMA_IGPU_ENABLE = "1"
 OLLAMA_VULKAN = "1"
-OLLAMA_HOST = "http://0.0.0.0:11434"

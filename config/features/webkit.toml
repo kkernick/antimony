@@ -1,6 +1,6 @@
 name = "webkit"
 description = "WebKit for rendering web-content"
-requires = ["gio", "gir"]
+requires = ["gir", "gio"]
 
 [libraries]
 files = ["libjavascriptcoregtk*", "libwebkitgtk*"]

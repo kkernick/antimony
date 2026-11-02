@@ -2,5 +2,5 @@ name = "vaapi"
 description = "VA-API for Hardware Video Encoding/Decoding."
 
 [libraries]
-files = ["libva-drm*", "libavutil*", "libva.so*", "libavformat*", "libavcodec*", "libavdevice*", "libavfilter*", "libva-wayland*"]
+files = ["libavfilter*", "libavformat*", "libva.so*", "libva-drm*", "libavutil*", "libva-wayland*", "libavcodec*", "libavdevice*"]
 directories = ["va"]

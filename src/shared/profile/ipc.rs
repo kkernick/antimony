@@ -115,13 +115,13 @@ impl Ipc {
         if let Some(sockets) = args.sockets.take() {
             ipc.get_or_insert_default().sockets = Some(sockets.into_iter().collect());
         }
-        if let Some(bind) = args.bind.take() {
+        if let Some(bind) = args.binds.take() {
             ipc.get_or_insert_default()
                 .ports
                 .get_or_insert_default()
                 .bind = Some(bind.into_iter().collect());
         }
-        if let Some(connect) = args.connect.take() {
+        if let Some(connect) = args.connects.take() {
             ipc.get_or_insert_default()
                 .ports
                 .get_or_insert_default()

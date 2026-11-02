@@ -7,7 +7,7 @@ files = ["libgnutls*"]
 directories = ["pkcs11"]
 
 [files.platform]
-ro = ["/etc/gnutls", "/etc/pkcs11"]
+ro = ["/etc/pkcs11", "/etc/gnutls"]
 
 [files.resources]
 ro = ["/usr/share/p11-kit/"]

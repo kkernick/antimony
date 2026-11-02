@@ -31,9 +31,7 @@ One particular challenge Antimony faces is determining where your system librari
 `
 For Arch, everything points to `/usr/lib`. For Ubuntu, application install their own library folders (i.e `/usr/lib/chromium`), directly to `/usr/lib`, whereas shared libraries are placed in their `arch-id` sub-folder. Additionally, `/usr/libexec` is used by some applications. For Fedora, `lib64` is a distinct folder. 
 
-While Antimony attempted in the past to try and ameliorate Library Root discovery to be an automatic process, it proved either non-exhaustive, or too slow. A particular issue that cropped up was `lib32`. Some applications, like Steam, use `lib32` libraries in an otherwise 64 bit system. An automatic discovery method would require all applications to search this location, despite never using anything inside of it.
-
-The solution ended up being a static list of library roots installed for each distribution, with profiles and feature able to add to this list. Every version of Antimony ships with the base library root of `library_roots = ["/usr/lib"]`. For Arch, this is all that is needed. For Debian/Ubuntu, we add additional roots:
+Antimony parses your linker cache (`/etc/ld.so.cache`) to discover library roots on your system. However, you can also define an additional set of supplementary roots in Antimony’s config at `/etc/antimony.toml` or drop-ins at `/etc/antimony.d/`
 
 ```toml
 library_roots = [
@@ -52,19 +50,10 @@ roots = ["/usr/lib32"]
 
 ## Discovery 
 
-Antimony uses `ldd` to discovery shared libraries. There have been numerous attempts to move to something better, as `ldd`:
-1. Requires an `execve` call.
-2. Executes the library/binary.
-
-This has included:
-1. Trying `objdump`, which only performs static analysis
-2. Using `goblin` and manually parsing the files in Rust
-3. Using `antimony-dumper` and capturing `dlopen` calls.
-
-However, `ldd` has proven to be the fastest and most comprehensive method available—and one almost universally installed by all systems.
+Antimony uses the system linker to discovery shared libraries.
 
 > [!warning]
-> As if this still needs to be said: Sandboxing cannot protect you from running malicious software. Antimony will execute your binary on the host using `ldd`.
+> As if this still needs to be said: Sandboxing cannot protect you from running malicious software. Antimony will execute your binary on the host using the linker.
 
 Antimony has a custom directory crawler that indexes your library roots and their sub-folders, collecting a list of shared libraries that a profile needs. It then runs `ldd` against all of them, coalescing the results into a single list.
 
@@ -81,7 +70,7 @@ There are also several places Antimony checks outside your typical roots for app
 
 Part of the advantage of using Antimony is you are using your own system libraries, unlike solutions like Flatpak or Snap which ship an entire set of system libraries for sandboxed environments. However, while we now have a list of shared libraries the program needs, getting them exposed to the sandbox in an isolated window is difficult. We cannot simply `--bind` each shared library, as it would slow `bwrap` to a crawl (And often times exceed its maximum argument count). The solution is the titular SOF, a physical folder in Antimony’s cache.
 
-If you have the correct permissions and setup (i.e the Cache folder is located on the same partition as your library roots, and `fs.protected_hardlinks` is not set), Antimony will create hard-links from the original files to the SOF; in other words: it costs nothing. 
+Antimony uses a capability helper, `antimony-writer`, to utilize hardlinks when creating the SOF files. This has the benefit of being instantaneous, and taking up no additional space. This supports hardened systems (i.e `fs.protected_hardlinks`)
 
 If Antimony cannot do that, it does the next best thing and de-duplicates copies across your profiles. It creates a copy of the library in `$CACHE_DIR/shared`, which it then hard-links to; because Antimony owns the copy, you don’t need to tweak `sysctl` to get it working. Then, if another profile has already copied a needed library over, other profiles can freely hard-link to that copy as well.
 

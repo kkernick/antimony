@@ -1,11 +1,11 @@
 id = "com.github.neithern.g4music"
-features = ["libadwaita", "pipewire", "vaapi", "gst", "mpris"]
+features = ["pipewire", "libadwaita", "gst", "mpris", "vaapi"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
-portals = ["Background", "FileChooser", "Inhibit"]
+portals = ["FileChooser", "Inhibit", "Background"]
 
 [files.user]
 rw = ["Music"]

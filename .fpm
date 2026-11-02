@@ -26,9 +26,9 @@
 ./config/features=/usr/share/antimony/config
 ./config/default.toml=/usr/share/antimony/config/profiles/default.toml
 
-./config/feature.toml=/usr/share/antimony/config/feature.toml
-./config/profile.toml=/usr/share/antimony/config/profile.toml
-./config/config.d/base.toml=/etc/antimony.d/base.toml
+./generated/feature.toml=/usr/share/antimony/config/feature.toml
+./generated/profile.toml=/usr/share/antimony/config/profile.toml
+./config/config.toml=/etc/antimony.toml
 
 ./generated/antimony.bash=/usr/share/bash-completion/completions/antimony
 ./generated/antimony.fish=/usr/share/fish/vendor_completions.d/antimony.fish

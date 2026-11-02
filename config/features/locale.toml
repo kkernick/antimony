@@ -8,4 +8,4 @@ LANG = "$LANG"
 directories = ["locale"]
 
 [files.platform]
-ro = ["/etc/localtime", "/usr/share/locale", "/usr/share/zoneinfo"]
+ro = ["/usr/share/zoneinfo", "/etc/localtime", "/usr/share/locale"]

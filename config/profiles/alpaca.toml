@@ -1,5 +1,5 @@
 id = "com.jeffser.Alpaca"
-features = ["webkit", "hunspell", "network", "libadwaita", "python", "gtksourceview", "vte", "gst", "pipewire", "libspelling"]
+features = ["libadwaita", "python", "gst", "hunspell", "network", "gtksourceview", "pipewire", "webkit", "vte", "libspelling"]
 conflicts = ["hardened_malloc"]
 
 [home]

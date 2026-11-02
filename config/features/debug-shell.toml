@@ -3,5 +3,5 @@ description = "Drop into a debug shell"
 conditional = "command -v /usr/bin/sh"
 requires = ["shell"]
 conflicts = ["daemon"]
-binaries = ["ls", "sh", "cat"]
+binaries = ["cat", "sh", "ls"]
 sandbox_args = ["#", "sh", "!"]

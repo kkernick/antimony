@@ -1,7 +1,7 @@
 path = "/opt/cryptomator/bin/cryptomator"
 notes = "You cannot actually mount volumes though antimony, as that requires privilege."
 id = "org.cryptomator.Cryptomator"
-features = ["gtk3", "xorg"]
+features = ["xorg", "gtk3"]
 binaries = ["sh"]
 
 [home]
@@ -11,4 +11,4 @@ policy = "Enabled"
 portals = ["FileChooser"]
 
 [libraries]
-files = ["librt*", "libappindicator*", "libX*", "libpthread*", "libgthread*"]
+files = ["libpthread*", "librt*", "libX*", "libappindicator*", "libgthread*"]

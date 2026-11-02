@@ -3,7 +3,7 @@
 #![allow(unused_crate_dependencies)]
 
 use antimony::shared::{env::HOME_PATH, which::AntimonyWhich};
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::Parser;
 use spawn::{Spawner, StreamMode};
 use std::{env, fs};
@@ -63,25 +63,29 @@ fn main() -> Result<()> {
     let target = "x86_64-unknown-linux-gnu";
     if cli.recipe == "pgo" {
         eprintln!("Compiling instrumented binary");
-        Spawner::which::<AntimonyWhich>("cargo")?
+        let mut handle = Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
             .env("RUST_LOG", "")
-            .error(StreamMode::Log(log::Level::Warn))
+            .error(StreamMode::Pipe)
             .output(StreamMode::Log(log::Level::Info))
             .args(cargo_flags.clone())
             .args(["pgo", "build", "--", "--target", target])
             .args(post_flags.clone())
             .args(&passthrough)
-            .spawn()?
-            .wait()?;
+            .spawn()?;
+        if handle.wait_and()? != 0
+            && let Ok(e) = handle.error_all()
+        {
+            return Err(anyhow!("Failed to build instrumented binary: {e}"));
+        }
 
         let instrumented = format!("{target_dir}/{target}/release/antimony");
         eprintln!("Using {instrumented}");
 
         eprintln!("Performing Refresh Profiling");
-        Spawner::abs(&instrumented)
+        let mut handle = Spawner::abs(&instrumented)
             .args(["refresh", "--hard"])
             .new_privileges(true)
             .preserve_env(true)
@@ -89,10 +93,15 @@ fn main() -> Result<()> {
                 "LLVM_PROFILE_FILE",
                 format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
             )
-            .error(StreamMode::Log(log::Level::Warn))
+            .error(StreamMode::Pipe)
             .output(StreamMode::Log(log::Level::Info))
-            .spawn()?
-            .wait()?;
+            .spawn()?;
+
+        if handle.wait_and()? != 0
+            && let Ok(e) = handle.error_all()
+        {
+            return Err(anyhow!("Failed to refresh with binary: {e}"));
+        }
 
         let profiles = fs::read_dir(HOME_PATH.join(".local").join("bin"))?.filter_map(|e| {
             if let Ok(entry) = e
@@ -106,7 +115,7 @@ fn main() -> Result<()> {
         });
 
         eprintln!("Peforming Benchmark Profiling");
-        Spawner::abs(format!("{root}/scripts/cargo-bencher"))
+        let mut handle = Spawner::abs(format!("{root}/scripts/cargo-bencher"))
             .args(profiles)
             .args(["--recipe", &instrumented, "--", "--bench", "real"])
             .new_privileges(true)
@@ -115,18 +124,22 @@ fn main() -> Result<()> {
                 "LLVM_PROFILE_FILE",
                 format!("{target_dir}/pgo-profiles/antimony_%m_%p.profraw"),
             )
-            .error(StreamMode::Log(log::Level::Warn))
+            .error(StreamMode::Pipe)
             .output(StreamMode::Log(log::Level::Info))
-            .spawn()?
-            .wait()?;
+            .spawn()?;
+        if handle.wait_and()? != 0
+            && let Ok(e) = handle.error_all()
+        {
+            return Err(anyhow!("Failed to benchmark with binary: {e}"));
+        }
 
         eprintln!("Compiling Final Binary");
-        Spawner::which::<AntimonyWhich>("cargo")?
+        let mut handle = Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
             .env("RUST_LOG", "")
-            .error(StreamMode::Log(log::Level::Warn))
+            .error(StreamMode::Pipe)
             .output(StreamMode::Log(log::Level::Info))
             .args(cargo_flags)
             .args([
@@ -140,11 +153,15 @@ fn main() -> Result<()> {
             ])
             .args(post_flags)
             .args(&passthrough)
-            .spawn()?
-            .wait()?;
+            .spawn()?;
+        if handle.wait_and()? != 0
+            && let Ok(e) = handle.error_all()
+        {
+            return Err(anyhow!("Failed to compile final binary: {e}"));
+        }
     } else {
         eprintln!("Compiling Binary");
-        Spawner::which::<AntimonyWhich>("cargo")?
+        let mut handle = Spawner::which::<AntimonyWhich>("cargo")?
             .env("RUSTFLAGS", rust_flags.join(" "))
             .new_privileges(true)
             .preserve_env(true)
@@ -153,10 +170,14 @@ fn main() -> Result<()> {
             .args(["--target", target, "--workspace", "--profile", &cli.recipe])
             .args(post_flags)
             .args(&passthrough)
-            .error(StreamMode::Log(log::Level::Warn))
+            .error(StreamMode::Pipe)
             .output(StreamMode::Log(log::Level::Info))
-            .spawn()?
-            .wait()?;
+            .spawn()?;
+        if handle.wait_and()? != 0
+            && let Ok(e) = handle.error_all()
+        {
+            return Err(anyhow!("Failed to compile binary: {e}"));
+        }
     }
 
     let path = format!(

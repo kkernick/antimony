@@ -1,5 +1,4 @@
 features = ["electron"]
-arguments = ["--ozone-platform=wayland"]
 
 [home]
 policy = "Enabled"

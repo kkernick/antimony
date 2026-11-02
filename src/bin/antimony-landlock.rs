@@ -28,10 +28,7 @@ pub struct Cli {
 }
 
 fn main() -> Result<()> {
-    // Try and init the logger
-    let _ = notify::init();
     let cli = Cli::parse();
-
     let policy: LandlockPolicy = bitcode::deserialize(&fs::read(cli.policy)?)?;
     let ruleset = policy.construct_ruleset()?;
 

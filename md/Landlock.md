@@ -14,23 +14,31 @@ Antimony uses a helper program, `antimony-landlock`, which ingests a markup docu
 
 ```mermaid
 stateDiagram-v2
-Antimony --> Bubblewrap: Creates Namespace Sandbox
-Bubblewrap --> Landlock: Creates MAC Sandbox
+L: Antimony Landlock
+N: User Namespace
+
+Antimony --> Bubblewrap: Prepares Namespace Sandbox
+Antimony --> N: Creates Policy document
+Bubblewrap --> L: Creates Namespace Sandbox
+L --> N: Reads Policy and constructs kernel analog
+L --> Application: Exectutes underneath Policy.
 ```
 
 
-Antimony opportunistically uses Landlock if it’s available, though this has to prerequisites:
-1. Your kernel must be build with Landlock support (If you don’t compile it yourself, it almost certainly does)
+Antimony opportunistically uses Landlock if it’s available, though this has two prerequisites:
+1. Your kernel must be built with Landlock support (If you don’t compile it yourself, it almost certainly does)
 2. Add `lsm=landlock` to your kernel command line. If `lsm` already exists, simply append `landlock` to the list.
+
+>[!note]
+> The initial implementation of Landlock in Antimony (6.0.0 to 6.0.1), required complete compatibility with all the features of Landlock to be enabled (i.e ABI ≥ 10). This was to ensure transparency (If Antimony enabled Landlock, you would know exactly what security guarantees that entails).
+> 
+> Version 6.0.2 and onward shifted to a similarly opportunistic model as enabling support itself—but for features. This means that while the exact details of what Antimony uses Landlock for will vary between kernels, it provides additional protections for systems that would otherwise only have the namespace sandbox. For example, Ubuntu did not meet the ABI requirement, so would not run with Landlock; now, Unix/UDP restrictions are absent, but enforcement of reading/writing/executing paths is enforced.
+> 
+> This relaxed model also means that profiles enforcing specific ports (Particularly UDP ports as Landlock support for that was added in a more recent ABI), may not have the restrictions in place for certain kernels. See the [Kernel Documentation](https://docs.kernel.org/userspace-api/landlock.html) for more information about the exact set of features available for your system.
 
 ## File Permissions
 
-You can manually adjust file permissions via `files.permissions` in Profiles/Features. It accepts a path, and a `FileMode` such as `ro`, `rw`, and `rx`. Because Landlock rules layer, you can stack them to achieve permissions outside these. For example, if you *do* need `wx`, such as if your application downloads applications to run, you can specify a traditional `rw` mount in `files`, then add an `rx` permission:
-
-```toml
-[files.permissions]  
-"~/.local/share/zed/extensions" = "rx"
-```
+You can manually adjust file permissions via `files.permissions` in Profiles/Features. It accepts a path, and a `FileMode` such as `ro`, `rw`, `rx`, and `wx`. 
 
 >[!note]
 >Antimony will create paths that do not exist in the sandbox.
@@ -57,6 +65,7 @@ arguments = ["--port", "8080"]
 bind = [8080]
 ```
 
-## ABI
+> [!warning]
+> Antimony handles port restrictions under a open-if-undefined scheme. If you have specified no ports to restrict, then *all* ports will be allowed. Additionally, it should be noted that merely defining allowed ports does *not* provide access to the Network Namespace and host networking files. You will need to provide the `network` feature. Then, if you want to restrict the networking with more granularity, define the `ipc.ports` field. If your Landlock ABI does not support network restrictions, the fields are disregarded.
 
-Antimony requires an ABI of 10 in order to utilize Landlock.
+

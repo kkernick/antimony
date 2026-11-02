@@ -1,14 +1,14 @@
 name = "rust-devel"
 description = "Provide Rust and its associated development tools."
-requires = ["gcc", "hostname"]
-binaries = ["cargo-clippy", "ld.lld", "rustc", "rustdoc", "nm", "clippy-driver", "cargo-fmt", "rustfmt", "cargo", "rustup", "strip"]
+requires = ["hostname", "gcc"]
+binaries = ["rustup", "cargo-clippy", "nm", "cargo-fmt", "ld.lld", "strip", "cargo", "rustc", "clippy-driver", "rustdoc", "rustfmt"]
 
 [environment]
-CARGO_HOME = "$CARGO_HOME"
 RUSTUP_HOME = "$RUSTUP_HOME"
+CARGO_HOME = "$CARGO_HOME"
 
 [libraries]
 no_sof = true
 
 [files.user]
-rw = ["$RUSTUP_HOME", "$CARGO_HOME"]
+rw = ["$CARGO_HOME", "$RUSTUP_HOME"]

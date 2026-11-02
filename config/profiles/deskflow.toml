@@ -1,12 +1,12 @@
 id = "org.deskflow.deskflow"
-features = ["network", "tray", "qt6-qml", "qt6", "qt6-plugins"]
+features = ["qt6-plugins", "qt6-qml", "qt6", "network", "tray"]
 binaries = ["deskflow-core"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
-portals = ["RemoteDesktop", "InputCapture"]
+portals = ["InputCapture", "RemoteDesktop"]
 
 [libraries]
 files = ["/usr/lib/libnss*"]

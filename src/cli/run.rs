@@ -74,15 +74,15 @@ pub struct Args {
     pub config: Option<String>,
 
     /// Additional features.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "feature", value_delimiter = ' ', num_args = 1..)]
     pub features: Option<Vec<String>>,
 
     /// Conflicting features
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "conflict", value_delimiter = ' ', num_args = 1..)]
     pub conflicts: Option<Vec<String>>,
 
     /// Additional inheritance.
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
+    #[arg(long, alias = "inherit", value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub inherits: Option<Vec<String>>,
 
     /// Override the home policy
@@ -110,36 +110,36 @@ pub struct Args {
     pub seccomp: Option<SeccompPolicy>,
 
     /// Add portals
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "portal", value_delimiter = ' ', num_args = 1..)]
     pub portals: Option<Vec<Portal>>,
 
     /// Add busses the sandbox can see.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "see", value_delimiter = ' ', num_args = 1..)]
     pub sees: Option<Vec<String>>,
 
     /// Add busses the sandbox can talk to.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "talk", value_delimiter = ' ', num_args = 1..)]
     pub talks: Option<Vec<String>>,
 
     /// Add busses the sandbox owns.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "own", value_delimiter = ' ', num_args = 1..)]
     pub owns: Option<Vec<String>>,
 
     /// Add busses the sandbox can call.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "call", value_delimiter = ' ', num_args = 1..)]
     pub calls: Option<Vec<String>>,
 
     /// Additional sockets the sandbox is allowed to connect to.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "socket", value_delimiter = ' ', num_args = 1..)]
     pub sockets: Option<Vec<String>>,
 
     /// Ports the sandbox should be allowed to bind to
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub bind: Option<Vec<u16>>,
+    #[arg(long, alias = "bind", value_delimiter = ' ', num_args = 1..)]
+    pub binds: Option<Vec<u16>>,
 
     /// Ports the sandbox should be allowed to connect to
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub connect: Option<Vec<u16>>,
+    #[arg(long, alias = "connect", value_delimiter = ' ', num_args = 1..)]
+    pub connects: Option<Vec<u16>>,
 
     /// Disable all IPC. This overrules all other IPC settings.
     #[arg(long)]
@@ -170,27 +170,31 @@ pub struct Args {
     pub rw: Option<Vec<String>>,
 
     /// Add symlinks in SRC=DST syntax
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub link: Option<Vec<String>>,
+    #[arg(long, alias = "link", value_delimiter = ' ', num_args = 1..)]
+    pub links: Option<Vec<String>>,
+
+    /// Add symlinks in SRC=DST syntax
+    #[arg(long, alias = "overlay", value_delimiter = ' ', num_args = 1..)]
+    pub overlays: Option<Vec<String>>,
 
     /// Add temporary directories.
     #[arg(long, value_delimiter = ' ', num_args = 1..)]
     pub temp: Option<Vec<String>>,
 
     /// Add binaries
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
+    #[arg(long, alias = "binary", value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::CommandName)]
     pub binaries: Option<Vec<String>>,
 
     /// Add libraries
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "library", value_delimiter = ' ', num_args = 1..)]
     pub libraries: Option<Vec<String>>,
 
     /// Add library directories
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
+    #[arg(long, alias = "directory", value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub directories: Option<Vec<String>>,
 
     /// Add library roots
-    #[arg(long, value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
+    #[arg(long, alias = "root", value_delimiter = ' ', num_args = 1.., value_hint = ValueHint::DirPath)]
     pub roots: Option<Vec<String>>,
 
     /// Disable the SOF and mount the system libraries directly.
@@ -198,27 +202,27 @@ pub struct Args {
     pub no_sof: bool,
 
     /// Add devices
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "device", value_delimiter = ' ', num_args = 1..)]
     pub devices: Option<Vec<String>>,
 
     /// Add namespaces
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "namespace", value_delimiter = ' ', num_args = 1..)]
     pub namespaces: Option<Vec<Namespace>>,
 
     /// Add environment variables in KEY=VALUE syntax
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
-    pub env: Option<Vec<String>>,
+    #[arg(long, alias = "env", value_delimiter = ' ', num_args = 1..)]
+    pub envs: Option<Vec<String>>,
 
     /// Preserve the environment. Explicit --env will overwrite existing values
     #[arg(long)]
     pub preserve_env: Option<bool>,
 
     /// Arguments to pass to bubblewrap/wrapper
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "sandbox_arg", value_delimiter = ' ', num_args = 1..)]
     pub sandbox_args: Option<Vec<String>>,
 
     /// Exit codes that should not prompt a notification.
-    #[arg(long, value_delimiter = ' ', num_args = 1..)]
+    #[arg(long, alias = "ignored_exit_code", value_delimiter = ' ', num_args = 1..)]
     pub ignored_exit_codes: Option<Vec<i32>>,
 
     /// Arguments to pass to the profile application.

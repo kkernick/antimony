@@ -55,6 +55,30 @@ description = ""
 #     does this, as it changed how the sandbox behaves.
 # sandbox_args = []
 
+# When running without a terminal, Antimony will create notifications should the sandbox return an error code (!= 0)
+# Usually, this is desirable, as otherwise real sandbox issues would silently fail without any indication as to what
+# had happened. However, some programs also use exit codes to relay information, such as Antimony itself returning 2
+# when calling `--help`. It can be benefical to suppress exit codes that don't indicate errors.
+# ignored_exit_codes = []
+
+# # SECCOMP is a security mechanism provided by the Linux Kernel that can restrict system calls (Like read,exec)
+# Antimony uses SECCOMP as a means of further constraining the sandbox.
+#
+# In Permissive Mode, the sandbox runs under a logging filter and with a companion binary: antimony-monitor. The
+# monitor will collect syscall information and store them in the SECCOMP Database. The first time you run
+# the application in Permissive mode, you may notice a performance drop, but subsequent uses will be faster;
+# additionally, filter generation is cumulative, so you can keep the profile in Permissive mode for a day or
+# so, ensuring you cover all use-cases, then switch it to Enforcing.
+# seccomp = "Permissive"
+#
+# In Enforcing Mode, Antimony will kill the entire sandbox when any program within it attempts to use a system call
+# not specified in the SECCOMP profile. There is virtually zero overhead to use this setting.
+# seccomp = "Enforcing"
+#
+# In Notifying Mode, the sandbox runs under a monitor that prompts the user via the Notification Portal for each
+# unrecognized syscall. It has similar implications to Permissive.
+# seccomp = "Notifying"
+
 # Additional libraries to pass to the sandbox.
 # [libraries]
 #
@@ -143,9 +167,14 @@ description = ""
 # passthrough = "ro"
 # passthrough = "rw"
 # passthrough = "rx"
+# passthrough = "wx"
 #
 # Locations to mount a tmpfs in the sandbox.
 # temp = []
+#
+# Overlays are directories mounted under a temporary upper-dir such that it appears writeable, but changes
+# do not appear/persist on the host
+# overlays = []
 #
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
@@ -153,17 +182,27 @@ description = ""
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
-# System files have the normal root as canonical (/).
+# There are two forms of system files: Platform Files, and Resource Files. They are both canonical
+# to root.
+#
+# Platform Files are specific to the current device. This includes things like configurations
+# in /etc, locales, ephemeral directories like /sys, etc. These files do not need to exist
+# on the system in order for the sandbox to run.
 # [files.platform]
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
+# Resource Files are files used by the application or its dependencies. This includes things
+# like library configuration in /usr/share. These files must be present on the system.
 # [files.resources]
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # Runtime Files are files that have unstable paths (i.e environment variable), that cannot be cached.
 # Because these files are evaluated for every instance, adding too many can impose performance penalties.
@@ -171,6 +210,7 @@ description = ""
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # Direct files are constructed with the sandbox, creating the file with the path specified with the key,
 # and the contents as the value. They are mounted ro.
@@ -182,6 +222,9 @@ description = ""
 # "/my/file.txt.rw" = "Contents"
 #
 # [files.direct.rx]
+# "/my/file.txt.exe" = "#!/bin/bash"
+#
+# [files.direct.wx]
 # "/my/file.txt.exe" = "#!/bin/bash"
 #
 # Link are symlinks in the sandbox. You'll need to ensure the source already exists (i.e through one of the

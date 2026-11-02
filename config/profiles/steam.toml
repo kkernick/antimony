@@ -1,8 +1,7 @@
 landlock = false
-features = ["vulkan", "bin", "locale", "dri", "passwd", "https", "ld", "wayland", "fonts", "pipewire", "xorg", "themes", "tray"]
+features = ["xorg", "fonts", "vulkan", "https", "bin", "wayland", "dri", "locale", "passwd", "ld", "pipewire", "themes", "tray", "udev", "sys", "dev"]
 conflicts = ["hardened_malloc"]
 seccomp = "Disabled"
-devices = ["/dev"]
 namespaces = ["User"]
 
 [home]
@@ -12,7 +11,6 @@ policy = "Enabled"
 user_bus = true
 
 [files.platform]
-ro = ["/etc/machine-id", "/sys", "/run/udev"]
 rw = ["/dev/shm"]
 
 [libraries]

@@ -2,8 +2,8 @@
 # acts as a set of defaults/supplementary definitions.
 #
 # The syntax is identical to an actual profile, and all
-# options within this file save path, name, and id
-# will be incorporated into all profiles you run as this user.
+# options within this file will be incorporated into all
+# profiles you run as this user.
 #
 # This merging process has two rules:
 #   1.  For Single-Value arguments, such as seccomp,

@@ -1,5 +1,5 @@
 id = "org.gnome.gitlab.somas.Apostrophe"
-features = ["libadwaita", "python", "gtksourceview", "webkit", "libspelling"]
+features = ["gtksourceview", "libadwaita", "python", "webkit", "libspelling"]
 
 [home]
 policy = "Enabled"

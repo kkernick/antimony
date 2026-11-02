@@ -24,7 +24,7 @@ pub struct Args {
     pub feature: bool,
 
     /// Display the difference between system and user profiles.
-    #[arg(long, long)]
+    #[arg(short, long)]
     pub diff: bool,
 
     /// Target the system set rather than the user set.
@@ -32,7 +32,6 @@ pub struct Args {
     pub system: bool,
 
     /// Display SECCOMP data. Overrides --feature, --system, and --diff.
-
     #[arg(long)]
     pub seccomp: bool,
 }

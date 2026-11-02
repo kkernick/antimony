@@ -67,7 +67,7 @@ pub struct Feature {
     /// The SECCOMP policy dictates whether to use SECCOMP to constrain the sandbox.
     pub seccomp: Option<profile::seccomp::SeccompPolicy>,
 
-    /// Explicitly specify whether to use lockdown.
+    /// Explicitly specify whether to use landlock.
     pub landlock: Option<bool>,
 
     /// Required binaries
@@ -103,6 +103,12 @@ pub struct Feature {
     /// here, but when they run in relation to other features and profiles you cannot
     /// count on.
     pub hooks: Option<Hooks>,
+
+    /// Some profiles can return error codes that don't actually indicate errors.
+    /// For example, Antimony will return error code 2 on --help, and keepassxc will
+    /// return error codes on devel builds. Antimony can optionally ignore such
+    /// codes, rather than notifying.
+    pub ignored_exit_codes: Option<Set<i32>>,
 }
 impl Feature {
     /// Get a feature from its name.
@@ -322,6 +328,7 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
     extend_option(&mut profile.devices, feature.devices);
     extend_option(&mut profile.namespaces, feature.namespaces);
     extend_option(&mut profile.sandbox_args, feature.sandbox_args);
+    extend_option(&mut profile.ignored_exit_codes, feature.ignored_exit_codes);
 
     if let Some(mut libraries) = feature.libraries.take() {
         let p_lib = profile.libraries.get_or_insert_default();
@@ -431,6 +438,11 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
     {
         profile.landlock = Some(landlock);
     }
+
+    profile
+        .features
+        .get_or_insert_default()
+        .insert(feature.name);
 }
 
 #[allow(clippy::literal_string_with_formatting_args)]

@@ -59,7 +59,7 @@ pub struct Args {
     /// incongruity between ID and desktop that requires a shadow that
     /// hides the original. If an integrated profile lacks an icon, you
     /// may need to use this option.
-    #[arg(long)]
+    #[arg(short, long)]
     pub shadow: bool,
 
     /// Install the program to autostart. If an autostart already exists
@@ -81,7 +81,7 @@ pub struct Args {
     pub enable: bool,
 
     /// How to integrate configurations
-    #[arg(long)]
+    #[arg(short, long)]
     pub config_mode: Option<ConfigMode>,
 
     /// Create a desktop file if one does not exist

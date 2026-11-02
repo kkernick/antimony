@@ -99,7 +99,7 @@ pub fn setup<'a>(
     {
         for root in roots {
             if Path::new(&root).exists() {
-                let _ = ROOTS.insert(Cow::Owned(root));
+                let _ = ROOTS.insert(root);
             }
         }
     }
@@ -277,9 +277,7 @@ pub fn setup<'a>(
         ]);
     }
 
-    let (policy, cached) = if let Ok(abi) = landlock::abi()
-        // We need at least 10 for Unix.
-        && abi >= 10
+    let (policy, cached) = if landlock::abi().is_ok()
         && profile.landlock.unwrap_or(true)
         && Path::new(&utility("landlock")).exists()
     {

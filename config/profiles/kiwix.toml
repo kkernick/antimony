@@ -1,6 +1,6 @@
 path = "kiwix-desktop"
 id = "org.kiwix.desktop"
-features = ["https", "qt6-webengine", "kf6"]
+features = ["https", "kf6", "qt6-webengine"]
 conflicts = ["hardened_malloc"]
 binaries = ["aria2c"]
 

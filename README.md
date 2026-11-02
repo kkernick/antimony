@@ -74,9 +74,5 @@ sudo chmod ug+s /usr/bin/antimony
 >[!note]
 >If you intend to use the Lockdown functionality, you will additonally need to create a new `antimony-lockdown` user and create a dedicated directory for it in `$AT_HOME`
 
-2.  Antimony creates hard-links from the system library folder (`/usr/lib` and `/usr/lib64`). Some distributions and hardened kernels enforce the `fs.protected_hardlinks` sysctl, which denies this. 
-
->[!warning]
->If Antimony cannot create hard links, it will default to copies.
-
+2.  Antimony uses several helpers than need certain capabilities, such as `antimony-writer` to write hardlinks, and `antimony-dumper` which traces children memory. Ensure these programs are installed with the correct capabilities.
 3. You should create a folder for Antimony to store configurations and caches. It defaults to `/usr/share/antimony`.

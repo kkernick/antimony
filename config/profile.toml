@@ -79,6 +79,10 @@
 # In Enforcing Mode, Antimony will kill the entire sandbox when any program within it attempts to use a system call
 # not specified in the SECCOMP profile. There is virtually zero overhead to use this setting.
 # seccomp = "Enforcing"
+#
+# In Notifying Mode, the sandbox runs under a monitor that prompts the user via the Notification Portal for each
+# unrecognized syscall. It has similar implications to Permissive.
+# seccomp = "Notifying"
 
 # Inheritance is like a feature, but specifies other profiles. Inherited profiles provide values
 # for the calling profile, only if the latter has not explicitly set its own value for that
@@ -119,6 +123,18 @@
 # 2.  Exclusively. You use both # and ! to ensure only your arguments are passed. Debug-Shell and Stats
 #     does this, as it changed how the sandbox behaves.
 # sandbox_args = []
+
+# You can also skip environment hardening altogether and pass the existing system environment. This means the
+# sandbox will use your real username, and have access to values you may not have wanted. Use this sparingly.
+# Note that you can combine this flag with the above section; new values will be added, existing values will
+# be replaced.
+# preserve_env = false
+
+# When running without a terminal, Antimony will create notifications should the sandbox return an error code (!= 0)
+# Usually, this is desirable, as otherwise real sandbox issues would silently fail without any indication as to what
+# had happened. However, some programs also use exit codes to relay information, such as Antimony itself returning 2
+# when calling `--help`. It can be benefical to suppress exit codes that don't indicate errors.
+# ignored_exit_codes = []
 
 # Additional libraries to pass to the sandbox.
 # [libraries]
@@ -256,9 +272,14 @@
 # passthrough = "ro"
 # passthrough = "rw"
 # passthrough = "rx"
+# passthrough = "wx"
 #
 # Locations to mount a tmpfs in the sandbox.
 # temp = []
+#
+# Overlays are directories mounted under a temporary upper-dir such that it appears writeable, but changes
+# do not appear/persist on the host
+# overlays = []
 #
 # User files have a root at the sandboxes home (~), so /.zshrc would point to ~/.zshrc, unless they have
 # been qualified with absolute paths, such as /home/a/file, or $XDG_DATA_HOME/file.
@@ -266,6 +287,7 @@
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # There are two forms of system files: Platform Files, and Resource Files. They are both canonical
 # to root.
@@ -277,6 +299,7 @@
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # Resource Files are files used by the application or its dependencies. This includes things
 # like library configuration in /usr/share. These files must be present on the system.
@@ -284,6 +307,7 @@
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # Runtime Files are files that have unstable paths (i.e environment variable), that cannot be cached.
 # Because these files are evaluated for every instance, adding too many can impose performance penalties.
@@ -291,6 +315,7 @@
 # ro = []
 # rw = []
 # rx = []
+# wx = []
 #
 # Direct files are constructed with the sandbox, creating the file with the path specified with the key,
 # and the contents as the value. They are mounted ro.
@@ -302,6 +327,9 @@
 # "/my/file.txt.rw" = "Contents"
 #
 # [files.direct.rx]
+# "/my/file.txt.exe" = "#!/bin/bash"
+#
+# [files.direct.wx]
 # "/my/file.txt.exe" = "#!/bin/bash"
 #
 # Link are symlinks in the sandbox. You'll need to ensure the source already exists (i.e through one of the
@@ -319,18 +347,6 @@
 # Keypair environment variables to pass to the sandbox.
 # [environment]
 # KEY = "VAL"
-
-# You can also skip environment hardening altogether and pass the existing system environment. This means the
-# sandbox will use your real username, and have access to values you may not have wanted. Use this sparingly.
-# Note that you can combine this flag with the above section; new values will be added, existing values will
-# be replaced.
-# preserve_env = false
-
-# When running without a terminal, Antimony will create notifications should the sandbox return an error code (!= 0)
-# Usually, this is desirable, as otherwise real sandbox issues would silently fail without any indication as to what
-# had happened. However, some programs also use exit codes to relay information, such as Antimony itself returning 2
-# when calling `--help`. It can be benefical to suppress exit codes that don't indicate errors.
-# ignored_exit_codes = []
 
 # Configurations specify specialized modes of running the profile. Each config is a fully fledged
 # profile that overrides the settings defined above (Opposite to how inheritance functions)

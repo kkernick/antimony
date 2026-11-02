@@ -114,7 +114,7 @@ fn main() -> Result<()> {
             passthrough: cli.passthrough,
             ro: cli.sandbox_expose_ro,
             rw: cli.sandbox_expose,
-            env: cli.env,
+            envs: cli.env,
             no_sof: true,
             ..Default::default()
         };

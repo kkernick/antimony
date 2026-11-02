@@ -7,4 +7,4 @@ files = ["libproxy*"]
 directories = ["gio"]
 
 [ipc]
-portals = ["NetworkMonitor", "ProxyResolver"]
+portals = ["ProxyResolver", "NetworkMonitor"]

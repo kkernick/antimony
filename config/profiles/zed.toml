@@ -1,15 +1,15 @@
 path = "/usr/lib/zed/zed-editor"
 id = "dev.zed.Zed"
-features = ["dri", "vulkan", "fonts", "shell", "wayland"]
+features = ["dri", "fonts", "vulkan", "shell", "wayland"]
 
 [home]
 policy = "Enabled"
 
 [ipc]
-portals = ["FileChooser", "Settings", "Documents"]
+portals = ["Settings", "FileChooser", "Documents"]
 
 [files]
 passthrough = "rw"
 
 [files.permissions]
-"~/.local/share/zed/extensions" = "rx"
+"~/.local/share/zed" = "wx"

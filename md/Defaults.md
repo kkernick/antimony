@@ -15,7 +15,7 @@ For example, the most common use of this functionality is to create a base profi
 ```toml
 path = "/usr/lib/zed/zed-editor"
 id =  "dev.zed.Zed-Preview"
-inherits = ["default", "zed"]
+inherits = ["zed"]
 ```
 
 `zed-preview` borrows everything from `zed` because they’re literally the same application—merely a different version. `zed-preview` will take the features, IPC, and all other attributes from `zed`, eliminating duplication. Inheritance is *not* recursive, there is at most a single level of inheritance.

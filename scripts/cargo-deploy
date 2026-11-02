@@ -71,7 +71,6 @@ fi
 if [[ ! -d /etc/antimony.d ]]; then
   sudo mkdir /etc/antimony.d
 fi
-sudo cp $ROOT/config/config.d/base.toml /etc/antimony.d/base.toml
 
 # Clear the cache to prevent erroneously taking ownership of links
 $exec refresh --hard --dry
