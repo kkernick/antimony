@@ -1,0 +1,15 @@
+notes = "This shares the same home as the GUI. You can configure it through it, then enable this"
+features = ["tray", "network", "qt6"]
+
+[home]
+name = "deskflow"
+policy = "Enabled"
+
+[ipc]
+portals = ["InputCapture", "RemoteDesktop"]
+
+[configuration.server]
+arguments = ["server"]
+
+[configuration.client]
+arguments = ["client"]

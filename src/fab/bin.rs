@@ -21,6 +21,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{debug, warn};
+use path_clean::PathClean;
 use rayon::prelude::*;
 use spawn::{Spawner, StreamMode};
 use std::{
@@ -499,6 +500,143 @@ pub fn update_dirs(str: &str, directories: &mut Set<String>) {
     }
 }
 
+/// Recursively walk a symlink to collect all directories that need to be imported to resolve it.
+///
+/// This exists because we sometimes run into multiple chained links, such as:
+///
+/// /usr/bin/awk -> /etc/alternatives/awk -> /usr/bin/gawk.
+///
+/// Using canonicalize on this would return us to /usr/bin, and we'd skip adding /etc/alternatives
+/// entirely.
+#[must_use]
+pub fn walk_link(path: &Path, mut dirs: Set<PathBuf>) -> Set<PathBuf> {
+    if let Ok(mut link) = fs::read_link(path) {
+        if !link.is_absolute()
+            && let Some(parent) = path.parent()
+        {
+            link = parent.join(link).clean();
+        }
+
+        if let Some(dir) = link.parent() {
+            let usr = Path::new("/usr").join(dir.strip_prefix("/").unwrap_or(dir));
+            if usr.exists() {
+                dirs.insert(usr);
+            } else {
+                dirs.insert(dir.to_owned());
+            }
+        }
+        walk_link(&link, dirs)
+    } else {
+        dirs
+    }
+}
+
+/// Mount the system binary roots, including links to elsewhere on the file system
+pub fn mount_host(binaries: &mut Set<String>, directories: &mut Set<String>, info: &mut FabInfo) {
+    binaries.remove("/usr/bin");
+    info.profile.libraries.get_or_insert_default().no_sof = Some(true);
+    binaries.insert(info.profile.app_path(info.name).into_owned());
+
+    // Find all real roots, filtering out symlinks, and mount them.
+    let mut roots = Set::default();
+    for root in directories.iter() {
+        let root = root.strip_suffix('/').unwrap_or(root);
+        let path = Path::new(root);
+        if let Ok(mut src) = fs::read_link(path) {
+            if !src.is_absolute()
+                && let Some(parent) = path.parent()
+            {
+                src = parent.join(&src);
+            }
+            let str = src.to_string_lossy();
+            if !directories.contains(str.as_ref()) {
+                info.handle
+                    .args_i(["--overlay-src", &str, "--tmp-overlay", &str]);
+                if let Some(policy) = info.policy {
+                    update_policy(&src, policy, RX);
+                }
+            }
+            info.handle.args_i(["--symlink", &str, root]);
+        } else {
+            info.handle
+                .args_i(["--overlay-src", root, "--tmp-overlay", root]);
+            roots.insert(root.to_owned());
+        }
+    }
+
+    // Grab all specified binaries that exist outside the binary roots
+    for binary in binaries.iter() {
+        if let Ok(localized) = localize_path(binary, false) {
+            match localized {
+                (Some(src), dest) if !in_bin(src.as_ref()) => {
+                    info.handle.args_i(["--ro-bind", &src, &dest]);
+                    update_dirs(&dest, directories);
+                }
+                (None, dest) => {
+                    if let Ok(resolved) = which(binary) {
+                        if dest == binary.as_str() && !in_bin(resolved) && !in_lib(resolved) {
+                            info.handle.args_i(["--ro-bind", resolved, resolved]);
+                        } else if !in_bin(&dest) && Path::new(&dest).is_absolute() && !in_lib(&dest)
+                        {
+                            info.handle.args_i(["--ro-bind", resolved, &dest]);
+                        }
+                    } else {
+                        warn!("Could not resolve binary: {binary}");
+                    }
+                    update_dirs(&dest, directories);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // Crawl the binary folder to:
+    // 1. Discover external directories that are linked to that need to be included.
+    // 2. Discover ELF binaries to add to the SOF
+    roots
+        .iter()
+        // For each real root
+        .filter_map(|root| {
+            // Get all the links within it
+            if let Ok(mut sys_binaries) = find::crawl_dir(root)
+                && let Some(links) = sys_binaries.remove(&DirType::Link)
+            {
+                // For each link
+                Some(
+                    links
+                        .into_iter()
+                        // Get the entire symlink chain
+                        .flat_map(|link| walk_link(Path::new(&link), Set::default()))
+                        .collect::<Set<_>>()
+                        .into_iter()
+                        // Remove directories outside our roots
+                        .filter(|dest| {
+                            !ROOTS.iter().any(|root| dest.starts_with(root.as_str()))
+                                && !BINARY_ROOTS.iter().any(|r| dest.starts_with(r))
+                        })
+                        .collect::<Set<_>>(),
+                )
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .for_each(|dest| {
+            debug!("Add external binary path: {}", dest.display());
+            let str = dest.to_string_lossy();
+            info.handle.args_i(["--ro-bind", &str, &str]);
+
+            if dest.is_file() && elf_filter(&str).unwrap_or_default() {
+                binaries.insert(str.into_owned());
+                if let Some(policy) = info.policy {
+                    update_policy(dest, policy, RX);
+                }
+            } else if let Some(policy) = info.policy {
+                update_policy(dest, policy, RX);
+            }
+        });
+}
+
 /// Fabricate the binaries.
 #[allow(
     clippy::missing_panics_doc,
@@ -512,103 +650,7 @@ pub fn fabricate(info: &mut FabInfo) -> Result<()> {
 
     let skip = binaries.contains("/usr/bin");
     if skip {
-        binaries.remove("/usr/bin");
-        info.profile.libraries.get_or_insert_default().no_sof = Some(true);
-        binaries.insert(info.profile.app_path(info.name).into_owned());
-
-        let mut roots = Set::default();
-        for root in &directories {
-            let root = root.strip_suffix('/').unwrap_or(root);
-            let path = Path::new(root);
-            if let Ok(mut src) = fs::read_link(path) {
-                if !src.is_absolute()
-                    && let Some(parent) = path.parent()
-                {
-                    src = parent.join(&src);
-                }
-                let str = src.to_string_lossy();
-                if !directories.contains(str.as_ref()) {
-                    info.handle
-                        .args_i(["--overlay-src", &str, "--tmp-overlay", &str]);
-                    if let Some(policy) = info.policy {
-                        update_policy(&src, policy, RX);
-                    }
-                }
-                info.handle.args_i(["--symlink", &str, root]);
-            } else {
-                info.handle
-                    .args_i(["--overlay-src", root, "--tmp-overlay", root]);
-                roots.insert(root.to_owned());
-            }
-        }
-
-        for binary in &binaries {
-            if let Ok(localized) = localize_path(binary, false) {
-                match localized {
-                    (Some(src), dest) if !in_bin(src.as_ref()) => {
-                        info.handle.args_i(["--ro-bind", &src, &dest]);
-                        update_dirs(&dest, &mut directories);
-                    }
-                    (None, dest) => {
-                        if let Ok(resolved) = which(binary) {
-                            if dest == binary.as_str() && !in_bin(resolved) && !in_lib(resolved) {
-                                info.handle.args_i(["--ro-bind", resolved, resolved]);
-                            } else if !in_bin(&dest)
-                                && Path::new(&dest).is_absolute()
-                                && !in_lib(&dest)
-                            {
-                                info.handle.args_i(["--ro-bind", resolved, &dest]);
-                            }
-                        } else {
-                            warn!("Could not resolve binary: {binary}");
-                        }
-                        update_dirs(&dest, &mut directories);
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        // Crawl the binary folder to:
-        // 1. Discover external directories that are linked to that need to be included.
-        // 2. Discover ELF binaries to add to the SOF
-        for root in roots {
-            if let Ok(mut sys_binaries) = find::crawl_dir(&root)
-                && let Some(links) = sys_binaries.remove(&DirType::Link)
-            {
-                #[allow(clippy::option_if_let_else, reason = "dest is already being borrowed.")]
-                links
-                    .into_iter()
-                    .filter_map(|link| fs::canonicalize(&link).ok())
-                    .filter(|dest| {
-                        !in_bin(&dest.to_string_lossy())
-                            && !ROOTS.iter().any(|root| dest.starts_with(root.as_str()))
-                    })
-                    .map(|dest| {
-                        if let Some(parent) = dest.parent() {
-                            parent.to_path_buf()
-                        } else {
-                            dest
-                        }
-                    })
-                    .collect::<Set<_>>()
-                    .into_iter()
-                    .for_each(|dest| {
-                        debug!("Add external binary path: {}", dest.display());
-                        let str = dest.to_string_lossy();
-                        info.handle.args_i(["--ro-bind", &str, &str]);
-
-                        if dest.is_file() && elf_filter(&str).unwrap_or_default() {
-                            binaries.insert(str.into_owned());
-                            if let Some(policy) = info.policy {
-                                update_policy(dest, policy, RX);
-                            }
-                        } else if let Some(policy) = info.policy {
-                            update_policy(dest, policy, RX);
-                        }
-                    });
-            }
-        }
+        mount_host(&mut binaries, &mut directories, info);
     } else {
         update_dirs(
             &localize_path(&info.profile.app_path(info.name), false)?.1,

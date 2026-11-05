@@ -128,31 +128,37 @@ impl Args {
             (Object::Profile, "profile")
         };
 
-        let info_dump = |name: &str| -> String {
+        let info_dump = |name: &str| -> Option<String> {
             let user = USER_STORE.borrow().fetch(name, table);
             let system = SYSTEM_STORE.borrow().fetch(name, table);
 
             if let Ok(user) = user
                 && !self.system
             {
-                if self.diff
-                    && name != "default"
-                    && let Ok(system) = system
-                {
-                    TextDiff::configure()
-                        .algorithm(Algorithm::Patience)
-                        .diff_lines(&system, &user)
-                        .unified_diff()
-                        .to_string()
+                if self.diff {
+                    if name != "default"
+                        && let Ok(system) = system
+                        && user != system
+                    {
+                        Some(
+                            TextDiff::configure()
+                                .algorithm(Algorithm::Patience)
+                                .diff_lines(&system, &user)
+                                .unified_diff()
+                                .to_string(),
+                        )
+                    } else {
+                        None
+                    }
                 } else if system.is_err() {
-                    format!("USER\n{user}")
+                    Some(format!("USER\n{user}"))
                 } else {
-                    user
+                    Some(user)
                 }
             } else if let Ok(system) = system {
-                system
+                if self.diff { None } else { Some(system) }
             } else {
-                format!("No such {kind}: name")
+                Some(format!("No such {kind}: name"))
             }
         };
 
@@ -177,20 +183,26 @@ impl Args {
             });
         };
 
-        if let Some(name) = self.name {
-            print(&name, info_dump(&name));
+        if let Some(name) = self.name
+            && let Some(info) = info_dump(&name)
+        {
+            print(&name, info);
         } else if let Ok(user) = USER_STORE.borrow().get(table) {
             SYSTEM_STORE
                 .borrow()
                 .get(table)?
                 .union(&user)
-                .for_each(|name| print(name, info_dump(name)));
+                .for_each(|name| {
+                    if let Some(info) = info_dump(name) {
+                        print(name, info);
+                    }
+                });
         } else {
-            SYSTEM_STORE
-                .borrow()
-                .get(table)?
-                .iter()
-                .for_each(|name| print(name, info_dump(name)));
+            SYSTEM_STORE.borrow().get(table)?.iter().for_each(|name| {
+                if let Some(info) = info_dump(name) {
+                    print(name, info);
+                }
+            });
         }
 
         Ok(())

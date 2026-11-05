@@ -46,23 +46,26 @@ pub static DIRS: LazyLock<ThreadSet<String>> = LazyLock::new(ThreadSet::default)
 
 /// Roots to search for files and directories
 pub static ROOTS: LazyLock<ThreadSet<String>> = LazyLock::new(|| {
-    parse_cache("/etc/ld.so.cache").map_or_default(|mut roots| {
-        if let Some(cached) = &CONFIG_FILE.library_roots {
-            roots.extend(cached.clone());
-        }
+    parse_cache("/etc/ld.so.cache").map_or_else(
+        |_| ThreadSet::default(),
+        |mut roots| {
+            if let Some(cached) = &CONFIG_FILE.library_roots {
+                roots.extend(cached.clone());
+            }
 
-        roots
-            .into_iter()
-            .filter(|root| !root.is_empty() && root != "/")
-            .map(|root| {
-                if root.ends_with('/') {
-                    root
-                } else {
-                    format!("{root}/")
-                }
-            })
-            .collect()
-    })
+            roots
+                .into_iter()
+                .filter(|root| !root.is_empty() && root != "/")
+                .map(|root| {
+                    if root.ends_with('/') {
+                        root
+                    } else {
+                        format!("{root}/")
+                    }
+                })
+                .collect()
+        },
+    )
 });
 
 /// Parse the host ld.so.cache to extract roots

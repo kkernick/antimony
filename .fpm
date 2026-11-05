@@ -11,6 +11,8 @@
 --after-remove hooks/after_remove.sh
 --after-upgrade hooks/after_install.sh
 
+--config-files etc/antimony.toml
+
 ./target/x86_64-unknown-linux-gnu/release/antimony=/usr/bin/antimony
 ./target/x86_64-unknown-linux-gnu/release/antimony-monitor=/usr/share/antimony/utilities/antimony-monitor
 ./target/x86_64-unknown-linux-gnu/release/antimony-dumper=/usr/share/antimony/utilities/antimony-dumper

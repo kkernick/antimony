@@ -1,0 +1,12 @@
+path = "/usr/bin/euro-office-euro-office"
+id = "euro-office-euro-office"
+features = ["daemon", "qt6", "gtk3"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["FileChooser"]
+
+[files]
+passthrough = "rw"

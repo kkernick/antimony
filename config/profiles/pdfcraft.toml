@@ -1,0 +1,14 @@
+id = "ai.storyteller.pdfcraft"
+features = ["dri", "vulkan", "wayland"]
+
+[home]
+policy = "Enabled"
+
+[ipc]
+portals = ["Settings", "FileChooser"]
+
+[files]
+passthrough = "rw"
+
+[libraries]
+files = ["libdbus*", "libxkbcommon*"]

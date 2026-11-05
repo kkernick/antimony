@@ -18,7 +18,6 @@ use spawn::Spawner;
 use std::{
     borrow::Cow,
     fs::{self, File},
-    io,
     os::fd::{AsRawFd, OwnedFd},
     path::Path,
 };
@@ -60,24 +59,23 @@ fn lockdown_file(
     handle: &Spawner,
     ro: bool,
     policy: &mut Option<LandlockPolicy>,
-) -> Result<()> {
+) {
     let src = src.unwrap_or(Cow::Borrowed(dst));
-    if !Path::new(src.as_ref()).is_file() {
-        return Err(anyhow::anyhow!(
-            "Lockdown can only pass user files. {src} is not a file! Profile cannot use Lockdown!"
-        ));
+    let path = Path::new(src.as_ref());
+    if !path.exists() {
+        return;
+    }
+
+    if !path.is_file() {
+        warn!("Lockdown can only pass user files. {src} is being ignored");
+        return;
     }
 
     let fd = match File::open(src.as_ref()) {
         Ok(file) => OwnedFd::from(file),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            warn!("No such file: {src}");
-            return Ok(());
-        }
         Err(e) => {
-            return Err(anyhow::anyhow!(
-                "Could not open file {src}: {e}. This profile cannot use Lockdown!"
-            ));
+            warn!("Could not open file {src}: {e}.");
+            return;
         }
     };
 
@@ -99,7 +97,6 @@ fn lockdown_file(
             .or_default()
             .extend(allowed);
     }
-    Ok(())
 }
 
 /// Add a file to the sandbox.
@@ -170,16 +167,16 @@ pub fn setup(args: &mut super::Args) -> Result<()> {
             // Lockdown takes all user files and passes them as FDs. Folders are not supported.
             if lockdown {
                 if let Some(ro) = user.remove(&FileMode::ReadOnly) {
-                    ro.into_iter().try_for_each(|file| {
+                    for file in ro {
                         let (src, dest) = localize_path(&file, true)?;
-                        lockdown_file(src, &dest, &args.handle, true, &mut args.policy)
-                    })?;
+                        lockdown_file(src, &dest, &args.handle, true, &mut args.policy);
+                    }
                 }
                 if let Some(rw) = user.remove(&FileMode::ReadWrite) {
-                    rw.into_iter().try_for_each(|file| {
+                    for file in rw {
                         let (src, dest) = localize_path(&file, true)?;
-                        lockdown_file(src, &dest, &args.handle, false, &mut args.policy)
-                    })?;
+                        lockdown_file(src, &dest, &args.handle, false, &mut args.policy);
+                    }
                 }
             }
         }

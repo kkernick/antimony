@@ -251,12 +251,36 @@ fn manage_configurations(
     local: &str,
     package: bool,
 ) -> Result<()> {
-    match cmd.config_mode.unwrap_or_default() {
-        // Integrate each into one desktop file with actions.
-        ConfigMode::Action => {
-            contents.push("\n".into());
-            if let Some(configuration) = &profile.configuration {
-                for config in configuration.keys() {
+    if let Some(configuration) = &mut profile.configuration {
+        let mut first = false;
+        let configurations: Vec<_> = configuration.drain().collect();
+
+        for (config, mut info) in configurations {
+            let action = cmd.config_mode.unwrap_or_else(|| {
+                // If the action isn't explicitly provided, and we have a unique ID that exists on the host,
+                // use that.
+                if let Some(id) = &info.id
+                    && info.id != profile.id
+                    && Path::new("/usr/share/applications")
+                        .join(id)
+                        .with_extension("desktop")
+                        .exists()
+                {
+                    info!(
+                        "Configuration {config} has a unique, existing ID, and will be integrated as a file. Explicitly set --config-mode if this is not desired"
+                    );
+                    ConfigMode::File
+                } else {
+                    ConfigMode::Action
+                }
+            });
+
+            match action {
+                ConfigMode::Action => {
+                    if first {
+                        contents.push("\n".into());
+                        first = true;
+                    }
                     if package {
                         contents.push(format!(
                             "[Desktop Action {config}]\n\
@@ -274,14 +298,8 @@ fn manage_configurations(
                         ));
                     }
                 }
-            }
-        }
 
-        // Provide each configuration as a desktop file.
-        ConfigMode::File => {
-            if let Some(configuration) = &mut profile.configuration {
-                let configurations: Vec<_> = configuration.drain().collect();
-                for (config, mut info) in configurations {
+                ConfigMode::File => {
                     if info.id.is_some() {
                         info.merge(profile.clone())?;
                         integrate(&mut info, cmd, package)?;
@@ -316,7 +334,6 @@ fn manage_configurations(
             }
         }
     }
-
     Ok(())
 }
 

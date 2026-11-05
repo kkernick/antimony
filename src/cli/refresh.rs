@@ -133,7 +133,9 @@ impl Args {
         if let Some(profile) = self.profile {
             let mut args = self
                 .passthrough
-                .map_or_default(|passthrough| run::Args::from_vec(&profile, passthrough));
+                .map_or_else(run::Args::default, |passthrough| {
+                    run::Args::from_vec(&profile, passthrough)
+                });
 
             args.refresh = true;
             args.dry = self.dry;

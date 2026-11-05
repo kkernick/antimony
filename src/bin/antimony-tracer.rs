@@ -20,9 +20,8 @@ use rayon::prelude::*;
 use signal_hook::{consts, flag};
 use std::{
     borrow::Cow,
-    env,
-    fs::{self, File},
-    io::{self, ErrorKind, Write, stdin},
+    env, fs,
+    io::{self, Write, stdin},
     path::Path,
     sync::{
         Arc,
@@ -78,7 +77,7 @@ fn main() -> anyhow::Result<()> {
         if let Some(l) = line.find(delim_l)
             && let Some(l) = l.checked_add(1)
             && let Some(r) = line.rfind(delim_r)
-            && l != r
+            && l < r
         {
             Some(line[l..r].trim().to_owned())
         } else {
@@ -92,8 +91,7 @@ fn main() -> anyhow::Result<()> {
         .enumerate()
         .filter(|(_, e)| e.contains("ENOENT"))
         .filter_map(|(i, e)| {
-            // Try and extract the path
-            let path = extract(e, '"', '"').map_or_else(
+            extract(e, '"', '"').map_or_else(
                 // If there is no path, grab the PID and name.
                 || {
                     extract(e, '[', ']').and_then(|pid| {
@@ -116,17 +114,7 @@ fn main() -> anyhow::Result<()> {
                     })
                 },
                 Some,
-            );
-
-            if let Some(path) = &path
-                && e.contains("EACCES")
-                && let Err(e) = File::open(path)
-                && e.kind() == ErrorKind::PermissionDenied
-            {
-                None
-            } else {
-                path
-            }
+            )
         })
         .filter(|e| {
             let path = Path::new(e);

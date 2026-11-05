@@ -1,7 +1,7 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 use crate::shared::{
-    Set, create_path,
+    create_path,
     env::SESSION_BUS,
     landlock::{RO, RW},
     profile::home::{HomeLockPolicy, HomePolicy},
@@ -25,171 +25,168 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
 
     if let Some(home) = &args.profile.home
         && let Some(mut policy) = home.policy
-        && policy != HomePolicy::None
     {
         let home_dir = home.path(&args.name);
-        if home.lock.unwrap_or(false)
-            && !args.run.dry
-            && home_dir.exists()
-            && policy != HomePolicy::Overlay
-        {
-            let file = File::open(&home_dir)?;
-            let lock = file.try_lock();
-            let mut cont = false;
-            let error = Err(anyhow!(
-                "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
-            ));
+        let dest = home.path.as_ref().map_or("/home/antimony", |path| path);
 
-            match lock {
-                Ok(()) => args.handle.fd_i(file),
-                Err(TryLockError::WouldBlock) => {
-                    {
-                        match home.lock_policy.unwrap_or_default() {
-                            HomeLockPolicy::Notify => {
-                                // Attach a notify watch on the directory to see if the running instance closes it.
-                                let mut inotify = Inotify::init()?;
-                                let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
-                                let mut buffer = [0; 1024];
-                                let title = args.name.to_title_case();
-                                if notify::can_notify() {
-                                    let mut prompt = Spawner::abs(utility("notify"))
-                                    .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
-                                    .output(StreamMode::Pipe)
-                                    .args([
-                                        "--title",
-                                        &format!("{title} is Locked"),
-                                        "--body",
-                                        &format!(
-                                            "{title}'s home folder has been locked by another instance. If you can confirm no such \
-                                            instance exists, it's possible it was terminated before the lock could be removed. However, \
-                                            bypassing the lock when another instance is running may cause issues. You can also skip mounting \
-                                            the home folder for this instance, or mount it on an overlay."
-                                        ),
-                                        "--timeout",
-                                        "10000",
-                                        "--action", "Ignore",
-                                        "--action", "Skip",
-                                        "--action", "Abort",
-                                        "--action", "Unlock",
-                                        "--action", "Overlay",
-                                    ])
-                                    .spawn()?;
+        let ret = if policy == HomePolicy::None {
+            None
+        } else {
+            if home.lock.unwrap_or(false)
+                && !args.run.dry
+                && home_dir.exists()
+                && policy != HomePolicy::Overlay
+            {
+                let file = File::open(&home_dir)?;
+                let lock = file.try_lock();
+                let mut cont = false;
+                let error = Err(anyhow!(
+                    "This profile only allows a single instance to run per user, and its home folder is currently locked by another instance."
+                ));
 
-                                    while prompt.alive()?.is_some() {
-                                        match inotify.read_events(&mut buffer) {
-                                            Ok(events) => {
-                                                for event in events {
-                                                    if event.wd == wd {
-                                                        break;
+                match lock {
+                    Ok(()) => args.handle.fd_i(file),
+                    Err(TryLockError::WouldBlock) => {
+                        {
+                            match home.lock_policy.unwrap_or_default() {
+                                HomeLockPolicy::Notify => {
+                                    // Attach a notify watch on the directory to see if the running instance closes it.
+                                    let mut inotify = Inotify::init()?;
+                                    let wd = inotify.watches().add(&home_dir, WatchMask::CLOSE)?;
+                                    let mut buffer = [0; 1024];
+                                    let title = args.name.to_title_case();
+                                    if notify::can_notify() {
+                                        let mut prompt = Spawner::abs(utility("notify"))
+                                            .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
+                                            .output(StreamMode::Pipe)
+                                            .args([
+                                                "--title",
+                                                &format!("{title} is Locked"),
+                                                "--body",
+                                                &format!(
+                                                    "{title}'s home folder has been locked by another instance. If you can confirm no such \
+                                                    instance exists, it's possible it was terminated before the lock could be removed. However, \
+                                                    bypassing the lock when another instance is running may cause issues. You can also skip mounting \
+                                                    the home folder for this instance, or mount it on an overlay."
+                                                ),
+                                                "--timeout",
+                                                "10000",
+                                                "--action", "Ignore",
+                                                "--action", "Skip",
+                                                "--action", "Abort",
+                                                "--action", "Unlock",
+                                                "--action", "Overlay",
+                                            ])
+                                            .spawn()?;
+
+                                        while prompt.alive()?.is_some() {
+                                            match inotify.read_events(&mut buffer) {
+                                                Ok(events) => {
+                                                    for event in events {
+                                                        if event.wd == wd {
+                                                            break;
+                                                        }
                                                     }
                                                 }
+                                                Err(error)
+                                                    if error.kind() == ErrorKind::WouldBlock =>
+                                                {
+                                                    continue;
+                                                }
+                                                _ => {
+                                                    return Err(anyhow!(
+                                                        "Error while reading events"
+                                                    ));
+                                                }
                                             }
-                                            Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                                                continue;
-                                            }
-                                            _ => return Err(anyhow!("Error while reading events")),
                                         }
-                                    }
 
-                                    inotify.watches().remove(wd)?;
+                                        inotify.watches().remove(wd)?;
 
-                                    if prompt.alive()?.is_none() {
-                                        let choice = prompt.output_all()?;
-                                        match choice.as_str() {
-                                            "Ignore\n" => cont = true,
-                                            "Unlock\n" => {
-                                                File::open(&home_dir)?.unlock()?;
-                                                cont = true;
+                                        if prompt.alive()?.is_none() {
+                                            let choice = prompt.output_all()?;
+                                            match choice.as_str() {
+                                                "Ignore\n" => cont = true,
+                                                "Unlock\n" => {
+                                                    File::open(&home_dir)?.unlock()?;
+                                                    cont = true;
+                                                }
+                                                "Skip\n" => return Ok(None),
+                                                "Overlay\n" => {
+                                                    policy = HomePolicy::Overlay;
+                                                    cont = true;
+                                                }
+                                                "Abort\n" => return error,
+                                                _ => {}
                                             }
-                                            "Skip\n" => return Ok(None),
-                                            "Overlay\n" => {
-                                                policy = HomePolicy::Overlay;
-                                                cont = true;
-                                            }
-                                            "Abort\n" => return error,
-                                            _ => {}
+                                        } else {
+                                            prompt.signal(SIGKILL)?;
                                         }
                                     } else {
-                                        prompt.signal(SIGKILL)?;
+                                        return error;
                                     }
-                                } else {
+                                }
+                                HomeLockPolicy::Abort => return error,
+                                HomeLockPolicy::Overlay => {
+                                    policy = HomePolicy::Overlay;
+                                    cont = true;
+                                }
+                            }
+                        }
+
+                        match file.try_lock() {
+                            Ok(()) => args.handle.fd_i(file),
+                            Err(_) => {
+                                if !cont {
                                     return error;
                                 }
                             }
-                            HomeLockPolicy::Abort => return error,
-                            HomeLockPolicy::Overlay => {
-                                policy = HomePolicy::Overlay;
-                                cont = true;
-                            }
                         }
                     }
-
-                    match file.try_lock() {
-                        Ok(()) => args.handle.fd_i(file),
-                        Err(_) => {
-                            if !cont {
-                                return error;
-                            }
-                        }
-                    }
-                }
-                Err(e) => return Err(anyhow!("Failed to get lock on home folder: {e}")),
-            }
-        }
-
-        let home_str = home_dir.to_string_lossy();
-        if !args.run.dry {
-            create_path(home_dir.as_path())?;
-        }
-
-        let dest = home.path.as_ref().map_or("/home/antimony", |path| path);
-
-        let mut permissions = Set::default();
-
-        match policy {
-            HomePolicy::Enabled => {
-                args.handle.args_i(["--bind", &home_str, dest]);
-                if args.policy.is_some() {
-                    permissions.extend(RW);
+                    Err(e) => return Err(anyhow!("Failed to get lock on home folder: {e}")),
                 }
             }
-            HomePolicy::Overlay => {
-                #[rustfmt::skip]
-                args.handle.args_i([
-                    "--overlay-src", &home_str,
-                    "--tmp-overlay", dest,
-                ]);
-                if args.policy.is_some() {
-                    permissions.extend(RW);
-                }
+            if !args.run.dry {
+                create_path(home_dir.as_path())?;
             }
-            HomePolicy::ReadOnly => {
-                let work = args.sys_dir.join("work");
-                let work_str = work.to_string_lossy();
-                fs::create_dir_all(&work)?;
+            let home_str = home_dir.to_string_lossy();
 
-                #[rustfmt::skip]
-                args.handle.args_i([
-                    "--overlay-src", &work_str,
-                    "--overlay-src", &home_str,
-                    "--ro-overlay", dest,
-                ]);
-                if args.policy.is_some() {
-                    permissions.extend(RO);
+            match policy {
+                HomePolicy::Enabled => args.handle.args_i(["--bind", &home_str, dest]),
+                HomePolicy::Overlay => {
+                    args.handle
+                        .args_i(["--overlay-src", &home_str, "--tmp-overlay", dest]);
                 }
-            }
-            HomePolicy::None => {}
-        }
+                HomePolicy::ReadOnly => {
+                    let work = args.sys_dir.join("work");
+                    let work_str = work.to_string_lossy();
+                    fs::create_dir_all(&work)?;
 
-        if let Some(policy) = &mut args.policy {
-            policy
+                    #[rustfmt::skip]
+                    args.handle.args_i([
+                        "--overlay-src", &work_str,
+                        "--overlay-src", &home_str,
+                        "--ro-overlay", dest,
+                    ]);
+                }
+                HomePolicy::None => {}
+            }
+            Some(home_str.into_owned())
+        };
+
+        if let Some(l_policy) = &mut args.policy {
+            let entry = l_policy
                 .paths
                 .get_or_insert_default()
-                .entry("/home/antimony".to_owned())
-                .or_default()
-                .extend(permissions);
+                .entry(dest.to_owned())
+                .or_default();
+
+            match policy {
+                HomePolicy::Enabled | HomePolicy::None | HomePolicy::Overlay => entry.extend(RW),
+                HomePolicy::ReadOnly => entry.extend(RO),
+            }
         }
-        Ok(Some(home_str.into_owned()))
+        Ok(ret)
     } else {
         Ok(None)
     }
