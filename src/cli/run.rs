@@ -6,7 +6,7 @@ use crate::{
     fab::localize_home,
     setup::{self, setup},
     shared::{
-        env::{RUNTIME_DIR, SESSION_BUS},
+        env::{RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         profile::{
             files::FileMode,
             home::{HomeLockPolicy, HomePolicy},
@@ -404,6 +404,7 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
             && [FileChooser, Documents]
                 .iter()
                 .any(|portal| portals.contains(portal))
+            && !mounted(&format!("{}/doc", RUNTIME_STR.as_str()))
         {
             log::info!("Waiting for document portal");
             timer!("::wait_document", wait_for_doc());

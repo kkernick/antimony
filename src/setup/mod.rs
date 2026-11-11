@@ -9,7 +9,6 @@ mod proxy;
 mod syscalls;
 
 use crate::{
-    cli::run::mounted,
     fab::lib::ROOTS,
     shared::{
         Set, create_path,
@@ -18,7 +17,6 @@ use crate::{
         landlock::{LandlockPolicy, RW, update_policy},
         profile::{
             Profile,
-            ipc::Portal::{Documents, FileChooser},
         },
         remove_directory,
         store::mem,
@@ -27,11 +25,6 @@ use crate::{
     timer,
 };
 use anyhow::{Result, anyhow};
-use dbus::{
-    Message,
-    blocking::{BlockingSender, LocalConnection},
-    strings::{BusName, Interface, Member},
-};
 use heck::ToTitleCase;
 use inotify::{Inotify, WatchDescriptor};
 use landlock::ruleset::{Filesystem, Flag};
@@ -42,7 +35,6 @@ use std::{
     borrow::Cow,
     fs,
     path::{Path, PathBuf},
-    time::Duration,
 };
 use temp::Temp;
 use user::as_effective;
@@ -198,51 +190,13 @@ pub fn setup<'a>(
     }
 
     // The instance is a unique, random string used in $XDG_RUNTIME_HOME for user facing configuration.
-    let mut instance = temp::Builder::new()
+    let instance = temp::Builder::new()
         .within(instances)
         .owner(user::Mode::Real)
         .create::<temp::Directory>()?;
 
     as_effective!({ create_path(sys_dir.as_path()) })?;
     let runtime = RUNTIME_STR.as_str();
-
-    // The Document Portal doesn't run until something pings it. If this is the
-    // first sandbox running, that introduces a significant lag on the wait() call,
-    // so we ping it immediately.
-    if !args.dry
-        && let Some(ipc) = &profile.ipc
-        && let Some(portals) = &ipc.portals
-        && [FileChooser, Documents]
-            .iter()
-            .any(|portal| portals.contains(portal))
-    {
-        timer!("::document_wakeup", {
-            if !mounted(&format!("{runtime}/doc")) {
-                let connection = LocalConnection::new_session()?;
-                let msg = Message::new_method_call(
-                    BusName::from("org.freedesktop.portal.Documents\0"),
-                    dbus::Path::from("/org/freedesktop/portal/documents\0"),
-                    Interface::from("org.freedesktop.DBus.Peer\0"),
-                    Member::from("Ping\0"),
-                );
-
-                if let Ok(msg) = msg {
-                    connection.send_with_reply_and_block(msg, Duration::from_secs(1))?;
-                } else {
-                    return Err(anyhow!("Failed to send ping to Document Portal"));
-                }
-            }
-
-            // Associate the flatpak dir with our instance so they're deleted together.
-            instance.associate(
-                temp::Builder::new()
-                    .within(RUNTIME_DIR.join(".flatpak"))
-                    .name(instance.name())
-                    .owner(user::Mode::Real)
-                    .create::<temp::Directory>()?,
-            );
-        });
-    }
 
     // Start the command.
     #[rustfmt::skip]

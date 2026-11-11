@@ -6,7 +6,10 @@ use crate::{
     shared::{
         create_parent, create_path,
         env::{CONFIG_HOME, DATA_HOME, HOME_PATH, SESSION_BUS},
-        profile::Profile,
+        profile::{
+            Profile,
+            ipc::Portal::{Documents, FileChooser},
+        },
         remove_file,
         which::{AntimonyWhich, which},
     },
@@ -572,9 +575,17 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
             if config {
                 description.push_str(" with Configuration %i");
             }
-            let after = format!("After=run-user-{}.mount", USER.real);
+            let mut after = format!("After=run-user-{}.mount\n", USER.real);
+            if let Some(ipc) = &profile.ipc
+                && let Some(portals) = &ipc.portals
+                && [Documents, FileChooser]
+                    .iter()
+                    .any(|portal| portals.contains(portal))
+            {
+                after.push_str("After=xdg-document-portal.service\n");
+            }
+
             let requires = format!("Requires=run-user-{}.mount", USER.real);
-            let condition = format!("ConditionPathExists=/run/user/{}/bus", USER.real);
             let environment = format!(
                 "Environment=DBUS_SESSION_BUS_ADDRESS={}",
                 SESSION_BUS.as_str()
@@ -589,7 +600,6 @@ pub fn integrate(profile: &mut Profile, cmd: &Args, package: bool) -> Result<()>
                 &description,
                 &after,
                 &requires,
-                &condition,
                 "[Service]",
                 "Type=simple",
                 "Restart=on-failure",
