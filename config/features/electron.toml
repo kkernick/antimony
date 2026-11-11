@@ -1,10 +1,12 @@
 name = "electron"
-notes = "Electron applications do not use GTK is the same way real GTK do. Glycin does not seem to be used, and prevents us from using Landlock."
 description = "For Chromium/Electron applications"
-requires = ["gtk3", "qt6"]
+requires = ["qt6", "gtk3"]
 devices = ["/dev/urandom", "/dev/null", "/dev/shm"]
 namespaces = ["User"]
-conflicts = ["glycin"]
+
+[home]
+lock = true
+lock_policy = "Abort"
 
 [libraries]
 files = ["libnss*", "libsoftokn3*", "libsmime3*", "libfreeblpriv3*"]

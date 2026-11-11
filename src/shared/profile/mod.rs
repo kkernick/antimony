@@ -227,6 +227,7 @@ impl Profile {
         profile.libraries = lib::Libraries::from_args(args);
         profile.files = files::Files::from_args(args);
         profile.ipc = ipc::Ipc::from_args(args);
+        profile.home = home::Home::from_args(args);
 
         if let Some(env) = args.envs.take() {
             let environment = profile.environment.get_or_insert_default();
@@ -241,19 +242,6 @@ impl Profile {
                     warn!("Unrecognized environment variable: {pair}");
                 }
             }
-        }
-
-        if let Some(lock) = args.home_lock.take() {
-            profile.home.get_or_insert_default().lock = Some(lock);
-        }
-        if let Some(name) = args.home_name.take() {
-            profile.home.get_or_insert_default().name = Some(name);
-        }
-        if let Some(path) = args.home_path.take() {
-            profile.home.get_or_insert_default().path = Some(path);
-        }
-        if let Some(policy) = args.home_policy.take() {
-            profile.home.get_or_insert_default().policy = Some(policy);
         }
 
         Ok(profile)

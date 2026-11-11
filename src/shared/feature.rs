@@ -4,7 +4,9 @@
 use super::profile::{ipc::Ipc, ns::Namespace};
 use crate::shared::{
     Map, Set, edit, extend_option,
-    profile::{self, Profile, files::Files, hooks::Hooks, lib::Libraries, seccomp::SeccompPolicy},
+    profile::{
+        self, Profile, files::Files, home, hooks::Hooks, lib::Libraries, seccomp::SeccompPolicy,
+    },
     store::{self, Object},
     which::AntimonyWhich,
 };
@@ -63,6 +65,9 @@ pub struct Feature {
 
     /// A list of other features this feature conflicts with.
     pub conflicts: Option<Set<String>>,
+
+    /// Configuration for the profile's home.
+    pub home: Option<home::Home>,
 
     /// The SECCOMP policy dictates whether to use SECCOMP to constrain the sandbox.
     pub seccomp: Option<profile::seccomp::SeccompPolicy>,
@@ -417,6 +422,11 @@ fn add_feature(profile: &mut Profile, map: &Map<&str, String>, mut feature: Feat
             extend_option(&mut p_ports.bind, ports.bind);
             extend_option(&mut p_ports.connect, ports.connect);
         }
+    }
+
+    if let Some(home) = feature.home.take() {
+        let p_home = profile.home.get_or_insert_default();
+        p_home.merge(home);
     }
 
     extend_option(&mut profile.environment, feature.environment);

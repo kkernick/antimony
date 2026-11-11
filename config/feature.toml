@@ -98,6 +98,54 @@ description = ""
 # files = []
 # directories = []
 
+# Home specifies whether to create a home folder for the application, located at:
+# ~/.local/share/antimony/{name}
+# This allows for configuration to persist between runs. If no home is defined, settings,
+# configuration, and caches are discarded after the application closes.
+# [home]
+#
+# None does not create a home folder. This behaves identically to if you hadn't set the value
+# at all, but is useful for overriding inheritance.
+# policy = "None"
+#
+# Enabled will create the home directory and bind it rw, so the application can make
+# configurations, and they will persist between instances.
+# policy = "Enabled"
+#
+# Overlay will provide the home directory under a temporary overlay, so the profile will be
+# able to make modifications, but they will be discarded. You can use this if you have setup
+# a good configuration of the application (Via Enabled), but don't want further changes to be
+# made. It's especially useful for applications that only like having a single instance, such
+# as Chromium and Zed, but to which this paradigm does not work in a Sandbox.
+# With this option, you can spawn multiple, isolated copies.
+# policy = "Overlay"
+#
+# By default, the name of the home folder will be the name of the profile. You can override
+# this, however, which can be useful for configurations.
+# name = "name"
+#
+# Where the home should be mounted in the sandbox.
+# path = ~/antimony
+#
+# Antimony can optionally lock the home folder with a cooperative futex. This means the folder doesn't
+# actually become inaccessible or restricted, but programs that look and respect this lock (i.e other
+# Antimony instances) can return an error. Some profiles, like Chromium, get upset if you try and run
+# multiple instances, so this lock can be an alternative to Overlay that will raise an error if an
+# instance is already running
+# lock = false
+#
+# By default, Antimony will prompt the user should a running instance already have a lock on the home folder.
+# However, you can override this default should there be an obvious action to take.
+# lock_policy = Notify
+#
+# With Overlay, the existing Home is simply mounted with a Temporary Overlay place on top. This prevents the two
+# instances from conflicting over the home, as the newer instances' writes will simply be discarded. However, the
+# underlying, first instance, will still be able to make changes that successive instances may have issue with.
+# lock_policy = Overlay
+#
+# Self-explanatory. If there should never be two running instances just abort.
+# lock_policy = Abort
+
 # IPC is mediated via xdg-dbus-proxy, allowing selective communication--particularly for Portals. For more
 # information, see xdg-dbus-proxy's manual page.
 # [ipc]

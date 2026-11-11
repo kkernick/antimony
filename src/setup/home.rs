@@ -60,19 +60,11 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
                                             .env("DBUS_SESSION_BUS_ADDRESS", SESSION_BUS.as_str())
                                             .output(StreamMode::Pipe)
                                             .args([
-                                                "--title",
-                                                &format!("{title} is Locked"),
-                                                "--body",
-                                                &format!(
-                                                    "{title}'s home folder has been locked by another instance. If you can confirm no such \
-                                                    instance exists, it's possible it was terminated before the lock could be removed. However, \
-                                                    bypassing the lock when another instance is running may cause issues. You can also skip mounting \
-                                                    the home folder for this instance, or mount it on an overlay."
-                                                ),
-                                                "--timeout",
-                                                "10000",
-                                                "--action", "Ignore",
-                                                "--action", "Skip",
+                                                "--title", &format!("{title} is Locked"),
+                                                "--body", &format!("{title}'s home folder appears to be locked by another instance. What would you like to do?"),
+                                                "--timeout", "10000",
+                                                "--action", "Ignore=Mount Anyways",
+                                                "--action", "Skip=Run Without",
                                                 "--action", "Abort",
                                                 "--action", "Unlock",
                                                 "--action", "Overlay",

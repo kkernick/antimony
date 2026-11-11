@@ -2,7 +2,6 @@ features = ["pipewire", "electron", "xdg-open", "https", "vaapi", "mpris"]
 
 [home]
 policy = "Enabled"
-lock = true
 
 [ipc]
 portals = ["FileChooser"]

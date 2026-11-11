@@ -1,8 +1,7 @@
-features = ["electron"]
+features = ["electron", "xdg-open"]
 
 [home]
 policy = "Enabled"
-lock = true
 
 [ipc]
 portals = ["FileChooser", "Documents"]

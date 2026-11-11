@@ -2,7 +2,6 @@ features = ["electron", "xdg-open", "https", "shell"]
 
 [home]
 policy = "Enabled"
-lock = true
 
 [files.platform]
 ro = ["/usr/share/applications/proton-mail.desktop"]

@@ -42,13 +42,22 @@ impl Home {
         }
     }
 
-    pub const fn from_args(args: &mut cli::run::Args) -> Self {
-        Self {
-            name: args.home_name.take(),
-            policy: args.home_policy.take(),
-            path: args.home_path.take(),
-            lock: args.home_lock.take(),
-            lock_policy: args.home_lock_policy.take(),
+    pub const fn from_args(args: &mut cli::run::Args) -> Option<Self> {
+        if args.home_name.is_some()
+            || args.home_policy.is_some()
+            || args.home_path.is_some()
+            || args.home_lock.is_some()
+            || args.home_lock_policy.is_some()
+        {
+            Some(Self {
+                name: args.home_name.take(),
+                policy: args.home_policy.take(),
+                path: args.home_path.take(),
+                lock: args.home_lock.take(),
+                lock_policy: args.home_lock_policy.take(),
+            })
+        } else {
+            None
         }
     }
 
