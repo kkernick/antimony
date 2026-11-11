@@ -19,11 +19,9 @@ use std::{
 
 #[allow(clippy::too_many_lines)]
 pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
-    if args.profile.lockdown.unwrap_or(false) {
-        return Ok(None);
-    }
-
-    if let Some(home) = &args.profile.home
+    let (src, dest, perm) = if args.profile.lockdown.unwrap_or(false) {
+        (None, "/home/antimony", RW.as_slice())
+    } else if let Some(home) = &args.profile.home
         && let Some(mut policy) = home.policy
     {
         let home_dir = home.path(&args.name);
@@ -166,20 +164,24 @@ pub fn setup(args: &mut super::Args) -> Result<Option<String>> {
             Some(home_str.into_owned())
         };
 
-        if let Some(l_policy) = &mut args.policy {
-            let entry = l_policy
-                .paths
-                .get_or_insert_default()
-                .entry(dest.to_owned())
-                .or_default();
+        let policy = match policy {
+            HomePolicy::Enabled | HomePolicy::None | HomePolicy::Overlay => RW.as_slice(),
+            HomePolicy::ReadOnly => RO.as_slice(),
+        };
 
-            match policy {
-                HomePolicy::Enabled | HomePolicy::None | HomePolicy::Overlay => entry.extend(RW),
-                HomePolicy::ReadOnly => entry.extend(RO),
-            }
-        }
-        Ok(ret)
+        (ret, dest, policy)
     } else {
-        Ok(None)
+        (None, "/home/antimony", RW.as_slice())
+    };
+
+    if let Some(l_policy) = &mut args.policy {
+        l_policy
+            .paths
+            .get_or_insert_default()
+            .entry(String::from(dest))
+            .or_default()
+            .extend(perm);
     }
+
+    Ok(src)
 }
