@@ -16,7 +16,10 @@ use crate::{
         env::{CACHE_DIR, RUNTIME_DIR, RUNTIME_STR, SESSION_BUS},
         find::{DirType, recursive_crawl},
         landlock::{LandlockPolicy, RW, update_policy},
-        profile::Profile,
+        profile::{
+            Profile,
+            ipc::Portal::{Documents, FileChooser},
+        },
         remove_directory,
         store::mem,
         utility,
@@ -208,7 +211,10 @@ pub fn setup<'a>(
     // so we ping it immediately.
     if !args.dry
         && let Some(ipc) = &profile.ipc
-        && !ipc.disable.unwrap_or(false)
+        && let Some(portals) = &ipc.portals
+        && [FileChooser, Documents]
+            .iter()
+            .any(|portal| portals.contains(portal))
     {
         timer!("::document_wakeup", {
             if !mounted(&format!("{runtime}/doc")) {

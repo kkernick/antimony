@@ -1,0 +1,60 @@
+name: Nightly Packages
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libseccomp-dev sqlite3 libsqlite3-dev ruby-dev libarchive-tools pkg-config libdbus-1-dev gcc bubblewrap xdg-dbus-proxy
+          sudo gem install fpm
+
+      - name: Compute devel version
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed 's/^version *= *"\(.*\)"/\1/')
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COUNT=$(git rev-list --count "${LAST_TAG}..HEAD")
+          else
+            COUNT=$(git rev-list --count HEAD)
+          fi
+          HASH=$(git rev-parse --short=7 HEAD)
+          DEV_VERSION="${VERSION}~git.${COUNT}.g${HASH}"
+          echo "Version: $DEV_VERSION"
+          echo "version=$DEV_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run package script
+        run: |
+          ./scripts/cargo-packager "${{ steps.version.outputs.version }}"
+
+      - name: Upload devel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: antimony-sandbox-${{ steps.version.outputs.version }}
+          path: |
+            generated/*.pkg.tar.zst
+            generated/*.deb
+            generated/*.rpm
+          retention-days: 30
+          if-no-files-found: error

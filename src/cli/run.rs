@@ -10,7 +10,7 @@ use crate::{
         profile::{
             files::FileMode,
             home::{HomeLockPolicy, HomePolicy},
-            ipc::Portal,
+            ipc::Portal::{self, Documents, FileChooser},
             ns::Namespace,
             seccomp::SeccompPolicy,
         },
@@ -400,7 +400,10 @@ pub fn run(mut info: setup::Info, args: &mut Args) -> Result<()> {
         Ok(())
     } else {
         if let Some(ipc) = &info.profile.ipc
-            && !ipc.disable.unwrap_or(false)
+            && let Some(portals) = &ipc.portals
+            && [FileChooser, Documents]
+                .iter()
+                .any(|portal| portals.contains(portal))
         {
             log::info!("Waiting for document portal");
             timer!("::wait_document", wait_for_doc());
